@@ -176,10 +176,22 @@ window.__ModuleLoader__.load({
      */
     function WidthHandle({ side, width, onChange, onCommit, containerRef }) {
       const start = useRef(null)
+      const [hovered, setHovered] = useState(false)
+      const [dragging, setDragging] = useState(false)
+      // 指针离顶端多远：那条 72px 的短线段跟着它漂（照抄原生 dsh 的手感）
+      const [pointerY, setPointerY] = useState(null)
+      const active = hovered || dragging
       return h('div', {
+        onPointerEnter: () => setHovered(true),
+        onPointerLeave: () => {
+          if (start.current) return
+          setHovered(false)
+          setPointerY(null)
+        },
         onPointerDown: (event) => {
           event.preventDefault()
           event.currentTarget.setPointerCapture?.(event.pointerId)
+          setDragging(true)
           start.current = {
             x: event.clientX,
             spanPx: containerRef?.current?.clientWidth ?? window.innerWidth,
@@ -187,6 +199,8 @@ window.__ModuleLoader__.load({
           }
         },
         onPointerMove: (event) => {
+          const rect = event.currentTarget.getBoundingClientRect()
+          setPointerY(Math.max(0, Math.min(rect.height, event.clientY - rect.top)))
           if (!start.current) return
           const { x, spanPx, startPct } = start.current
           if (!(spanPx > 0)) return
@@ -198,10 +212,12 @@ window.__ModuleLoader__.load({
         onPointerUp: (event) => {
           event.currentTarget.releasePointerCapture?.(event.pointerId)
           start.current = null
+          setDragging(false)
           onCommit?.()
         },
         onPointerCancel: () => {
           start.current = null
+          setDragging(false)
           onCommit?.()
         },
         title: '拖动调整宽度',
@@ -209,7 +225,22 @@ window.__ModuleLoader__.load({
           position: 'absolute', top: 0, bottom: 0, width: 14,
           [side]: -7, cursor: 'col-resize', touchAction: 'none',
         },
-      })
+      },
+        h('div', {
+          style: {
+            position: 'absolute', left: '50%', marginLeft: -1, width: 2, height: 72,
+            top: pointerY === null ? 'calc(50% - 36px)' : `${pointerY - 36}px`,
+            borderRadius: 2,
+            // 两端淡、中间实：33% 处与 66% 处为实心段
+            backgroundImage: dragging
+              ? 'linear-gradient(to bottom, transparent 0%, var(--dsw-alias-brand-primary, #4a7dbd) 33%, var(--dsw-alias-brand-primary, #4a7dbd) 66%, transparent 100%)'
+              : 'linear-gradient(to bottom, transparent 0%, #b8bec8 33%, #b8bec8 66%, transparent 100%)',
+            opacity: active ? 1 : 0,
+            transition: 'opacity 120ms ease',
+            pointerEvents: 'none',
+          },
+        }),
+      )
     }
 
     /** "@ 谁" 的小面板：一行一个成员，头像 + 名字。点「所有人」= 不指定对象。 */
