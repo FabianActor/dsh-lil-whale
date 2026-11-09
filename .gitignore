@@ -1,0 +1,14 @@
+# 依赖（link: 装进来的 npmm 目录，不进版本库）
+node_modules/
+
+# 手改前留的备份
+*.bak
+*.bak-*
+
+# 临时与日志
+tmp/
+.tmp/
+*.log
+!docs/**/*.log
+
+# 她自己的家不在这里，别误加
