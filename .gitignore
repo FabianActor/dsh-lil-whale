@@ -12,3 +12,7 @@ tmp/
 !docs/**/*.log
 
 # 她自己的家不在这里，别误加
+
+# 探针/实验的临时产物
+probe/*.txt*
+probe/*.json
