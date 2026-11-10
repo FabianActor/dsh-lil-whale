@@ -253,7 +253,7 @@ window.__ModuleLoader__.load({
       return h('div', {
         onMouseLeave: onClose,
         style: {
-          position: 'absolute', bottom: 'calc(100% + 10px)', left: 0, zIndex: 30,
+          position: 'absolute', bottom: 46, left: 4, zIndex: 30,
           width: 200, maxHeight: 240, overflowY: 'auto', padding: 6, borderRadius: 12,
           background: 'var(--dsw-alias-bg-layer-1, #fff)',
           border: '1px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12))',
@@ -521,14 +521,16 @@ window.__ModuleLoader__.load({
                   onClick: () => setPickerOpen((open) => !open),
                   title: '指定说话对象',
                   style: {
-                    width: 28, height: 28, borderRadius: '50%', flex: '0 0 auto',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+                    width: 32, height: 32, boxSizing: 'border-box', borderRadius: '50%', flex: '0 0 auto',
+                    display: 'grid', placeItems: 'center', padding: 0,
                     border: '1px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12))',
                     background: pickerOpen ? 'var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,0.06))' : 'transparent',
                     color: 'var(--dsw-alias-label-secondary)',
-                    cursor: 'pointer', fontSize: 14, lineHeight: 1,
+                    cursor: 'pointer',
                   },
-                }, '@'),
+                }, h('span', {
+                  style: { fontSize: 15, lineHeight: 1, transform: 'translateY(-0.5px)' },
+                }, '@')),
                 h('div', { style: { flex: 1, fontSize: 11, color: 'var(--dsw-alias-label-caption)' } },
                   to === 'all' ? t.groupOnly : t.toOne(nameOf(config, to))),
                 h('button', {
@@ -536,28 +538,28 @@ window.__ModuleLoader__.load({
                   disabled: sending || text.trim() === '',
                   title: t.send,
                   style: {
-                    width: 32, height: 32, borderRadius: '50%', flex: '0 0 auto',
+                    width: 32, height: 32, boxSizing: 'border-box', borderRadius: '50%', flex: '0 0 auto',
                     border: 'none',
                     background: 'var(--dsw-alias-brand-primary, #4a7dbd)',
                     color: 'var(--dsw-alias-label-primary-foreground, #fff)',
                     cursor: sending || text.trim() === '' ? 'not-allowed' : 'pointer',
                     opacity: sending || text.trim() === '' ? 0.4 : 1,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    display: 'grid', placeItems: 'center', padding: 0,
                     transition: 'opacity 120ms ease',
                   },
                 }, h('svg', {
                   width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none',
                   stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round',
                 }, h('path', { d: 'M8 13V3M4 7l4-4 4 4' }))),
-                pickerOpen
-                  ? h(AtPicker, {
-                    config,
-                    current: to,
-                    onPick: (id) => { setTo(id); setPickerOpen(false) },
-                    onClose: () => setPickerOpen(false),
-                  })
-                  : null,
               ),
+              pickerOpen
+                ? h(AtPicker, {
+                  config,
+                  current: to,
+                  onPick: (id) => { setTo(id); setPickerOpen(false) },
+                  onClose: () => setPickerOpen(false),
+                })
+                : null,
             ),
           ),
         ),
