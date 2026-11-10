@@ -121,8 +121,12 @@ window.__ModuleLoader__.load({
     const MarkdownText = (() => {
       try {
         const primitives = require('@deepseek-ai/dsh-client-ui-primitives')
-        return primitives && typeof primitives.MarkdownText === 'function' ? primitives.MarkdownText : null
-      } catch {
+        if (primitives && typeof primitives.MarkdownText === 'function') return primitives.MarkdownText
+        console.warn('[dsh-group-ui] primitives 里没有 MarkdownText，退回纯文本')
+        return null
+      } catch (error) {
+        // 退化成纯文本可以接受，但必须留一条痕迹：静默降级等于把错误藏起来。
+        console.warn('[dsh-group-ui] 取不到 @deepseek-ai/dsh-client-ui-primitives，退回纯文本：', error?.message ?? error)
         return null
       }
     })()
