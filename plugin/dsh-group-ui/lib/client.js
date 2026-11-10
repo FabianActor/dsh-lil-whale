@@ -122,7 +122,7 @@ window.__ModuleLoader__.load({
       try {
         const primitives = require('@deepseek-ai/dsh-client-ui-primitives')
         if (primitives && typeof primitives.MarkdownText === 'function') return primitives.MarkdownText
-        console.warn('[dsh-group-ui] primitives 里没有 MarkdownText，退回纯文本')
+        console.warn('[dsh-group-ui] primitives 里没有 MarkdownText；keys= ' + Object.keys(primitives).slice(0, 60).join(',') + '；typeof default= ' + typeof (primitives && primitives.default))
         return null
       } catch (error) {
         // 退化成纯文本可以接受，但必须留一条痕迹：静默降级等于把错误藏起来。
@@ -131,6 +131,179 @@ window.__ModuleLoader__.load({
       }
     })()
 
+
+    /* ───────── 自带的轻量 markdown 渲染 ─────────
+     * 群里写的是 markdown。dsh 的 `MarkdownText` 优先（视觉和主界面完全一致），
+     * 但它来自浏览器静态模块表，能不能 require 到不受我们控制 —— 所以这里留一份
+     * 自己的实现：粗体/斜体/行内代码/链接/标题/列表/引用/代码块/段落。
+     * 不做表格、不做嵌套列表、不做脚注：群聊里没人写那些，写了也读得懂。
+     * 每个块都打 key，避免 React 警告。
+     */
+
+    function inlineNodes(text) {
+      const nodes = []
+      const pattern = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)|(\[[^\]]+\]\([^)\s]+\))/g
+      let last = 0
+      let match
+      let k = 0
+      while ((match = pattern.exec(text)) !== null) {
+        if (match.index > last) nodes.push(text.slice(last, match.index))
+        const token = match[0]
+        if (token.startsWith('`')) {
+          nodes.push(
+            h(
+              'code',
+              {
+                key: `c${k}`,
+                style: {
+                  padding: '1px 5px',
+                  borderRadius: 4,
+                  background: 'var(--dsw-alias-bg-layer-2, rgba(0,0,0,0.06))',
+                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                  fontSize: '0.92em',
+                },
+              },
+              token.slice(1, -1),
+            ),
+          )
+        } else if (token.startsWith('**')) {
+          nodes.push(h('strong', { key: `b${k}`, style: { fontWeight: 600 } }, token.slice(2, -2)))
+        } else if (token.startsWith('*')) {
+          nodes.push(h('em', { key: `i${k}` }, token.slice(1, -1)))
+        } else {
+          const cut = token.indexOf('](')
+          const label = token.slice(1, cut)
+          const href = token.slice(cut + 2, -1)
+          nodes.push(
+            h(
+              'a',
+              {
+                key: `a${k}`,
+                href,
+                target: '_blank',
+                rel: 'noreferrer',
+                style: { color: 'var(--dsw-alias-link, var(--dsw-alias-state-business-primary, #4a7dbd))' },
+              },
+              label,
+            ),
+          )
+        }
+        last = match.index + token.length
+        k += 1
+      }
+      if (last < text.length) nodes.push(text.slice(last))
+      return nodes
+    }
+
+    function MarkdownBody({ text }) {
+      const blocks = String(text ?? '').replace(/\r\n/g, '\n').split(/\n{2,}/)
+      const out = []
+      blocks.forEach((raw, index) => {
+        const block = raw.replace(/^\n+|\n+$/g, '')
+        if (!block) return
+        const key = `blk${index}`
+
+        const fence = block.match(/^```(\w*)\n([\s\S]*?)\n?```$/)
+        if (fence) {
+          out.push(
+            h(
+              'pre',
+              {
+                key,
+                style: {
+                  margin: '4px 0',
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  overflowX: 'auto',
+                  background: 'var(--dsw-alias-bg-layer-2, rgba(0,0,0,0.06))',
+                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                  fontSize: 13,
+                  lineHeight: '20px',
+                },
+              },
+              h('code', null, fence[2]),
+            ),
+          )
+          return
+        }
+
+        const heading = block.match(/^(#{1,6})\s+(.*)$/)
+        if (heading && !block.includes('\n')) {
+          const level = heading[1].length
+          out.push(
+            h(
+              'div',
+              {
+                key,
+                style: {
+                  fontSize: level <= 2 ? 16 : 15,
+                  fontWeight: 600,
+                  lineHeight: '24px',
+                  margin: '2px 0 2px',
+                  color: 'var(--dsw-alias-label-primary)',
+                },
+              },
+              ...inlineNodes(heading[2]),
+            ),
+          )
+          return
+        }
+
+        const lines = block.split('\n')
+        const isBullet = (line) => /^\s*([-*+]|\d+\.)\s+/.test(line)
+        if (lines.every(isBullet)) {
+          const ordered = /^\s*\d+\./.test(lines[0])
+          const Tag = ordered ? 'ol' : 'ul'
+          out.push(
+            h(
+              Tag,
+              {
+                key,
+                style: {
+                  margin: '2px 0',
+                  paddingLeft: 22,
+                  listStyleType: ordered ? 'decimal' : 'disc',
+                  lineHeight: '22px',
+                },
+              },
+              ...lines.map((line, li) =>
+                h('li', { key: `li${li}`, style: { margin: '1px 0' } }, ...inlineNodes(line.replace(/^\s*([-*+]|\d+\.)\s+/, ''))),
+              ),
+            ),
+          )
+          return
+        }
+
+        if (block.startsWith('>')) {
+          out.push(
+            h(
+              'div',
+              {
+                key,
+                style: {
+                  margin: '2px 0',
+                  paddingLeft: 10,
+                  borderLeft: '2px solid var(--dsw-alias-border-l3, rgba(0,0,0,0.15))',
+                  color: 'var(--dsw-alias-label-secondary)',
+                  lineHeight: '22px',
+                },
+              },
+              ...inlineNodes(block.replace(/^>\s?/gm, '')),
+            ),
+          )
+          return
+        }
+
+        out.push(
+          h(
+            'div',
+            { key, style: { lineHeight: '22px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' } },
+            ...inlineNodes(block),
+          ),
+        )
+      })
+      return h('div', null, ...out)
+    }
 
     /** 一条消息：左边是别人，右边是自己。 */
     function Bubble({ config, message, onMention, animate = false }) {
@@ -180,7 +353,7 @@ window.__ModuleLoader__.load({
               wordBreak: 'break-word',
               animation: animateOnMount ? 'dshGroupRise 240ms cubic-bezier(.2,.8,.2,1) both' : undefined,
             },
-              }, MarkdownText ? h(MarkdownText, { text: message.text }) : message.text),
+              }, MarkdownText ? h(MarkdownText, { text: message.text }) : h(MarkdownBody, { text: message.text })),
         ),
       )
     }
