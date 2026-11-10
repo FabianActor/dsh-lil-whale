@@ -378,6 +378,20 @@ window.__ModuleLoader__.load({
           return Number.isFinite(saved) && saved >= 140 && saved <= 420 ? saved : 208
         } catch { return 208 }
       })
+      // 私聊列宽：可拖、记在本机（跟左边的联系人栏一样，属于"这一台机器上的手感"）
+      const [dmWidth, setDmWidth] = useState(() => {
+        try {
+          const saved = Number(window.localStorage?.getItem('dsh-group-dm-width'))
+          return Number.isFinite(saved) && saved >= 30 && saved <= 92 ? saved : 72
+        } catch { return 72 }
+      })
+      const persistDmWidth = useCallback(() => {
+        setDmWidth((current) => {
+          try { window.localStorage?.setItem('dsh-group-dm-width', String(current)) } catch {}
+          return current
+        })
+      }, [])
+      const scrollRef = useRef(null)
       const bottom = useRef(null)
       const inputRef = useRef(null)
 
@@ -536,21 +550,26 @@ window.__ModuleLoader__.load({
 
       const fadeMask = { WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)', maskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)' }
       // 滚到边界时消息在输入框后面渐隐（照 dsh 的样子）：用 mask 而不是盖一层渐变，免得挡住点击。
-      const messageList = h('div', { style: { flex: 1, overflowY: 'auto', padding: '8px 0 46px', minHeight: 0, ...fadeMask } },
-        h('div', { style: { width: '100%' } },
+      const widthHandles = [
+        h(WidthHandle, { key: 'left', side: 'left', width: dmWidth, containerRef: scrollRef, onChange: setDmWidth, onCommit: persistDmWidth }),
+        h(WidthHandle, { key: 'right', side: 'right', width: dmWidth, containerRef: scrollRef, onChange: setDmWidth, onCommit: persistDmWidth }),
+      ]
+      // 私聊的左右边界跟群聊同款：拖住两侧，列宽实时变；宽度存在这台机器上。
+      const messageList = h('div', { ref: scrollRef, style: { flex: 1, overflowY: 'auto', padding: '8px 0 46px', minHeight: 0, ...fadeMask } },
+        h('div', { style: { width: `${dmWidth}%`, margin: '0 auto', position: 'relative' } },
           messages.length === 0
             ? h('div', { style: { padding: '28px 20px', fontSize: 13, lineHeight: '20px', color: 'var(--dsw-alias-label-tertiary)' } },
               '还没有私下说过话。这里的话只有你们两个看得见。')
-          : messages.map((message, index) => h(Bubble, { key: `${message.ts}-${index}`, config, message, animate: animateRef.current, useGutter: true })),
-          h('div', { ref: bottom })))
+          : messages.map((message, index) => h(Bubble, { key: `${message.ts}-${index}`, config, message, animate: animateRef.current })),
+          h('div', { ref: bottom }),
+          widthHandles))
 
       const composer = h('div', {
-          style: { flex: 'none', padding: '10px ' + (Number(config?.gutter) || 28) + 'px 18px' },
+          style: { flex: 'none', padding: '10px 0 18px' },
       },
         h('div', {
           style: {
-            position: 'relative', display: 'flex', flexDirection: 'column',
-            width: '100%', maxWidth: 760, margin: '0 auto', boxSizing: 'border-box',
+            width: `${dmWidth}%`, margin: '0 auto', boxSizing: 'border-box',
             background: 'var(--dsw-specific-input-major, var(--dsw-alias-bg-layer-1, #fff))',
             borderRadius: 'var(--dsw-radius-panel, 16px)',
             boxShadow: 'var(--dsw-elevation-soft, 0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06))',
@@ -1133,16 +1152,6 @@ window.__ModuleLoader__.load({
               maxLength: 12,
               onChange: (event) => patch((next) => { next.panelLabel = event.target.value }),
               style: inputStyle,
-            }),
-          ),
-        ),
-
-        h(Section, { title: '消息区', hint: '气泡离面板左右边缘的距离。' },
-          h('div', { style: rowStyle },
-            h('span', { style: labelStyle }, '左右留白'),
-            h(NumberField, {
-              value: config.gutter ?? 28, min: 10, max: 300, suffix: 'px（10–300）',
-              onCommit: (next) => patch((draft) => { draft.gutter = next }),
             }),
           ),
         ),
