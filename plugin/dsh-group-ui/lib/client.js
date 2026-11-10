@@ -245,13 +245,32 @@ window.__ModuleLoader__.load({
 
     /** "@ 谁" 的小面板：一行一个成员，头像 + 名字。点「所有人」= 不指定对象。 */
     function AtPicker({ config, current, onPick, onClose }) {
+      const [hovered, setHovered] = useState(null)
+      const boxRef = useRef(null)
+      // 移出去不关；点别处才关。她自己点 @ 钮那种情况由 data-at-anchor 放行，
+      // 否则 mousedown 先关、click 再开，那个按钮就永远关不上了。
+      useEffect(() => {
+        const onDown = (event) => {
+          const target = event.target
+          if (boxRef.current && boxRef.current.contains(target)) return
+          if (target?.closest?.('[data-at-anchor]')) return
+          onClose()
+        }
+        const onKey = (event) => { if (event.key === 'Escape') onClose() }
+        document.addEventListener('mousedown', onDown)
+        document.addEventListener('keydown', onKey)
+        return () => {
+          document.removeEventListener('mousedown', onDown)
+          document.removeEventListener('keydown', onKey)
+        }
+      }, [onClose])
       const rows = [
         { id: 'all', label: t.toAll, plain: true },
         { id: 'lee', label: nameOf(config, 'lee') },
         { id: 'whale', label: nameOf(config, 'whale') },
       ]
       return h('div', {
-        onMouseLeave: onClose,
+        ref: boxRef,
         style: {
           position: 'absolute', bottom: 46, left: 4, zIndex: 30,
           width: 200, maxHeight: 240, overflowY: 'auto', padding: 6, borderRadius: 12,
@@ -261,16 +280,20 @@ window.__ModuleLoader__.load({
         },
       }, rows.map((row) => {
         const active = (current || 'all') === row.id
+        const lit = active || hovered === row.id
         return h('button', {
           key: row.id,
           onClick: () => onPick(row.id),
           onMouseDown: (event) => event.preventDefault(),
+          onMouseEnter: () => setHovered(row.id),
+          onMouseLeave: () => setHovered(null),
           style: {
             display: 'flex', alignItems: 'center', gap: 10, width: '100%',
             padding: '7px 8px', border: 'none', borderRadius: 8,
-            background: active ? 'var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,0.06))' : 'transparent',
+            background: lit ? 'var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,0.06))' : 'transparent',
             color: 'var(--dsw-alias-label-primary)',
             font: 'inherit', fontSize: 13, cursor: 'pointer', textAlign: 'left',
+            transition: 'background 90ms ease',
           },
         },
           row.plain
@@ -520,6 +543,7 @@ window.__ModuleLoader__.load({
                 h('button', {
                   onClick: () => setPickerOpen((open) => !open),
                   title: '指定说话对象',
+                  'data-at-anchor': '1',
                   style: {
                     width: 32, height: 32, boxSizing: 'border-box', borderRadius: '50%', flex: '0 0 auto',
                     display: 'grid', placeItems: 'center', padding: 0,
