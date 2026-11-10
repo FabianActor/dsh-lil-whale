@@ -89,7 +89,7 @@ function normalizeName(value, fallback) {
 function normalizeGutter(value) {
   const n = Number(value)
   if (!Number.isFinite(n)) return DEFAULT_CONFIG.gutter
-  return Math.min(40, Math.max(4, Math.round(n)))
+  return Math.min(300, Math.max(10, Math.round(n)))
 }
 
 function normalizeWidth(value) {

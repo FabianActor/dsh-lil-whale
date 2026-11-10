@@ -14,7 +14,7 @@ window.__ModuleLoader__.load({
   factory(require) {
     const React = require('react')
     const h = React.createElement
-    const { useCallback, useEffect, useMemo, useRef, useState } = React
+    const { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } = React
 
     const PANEL_ID = 'group'
     const SETTINGS_ID = 'lil-whale'
@@ -1009,6 +1009,50 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /**
+     * 数字输入框：自己没有「受控」依赖。
+     * 每敲一下就去改 config，会让设置页整层重渲染，输入框跟着被换掉——光标就掉了（2026-11-10 实测）。
+     * 所以：输入过程只改本地草稿，失焦或回车才提交；万一节点真的被换掉，把光标还回去。
+     */
+    function NumberField({ value, min, max, suffix, onCommit }) {
+      const [draft, setDraft] = useState(String(value ?? min))
+      const inputRef = useRef(null)
+      const wasFocused = useRef(false)
+
+      useEffect(() => { setDraft(String(value ?? min)) }, [value])
+
+      useLayoutEffect(() => {
+        const node = inputRef.current
+        if (!node) return
+        if (wasFocused.current && document.activeElement !== node) {
+          node.focus()
+          const end = node.value.length
+          try { node.setSelectionRange(end, end) } catch {}
+        }
+      })
+
+      const commit = () => {
+        const parsed = Number(draft)
+        const next = Number.isFinite(parsed) ? Math.min(max, Math.max(min, Math.round(parsed))) : value
+        setDraft(String(next))
+        onCommit(next)
+      }
+
+      return h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+        h('input', {
+          ref: inputRef,
+          type: 'number', min, max, step: 1,
+          value: draft,
+          onFocus: () => { wasFocused.current = true },
+          onBlur: () => { wasFocused.current = false; commit() },
+          onChange: (event) => { setDraft(event.target.value) },
+          onKeyDown: (event) => { if (event.key === 'Enter') { event.currentTarget.blur() } },
+          style: { width: 96, height: 32, padding: '0 10px', borderRadius: 'var(--dsw-radius-md, 8px)', border: '0.5px solid var(--dsw-alias-border-l2)', background: 'var(--dsw-alias-bg-layer-1)', color: 'var(--dsw-alias-label-primary)', fontSize: 13, fontFamily: 'inherit', boxSizing: 'border-box' },
+        }),
+        suffix ? h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } }, suffix) : null,
+      )
+    }
+
     /** 设置页：侧边栏名称 / 三个头像 / 三个显示名。 */
     function SettingsPage() {
       const [config, setConfig] = useState(DEFAULT_CONFIG)
@@ -1085,13 +1129,10 @@ window.__ModuleLoader__.load({
           ),
           h('div', { style: rowStyle },
             h('span', { style: labelStyle }, '消息左右留白'),
-            h('input', {
-              type: 'number', min: 4, max: 40, step: 1,
-              value: config.gutter ?? 28,
-              onChange: (event) => patch((next) => { next.gutter = Math.max(4, Math.min(40, Math.round(Number(event.target.value) || 28))) }),
-              style: { ...inputStyle, width: 84 },
+            h(NumberField, {
+              value: config.gutter ?? 28, min: 10, max: 300, suffix: 'px（10–300）',
+              onCommit: (next) => patch((draft) => { draft.gutter = next }),
             }),
-            h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } }, 'px（4–40，气泡与页边的距离）'),
           ),
         ),
 
