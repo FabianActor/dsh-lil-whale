@@ -239,9 +239,9 @@ function writeJson(file, value) {
   renameSync(tmp, file)
 }
 
-function readLines() {
-  if (!existsSync(MESSAGES)) return []
-  return readFileSync(MESSAGES, 'utf8').split('\n').filter((line) => line.trim() !== '')
+function readLinesOf(file) {
+  if (!existsSync(file)) return []
+  return readFileSync(file, 'utf8').split('\n').filter((line) => line.trim() !== '')
 }
 
 function stamp() {
