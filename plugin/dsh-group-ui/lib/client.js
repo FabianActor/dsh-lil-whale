@@ -313,6 +313,218 @@ window.__ModuleLoader__.load({
     }
 
     /** 主面板：群聊。 */
+    /** 私聊页：左边是能单独说话的人，右边默认空白；点谁开谁，再点一次收起。 */
+    function DmPage({ config, presence }) {
+      const [contacts, setContacts] = useState([])
+      const [activePeer, setActivePeer] = useState(null)
+      const [messages, setMessages] = useState([])
+      const [text, setText] = useState('')
+      const [sending, setSending] = useState(false)
+      const [error, setError] = useState(null)
+      const bottom = useRef(null)
+      const inputRef = useRef(null)
+
+      const loadContacts = useCallback(async () => {
+        try {
+          const response = await fetch('/group/api/dm/contacts', { headers: { accept: 'application/json' } })
+          if (!response.ok) throw new Error(`HTTP ${response.status}`)
+          const data = await response.json()
+          setContacts(Array.isArray(data?.contacts) ? data.contacts : [])
+          setError(null)
+        } catch (e) {
+          setError(String(e?.message ?? e))
+        }
+      }, [])
+
+      const loadMessages = useCallback(async () => {
+        if (activePeer === null) { setMessages([]); return }
+        try {
+          const response = await fetch(`/group/api/dm?peer=${encodeURIComponent(activePeer)}`, { headers: { accept: 'application/json' } })
+          if (!response.ok) throw new Error(`HTTP ${response.status}`)
+          const data = await response.json()
+          setMessages(Array.isArray(data?.messages) ? data.messages : [])
+          setError(null)
+        } catch (e) {
+          setError(String(e?.message ?? e))
+        }
+      }, [activePeer])
+
+      useEffect(() => {
+        const tick = async () => { await loadContacts(); await loadMessages() }
+        void tick()
+        const timer = setInterval(() => { void tick() }, 3000)
+        return () => clearInterval(timer)
+      }, [loadContacts, loadMessages])
+
+      useEffect(() => { bottom.current?.scrollIntoView({ block: 'end' }) }, [messages.length])
+      useEffect(() => { if (activePeer !== null) inputRef.current?.focus() }, [activePeer])
+
+      const pick = (peer) => {
+        setActivePeer((current) => (current === peer ? null : peer))
+        setMessages([])
+        setText('')
+      }
+
+      const submit = useCallback(async () => {
+        const value = text.trim()
+        if (value === '' || sending || activePeer === null) return
+        setSending(true)
+        try {
+          const response = await fetch('/group/api/dm', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ peer: activePeer, text: value }),
+          })
+          if (!response.ok) throw new Error(`HTTP ${response.status}`)
+          setText('')
+          await loadMessages()
+          await loadContacts()
+        } catch (e) {
+          setError(String(e?.message ?? e))
+        } finally {
+          setSending(false)
+        }
+      }, [text, sending, activePeer, loadMessages, loadContacts])
+
+      const shortTime = (ts) => {
+        const date = new Date(ts ?? '')
+        if (Number.isNaN(date.getTime())) return ''
+        const pad = (n) => String(n).padStart(2, '0')
+        return date.toDateString() === new Date().toDateString()
+          ? `${pad(date.getHours())}:${pad(date.getMinutes())}`
+          : `${date.getMonth() + 1}/${date.getDate()}`
+      }
+
+      const contactList = contacts.length === 0
+        ? h('div', { style: { padding: '16px 14px', fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } }, '还没有能私下说话的人。')
+        : contacts.map((contact) => {
+          const active = contact.peer === activePeer
+          return h('button', {
+            key: contact.peer,
+            onClick: () => pick(contact.peer),
+            title: active ? '再点一次收起' : `和 ${nameOf(config, contact.peer)} 说话`,
+            style: {
+              width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+              padding: '8px 12px', border: 'none', textAlign: 'left',
+              background: active ? 'var(--dsw-alias-bg-layer-2, rgba(0,0,0,0.05))' : 'transparent',
+              cursor: 'pointer', fontFamily: 'inherit',
+            },
+          },
+            h(Avatar, { config, member: contact.peer, size: 34 }),
+            h('div', { style: { flex: 1, minWidth: 0 } },
+              h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 6 } },
+                h('span', {
+                  style: {
+                    fontSize: 13, fontWeight: 500, color: 'var(--dsw-alias-label-primary)',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  },
+                }, nameOf(config, contact.peer)),
+                h('span', { style: { marginLeft: 'auto', fontSize: 11, color: 'var(--dsw-alias-label-caption)' } }, shortTime(contact.last?.ts))),
+              h('div', {
+                style: {
+                  fontSize: 12, color: 'var(--dsw-alias-label-tertiary)',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                },
+              }, contact.last ? contact.last.text : '还没有说过话')),
+          )
+        })
+
+      const blankPane = h('div', {
+        style: {
+          flex: 1, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+          gap: 8, padding: '0 24px', textAlign: 'center',
+        },
+      },
+        h('div', { style: { fontSize: 15, fontWeight: 500, lineHeight: '22px', color: 'var(--dsw-alias-label-primary)' } }, '选一个人说话'),
+        h('div', { style: { fontSize: 13, lineHeight: '20px', color: 'var(--dsw-alias-label-tertiary)' } },
+          '左边是能私下说话的人。这里的话不进群记录。'))
+
+      const chatHeader = h('div', {
+        style: { flex: 'none', padding: '10px 20px', borderBottom: '0.5px solid var(--dsw-alias-border-l3, rgba(0,0,0,0.1))' },
+      },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+          h('span', { style: { fontSize: 14, fontWeight: 500, color: 'var(--dsw-alias-label-primary)' } }, nameOf(config, activePeer)),
+          presence?.[activePeer] === 'working'
+            ? h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } }, t.typing(nameOf(config, activePeer)))
+            : null))
+
+      const messageList = h('div', { style: { flex: 1, overflowY: 'auto', padding: '8px 0', minHeight: 0 } },
+        h('div', { style: { width: '100%', maxWidth: 720, margin: '0 auto' } },
+          messages.length === 0
+            ? h('div', { style: { padding: '28px 20px', fontSize: 13, lineHeight: '20px', color: 'var(--dsw-alias-label-tertiary)' } },
+              '还没有私下说过话。这里的话只有你们两个看得见。')
+            : messages.map((message, index) => h(Bubble, { key: `${message.ts}-${index}`, config, message })),
+          h('div', { ref: bottom })))
+
+      const composer = h('div', {
+        style: { borderTop: '1px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.1))', padding: '10px 16px 14px' },
+      },
+        h('div', {
+          style: {
+            position: 'relative', display: 'flex', flexDirection: 'column',
+            background: 'var(--dsw-specific-input-major, var(--dsw-alias-bg-layer-1, #fff))',
+            borderRadius: 'var(--dsw-radius-panel, 16px)',
+            boxShadow: 'var(--dsw-elevation-soft, 0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06))',
+            gap: 10, padding: '10px 12px 8px',
+          },
+        },
+          h('textarea', {
+            ref: inputRef,
+            value: text,
+            onChange: (event) => setText(event.target.value),
+            onKeyDown: (event) => {
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault()
+                void submit()
+              }
+            },
+            placeholder: `只对 ${nameOf(config, activePeer)} 说…`,
+            rows: 1,
+            style: {
+              border: 'none', outline: 'none', resize: 'none', background: 'transparent',
+              color: 'var(--dsw-alias-label-primary)', font: 'inherit',
+              fontSize: 14, lineHeight: '24px', padding: '4px 2px', minHeight: 44, maxHeight: 220,
+            },
+          }),
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
+            h('div', { style: { flex: 1, fontSize: 11, color: 'var(--dsw-alias-label-caption)' } }, '不进群记录，只有你们两个看得见'),
+            h('button', {
+              onClick: () => { void submit() },
+              disabled: sending || text.trim() === '',
+              title: t.send,
+              style: {
+                flex: '0 0 32px', width: 32, height: 32, padding: 0, border: 'none',
+                background: 'transparent', position: 'relative',
+                cursor: sending || text.trim() === '' ? 'not-allowed' : 'pointer',
+                opacity: sending || text.trim() === '' ? 0.4 : 1,
+                display: 'grid', placeItems: 'center',
+              },
+            },
+              h('svg', { width: 32, height: 32, viewBox: '0 0 32 32', style: { position: 'absolute', inset: 0 } },
+                h('circle', { cx: 16, cy: 16, r: 16, fill: 'var(--dsw-alias-brand-primary, #4a7dbd)' })),
+              h('svg', {
+                width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none',
+                stroke: 'var(--dsw-alias-label-primary-foreground, #fff)', strokeWidth: 1.8,
+                strokeLinecap: 'round', strokeLinejoin: 'round', style: { position: 'relative' },
+              }, h('path', { d: 'M8 13V3M4 7l4-4 4 4' }))))))
+
+      const chatPane = h(React.Fragment, null, chatHeader, messageList, composer)
+      const rightPane = activePeer === null ? blankPane : chatPane
+
+      return h('div', { style: { flex: 1, minHeight: 0, display: 'flex' } },
+        h('div', {
+          style: {
+            width: 208, flex: 'none', overflowY: 'auto', padding: '6px 0',
+            borderRight: '0.5px solid var(--dsw-alias-border-l3, rgba(0,0,0,0.1))',
+          },
+        }, contactList),
+        h('div', { style: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' } },
+          rightPane,
+          error
+            ? h('div', { style: { flex: 'none', padding: '0 16px 8px', fontSize: 12, color: 'var(--dsw-alias-label-error, #c0392b)' } }, error)
+            : null))
+    }
     function GroupPage() {
       const [config, setConfig] = useState(DEFAULT_CONFIG)
       const [messages, setMessages] = useState([])
@@ -330,8 +542,7 @@ window.__ModuleLoader__.load({
 
       const refresh = useCallback(async () => {
         try {
-          const url = tab === 'dm' ? '/group/api/dm' : '/group/api/messages'
-          const response = await fetch(url, { headers: { accept: 'application/json' } })
+          const response = await fetch('/group/api/messages', { headers: { accept: 'application/json' } })
           if (!response.ok) throw new Error(`HTTP ${response.status}`)
           const data = await response.json()
           setMessages(Array.isArray(data.messages) ? data.messages : [])
@@ -478,6 +689,9 @@ window.__ModuleLoader__.load({
             ? h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-error, #c0392b)', padding: '0 0 8px' } }, error)
             : h('div', { style: { height: 8 } }),
         ),
+        tab === 'dm'
+          ? h(DmPage, { config, presence })
+          : h(React.Fragment, null,
         h('div', {
           ref: scrollRef,
           style: { flex: 1, overflowY: 'auto', padding: '8px 0', minHeight: 0, position: 'relative' },
@@ -658,6 +872,7 @@ window.__ModuleLoader__.load({
             ),
           ),
         ),
+          ),
       )
     }
 

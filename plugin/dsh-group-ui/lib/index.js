@@ -16,11 +16,17 @@ const MESSAGES = join(GROUP_DIR, 'messages.jsonl')
 const READABLE = join(GROUP_DIR, '群.md')
 const DM_DIR = join(GROUP_DIR, 'dm')
 // 一个人和一条鱼的那段对话：两个方向都写在同一个文件里（他 2026-11-10 定）
-const DM_FILE = join(DM_DIR, 'fabian__whale.jsonl')
+// 文件名 = 两个 id 按字母序拼：`fabian__whale.jsonl`
+function dmFileOf(peer) {
+  return join(DM_DIR, ['fabian', peer].sort().join('__') + '.jsonl')
+}
+// 列表里只放"鱼"：fabian 是他自己，lee 是大肥鱼（他就在 3080 里跟 Leea 说话，不用再开一页）
+const DM_HIDDEN = new Set(['fabian', 'lee'])
 const UI_CONFIG = join(GROUP_DIR, 'ui-config.json')
 const PINS = join(GROUP_DIR, 'pins.json')
 
 const LABEL = { lee: '大肥鱼', whale: '小肥鱼', fabian: 'Fabian' }
+const KNOWN_PEERS = Object.keys(LABEL).filter((id) => !DM_HIDDEN.has(id))
 
 const DEFAULT_CONFIG = {
   panelLabel: '鱼群',
@@ -259,14 +265,21 @@ export function apply(ctx) {
   }))
 
   // ---------- 私聊：一个人和一条鱼的那段对话 ----------
-  // 这个窗口里说话的人固定是 Fabian，收信的人是她；两个方向都写进同一个文件。
+  // 这个窗口里说话的人固定是 Fabian，收信的人是 peer；两个方向都写进同一个文件。
+  const dmPeerOf = (value) => {
+    const peer = typeof value === 'string' ? value.trim() : ''
+    return peer && KNOWN_PEERS.includes(peer) ? peer : KNOWN_PEERS[0]
+  }
+
   disposers.push(ctx.webServer.register({
     kind: 'exact',
     path: '/group/api/dm',
     async handler(req, res) {
+      const url = new URL(req.url ?? '/', 'http://127.0.0.1')
       if (req.method === 'GET') {
-        const messages = readMessages(DM_FILE)
-        sendJson(res, 200, { count: messages.length, messages })
+        const peer = dmPeerOf(url.searchParams.get('peer'))
+        const messages = readMessages(dmFileOf(peer))
+        sendJson(res, 200, { peer, count: messages.length, messages })
         return
       }
       if (req.method !== 'POST') {
@@ -285,16 +298,35 @@ export function apply(ctx) {
         sendJson(res, 400, { error: 'empty-text' })
         return
       }
+      const peer = dmPeerOf(payload?.peer)
       const now = new Date()
-      const record = { ts: now.toISOString(), from: 'fabian', to: 'whale', text, kind: 'dm', channel: 'dm' }
+      const record = { ts: now.toISOString(), from: 'fabian', to: peer, text, kind: 'dm', channel: 'dm' }
       try {
         mkdirSync(DM_DIR, { recursive: true })
-        appendFileSync(DM_FILE, JSON.stringify(record) + '\n', 'utf8')
+        appendFileSync(dmFileOf(peer), JSON.stringify(record) + '\n', 'utf8')
       } catch (error) {
         sendJson(res, 500, { error: 'write-failed', detail: String(error?.message ?? error) })
         return
       }
-      sendJson(res, 200, { ok: true, record })
+      sendJson(res, 200, { ok: true, peer, record })
+    },
+  }))
+
+  // 联系人列表：每条鱼一行，带最后一句（未读数还没做，先不做假数）
+  disposers.push(ctx.webServer.register({
+    kind: 'exact',
+    path: '/group/api/dm/contacts',
+    async handler(req, res) {
+      if (req.method !== 'GET') {
+        sendJson(res, 405, { error: 'method-not-allowed' })
+        return
+      }
+      const contacts = KNOWN_PEERS.map((peer) => {
+        const messages = readMessages(dmFileOf(peer))
+        const last = messages.length ? messages[messages.length - 1] : null
+        return { peer, name: LABEL[peer] ?? peer, count: messages.length, last }
+      })
+      sendJson(res, 200, { contacts })
     },
   }))
 
