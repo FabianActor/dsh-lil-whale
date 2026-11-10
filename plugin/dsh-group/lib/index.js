@@ -8,7 +8,7 @@
 // 身份优先按**钉住的 sessionId** 认（2026-11-09 起）：同一目录下可能有两段会话，
 // 按 cwd 会叫错人。cwd 只作退路，并在 plugin.log 留一行痕迹。
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, statSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
@@ -149,6 +149,29 @@ function watchmanLog(result, why) {
     appendFileSync(WATCHMAN_LOG, `${ts} | ${result} | ${why}\n`, 'utf8')
   } catch {
     // 日志写不进去也不能把插件的 tick 打死
+  }
+}
+
+/**
+ * 上一行日志是什么时候写的？——她 2026-11-10 要的 `gap=`。
+ * 理由：06:00 那一行和 18:00 那一行，中间空了 6 小时，日志上完全看不出来。
+ * 只读最后 4KB，不加载整份文件。
+ */
+function lastLogGapSec() {
+  try {
+    if (!existsSync(WATCHMAN_LOG)) return null
+    const stat = statSync(WATCHMAN_LOG)
+    const start = Math.max(0, stat.size - 4096)
+    const tail = readFileSync(WATCHMAN_LOG, 'utf8').slice(-4096)
+    const lines = tail.split('\n').filter((line) => /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \|/.test(line))
+    const last = lines[lines.length - 1]
+    if (!last) return null
+    const m = last.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/)
+    if (!m) return null
+    const at = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6]))
+    return Math.max(0, Math.round((Date.now() - at.getTime()) / 1000))
+  } catch {
+    return null
   }
 }
 const PINS = join(GROUP_DIR, 'pins.json')
@@ -462,7 +485,14 @@ function apply(ctx) {
 
   // 2. 听：只在新消息到达时唤醒，不做心跳
   const timer = setInterval(() => {
-    void tick(ctx).catch((error) => console.error(`[${name}] tick 失败：`, error))
+    void tick(ctx).catch((error) => {
+      // 她 2026-11-10 数的：那个 readLinesOf 的错抛了 6 小时（≈4300 次），
+      // 三个日志里一条都没有 —— "它坏了"和"今天没事"在纸上长得一模一样。
+      // 所以异常也写一行。吵一点，总比沉默好。
+      console.error(`[${name}] tick 失败：`, error)
+      const short = String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 160)
+      watchmanLog('error', `why=${error?.name ?? 'Error'}:${short} tick#=wake`)
+    })
   }, WAKE.intervalMs)
   timer.unref?.()
 
@@ -487,7 +517,9 @@ function apply(ctx) {
       const aliveSec = Math.round((Date.now() - startedAt.getTime()) / 1000)
       watchmanLog('stopped', `reason=dispose pid=${process.pid} lived=${aliveSec}s`)
     })
-    watchmanLog('started', `pid=${process.pid} interval=${WATCH.intervalMs / 1000}s port=${WATCH.port} cap=${WATCH.maxWakesPerDay}/day exe=${pwshInfo()}`)
+    // gap = 距上一行日志多少秒（她 2026-11-10 要的）。今天那一行本该是 gap=21600s。
+    const gap = lastLogGapSec()
+    watchmanLog('started', `pid=${process.pid} gap=${gap === null ? 'first' : `${gap}s`} interval=${WATCH.intervalMs / 1000}s port=${WATCH.port} cap=${WATCH.maxWakesPerDay}/day exe=${pwshInfo()}`)
     void watchmanTick().catch(() => {})
   }
 }
