@@ -519,6 +519,12 @@ or export DEEPSEEK_API_KEY in the launching environment
 
 **A.9 插件里取宿主包只能用动态 import()**：顶层 `require` 会撞 `ERR_REQUIRE_ESM_RACE_CONDITION`（宿主 loader 正在并行 import 它们）；能用的形状是 `apply()` / `tick()` 里懒调用 `resolveHost()`，按 `…/@deepseek-ai/dsh/node_modules/@deepseek-ai/<pkg>/lib/index.js` 用 `pathToFileURL` + `import()`。
 
+**A.10 客户端 bundle 的缓存规则，以及一个没查明的圆角（2026-11-10）**
+
+- bundle 地址是 `/plugins/??<pkg>/client.js&rev=<12 位>`；`rev = framedHash('plugin-artifact', [mtimeMs, ctimeMs, size])`，**只在宿主启动时算一次**；响应带 `cache-control: public, max-age=31536000, immutable` ⇒ **改客户端代码必须重启宿主**，否则浏览器永远拿旧字节，按 F5 也没用。
+- **没查明的事**：两个 32×32 的 `<button>`，内联 `borderRadius: 16`，DevTools 的 Computed 里宽高都是 `32px`、四个角都是 `16px`，屏幕上却画成圆角矩形；同一份 CSS 里输入卡的 `borderRadius: 14` 是正常的。最后用**内嵌 SVG `<circle>`** 绕过 CSS 圆角才画出正圆。原因不明，记在这里免得下次重查。
+- 教训：**"我改的那个东西"和"他看到的东西"必须先是同一个对象**。这一条线绕了七八轮，每一轮都在改一个他根本没在看的元素。
+
 ---
 
 ## 11. 风险与未验证
