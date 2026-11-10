@@ -156,7 +156,7 @@ window.__ModuleLoader__.load({
           h('div', {
             style: {
               padding: '8px 12px', borderRadius: 'var(--dsw-radius-lg, 12px)',
-              padding: '8px 12px', borderRadius: 'var(--dsw-radius-lg, 12px)',
+              background: mine ? 'rgba(74, 125, 189, 0.12)' : 'rgba(15, 20, 30, 0.06)',
               boxShadow: 'inset 0 0 0 1px ' + (mine ? 'rgba(74, 125, 189, 0.28)' : 'var(--dsw-alias-border-l2, rgba(0,0,0,0.14))'),
               border: 'none',
               fontSize: 14, lineHeight: '22px',
