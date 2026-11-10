@@ -32,8 +32,6 @@ const KNOWN_PEERS = Object.keys(LABEL).filter((id) => !DM_HIDDEN.has(id))
 
 const DEFAULT_CONFIG = {
   panelLabel: '鱼群',
-  contentWidth: 72,
-  gutter: 28,
   names: { lee: '大肥鱼', whale: '小肥鱼', fabian: 'Fabian' },
   /** 未读口径：'all' = 所有不是自己说的话；'mentions' = 只算 @ 到我的（to 是 all 或 fabian）。 */
   notifyScope: 'all',
@@ -59,8 +57,6 @@ function readConfig() {
     const raw = JSON.parse(readFileSync(UI_CONFIG, 'utf8'))
     return {
       panelLabel: typeof raw?.panelLabel === 'string' && raw.panelLabel.trim() ? raw.panelLabel.trim() : DEFAULT_CONFIG.panelLabel,
-  contentWidth: normalizeWidth(raw?.contentWidth),
-  gutter: normalizeGutter(raw?.gutter),
       notifyScope: raw?.notifyScope === 'mentions' ? 'mentions' : 'all',
       names: {
         lee: normalizeName(raw?.names?.lee, DEFAULT_CONFIG.names.lee),
@@ -83,19 +79,6 @@ function normalizeName(value, fallback) {
   const text = value.trim()
   if (!text) return fallback
   return text.slice(0, 16)
-}
-
-
-function normalizeGutter(value) {
-  const n = Number(value)
-  if (!Number.isFinite(n)) return DEFAULT_CONFIG.gutter
-  return Math.min(300, Math.max(10, Math.round(n)))
-}
-
-function normalizeWidth(value) {
-  const n = Number(value)
-  if (!Number.isFinite(n)) return DEFAULT_CONFIG.contentWidth
-  return Math.min(92, Math.max(30, Math.round(n)))
 }
 
 function normalizeAvatar(value, fallback) {
@@ -223,8 +206,6 @@ export function apply(ctx) {
       }
       const next = {
         panelLabel: normalizeLabel(payload?.panelLabel),
-  contentWidth: normalizeWidth(payload?.contentWidth),
-  gutter: normalizeGutter(payload?.gutter),
     notifyScope: payload?.notifyScope === 'mentions' ? 'mentions' : 'all',
         names: {
           lee: normalizeName(payload?.names?.lee, DEFAULT_CONFIG.names.lee),

@@ -29,8 +29,6 @@ window.__ModuleLoader__.load({
     const DEFAULT_CONFIG = {
       panelLabel: '鱼群',
       notifyScope: 'all',
-  contentWidth: 72,
-  gutter: 28,
       avatars: {
         lee: { text: '大', tint: '#4a7dbd' },
         whale: { text: '小', tint: '#c2705a' },
@@ -131,8 +129,7 @@ window.__ModuleLoader__.load({
 
 
     /** 一条消息：左边是别人，右边是自己。 */
-    function Bubble({ config, message, onMention, animate = false, useGutter = false }) {
-      const gutter = Number(config?.gutter) || 28
+    function Bubble({ config, message, onMention, animate = false }) {
       // 只在挂载时决定「要不要动画」：否则后续每次重渲染都会让老消息重新弹一遍。
       const animateOnMount = useRef(animate).current
       const mine = message.from === 'fabian'
@@ -145,7 +142,7 @@ window.__ModuleLoader__.load({
       })()
       return h('div', {
         style: {
-          display: 'flex', gap: 10, padding: useGutter ? '6px ' + gutter + 'px' : '6px 12px',
+          display: 'flex', gap: 10, padding: '6px 12px',
           flexDirection: mine ? 'row-reverse' : 'row',
         },
       },
@@ -676,7 +673,13 @@ window.__ModuleLoader__.load({
       const [pickerOpen, setPickerOpen] = useState(false)
       const [tab, setTab] = useState('group')
       const [unread, setUnread] = useState({ group: 0, dm: {}, total: 0 })
-      const [widthPct, setWidthPct] = useState(DEFAULT_CONFIG.contentWidth)
+      // 列宽是"这台机器上怎么看"，不属于她家的数据，存在浏览器里。
+      const [widthPct, setWidthPct] = useState(() => {
+        try {
+          const saved = Number(window.localStorage?.getItem('dsh-group-width'))
+          return Number.isFinite(saved) && saved >= 30 && saved <= 92 ? saved : 72
+        } catch { return 72 }
+      })
       const bottom = useRef(null)
       const scrollRef = useRef(null)
       const inputRef = useRef(null)
@@ -708,7 +711,6 @@ window.__ModuleLoader__.load({
       useEffect(() => {
         void loadConfig().then((value) => {
           setConfig(value)
-          if (typeof value?.contentWidth === 'number') setWidthPct(value.contentWidth)
         })
       }, [])
 
@@ -730,15 +732,12 @@ window.__ModuleLoader__.load({
         bottom.current?.scrollIntoView({ block: 'end' })
       }, [messages.length])
 
-      const persistWidth = useCallback(async () => {
-        try {
-          const next = { ...(cachedConfig ?? DEFAULT_CONFIG), contentWidth: Math.round(widthPct) }
-          await saveConfig(next)
-        } catch {
-          // 宽度不是数据，存不上就下次再说
-        }
-      }, [widthPct])
-
+      const persistWidth = useCallback(() => {
+        setWidthPct((current) => {
+          try { window.localStorage?.setItem('dsh-group-width', String(current)) } catch {}
+          return current
+        })
+      }, [])
       const submit = useCallback(async () => {
         const value = text.trim()
         if (value === '' || sending) return
