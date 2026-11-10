@@ -1487,6 +1487,8 @@ window.__ModuleLoader__.load({
     return {
       inject: ['slots'],
       apply(ctx) {
+        // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
+        console.info('[dsh-group-ui] client build v3 · markdown labels:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-group-keyframes')) {
           const style = document.createElement('style')
