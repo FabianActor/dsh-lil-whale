@@ -545,16 +545,18 @@ window.__ModuleLoader__.load({
                   title: '指定说话对象',
                   'data-at-anchor': '1',
                   style: {
-                    flex: '0 0 32px', width: 32, height: 32, boxSizing: 'border-box', borderRadius: 16, overflow: 'hidden',
-                    display: 'grid', placeItems: 'center', padding: 0,
-                    border: '1px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12))',
-                    background: pickerOpen ? '#8b5cf6' : '#e5484d',
-                    color: 'var(--dsw-alias-label-secondary)',
-                    cursor: 'pointer',
+                    flex: '0 0 32px', width: 32, height: 32, padding: 0, border: 'none',
+                    background: 'transparent', position: 'relative', cursor: 'pointer',
+                    display: 'grid', placeItems: 'center',
                   },
-                }, h('span', {
-                  style: { fontSize: 15, lineHeight: 1, transform: 'translateY(-0.5px)' },
-                }, '@')),
+                },
+                  h('svg', { width: 32, height: 32, viewBox: '0 0 32 32', style: { position: 'absolute', inset: 0 } },
+                    h('circle', {
+                      cx: 16, cy: 16, r: 15.5,
+                      fill: pickerOpen ? '#8b5cf6' : '#e5484d',
+                      stroke: 'var(--dsw-alias-border-l2, rgba(0,0,0,0.12))', strokeWidth: 1,
+                    })),
+                  h('span', { style: { position: 'relative', fontSize: 15, lineHeight: 1, color: '#fff' } }, '@')),
                 h('div', { style: { flex: 1, fontSize: 11, color: 'var(--dsw-alias-label-caption)' } },
                   to === 'all' ? t.groupOnly : t.toOne(nameOf(config, to))),
                 h('button', {
@@ -562,19 +564,20 @@ window.__ModuleLoader__.load({
                   disabled: sending || text.trim() === '',
                   title: t.send,
                   style: {
-                    flex: '0 0 32px', width: 32, height: 32, boxSizing: 'border-box', borderRadius: 16, overflow: 'hidden',
-                    border: 'none',
-                    background: 'var(--dsw-alias-brand-primary, #4a7dbd)',
-                    color: 'var(--dsw-alias-label-primary-foreground, #fff)',
+                    flex: '0 0 32px', width: 32, height: 32, padding: 0, border: 'none',
+                    background: 'transparent', position: 'relative',
                     cursor: sending || text.trim() === '' ? 'not-allowed' : 'pointer',
                     opacity: sending || text.trim() === '' ? 0.4 : 1,
-                    display: 'grid', placeItems: 'center', padding: 0,
-                    transition: 'opacity 120ms ease',
+                    display: 'grid', placeItems: 'center', transition: 'opacity 120ms ease',
                   },
-                }, h('svg', {
-                  width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none',
-                  stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round',
-                }, h('path', { d: 'M8 13V3M4 7l4-4 4 4' }))),
+                },
+                  h('svg', { width: 32, height: 32, viewBox: '0 0 32 32', style: { position: 'absolute', inset: 0 } },
+                    h('circle', { cx: 16, cy: 16, r: 16, fill: 'var(--dsw-alias-brand-primary, #4a7dbd)' })),
+                  h('svg', {
+                    width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none',
+                    stroke: 'var(--dsw-alias-label-primary-foreground, #fff)', strokeWidth: 1.8,
+                    strokeLinecap: 'round', strokeLinejoin: 'round', style: { position: 'relative' },
+                  }, h('path', { d: 'M8 13V3M4 7l4-4 4 4' }))),
               ),
               pickerOpen
                 ? h(AtPicker, {
