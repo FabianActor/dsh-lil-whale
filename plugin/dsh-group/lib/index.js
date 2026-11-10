@@ -111,9 +111,9 @@ function loadWatchState() {
   const day = new Date().toDateString()
   try {
     const raw = JSON.parse(readFileSync(WATCH_STATE_FILE, 'utf8'))
-    if (raw.day === day) return { day, wakes: Number(raw.wakes) || 0, fails: Number(raw.fails) || 0 }
+    if (raw.day === day) return { day, wakes: Number(raw.wakes) || 0, fails: Number(raw.fails) || 0, errors: Number(raw.errors) || 0 }
   } catch {}
-  return { day, wakes: 0, fails: 0 }
+  return { day, wakes: 0, fails: 0, errors: 0 }
 }
 
 /** 她 2026-11-09 的要求：绝对路径是"这次对了"不是"以后都对"，所以每次启动都报出它手里那把钥匙。 */
@@ -140,13 +140,18 @@ function isMainProcess() {
 }
 
 /** 一行一次：时间 | 结果 | 为什么（格式是她 19:07 定的）。 */
+/** 她 2026-11-10：error 行每 5 秒刷一次，会把 gap 压成 5s —— 所以 error 单独记连击数。 */
+let errorStreak = 0
 function watchmanLog(result, why) {
   try {
     mkdirSync(dirname(WATCHMAN_LOG), { recursive: true })
     const d = new Date()
     const pad = (n) => String(n).padStart(2, '0')
     const ts = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-    appendFileSync(WATCHMAN_LOG, `${ts} | ${result} | ${why}\n`, 'utf8')
+    const streakSuffix = result === 'error' ? ` streak=${++errorStreak}` : ''
+    if (result === 'error') { watchState.errors = (watchState.errors ?? 0) + 1; saveWatchState() }
+    if (result !== 'error' && result !== 'started') errorStreak = 0
+    appendFileSync(WATCHMAN_LOG, `${ts} | ${result} | ${why}${streakSuffix}\n`, 'utf8')
   } catch {
     // 日志写不进去也不能把插件的 tick 打死
   }
@@ -163,7 +168,12 @@ function lastLogGapSec() {
     const stat = statSync(WATCHMAN_LOG)
     const start = Math.max(0, stat.size - 4096)
     const tail = readFileSync(WATCHMAN_LOG, 'utf8').slice(-4096)
-    const lines = tail.split('\n').filter((line) => /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \|/.test(line))
+      // 她 2026-11-10 指出的打架：error 行每 5 秒刷一次，会把 gap 压成 5s，
+      // 于是"吵吵闹闹地坏掉"看起来比平时还活跃。所以 gap 只量正常行，error 另算。
+      const lines = tail
+        .split('\n')
+        .filter((line) => /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \|/.test(line))
+        .filter((line) => !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \| error \|/.test(line))
     const last = lines[lines.length - 1]
     if (!last) return null
     const m = last.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/)
@@ -519,7 +529,7 @@ function apply(ctx) {
     })
     // gap = 距上一行日志多少秒（她 2026-11-10 要的）。今天那一行本该是 gap=21600s。
     const gap = lastLogGapSec()
-    watchmanLog('started', `pid=${process.pid} gap=${gap === null ? 'first' : `${gap}s`} interval=${WATCH.intervalMs / 1000}s port=${WATCH.port} cap=${WATCH.maxWakesPerDay}/day exe=${pwshInfo()}`)
+    watchmanLog('started', `pid=${process.pid} gap=${gap === null ? 'first' : `${gap}s`} interval=${WATCH.intervalMs / 1000}s port=${WATCH.port} cap=${WATCH.maxWakesPerDay}/day errors_total=${watchState.errors ?? 0} exe=${pwshInfo()}`)
     void watchmanTick().catch(() => {})
   }
 }
@@ -897,6 +907,7 @@ async function watchmanTick() {
 }
 
 export { name, inject, apply }
+
 
 
 
