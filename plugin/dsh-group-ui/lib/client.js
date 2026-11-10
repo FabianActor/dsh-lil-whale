@@ -314,6 +314,20 @@ window.__ModuleLoader__.load({
      * 缺 context 时它会直接抛错 —— 一抛整页就白了。所以这里加一层错误边界：
      * 一条消息渲染失败就退回我们自己的渲染器，别把整页带走。
      */
+    /**
+     * MarkdownText 需要一份 labels 文案（复制按钮、代码块工具条、脚注）。
+     * 官方插件是用自己的 i18n 生成的；我们没接 i18n，就给一份写死的。
+     * 少了它会直接 "Cannot read properties of undefined" —— 实测过。
+     */
+    const MARKDOWN_LABELS = {
+      code: {
+        copyLabel: '复制',
+        copiedLabel: '已复制',
+        toolbarLabels: { codeLabel: '代码', wrapLabel: '自动换行', unwrapLabel: '不换行' },
+      },
+      footnotes: '脚注',
+    }
+
     class SafeMarkdown extends React.Component {
       constructor(props) {
         super(props)
@@ -330,7 +344,7 @@ window.__ModuleLoader__.load({
 
       render() {
         if (this.state.failed || !MarkdownText) return h(MarkdownBody, { text: this.props.text })
-        return h(MarkdownText, { text: this.props.text })
+        return h(MarkdownText, { text: this.props.text, labels: MARKDOWN_LABELS })
       }
     }
 
