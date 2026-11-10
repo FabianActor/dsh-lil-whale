@@ -253,8 +253,8 @@ window.__ModuleLoader__.load({
       return h('div', {
         onMouseLeave: onClose,
         style: {
-          position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, zIndex: 20,
-          minWidth: 180, padding: 6, borderRadius: 12,
+          position: 'absolute', bottom: 'calc(100% + 10px)', left: 0, zIndex: 30,
+          width: 200, maxHeight: 240, overflowY: 'auto', padding: 6, borderRadius: 12,
           background: 'var(--dsw-alias-bg-layer-1, #fff)',
           border: '1px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12))',
           boxShadow: '0 8px 28px rgba(0,0,0,0.18)',
@@ -493,8 +493,9 @@ window.__ModuleLoader__.load({
                       onClick: () => setTo('all'),
                       title: '取消指定',
                       style: {
-                        border: 'none', background: 'transparent', cursor: 'pointer',
-                        color: 'var(--dsw-alias-label-tertiary)', fontSize: 13, lineHeight: 1, padding: 2,
+                        width: 16, height: 16, borderRadius: '50%', border: 'none', background: 'transparent',
+                        color: 'var(--dsw-alias-label-tertiary)', fontSize: 13, lineHeight: 1, padding: 0,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
                       },
                     }, '×'))),
               h('textarea', {
@@ -515,16 +516,17 @@ window.__ModuleLoader__.load({
                   minHeight: 44, maxHeight: 220,
                 },
               }),
-              h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
+              h('div', { style: { position: 'relative', display: 'flex', alignItems: 'center', gap: 10 } },
                 h('button', {
                   onClick: () => setPickerOpen((open) => !open),
                   title: '指定说话对象',
                   style: {
                     width: 28, height: 28, borderRadius: '50%', flex: '0 0 auto',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
                     border: '1px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12))',
                     background: pickerOpen ? 'var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,0.06))' : 'transparent',
                     color: 'var(--dsw-alias-label-secondary)',
-                    cursor: 'pointer', fontSize: 13, lineHeight: 1,
+                    cursor: 'pointer', fontSize: 14, lineHeight: 1,
                   },
                 }, '@'),
                 h('div', { style: { flex: 1, fontSize: 11, color: 'var(--dsw-alias-label-caption)' } },
@@ -547,15 +549,15 @@ window.__ModuleLoader__.load({
                   width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none',
                   stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round',
                 }, h('path', { d: 'M8 13V3M4 7l4-4 4 4' }))),
+                pickerOpen
+                  ? h(AtPicker, {
+                    config,
+                    current: to,
+                    onPick: (id) => { setTo(id); setPickerOpen(false) },
+                    onClose: () => setPickerOpen(false),
+                  })
+                  : null,
               ),
-              pickerOpen
-                ? h(AtPicker, {
-                  config,
-                  current: to,
-                  onPick: (id) => { setTo(id); setPickerOpen(false) },
-                  onClose: () => setPickerOpen(false),
-                })
-                : null,
             ),
           ),
         ),
