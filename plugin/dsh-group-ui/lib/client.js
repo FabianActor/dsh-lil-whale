@@ -543,7 +543,7 @@ window.__ModuleLoader__.load({
           h('div', { ref: bottom })))
 
       const composer = h('div', {
-        style: { padding: '10px 28px 18px' },
+        style: { flex: 'none', padding: '10px 28px 18px' },
       },
         h('div', {
           style: {
@@ -595,10 +595,10 @@ window.__ModuleLoader__.load({
                 strokeLinecap: 'round', strokeLinejoin: 'round', style: { position: 'relative' },
               }, h('path', { d: 'M8 13V3M4 7l4-4 4 4' }))))))
 
-      const chatPane = h('div', { style: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' } }, chatHeader, messageList, composer)
+      const chatPane = h('div', { style: { flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' } }, chatHeader, messageList, composer)
       const rightPane = activePeer === null ? blankPane : chatPane
 
-      return h('div', { style: { flex: 1, minHeight: 0, display: 'flex' } },
+      return h('div', { style: { flex: 1, minHeight: 0, height: '100%', display: 'flex' } },
         h('div', { style: { width: sidebar, flex: 'none', position: 'relative', display: 'flex', minHeight: 0 } },
           h('div', { style: { flex: 1, overflowY: 'auto', padding: '6px 0', minWidth: 0 } }, contactList),
           h('div', {
