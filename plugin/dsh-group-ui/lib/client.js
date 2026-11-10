@@ -154,12 +154,12 @@ window.__ModuleLoader__.load({
           }, h('span', null, who + target), h('span', null, time)),
           h('div', {
             style: {
-              padding: '8px 12px', borderRadius: 12,
+              padding: '8px 12px', borderRadius: 'var(--dsw-radius-lg, 12px)',
               background: mine
                 ? 'var(--dsw-alias-bg-layer-3, rgba(0,0,0,0.06))'
                 : 'var(--dsw-alias-bg-layer-2, rgba(0,0,0,0.03))',
               border: '1px solid var(--dsw-alias-border-l1, rgba(0,0,0,0.08))',
-              fontSize: 14, lineHeight: 1.6,
+              fontSize: 14, lineHeight: '22px',
               whiteSpace: 'pre-wrap', wordBreak: 'break-word',
             },
           }, message.text),
@@ -406,30 +406,76 @@ window.__ModuleLoader__.load({
       },
         h('div', {
           style: {
-            padding: '16px 20px 12px',
-            borderBottom: '1px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.1))',
+            flex: 'none',
+            padding: '10px 28px 0 20px',
+            borderBottom: '0.5px solid var(--dsw-alias-border-l3, rgba(0,0,0,0.12))',
           },
         },
-          h('div', { style: { fontSize: 16, fontWeight: 600 } }, config.panelLabel || t.title),
-          h('div', { style: { display: 'flex', gap: 6, marginTop: 8 } },
-            [{ key: 'group', label: '群' }, { key: 'dm', label: '私聊' }].map((item) => h('button', {
-              key: item.key,
-              onClick: () => { setTab(item.key); setText('') },
+          h('div', { style: { minHeight: 30, display: 'flex', alignItems: 'center', gap: 10 } },
+            h('div', {
               style: {
-                padding: '5px 12px',
-                fontSize: 12,
-                cursor: 'pointer',
-                borderRadius: 999,
-                border: '1px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12))',
-                background: tab === item.key ? 'var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,0.06))' : 'transparent',
-                color: tab === item.key ? 'var(--dsw-alias-label-primary)' : 'var(--dsw-alias-label-secondary)',
-                fontFamily: 'inherit',
+                fontSize: 14,
+                lineHeight: '20px',
+                fontWeight: 500,
+                color: 'var(--dsw-alias-label-primary)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
               },
-            }, item.label)),
+            }, config.panelLabel || t.title),
+          ),
+          h('div', {
+            style: {
+              display: 'flex',
+              gap: 32,
+              marginTop: 10,
+              paddingLeft: 8,
+              minHeight: 25,
+              alignItems: 'flex-start',
+            },
+          },
+            [{ key: 'group', label: '群' }, { key: 'dm', label: '私聊' }].map((item) => {
+              const active = tab === item.key
+              return h('button', {
+                key: item.key,
+                onClick: () => { setTab(item.key); setText('') },
+                style: {
+                  position: 'relative',
+                  minHeight: 35,
+                  margin: '-10px -10px 0',
+                  padding: '10px 10px 9px',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  lineHeight: '16px',
+                  color: active
+                    ? 'var(--dsw-alias-state-business-primary, var(--dsw-alias-brand-primary, #4a7dbd))'
+                    : 'var(--dsw-alias-label-tertiary)',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                },
+              },
+                item.label,
+                h('span', {
+                  style: {
+                    position: 'absolute',
+                    left: 10,
+                    right: 10,
+                    bottom: -1,
+                    height: 2,
+                    borderRadius: 2,
+                    background: active
+                      ? 'var(--dsw-alias-state-business-primary, var(--dsw-alias-brand-primary, #4a7dbd))'
+                      : 'transparent',
+                  },
+                }),
+              )
+            }),
           ),
           error
-            ? h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-error, #c0392b)', marginTop: 4 } }, error)
-            : null,
+            ? h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-error, #c0392b)', padding: '0 0 8px' } }, error)
+            : h('div', { style: { height: 8 } }),
         ),
         h('div', {
           ref: scrollRef,
@@ -626,18 +672,21 @@ window.__ModuleLoader__.load({
 
       const rowStyle = { display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }
       const inputStyle = {
-        flex: 1, minWidth: 0, padding: '6px 8px', borderRadius: 8,
+        flex: 1, minWidth: 0, height: 32, padding: '0 10px', boxSizing: 'border-box',
+        borderRadius: 'var(--dsw-radius-md, 8px)',
         border: '1px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12))',
         background: 'var(--dsw-alias-bg-layer-1, #fff)',
         color: 'var(--dsw-alias-label-primary)', font: 'inherit', fontSize: 13,
       }
+      const sectionTitleStyle = { marginTop: 24, fontSize: 13, fontWeight: 600, color: 'var(--dsw-alias-label-primary)' }
+      const hintStyle = { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)', marginTop: 4 }
 
-      return h('div', { style: { ...baseStyle, padding: '4px 2px' } },
-        h('div', { style: { fontSize: 15, fontWeight: 600 } }, t.settingsTitle),
-        h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', marginTop: 4 } }, t.settingsHint),
+      return h('div', { style: { ...baseStyle, padding: '22px 24px 24px' } },
+        h('div', { style: { fontSize: 16, fontWeight: 500, lineHeight: '24px' } }, t.settingsTitle),
+        h('div', { style: hintStyle }, t.settingsHint),
 
         h('div', { style: { ...rowStyle, marginTop: 16 } },
-          h('span', { style: { width: 84, fontSize: 13 } }, '侧边栏名称'),
+          h('span', { style: { width: 84, fontSize: 13, color: 'var(--dsw-alias-label-secondary)' } }, '侧边栏名称'),
           h('input', {
             value: config.panelLabel ?? '',
             maxLength: 12,
@@ -646,8 +695,8 @@ window.__ModuleLoader__.load({
           }),
         ),
 
-        h('div', { style: { marginTop: 18, fontSize: 13, fontWeight: 600 } }, '名字'),
-        h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', marginTop: 4, lineHeight: 1.7 } },
+        h('div', { style: sectionTitleStyle }, '名字'),
+        h('div', { style: hintStyle },
           '仅修改显示效果，无法修改 ta 的自我认知。若想让 ta 改名请试着直接和 ta 聊聊？'),
         ['lee', 'whale', 'fabian'].map((member) => h('div', { key: `name-${member}`, style: rowStyle },
           h(Avatar, { config, member, size: 26 }),
@@ -662,8 +711,8 @@ window.__ModuleLoader__.load({
           }),
         )),
 
-        h('div', { style: { marginTop: 18, fontSize: 13, fontWeight: 600 } }, '头像'),
-        h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', marginTop: 4 } },
+        h('div', { style: sectionTitleStyle }, '头像'),
+        h('div', { style: hintStyle },
           '文字 1–2 个（也可以是 emoji），颜色是底色。'),
         ['lee', 'whale', 'fabian'].map((member) => h('div', { key: `avatar-${member}`, style: rowStyle },
           h(Avatar, { config, member, size: 28 }),
@@ -683,20 +732,22 @@ window.__ModuleLoader__.load({
               next.avatars = { ...(next.avatars ?? {}) }
               next.avatars[member] = { ...(next.avatars?.[member] ?? {}), tint: event.target.value }
             }),
-            style: { width: 36, height: 28, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' },
+            style: { width: 32, height: 32, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' },
           }),
           h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } }, nameOf(config, member)),
         )),
 
-        h('div', { style: { ...rowStyle, marginTop: 18 } },
+        h('div', { style: { ...rowStyle, marginTop: 24 } },
           h('button', {
             onClick: () => { void save() },
             disabled: saving,
             style: {
-              padding: '6px 14px', borderRadius: 8, border: 'none',
+              height: 32, padding: '0 14px', boxSizing: 'border-box',
+              borderRadius: 'var(--dsw-radius-md, 8px)', border: 'none',
               background: 'var(--dsw-alias-brand-primary, #4a7dbd)',
               color: 'var(--dsw-alias-label-primary-foreground, #fff)',
-              fontSize: 13, cursor: saving ? 'not-allowed' : 'pointer',
+              fontSize: 13, fontWeight: 500, fontFamily: 'inherit',
+              cursor: saving ? 'not-allowed' : 'pointer',
               opacity: saving ? 0.6 : 1,
             },
           }, saving ? '保存中…' : '保存'),
