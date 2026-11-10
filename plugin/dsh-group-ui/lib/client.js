@@ -532,7 +532,9 @@ window.__ModuleLoader__.load({
             ? h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } }, t.typing(nameOf(config, activePeer)))
             : null))
 
-      const messageList = h('div', { style: { flex: 1, overflowY: 'auto', padding: '8px 0', minHeight: 0 } },
+      const fadeMask = { WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)', maskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)' }
+      // 滚到边界时消息在输入框后面渐隐（照 dsh 的样子）：用 mask 而不是盖一层渐变，免得挡住点击。
+      const messageList = h('div', { style: { flex: 1, overflowY: 'auto', padding: '8px 0 46px', minHeight: 0, ...fadeMask } },
         h('div', { style: { width: '100%', maxWidth: 720, margin: '0 auto' } },
           messages.length === 0
             ? h('div', { style: { padding: '28px 20px', fontSize: 13, lineHeight: '20px', color: 'var(--dsw-alias-label-tertiary)' } },
@@ -541,7 +543,7 @@ window.__ModuleLoader__.load({
           h('div', { ref: bottom })))
 
       const composer = h('div', {
-        style: { borderTop: '1px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.1))', padding: '10px 28px 18px' },
+        style: { padding: '10px 28px 18px' },
       },
         h('div', {
           style: {
@@ -825,7 +827,7 @@ window.__ModuleLoader__.load({
           : h(React.Fragment, null,
         h('div', {
           ref: scrollRef,
-          style: { flex: 1, overflowY: 'auto', padding: '8px 0', minHeight: 0, position: 'relative' },
+          style: { flex: 1, overflowY: 'auto', padding: '8px 0 46px', minHeight: 0, position: 'relative', WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)', maskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)' },
         },
           messages.length === 0
             ? h('div', {
@@ -876,10 +878,7 @@ window.__ModuleLoader__.load({
             ),
         ),
         h('div', {
-          style: {
-            borderTop: '1px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.1))',
-            padding: '10px 0 14px',
-          },
+          style: { padding: '10px 0 14px' },
         },
           h('div', { style: { width: `${widthPct}%`, margin: '0 auto' } },
             typingLine
