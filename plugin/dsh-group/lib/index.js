@@ -740,7 +740,7 @@ function startHer() {
     let child
     try {
       // 不要 detached：detached 的子进程在无控制台的宿主里会被立刻收掉（实测 exit=0 只花 170ms）。
-      child = spawn(exe, ['-NoProfile', '-File', HER_WAKER, '-Port', String(WATCH.port)], {
+      child = spawn(exe, ['-NoProfile', '-File', HER_WAKER, '-Port', String(WATCH.port), '-Why', 'plan'], {
         windowsHide: true,
         stdio: 'ignore',
       })
