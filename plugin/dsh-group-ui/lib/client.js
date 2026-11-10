@@ -1057,32 +1057,41 @@ window.__ModuleLoader__.load({
     function SettingsPage() {
       const [config, setConfig] = useState(DEFAULT_CONFIG)
       const [status, setStatus] = useState('')
-      const [saving, setSaving] = useState(false)
+      const [dirty, setDirty] = useState(false)
+      const timerRef = useRef(null)
 
       useEffect(() => {
         void loadConfig(true).then(setConfig)
       }, [])
 
+      // 改一个字段就存一次（400ms 防抖）。没有「保存」按钮：
+      // 用户要的是「我改了它就记住」，而不是「我记得点保存」。
       const patch = (mutator) => {
         setConfig((prev) => {
           const next = { ...prev }
           mutator(next)
           return next
         })
+        setDirty(true)
       }
 
-      const save = async () => {
-        setSaving(true)
-        setStatus('')
-        try {
-          await saveConfig(config)
-          setStatus('已保存。侧边栏名称要刷新页面才变。')
-        } catch (e) {
-          setStatus(`保存失败：${String(e?.message ?? e)}`)
-        } finally {
-          setSaving(false)
-        }
-      }
+      useEffect(() => {
+        if (!dirty) return undefined
+        if (timerRef.current) clearTimeout(timerRef.current)
+        timerRef.current = setTimeout(() => {
+          setStatus('保存中…')
+          void saveConfig(config)
+            .then((saved) => {
+              if (saved) setConfig(saved)
+              setStatus('已保存')
+              setDirty(false)
+            })
+            .catch((error) => {
+              setStatus(`保存失败：${String(error?.message ?? error)}`)
+            })
+        }, 400)
+        return () => { if (timerRef.current) clearTimeout(timerRef.current) }
+      }, [config, dirty])
 
       const rowStyle = { display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }
       const inputStyle = {
@@ -1203,24 +1212,9 @@ window.__ModuleLoader__.load({
               : '群里任何人说的话都算未读（除了你自己发的）。'),
         ),
 
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, marginTop: 20 } },
-          h('button', {
-            onClick: () => { void save() },
-            disabled: saving,
-            style: {
-              height: 32, padding: '0 14px', boxSizing: 'border-box',
-              borderRadius: 'var(--dsw-radius-md, 8px)', border: 'none',
-              background: 'var(--dsw-alias-brand-primary, #4a7dbd)',
-              color: 'var(--dsw-alias-label-primary-foreground, #fff)',
-              fontSize: 13, fontWeight: 500, fontFamily: 'inherit',
-              cursor: saving ? 'not-allowed' : 'pointer',
-              opacity: saving ? 0.6 : 1,
-            },
-          }, saving ? '保存中…' : '保存'),
-          status
-            ? h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } }, status)
-            : null,
-        ),
+        h('div', {
+          style: { marginTop: 16, fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)' },
+        }, status || '改动会自动保存。侧边栏名称要刷新页面才变。'),
       )
     }
 
