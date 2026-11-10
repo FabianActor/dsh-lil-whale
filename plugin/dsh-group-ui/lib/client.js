@@ -131,7 +131,7 @@ window.__ModuleLoader__.load({
 
 
     /** 一条消息：左边是别人，右边是自己。 */
-    function Bubble({ config, message, onMention, animate = false }) {
+    function Bubble({ config, message, onMention, animate = false, useGutter = false }) {
       const gutter = Number(config?.gutter) || 28
       // 只在挂载时决定「要不要动画」：否则后续每次重渲染都会让老消息重新弹一遍。
       const animateOnMount = useRef(animate).current
@@ -145,7 +145,7 @@ window.__ModuleLoader__.load({
       })()
       return h('div', {
         style: {
-          display: 'flex', gap: 10, padding: '6px ' + gutter + 'px',
+          display: 'flex', gap: 10, padding: useGutter ? '6px ' + gutter + 'px' : '6px 12px',
           flexDirection: mine ? 'row-reverse' : 'row',
         },
       },
@@ -245,15 +245,14 @@ window.__ModuleLoader__.load({
       },
         h('div', {
           style: {
-            position: 'absolute', left: '50%', marginLeft: -1, width: 2, height: 72,
-            top: pointerY === null ? 'calc(50% - 36px)' : `${pointerY - 36}px`,
-            borderRadius: 2,
-            // 两端淡、中间实：33% 处与 66% 处为实心段
+            position: 'absolute', left: '50%', marginLeft: -1, width: 2,
+            top: 0, bottom: 0, borderRadius: 2,
+            // 常驻：两端淡、中间实。照 dsh 的分隔线，但一直看得见，不靠悬停才出现。
             backgroundImage: dragging
-              ? 'linear-gradient(to bottom, transparent 0%, var(--dsw-alias-brand-primary, #4a7dbd) 33%, var(--dsw-alias-brand-primary, #4a7dbd) 66%, transparent 100%)'
-              : 'linear-gradient(to bottom, transparent 0%, #b8bec8 33%, #b8bec8 66%, transparent 100%)',
-            opacity: active ? 1 : 0,
-            transition: 'opacity 120ms ease',
+              ? 'linear-gradient(to bottom, transparent 0%, var(--dsw-alias-brand-primary, #4a7dbd) 12%, var(--dsw-alias-brand-primary, #4a7dbd) 88%, transparent 100%)'
+              : 'linear-gradient(to bottom, transparent 0%, #c6ccd6 12%, #c6ccd6 88%, transparent 100%)',
+            opacity: dragging ? 1 : 0.9,
+            opacity: dragging ? 1 : (hovered ? 1 : 0.85),
             pointerEvents: 'none',
           },
         }),
@@ -541,11 +540,11 @@ window.__ModuleLoader__.load({
           messages.length === 0
             ? h('div', { style: { padding: '28px 20px', fontSize: 13, lineHeight: '20px', color: 'var(--dsw-alias-label-tertiary)' } },
               '还没有私下说过话。这里的话只有你们两个看得见。')
-            : messages.map((message, index) => h(Bubble, { key: `${message.ts}-${index}`, config, message, animate: animateRef.current })),
+          : messages.map((message, index) => h(Bubble, { key: `${message.ts}-${index}`, config, message, animate: animateRef.current, useGutter: true })),
           h('div', { ref: bottom })))
 
       const composer = h('div', {
-        style: { flex: 'none', padding: '10px ' + (Number(config?.gutter) || 28) + 'px 18px' },
+          style: { flex: 'none', padding: '10px ' + (Number(config?.gutter) || 28) + 'px 18px' },
       },
         h('div', {
           style: {
@@ -880,7 +879,7 @@ window.__ModuleLoader__.load({
             ),
         ),
         h('div', {
-          style: { padding: '10px ' + (Number(config?.gutter) || 28) + 'px 14px' },
+            style: { padding: '10px 28px 14px' },
         },
           h('div', { style: { width: `${widthPct}%`, margin: '0 auto' } },
             typingLine
