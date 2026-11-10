@@ -353,6 +353,12 @@ window.__ModuleLoader__.load({
       const [sending, setSending] = useState(false)
       const [error, setError] = useState(null)
       const [unread, setUnread] = useState({ dm: {} })
+      const [sidebar, setSidebar] = useState(() => {
+        try {
+          const saved = Number(window.localStorage?.getItem('dsh-group-dm-sidebar'))
+          return Number.isFinite(saved) && saved >= 140 && saved <= 420 ? saved : 208
+        } catch { return 208 }
+      })
       const bottom = useRef(null)
       const inputRef = useRef(null)
 
@@ -637,10 +643,10 @@ window.__ModuleLoader__.load({
           const data = await response.json()
           setMessages(Array.isArray(data.messages) ? data.messages : [])
           setError(null)
+          const counts = await loadUnread()
+          if (counts) setUnread(counts)
         } catch (e) {
           setError(String(e?.message ?? e))
-        const counts = await loadUnread()
-        if (counts) setUnread(counts)
         }
         try {
           const response = await fetch('/group/api/presence', { headers: { accept: 'application/json' } })

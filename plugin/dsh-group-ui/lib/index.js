@@ -383,6 +383,7 @@ export function apply(ctx) {
       const state = readUiRead()
       const scope = readConfig().notifyScope
       const group = countUnread(MESSAGES, state.group, scope)
+      const dm = {}
       let total = group
       for (const peer of KNOWN_PEERS) {
         const count = countUnread(dmFileOf(peer), String(state.dm[peer] ?? ''))
