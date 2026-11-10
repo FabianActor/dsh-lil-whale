@@ -437,8 +437,16 @@ function apply(ctx) {
       })
     }, WATCH.intervalMs)
     watchTimer.unref?.()
-    ctx.on('dispose', () => clearInterval(watchTimer))
-    watchmanLog('started', `interval=${WATCH.intervalMs / 1000}s port=${WATCH.port} cap=${WATCH.maxWakesPerDay}/day exe=${pwshInfo()}`)
+    const startedAt = new Date()
+    ctx.on('dispose', () => {
+      clearInterval(watchTimer)
+      // 她 2026-11-10 数出来的：整夜 26 次 started、只有 1 次 stopped，
+      // 于是"重启带起来的"和"崩了又爬起来的"在日志里长得一模一样。
+      // 起停必须成对，不然这份日志回答不了最基本的问题。
+      const aliveSec = Math.round((Date.now() - startedAt.getTime()) / 1000)
+      watchmanLog('stopped', `reason=dispose pid=${process.pid} lived=${aliveSec}s`)
+    })
+    watchmanLog('started', `pid=${process.pid} interval=${WATCH.intervalMs / 1000}s port=${WATCH.port} cap=${WATCH.maxWakesPerDay}/day exe=${pwshInfo()}`)
     void watchmanTick().catch(() => {})
   }
 }
@@ -720,7 +728,7 @@ async function watchmanTick() {
     jobs.push({ key: t.id, tag: `task=${t.id} scheduled=${new Date(t.at).toISOString()}`, why: 'due-and-closed', from: 'schedule' })
   }
   for (const p of planDue(new Date())) {
-    jobs.push({ key: p.id, tag: `plan=${p.id} at=${p.at}`, why: 'plan', from: 'plan' })
+    jobs.push({ key: p.id, tag: `plan=${p.id} at=${p.at}`, why: 'plan', from: 'plan', itemWhy: p.why })
   }
   if (jobs.length === 0) return
 
@@ -736,6 +744,24 @@ async function watchmanTick() {
       watchmanLog('skip', `${why} ${job.tag}`)
     }
     if (await isPortOpen(WATCH.port)) {
+      // 她已经醒着 → 不用推门，但 plan 条目不能就这么丢掉。
+      // 她 2026-11-10 说过：「plan 不是叫醒，是提醒一个活着的人去做事」——
+      // 推了没人接，比没人推还难查。所以醒着的时候改成"递一句话"，走群那条线让她自己看到。
+      if (job.from === 'plan') {
+        if (watchState.planFired?.[job.key] === todayKey(new Date())) {
+          noteSkip('why=already-delivered')
+          continue
+        }
+        const text = `守夜递话：\`${job.key}\` 到点了（${job.tag}）。\n\n表上写的理由：${job.itemWhy || '（没写）'}\n\n做着看不做也行，你定。这条只递一次。`
+        try {
+          say('lee', 'whale', text)
+        } catch {}
+        watchState.planFired ??= {}
+        watchState.planFired[job.key] = todayKey(new Date())
+        saveWatchState()
+        watchmanLog('deliver', `why=plan ${job.tag}（窗开着，改递话）`)
+        continue
+      }
       noteSkip('why=already-awake')
       continue
     }
