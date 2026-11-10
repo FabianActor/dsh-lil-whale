@@ -548,7 +548,7 @@ window.__ModuleLoader__.load({
                     flex: '0 0 32px', width: 32, height: 32, boxSizing: 'border-box', borderRadius: 16, overflow: 'hidden',
                     display: 'grid', placeItems: 'center', padding: 0,
                     border: '1px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12))',
-                    background: pickerOpen ? 'var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,0.06))' : 'transparent',
+                    background: pickerOpen ? '#8b5cf6' : '#e5484d',
                     color: 'var(--dsw-alias-label-secondary)',
                     cursor: 'pointer',
                   },
