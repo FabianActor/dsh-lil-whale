@@ -435,7 +435,7 @@ window.__ModuleLoader__.load({
               alignItems: 'flex-start',
             },
           },
-            [{ key: 'group', label: '群' }, { key: 'dm', label: '私聊' }].map((item) => {
+            [{ key: 'group', label: '群聊' }, { key: 'dm', label: '私聊' }].map((item) => {
               const active = tab === item.key
               return h('button', {
                 key: item.key,

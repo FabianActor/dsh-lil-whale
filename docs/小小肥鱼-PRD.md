@@ -531,7 +531,9 @@ or export DEEPSEEK_API_KEY in the launching environment
 
 **A.10 客户端 bundle 的缓存规则，以及一个没查明的圆角（2026-11-10）**
 
-- bundle 地址是 `/plugins/??<pkg>/client.js&rev=<12 位>`；`rev = framedHash('plugin-artifact', [mtimeMs, ctimeMs, size])`，**只在宿主启动时算一次**；响应带 `cache-control: public, max-age=31536000, immutable` ⇒ **改客户端代码必须重启宿主**，否则浏览器永远拿旧字节，按 F5 也没用。
+- bundle 地址是 `/plugins/??<pkg>/client.js&rev=<12 位>`；`rev = framedHash('plugin-artifact', [mtimeMs, ctimeMs, size])`；响应带 `cache-control: public, max-age=31536000, immutable`。
+- **2026-11-10 订正（我先前写错过）**：`rev` 不是"只在宿主启动时算一次"。宿主有一个 **HMR 监听**（`dsh-client-modules` 的 `rebuilt(id)`，注释写明"The HMR watch's registration hook"），客户端 bundle 文件一变就重新发布：`rev` 变 → URL 变 → 浏览器必然重拉。⇒ **改客户端代码通常不用重启**（他实测过好几次：我改完他刷新就看到了）；**要重启的是宿主半边 `lib/index.js`**，那份在 node 进程里。
+- 排查口径（下次别猜）：页面没变时先看 `/plugins/??<pkg>/client.js&rev=…` 里的 `rev` 有没有变 —— 变了说明宿主已经换过；没变才是宿主没看到文件。
 - **没查明的事**：两个 32×32 的 `<button>`，内联 `borderRadius: 16`，DevTools 的 Computed 里宽高都是 `32px`、四个角都是 `16px`，屏幕上却画成圆角矩形；同一份 CSS 里输入卡的 `borderRadius: 14` 是正常的。最后用**内嵌 SVG `<circle>`** 绕过 CSS 圆角才画出正圆。原因不明，记在这里免得下次重查。
 - 教训：**"我改的那个东西"和"他看到的东西"必须先是同一个对象**。这一条线绕了七八轮，每一轮都在改一个他根本没在看的元素。
 
