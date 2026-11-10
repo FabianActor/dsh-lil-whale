@@ -114,9 +114,25 @@ window.__ModuleLoader__.load({
         },
       }, avatar.text)
     }
+    /**
+     * dsh 自己的 Markdown 渲染器，来自浏览器静态模块表（`@deepseek-ai/dsh-client-ui-primitives`）。
+     * 群里的消息是 markdown：当纯文本画会把 **加粗**、`代码` 原样显示出来。
+     * 解析不到就退回纯文本 —— 宁可少渲染，不要空白。
+     */
+    const MarkdownText = (() => {
+      try {
+        const primitives = require('@deepseek-ai/dsh-client-ui-primitives')
+        return primitives && typeof primitives.MarkdownText === 'function' ? primitives.MarkdownText : null
+      } catch {
+        return null
+      }
+    })()
+
 
     /** 一条消息：左边是别人，右边是自己。 */
-    function Bubble({ config, message, onMention }) {
+    function Bubble({ config, message, onMention, animate = false }) {
+      // 只在挂载时决定「要不要动画」：否则后续每次重渲染都会让老消息重新弹一遍。
+      const animateOnMount = useRef(animate).current
       const mine = message.from === 'fabian'
       const who = nameOf(config, message.from)
       const target = message.to && message.to !== 'all' ? ` → ${nameOf(config, message.to)}` : ''
@@ -158,9 +174,10 @@ window.__ModuleLoader__.load({
               padding: '8px 12px', borderRadius: 'var(--dsw-radius-lg, 12px)',
               background: mine ? 'rgba(74, 125, 189, 0.12)' : 'rgba(15, 20, 30, 0.06)',
               fontSize: 14, lineHeight: '22px',
-              whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+              wordBreak: 'break-word',
+              animation: animateOnMount ? 'dshGroupRise 240ms cubic-bezier(.2,.8,.2,1) both' : undefined,
             },
-          }, message.text),
+              }, MarkdownText ? h(MarkdownText, { text: message.text }) : message.text),
         ),
       )
     }
@@ -346,6 +363,9 @@ window.__ModuleLoader__.load({
       const [contacts, setContacts] = useState([])
       const [activePeer, setActivePeer] = useState(null)
       const [messages, setMessages] = useState([])
+      const animateRef = useRef(false)
+      const pickedOnceRef = useRef(false)
+      const peerRef = useRef(null)
       const [text, setText] = useState('')
       const [sending, setSending] = useState(false)
       const [error, setError] = useState(null)
@@ -377,6 +397,9 @@ window.__ModuleLoader__.load({
           const response = await fetch(`/group/api/dm?peer=${encodeURIComponent(activePeer)}`, { headers: { accept: 'application/json' } })
           if (!response.ok) throw new Error(`HTTP ${response.status}`)
           const data = await response.json()
+          // 换人（或第一次装填）时整屏都是新节点：那一刻不弹，弹的只是「后来进来的」。
+          if (peerRef.current !== activePeer) { peerRef.current = activePeer; animateRef.current = false }
+          setTimeout(() => { animateRef.current = true }, 0)
           setMessages(Array.isArray(data?.messages) ? data.messages : [])
           setError(null)
         } catch (e) {
@@ -514,7 +537,7 @@ window.__ModuleLoader__.load({
           messages.length === 0
             ? h('div', { style: { padding: '28px 20px', fontSize: 13, lineHeight: '20px', color: 'var(--dsw-alias-label-tertiary)' } },
               '还没有私下说过话。这里的话只有你们两个看得见。')
-            : messages.map((message, index) => h(Bubble, { key: `${message.ts}-${index}`, config, message })),
+            : messages.map((message, index) => h(Bubble, { key: `${message.ts}-${index}`, config, message, animate: animateRef.current })),
           h('div', { ref: bottom })))
 
       const composer = h('div', {
@@ -619,6 +642,8 @@ window.__ModuleLoader__.load({
     /** 主面板：群聊。 */
     function GroupPage() {
       const [config, setConfig] = useState(DEFAULT_CONFIG)
+      const animateRef = useRef(false)
+      const pickedOnceRef = useRef(false)
       const [messages, setMessages] = useState([])
       const [text, setText] = useState('')
       const [to, setTo] = useState('all')
@@ -639,6 +664,7 @@ window.__ModuleLoader__.load({
           if (!response.ok) throw new Error(`HTTP ${response.status}`)
           const data = await response.json()
           setMessages(Array.isArray(data.messages) ? data.messages : [])
+          setTimeout(() => { animateRef.current = true }, 0)
           setError(null)
           const counts = await loadUnread()
           if (counts) setUnread(counts)
@@ -835,6 +861,7 @@ window.__ModuleLoader__.load({
                 key: `${message.ts}-${index}`,
                 config,
                 message,
+                animate: animateRef.current,
                 onMention: (id) => setTo(id),
               })),
               h('div', { ref: bottom }),
@@ -1188,7 +1215,7 @@ window.__ModuleLoader__.load({
         if (typeof document !== 'undefined' && !document.getElementById('dsh-group-keyframes')) {
           const style = document.createElement('style')
           style.id = 'dsh-group-keyframes'
-          style.textContent = '@keyframes dshGroupPulse{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-1px)}}'
+      style.textContent = '@keyframes dshGroupPulse{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-1px)}}' + '@keyframes dshGroupRise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}'
           document.head.appendChild(style)
         }
 
