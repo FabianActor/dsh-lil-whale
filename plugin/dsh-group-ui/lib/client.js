@@ -879,7 +879,7 @@ window.__ModuleLoader__.load({
             ),
         ),
         h('div', {
-            style: { padding: '10px 28px 14px' },
+          style: { padding: '10px 0 14px' },
         },
           h('div', { style: { width: `${widthPct}%`, margin: '0 auto' } },
             typingLine
