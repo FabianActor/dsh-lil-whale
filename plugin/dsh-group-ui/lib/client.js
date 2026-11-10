@@ -458,11 +458,12 @@ window.__ModuleLoader__.load({
           h('div', { ref: bottom })))
 
       const composer = h('div', {
-        style: { borderTop: '1px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.1))', padding: '10px 16px 14px' },
+        style: { borderTop: '1px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.1))', padding: '10px 28px 18px' },
       },
         h('div', {
           style: {
             position: 'relative', display: 'flex', flexDirection: 'column',
+            width: '100%', maxWidth: 760, margin: '0 auto', boxSizing: 'border-box',
             background: 'var(--dsw-specific-input-major, var(--dsw-alias-bg-layer-1, #fff))',
             borderRadius: 'var(--dsw-radius-panel, 16px)',
             boxShadow: 'var(--dsw-elevation-soft, 0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06))',
@@ -513,12 +514,42 @@ window.__ModuleLoader__.load({
       const rightPane = activePeer === null ? blankPane : chatPane
 
       return h('div', { style: { flex: 1, minHeight: 0, display: 'flex' } },
-        h('div', {
-          style: {
-            width: 208, flex: 'none', overflowY: 'auto', padding: '6px 0',
-            borderRight: '0.5px solid var(--dsw-alias-border-l3, rgba(0,0,0,0.1))',
+        h('div', { style: { width: sidebar, flex: 'none', position: 'relative', display: 'flex', minHeight: 0 } },
+          h('div', { style: { flex: 1, overflowY: 'auto', padding: '6px 0', minWidth: 0 } }, contactList),
+          h('div', {
+            title: '拖这里改变左侧宽度',
+            onPointerDown: (event) => {
+              event.preventDefault()
+              const startX = event.clientX
+              const startWidth = sidebar
+              const target = event.currentTarget
+              target.setPointerCapture(event.pointerId)
+              const move = (moveEvent) => {
+                const next = Math.max(140, Math.min(420, startWidth + (moveEvent.clientX - startX)))
+                setSidebar(next)
+              }
+              const up = () => {
+                target.removeEventListener('pointermove', move)
+                target.removeEventListener('pointerup', up)
+                target.removeEventListener('pointercancel', up)
+                setSidebar((current) => { try { window.localStorage?.setItem('dsh-group-dm-sidebar', String(current)) } catch {} ; return current })
+              }
+              target.addEventListener('pointermove', move)
+              target.addEventListener('pointerup', up)
+              target.addEventListener('pointercancel', up)
+            },
+            style: {
+              position: 'absolute', top: 0, bottom: 0, right: -3, width: 7,
+              cursor: 'col-resize', touchAction: 'none', zIndex: 5,
+            },
           },
-        }, contactList),
+            h('div', {
+              'aria-hidden': 'true',
+              style: {
+                position: 'absolute', top: 0, bottom: 0, right: 3, width: 1,
+                background: 'var(--dsw-alias-border-l3, rgba(0,0,0,0.12))',
+              },
+            }))),
         h('div', { style: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' } },
           rightPane,
           error
