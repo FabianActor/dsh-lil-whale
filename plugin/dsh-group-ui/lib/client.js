@@ -29,7 +29,8 @@ window.__ModuleLoader__.load({
     const DEFAULT_CONFIG = {
       panelLabel: '鱼群',
       notifyScope: 'all',
-      contentWidth: 72,
+  contentWidth: 72,
+  gutter: 28,
       avatars: {
         lee: { text: '大', tint: '#4a7dbd' },
         whale: { text: '小', tint: '#c2705a' },
@@ -131,6 +132,7 @@ window.__ModuleLoader__.load({
 
     /** 一条消息：左边是别人，右边是自己。 */
     function Bubble({ config, message, onMention, animate = false }) {
+      const gutter = Number(config?.gutter) || 28
       // 只在挂载时决定「要不要动画」：否则后续每次重渲染都会让老消息重新弹一遍。
       const animateOnMount = useRef(animate).current
       const mine = message.from === 'fabian'
@@ -143,7 +145,7 @@ window.__ModuleLoader__.load({
       })()
       return h('div', {
         style: {
-          display: 'flex', gap: 10, padding: '6px 12px',
+          display: 'flex', gap: 10, padding: '6px ' + gutter + 'px',
           flexDirection: mine ? 'row-reverse' : 'row',
         },
       },
@@ -543,7 +545,7 @@ window.__ModuleLoader__.load({
           h('div', { ref: bottom })))
 
       const composer = h('div', {
-        style: { flex: 'none', padding: '10px 28px 18px' },
+        style: { flex: 'none', padding: '10px ' + (Number(config?.gutter) || 28) + 'px 18px' },
       },
         h('div', {
           style: {
@@ -878,7 +880,7 @@ window.__ModuleLoader__.load({
             ),
         ),
         h('div', {
-          style: { padding: '10px 0 14px' },
+          style: { padding: '10px ' + (Number(config?.gutter) || 28) + 'px 14px' },
         },
           h('div', { style: { width: `${widthPct}%`, margin: '0 auto' } },
             typingLine
@@ -1080,6 +1082,16 @@ window.__ModuleLoader__.load({
               onChange: (event) => patch((next) => { next.panelLabel = event.target.value }),
               style: inputStyle,
             }),
+          ),
+          h('div', { style: rowStyle },
+            h('span', { style: labelStyle }, '消息左右留白'),
+            h('input', {
+              type: 'number', min: 4, max: 40, step: 1,
+              value: config.gutter ?? 28,
+              onChange: (event) => patch((next) => { next.gutter = Math.max(4, Math.min(40, Math.round(Number(event.target.value) || 28))) }),
+              style: { ...inputStyle, width: 84 },
+            }),
+            h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } }, 'px（4–40，气泡与页边的距离）'),
           ),
         ),
 
