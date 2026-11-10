@@ -23,6 +23,8 @@ function dmFileOf(peer) {
 // 列表里只放"鱼"：fabian 是他自己，lee 是大肥鱼（他就在 3080 里跟 Leea 说话，不用再开一页）
 const DM_HIDDEN = new Set(['fabian', 'lee'])
 const UI_CONFIG = join(GROUP_DIR, 'ui-config.json')
+// 「看到哪儿了」的游标：只在面板里看，不影响她那边读群的游标
+const UI_READ = join(GROUP_DIR, 'ui-read.json')
 const PINS = join(GROUP_DIR, 'pins.json')
 
 const LABEL = { lee: '大肥鱼', whale: '小肥鱼', fabian: 'Fabian' }
@@ -90,6 +92,35 @@ function normalizeAvatar(value, fallback) {
     text: text || fallback.text,
     tint: tint || fallback.tint,
   }
+}
+
+function readUiRead() {
+  try {
+    const raw = JSON.parse(readFileSync(UI_READ, 'utf8'))
+    return {
+      group: typeof raw?.group === 'string' ? raw.group : '',
+      dm: raw?.dm && typeof raw.dm === 'object' && !Array.isArray(raw.dm) ? raw.dm : {},
+    }
+  } catch {
+    return { group: '', dm: {} }
+  }
+}
+
+function writeUiRead(next) {
+  try {
+    writeFileSync(UI_READ, JSON.stringify(next, null, 2) + '\n', 'utf8')
+  } catch {
+    // 写不进去不影响看消息，只是红点会重复出现
+  }
+}
+
+function countUnread(file, since) {
+  return readMessages(file).filter((message) => message.from !== 'fabian' && String(message.ts ?? '') > since).length
+}
+
+function lastTsOf(file) {
+  const messages = readMessages(file)
+  return messages.length ? String(messages[messages.length - 1].ts ?? '') : ''
 }
 
 function readMessages(file = MESSAGES) {
@@ -327,6 +358,59 @@ export function apply(ctx) {
         return { peer, name: LABEL[peer] ?? peer, count: messages.length, last }
       })
       sendJson(res, 200, { contacts })
+    },
+  }))
+
+  // ---------- 未读红点：这里的"读没读"只记"这个窗口看到哪儿了"，不动她那边的游标 ----------
+  disposers.push(ctx.webServer.register({
+    kind: 'exact',
+    path: '/group/api/unread',
+    async handler(req, res) {
+      if (req.method !== 'GET') {
+        sendJson(res, 405, { error: 'method-not-allowed' })
+        return
+      }
+      const state = readUiRead()
+      const group = countUnread(MESSAGES, state.group)
+      const dm = {}
+      let total = group
+      for (const peer of KNOWN_PEERS) {
+        const count = countUnread(dmFileOf(peer), String(state.dm[peer] ?? ''))
+        dm[peer] = count
+        total += count
+      }
+      sendJson(res, 200, { group, dm, total })
+    },
+  }))
+
+  disposers.push(ctx.webServer.register({
+    kind: 'exact',
+    path: '/group/api/read',
+    async handler(req, res) {
+      if (req.method !== 'POST') {
+        sendJson(res, 405, { error: 'method-not-allowed' })
+        return
+      }
+      let payload = null
+      try {
+        payload = JSON.parse(await readBody(req))
+      } catch {
+        sendJson(res, 400, { error: 'bad-json' })
+        return
+      }
+      const channel = payload?.channel
+      const state = readUiRead()
+      if (channel === 'group') {
+        state.group = lastTsOf(MESSAGES)
+      } else if (channel === 'dm') {
+        const peer = dmPeerOf(payload?.peer)
+        state.dm[peer] = lastTsOf(dmFileOf(peer))
+      } else {
+        sendJson(res, 400, { error: 'bad-channel' })
+        return
+      }
+      writeUiRead(state)
+      sendJson(res, 200, { ok: true, state })
     },
   }))
 

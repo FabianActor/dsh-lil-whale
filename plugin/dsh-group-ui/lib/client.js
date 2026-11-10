@@ -314,6 +314,37 @@ window.__ModuleLoader__.load({
 
     /** 主面板：群聊。 */
     /** 私聊页：左边是能单独说话的人，右边默认空白；点谁开谁，再点一次收起。 */
+    async function markRead(channel, peer) {
+      try {
+        await fetch('/group/api/read', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ channel, peer }),
+        })
+      } catch {
+        // 清不掉就继续亮着，比假装看过好
+      }
+    }
+
+    function dmTotal(unread) {
+      return Object.values(unread?.dm ?? {}).reduce((sum, count) => sum + (Number(count) || 0), 0)
+    }
+
+    async function loadUnread() {
+      try {
+        const response = await fetch('/group/api/unread', { headers: { accept: 'application/json' } })
+        if (!response.ok) return null
+        const data = await response.json()
+        return {
+          group: Number(data?.group) || 0,
+          dm: data?.dm && typeof data.dm === 'object' ? data.dm : {},
+          total: Number(data?.total) || 0,
+        }
+      } catch {
+        return null
+      }
+    }
+
     function DmPage({ config, presence }) {
       const [contacts, setContacts] = useState([])
       const [activePeer, setActivePeer] = useState(null)
@@ -321,6 +352,7 @@ window.__ModuleLoader__.load({
       const [text, setText] = useState('')
       const [sending, setSending] = useState(false)
       const [error, setError] = useState(null)
+      const [unread, setUnread] = useState({ dm: {} })
       const bottom = useRef(null)
       const inputRef = useRef(null)
 
@@ -350,11 +382,26 @@ window.__ModuleLoader__.load({
       }, [activePeer])
 
       useEffect(() => {
-        const tick = async () => { await loadContacts(); await loadMessages() }
+        const tick = async () => {
+          await loadContacts()
+          await loadMessages()
+          const counts = await loadUnread()
+          if (counts) setUnread(counts)
+        }
         void tick()
         const timer = setInterval(() => { void tick() }, 3000)
         return () => clearInterval(timer)
       }, [loadContacts, loadMessages])
+
+      // 打开这一段、页面在前台、停 1.5 秒，才算读过
+      useEffect(() => {
+        if (activePeer === null) return
+        if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
+        const timer = setTimeout(() => {
+          void markRead('dm', activePeer).then(() => loadUnread().then((counts) => { if (counts) setUnread(counts) }))
+        }, 1500)
+        return () => clearTimeout(timer)
+      }, [activePeer])
 
       useEffect(() => { bottom.current?.scrollIntoView({ block: 'end' }) }, [messages.length])
       useEffect(() => { if (activePeer !== null) inputRef.current?.focus() }, [activePeer])
@@ -419,6 +466,16 @@ window.__ModuleLoader__.load({
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   },
                 }, nameOf(config, contact.peer)),
+                (Number(unread?.dm?.[contact.peer]) || 0) > 0
+                  ? h('span', {
+                      style: {
+                        minWidth: 16, height: 16, padding: '0 5px', borderRadius: 9999,
+                        background: 'var(--dsw-alias-label-error, #e5484d)',
+                        color: 'var(--dsw-alias-label-primary-foreground, #fff)',
+                        fontSize: 10, lineHeight: '16px', textAlign: 'center', fontWeight: 600,
+                      },
+                    }, String(unread.dm[contact.peer]))
+                  : null,
                 h('span', { style: { marginLeft: 'auto', fontSize: 11, color: 'var(--dsw-alias-label-caption)' } }, shortTime(contact.last?.ts))),
               h('div', {
                 style: {
@@ -566,6 +623,7 @@ window.__ModuleLoader__.load({
       const [presence, setPresence] = useState({})
       const [pickerOpen, setPickerOpen] = useState(false)
       const [tab, setTab] = useState('group')
+      const [unread, setUnread] = useState({ group: 0, dm: {}, total: 0 })
       const [widthPct, setWidthPct] = useState(DEFAULT_CONFIG.contentWidth)
       const bottom = useRef(null)
       const scrollRef = useRef(null)
@@ -580,6 +638,8 @@ window.__ModuleLoader__.load({
           setError(null)
         } catch (e) {
           setError(String(e?.message ?? e))
+        const counts = await loadUnread()
+        if (counts) setUnread(counts)
         }
         try {
           const response = await fetch('/group/api/presence', { headers: { accept: 'application/json' } })
@@ -598,6 +658,14 @@ window.__ModuleLoader__.load({
           if (typeof value?.contentWidth === 'number') setWidthPct(value.contentWidth)
         })
       }, [])
+
+      // 看过 1.5 秒才算读过：让红点有出现的余地，也不至于一闪就没
+      useEffect(() => {
+        if (tab !== 'group' || unread.group === 0) return
+        if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
+        const timer = setTimeout(() => { void markRead('group').then(() => refresh()) }, 1500)
+        return () => clearTimeout(timer)
+      }, [tab, unread.group, refresh])
 
       useEffect(() => {
         void refresh()
@@ -699,7 +767,9 @@ window.__ModuleLoader__.load({
                   fontFamily: 'inherit',
                 },
               },
-                item.label,
+                item.key === 'group'
+                  ? (unread.group > 0 ? item.label + ' (' + unread.group + ')' : item.label)
+                  : (dmTotal(unread) > 0 ? item.label + ' (' + dmTotal(unread) + ')' : item.label),
                 h('span', {
                   style: {
                     position: 'absolute',
@@ -1046,13 +1116,37 @@ window.__ModuleLoader__.load({
 
     /** 侧边栏图标：一个对话气泡。 */
     function GroupIcon({ size = 18 }) {
-      return h('svg', {
-        width: size, height: size, viewBox: '0 0 16 16', fill: 'none',
-        stroke: 'currentColor', strokeWidth: 1.4, strokeLinecap: 'round', strokeLinejoin: 'round',
-      },
-        h('path', { d: 'M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z' }),
-        h('path', { d: 'M5.5 6.5h5' }),
-        h('path', { d: 'M5.5 8.5h3' }),
+      const [unread, setUnread] = useState(0)
+      useEffect(() => {
+        let alive = true
+        const tick = async () => {
+          const counts = await loadUnread()
+          if (alive && counts) setUnread(counts.total)
+        }
+        void tick()
+        const timer = setInterval(() => { void tick() }, 5000)
+        return () => { alive = false; clearInterval(timer) }
+      }, [])
+
+      return h('div', { style: { position: 'relative', width: size, height: size, display: 'grid', placeItems: 'center' } },
+        h('svg', {
+          width: size, height: size, viewBox: '0 0 16 16', fill: 'none',
+          stroke: 'currentColor', strokeWidth: 1.4, strokeLinecap: 'round', strokeLinejoin: 'round',
+        },
+          h('path', { d: 'M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z' }),
+          h('path', { d: 'M5.5 6.5h5' }),
+          h('path', { d: 'M5.5 8.5h3' }),
+        ),
+        unread > 0
+          ? h('span', {
+              'aria-label': '有新消息',
+              title: '有新消息',
+              style: {
+                position: 'absolute', top: -1, right: -1, width: 6, height: 6,
+                borderRadius: 9999, background: 'var(--dsw-alias-label-error, #e5484d)',
+              },
+            })
+          : null,
       )
     }
 
