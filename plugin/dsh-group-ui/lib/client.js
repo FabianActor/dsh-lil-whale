@@ -308,6 +308,32 @@ window.__ModuleLoader__.load({
       return h('div', null, ...out)
     }
 
+    /**
+     * 官方的 MarkdownText 依赖它自己的 React context（`MarkdownDelegateProvider`）：
+     * 在 dsh 主界面里有人在外面套好了，在我们这种独立 slot 里不一定有。
+     * 缺 context 时它会直接抛错 —— 一抛整页就白了。所以这里加一层错误边界：
+     * 一条消息渲染失败就退回我们自己的渲染器，别把整页带走。
+     */
+    class SafeMarkdown extends React.Component {
+      constructor(props) {
+        super(props)
+        this.state = { failed: false }
+      }
+
+      static getDerivedStateFromError() {
+        return { failed: true }
+      }
+
+      componentDidCatch(error) {
+        console.warn('[dsh-group-ui] MarkdownText 渲染失败，这条改用自带渲染：', error?.message ?? error)
+      }
+
+      render() {
+        if (this.state.failed || !MarkdownText) return h(MarkdownBody, { text: this.props.text })
+        return h(MarkdownText, { text: this.props.text })
+      }
+    }
+
     /** 一条消息：左边是别人，右边是自己。 */
     function Bubble({ config, message, onMention, animate = false }) {
       // 只在挂载时决定「要不要动画」：否则后续每次重渲染都会让老消息重新弹一遍。
@@ -356,7 +382,7 @@ window.__ModuleLoader__.load({
               wordBreak: 'break-word',
               animation: animateOnMount ? 'dshGroupRise 240ms cubic-bezier(.2,.8,.2,1) both' : undefined,
             },
-              }, MarkdownText ? h(MarkdownText, { text: message.text }) : h(MarkdownBody, { text: message.text })),
+              }, h(SafeMarkdown, { text: message.text })),
         ),
       )
     }
