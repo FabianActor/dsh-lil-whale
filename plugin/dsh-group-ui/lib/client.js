@@ -312,8 +312,6 @@ window.__ModuleLoader__.load({
       }))
     }
 
-    /** 主面板：群聊。 */
-    /** 私聊页：左边是能单独说话的人，右边默认空白；点谁开谁，再点一次收起。 */
     async function markRead(channel, peer) {
       try {
         await fetch('/group/api/read', {
@@ -345,6 +343,7 @@ window.__ModuleLoader__.load({
       }
     }
 
+    /** 私聊页：左边是能单独说话的人，右边默认空白；点谁开谁，再点一次收起。 */
     function DmPage({ config, presence }) {
       const [contacts, setContacts] = useState([])
       const [activePeer, setActivePeer] = useState(null)
@@ -613,6 +612,7 @@ window.__ModuleLoader__.load({
             ? h('div', { style: { flex: 'none', padding: '0 16px 8px', fontSize: 12, color: 'var(--dsw-alias-label-error, #c0392b)' } }, error)
             : null))
     }
+    /** 主面板：群聊。 */
     function GroupPage() {
       const [config, setConfig] = useState(DEFAULT_CONFIG)
       const [messages, setMessages] = useState([])
