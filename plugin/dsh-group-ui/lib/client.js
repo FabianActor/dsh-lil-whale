@@ -245,14 +245,15 @@ window.__ModuleLoader__.load({
       },
         h('div', {
           style: {
-            position: 'absolute', left: '50%', marginLeft: -1, width: 2,
-            top: 0, bottom: 0, borderRadius: 2,
-            // 常驻：两端淡、中间实。照 dsh 的分隔线，但一直看得见，不靠悬停才出现。
+            position: 'absolute', left: '50%', marginLeft: -1, width: 2, height: 72,
+            top: pointerY === null ? 'calc(50% - 36px)' : `${pointerY - 36}px`,
+            borderRadius: 2,
+            // 平时完全透明；指针进到热区才浮出一段 72px、两端渐隐的短线段，跟着指针漂。
             backgroundImage: dragging
-              ? 'linear-gradient(to bottom, transparent 0%, var(--dsw-alias-brand-primary, #4a7dbd) 12%, var(--dsw-alias-brand-primary, #4a7dbd) 88%, transparent 100%)'
-              : 'linear-gradient(to bottom, transparent 0%, #c6ccd6 12%, #c6ccd6 88%, transparent 100%)',
-            opacity: dragging ? 1 : 0.9,
-            opacity: dragging ? 1 : (hovered ? 1 : 0.85),
+              ? 'linear-gradient(to bottom, transparent 0%, var(--dsw-alias-brand-primary, #4a7dbd) 33%, var(--dsw-alias-brand-primary, #4a7dbd) 66%, transparent 100%)'
+              : 'linear-gradient(to bottom, transparent 0%, #b8bec8 33%, #b8bec8 66%, transparent 100%)',
+            opacity: active ? 1 : 0,
+            transition: 'opacity 120ms ease',
             pointerEvents: 'none',
           },
         }),
