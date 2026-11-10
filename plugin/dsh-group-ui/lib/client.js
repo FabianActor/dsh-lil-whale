@@ -143,7 +143,7 @@ window.__ModuleLoader__.load({
       })()
       return h('div', {
         style: {
-          display: 'flex', gap: 10, padding: '10px 16px',
+          display: 'flex', gap: 10, padding: '6px 12px',
           flexDirection: mine ? 'row-reverse' : 'row',
         },
       },
@@ -535,7 +535,7 @@ window.__ModuleLoader__.load({
       const fadeMask = { WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)', maskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)' }
       // 滚到边界时消息在输入框后面渐隐（照 dsh 的样子）：用 mask 而不是盖一层渐变，免得挡住点击。
       const messageList = h('div', { style: { flex: 1, overflowY: 'auto', padding: '8px 0 46px', minHeight: 0, ...fadeMask } },
-        h('div', { style: { width: '100%', maxWidth: 720, margin: '0 auto' } },
+        h('div', { style: { width: '100%' } },
           messages.length === 0
             ? h('div', { style: { padding: '28px 20px', fontSize: 13, lineHeight: '20px', color: 'var(--dsw-alias-label-tertiary)' } },
               '还没有私下说过话。这里的话只有你们两个看得见。')
@@ -595,7 +595,7 @@ window.__ModuleLoader__.load({
                 strokeLinecap: 'round', strokeLinejoin: 'round', style: { position: 'relative' },
               }, h('path', { d: 'M8 13V3M4 7l4-4 4 4' }))))))
 
-      const chatPane = h(React.Fragment, null, chatHeader, messageList, composer)
+      const chatPane = h('div', { style: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' } }, chatHeader, messageList, composer)
       const rightPane = activePeer === null ? blankPane : chatPane
 
       return h('div', { style: { flex: 1, minHeight: 0, display: 'flex' } },
