@@ -553,10 +553,10 @@ window.__ModuleLoader__.load({
                   h('svg', { width: 32, height: 32, viewBox: '0 0 32 32', style: { position: 'absolute', inset: 0 } },
                     h('circle', {
                       cx: 16, cy: 16, r: 15.5,
-                      fill: pickerOpen ? '#8b5cf6' : '#e5484d',
+                      fill: pickerOpen ? 'var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,0.06))' : 'transparent',
                       stroke: 'var(--dsw-alias-border-l2, rgba(0,0,0,0.12))', strokeWidth: 1,
                     })),
-                  h('span', { style: { position: 'relative', fontSize: 15, lineHeight: 1, color: '#fff' } }, '@')),
+                  h('span', { style: { position: 'relative', fontSize: 15, lineHeight: 1, color: 'var(--dsw-alias-label-secondary)' } }, '@')),
                 h('div', { style: { flex: 1, fontSize: 11, color: 'var(--dsw-alias-label-caption)' } },
                   to === 'all' ? t.groupOnly : t.toOne(nameOf(config, to))),
                 h('button', {
