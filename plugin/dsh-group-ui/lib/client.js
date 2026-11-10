@@ -121,8 +121,11 @@ window.__ModuleLoader__.load({
     const MarkdownText = (() => {
       try {
         const primitives = require('@deepseek-ai/dsh-client-ui-primitives')
-        if (primitives && typeof primitives.MarkdownText === 'function') return primitives.MarkdownText
-        console.warn('[dsh-group-ui] primitives 里没有 MarkdownText；keys= ' + Object.keys(primitives).slice(0, 60).join(',') + '；typeof default= ' + typeof (primitives && primitives.default))
+        const md = primitives && primitives.MarkdownText
+        // dsh 的 MarkdownText 是 React.memo(...) 包出来的，typeof 是 "object" 不是 "function"。
+        // 只认 function 会把它判成"没有"——这个坑我踩过一次。
+        if (md && (typeof md === 'function' || typeof md === 'object')) return md
+        console.warn('[dsh-group-ui] primitives 里没有可用的 MarkdownText，用自带渲染兜底')
         return null
       } catch (error) {
         // 退化成纯文本可以接受，但必须留一条痕迹：静默降级等于把错误藏起来。
