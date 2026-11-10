@@ -299,13 +299,15 @@ window.__ModuleLoader__.load({
       const [sending, setSending] = useState(false)
       const [presence, setPresence] = useState({})
       const [pickerOpen, setPickerOpen] = useState(false)
+      const [tab, setTab] = useState('group')
       const [widthPct, setWidthPct] = useState(DEFAULT_CONFIG.contentWidth)
       const bottom = useRef(null)
       const scrollRef = useRef(null)
 
       const refresh = useCallback(async () => {
         try {
-          const response = await fetch('/group/api/messages', { headers: { accept: 'application/json' } })
+          const url = tab === 'dm' ? '/group/api/dm' : '/group/api/messages'
+          const response = await fetch(url, { headers: { accept: 'application/json' } })
           if (!response.ok) throw new Error(`HTTP ${response.status}`)
           const data = await response.json()
           setMessages(Array.isArray(data.messages) ? data.messages : [])
@@ -322,7 +324,7 @@ window.__ModuleLoader__.load({
         } catch {
           // 存在感掉了就当没人说话，宁可安静
         }
-      }, [])
+      }, [tab])
 
       useEffect(() => {
         void loadConfig().then((value) => {
@@ -355,10 +357,11 @@ window.__ModuleLoader__.load({
         if (value === '' || sending) return
         setSending(true)
         try {
-          const response = await fetch('/group/api/send', {
+          const endpoint = tab === 'dm' ? '/group/api/dm' : '/group/api/send'
+          const response = await fetch(endpoint, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ to, text: value }),
+            body: JSON.stringify(tab === 'dm' ? { text: value } : { to, text: value }),
           })
           if (!response.ok) throw new Error(`HTTP ${response.status}`)
           setText('')
@@ -368,7 +371,7 @@ window.__ModuleLoader__.load({
         } finally {
           setSending(false)
         }
-      }, [text, to, sending, refresh])
+      }, [text, to, sending, refresh, tab])
 
       const busy = ['lee', 'whale'].filter((id) => presence?.[id] === 'working')
       const typingLine = busy.length
@@ -385,6 +388,22 @@ window.__ModuleLoader__.load({
           },
         },
           h('div', { style: { fontSize: 16, fontWeight: 600 } }, config.panelLabel || t.title),
+          h('div', { style: { display: 'flex', gap: 6, marginTop: 8 } },
+            [{ key: 'group', label: '群' }, { key: 'dm', label: '私聊' }].map((item) => h('button', {
+              key: item.key,
+              onClick: () => { setTab(item.key); setText('') },
+              style: {
+                padding: '5px 12px',
+                fontSize: 12,
+                cursor: 'pointer',
+                borderRadius: 999,
+                border: '1px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12))',
+                background: tab === item.key ? 'var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,0.06))' : 'transparent',
+                color: tab === item.key ? 'var(--dsw-alias-label-primary)' : 'var(--dsw-alias-label-secondary)',
+                fontFamily: 'inherit',
+              },
+            }, item.label)),
+          ),
           error
             ? h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-error, #c0392b)', marginTop: 4 } }, error)
             : null,

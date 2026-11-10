@@ -5,7 +5,7 @@
  * 而 webServer 有现成的具名路由。群里那份 messages.jsonl 本来就是接口，
  * 这里只是给它开一扇 HTTP 的门。
  */
-import { readFileSync, writeFileSync, appendFileSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 export const name = 'dsh-group-ui'
@@ -14,6 +14,9 @@ export const inject = ['webServer', 'agents']
 const GROUP_DIR = 'D:\\文档\\WorkSpace\\lil-whale\\group'
 const MESSAGES = join(GROUP_DIR, 'messages.jsonl')
 const READABLE = join(GROUP_DIR, '群.md')
+const DM_DIR = join(GROUP_DIR, 'dm')
+// 一个人和一条鱼的那段对话：两个方向都写在同一个文件里（他 2026-11-10 定）
+const DM_FILE = join(DM_DIR, 'fabian__whale.jsonl')
 const UI_CONFIG = join(GROUP_DIR, 'ui-config.json')
 const PINS = join(GROUP_DIR, 'pins.json')
 
@@ -83,10 +86,10 @@ function normalizeAvatar(value, fallback) {
   }
 }
 
-function readMessages() {
-  if (!existsSync(MESSAGES)) return []
+function readMessages(file = MESSAGES) {
+  if (!existsSync(file)) return []
   const out = []
-  for (const line of readFileSync(MESSAGES, 'utf8').split(/\r?\n/)) {
+  for (const line of readFileSync(file, 'utf8').split(/\r?\n/)) {
     const text = line.trim()
     if (!text) continue
     try {
@@ -247,6 +250,46 @@ export function apply(ctx) {
         appendFileSync(MESSAGES, JSON.stringify(record) + '\n', 'utf8')
         const who = to === 'all' ? '群里' : LABEL[to] ?? to
         appendFileSync(READABLE, `**${stamp(now)} · Fabian → ${who}**\n\n${text}\n\n`, 'utf8')
+      } catch (error) {
+        sendJson(res, 500, { error: 'write-failed', detail: String(error?.message ?? error) })
+        return
+      }
+      sendJson(res, 200, { ok: true, record })
+    },
+  }))
+
+  // ---------- 私聊：一个人和一条鱼的那段对话 ----------
+  // 这个窗口里说话的人固定是 Fabian，收信的人是她；两个方向都写进同一个文件。
+  disposers.push(ctx.webServer.register({
+    kind: 'exact',
+    path: '/group/api/dm',
+    async handler(req, res) {
+      if (req.method === 'GET') {
+        const messages = readMessages(DM_FILE)
+        sendJson(res, 200, { count: messages.length, messages })
+        return
+      }
+      if (req.method !== 'POST') {
+        sendJson(res, 405, { error: 'method-not-allowed' })
+        return
+      }
+      let payload
+      try {
+        payload = JSON.parse(await readBody(req))
+      } catch {
+        sendJson(res, 400, { error: 'bad-json' })
+        return
+      }
+      const text = typeof payload?.text === 'string' ? payload.text.trim() : ''
+      if (!text) {
+        sendJson(res, 400, { error: 'empty-text' })
+        return
+      }
+      const now = new Date()
+      const record = { ts: now.toISOString(), from: 'fabian', to: 'whale', text, kind: 'dm', channel: 'dm' }
+      try {
+        mkdirSync(DM_DIR, { recursive: true })
+        appendFileSync(DM_FILE, JSON.stringify(record) + '\n', 'utf8')
       } catch (error) {
         sendJson(res, 500, { error: 'write-failed', detail: String(error?.message ?? error) })
         return

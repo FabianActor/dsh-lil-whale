@@ -259,26 +259,58 @@ function labelOf(who) {
 const DM_DIR = join(GROUP_DIR, 'dm')
 
 /**
+ * 私聊：一个人和一条鱼之间的一段对话，两个方向写进同一个文件。
+ * 他 2026-11-10 改的口径：按"对话"分文件，不按收件人分两个 ——
+ * 一个窗口就是一来一回，两边的话必须挨着放，否则读的人要在两个文件之间来回拼。
+ */
+function dmFileOf(a, b) {
+  const [x, y] = [a, b].sort()
+  return join(DM_DIR, `${x}__${y}.jsonl`)
+}
+
+function dmKey(a, b) {
+  const [x, y] = [a, b].sort()
+  return `dm:${x}__${y}`
+}
+
+/**
  * 私聊：不混进群记录、不打扰第三个人。
  * 他 2026-11-09 明确：**不用严格保密**（"这里又不是什么情报机构"），
  * 要紧的是说话的人分得清"这句话说给谁"。
  */
 function sayPrivate(from, to, text) {
   mkdirSync(DM_DIR, { recursive: true })
-  const record = { ts: new Date().toISOString(), from, to, text, kind: 'dm' }
-  appendFileSync(join(DM_DIR, `${to}.jsonl`), JSON.stringify(record) + '\n', 'utf8')
+  const record = { ts: new Date().toISOString(), from, to, text, kind: 'dm', channel: 'dm' }
+  appendFileSync(dmFileOf(from, to), JSON.stringify(record) + '\n', 'utf8')
   return record
 }
 
-function say(from, to, text) {
+function say(from, to, text, channel = 'group') {
   ensureDir()
-  if (to === 'fabian') return { ...sayPrivate(from, to, text), channel: 'dm' }
-  const record = { ts: new Date().toISOString(), from, to, text, kind: 'say' }
+  const isDm = channel === 'dm' || to === 'fabian'
+  if (isDm) return { ...sayPrivate(from, to, text), channel: 'dm' }
+  const record = { ts: new Date().toISOString(), from, to, text, kind: 'say', channel: 'group' }
   appendFileSync(MESSAGES, JSON.stringify(record) + '\n', 'utf8')
   appendFileSync(READABLE, `**${stamp()} · ${labelOf(from)}**\n\n${text}\n\n`, 'utf8')
   return { ...record, channel: 'group' }
 }
 
+/** 游标：一条鱼一个盒子，盒子里按通道分别记（group / dm:fabian__whale）。 */
+function cursorOf(cursors, member, key) {
+  const value = cursors?.[member]
+  if (typeof value === 'number') return key === 'group' ? value : 0
+  const n = value?.[key]
+  return typeof n === 'number' ? n : 0
+}
+
+function setCursor(cursors, member, key, value) {
+  const prev = cursors[member]
+  const box = prev !== null && typeof prev === 'object'
+    ? { ...prev }
+    : (typeof prev === 'number' ? { group: prev } : {})
+  box[key] = value
+  cursors[member] = box
+}
 /** 往 plugin.log 追一行（自检用，别让它影响主流程）。 */
 function logLine(record) {
   try {
@@ -359,13 +391,18 @@ function apply(ctx) {
   const buildTool = defineTool ?? ((options) => options)
   ctx.tools.register(buildTool({
     name: 'group_say',
-    description: '在群里说一句话。发出即返回，不等对方回复 —— 对方之后会不会看到、会不会回，都不影响你这一句。',
+    description: '说一句话。默认在群里说（三个人都看得见）；channel 给 dm 就是私下只对一个人说（不进群记录，其他人看不到这个窗口）。发出即返回，不等对方回复。',
     parameters: {
       to: {
         type: 'string',
         required: true,
         enum: ['all', 'lee', 'whale', 'fabian'],
-        description: '说给谁：all = 群里所有人；lee = 大肥鱼；whale = 小肥鱼；fabian = 人类',
+        description: '说给谁：all = 群里所有人（只能在群里用）；lee = 大肥鱼；whale = 小肥鱼；fabian = 人类。给具体的人配 channel dm 就是私下说。',
+      },
+      channel: {
+        type: 'string',
+        enum: ['group', 'dm'],
+        description: 'group（默认）= 在群里说，三个人都看得见；dm = 私下只对 to 那一个人说，写进你俩那段对话的文件，不进群记录。',
       },
       text: {
         type: 'string',
@@ -390,7 +427,7 @@ function apply(ctx) {
       render: (_args, value) => [{
         type: 'text',
         text: value.channel === 'dm'
-          ? `已写进私聊（${value.ts}）：只有 ${value.to} 看得见，不会叫醒谁。`
+          ? `已写进私聊（${value.ts}）：只有 ${value.to} 看得见，群里不会出现这句。`
           : `已入群（${value.ts}）：群里的人都看得见。`,
       }],
     },
@@ -407,7 +444,11 @@ function apply(ctx) {
           '要在这里发言，把这段会话的 id 写进 pins.json 就行，不用改代码、不用重启。',
         )
       }
-      const record = say(member, args.to, args.text)
+      const channel = args.channel === 'dm' ? 'dm' : 'group'
+      if (channel === 'dm' && args.to === 'all') {
+        throw new Error('私下说话得指名对象：to 不能是 all。要不就 channel 留空（在群里说）。')
+      }
+      const record = say(member, args.to, args.text, channel)
       // channel 让发言的人一眼知道这句话去了哪：group = 大家都看得见；dm = 只有对方看得见，且不会叫醒谁。
       return { ts: record.ts, queued: true, channel: record.channel, to: args.to }
     },
@@ -497,92 +538,121 @@ async function tick(ctx) {
   const agents = ctx.get('agents')
   if (agents === undefined) return
 
-  const lines = readLines()
-  if (lines.length === 0) return
-
   const cursors = readJson(CURSOR, {})
   const wakes = readJson(WAKES, {})
 
   for (const agent of agents.list()) {
     const member = memberOf(agent)
     if (member === null) continue
-    // 只叫醒"钉住的那一段"：她跟 Leea 的那段会因群消息被叫，
-    // 跟 Fabian 的那段不叫（他要说话，在自己的会话里直接说）。
+    // 只叫醒"钉住的那一段"：一个人可以登记多段会话，没登记的一律不碰。
     if (!pinnedSessions(member).includes(sessionIdOf(agent))) continue
     if (agent.status !== 'idle') continue // 正在跑就先别插嘴，下个 tick 再说
 
-    const seen = cursors[member] ?? 0
-    if (seen >= lines.length) continue
-
-    const fresh = lines.slice(seen)
-    const incoming = []
-    for (const line of fresh) {
-      try {
-        const record = JSON.parse(line)
-        if (record.from !== member && (record.to === member || record.to === 'all')) incoming.push(record)
-      } catch {
-        // 半截行（另一个进程正在写）—— 本轮跳过，下个 tick 再读
-        return
-      }
+    // 两条通道分别记账：群一条，私聊每一段对话一条。
+    // 游标分开的理由：群里读到哪儿、私下读到哪儿是两件事，混在一起会互相盖掉。
+    const channels = [{ key: 'group', file: MESSAGES, kind: 'group', who: '群' }]
+    for (const other of Object.keys(MEMBERS)) {
+      if (other === member) continue
+      const file = dmFileOf(member, other)
+      if (existsSync(file)) channels.push({ key: dmKey(member, other), file, kind: 'dm', who: labelOf(other) })
     }
 
-    // 没有写给我的，也把游标推过去，免得下次重复扫
-    if (incoming.length === 0) {
-      cursors[member] = lines.length
-      writeJson(CURSOR, cursors)
-      continue
+    // 一次只唤醒一件事：这条通道叫醒了，别的下个 tick 再说。
+    for (const channel of channels) {
+      const woke = handleChannel({ agent, member, channel, cursors, wakes })
+      if (woke) break
     }
-
-    // 一下一阵：最后一条安静满 quietMs 才发车；一直在来就最多憋 maxWaitMs。
-    // 挡的是"叫醒"，不是"送达"—— 消息一直在文件里，游标不动而已。
-    const now = Date.now()
-    const lastTs = Date.parse(incoming[incoming.length - 1]?.ts ?? '') || 0
-    if (!pending.has(member)) pending.set(member, now)
-    const quietEnough = now - lastTs >= WAKE.quietMs
-    const waitedEnough = now - pending.get(member) >= WAKE.maxWaitMs
-    if (!quietEnough && !waitedEnough) continue
-
-    const blocked = gate(member, wakes)
-    if (blocked !== null) continue // 被闸挡住：不告警、不补发、游标不动
-
-    const who = incoming.map((record) => labelOf(record.from)).join('、')
-    const preview = incoming
-      .slice(-3)
-      .map((record) => `${labelOf(record.from)}：${record.text.slice(0, 60)}`)
-      .join('\n')
-
-    const conversation = CONVERSATIONS[sessionIdOf(agent) ?? ''] ?? ''
-    const head = conversation === '' ? '' : `（这段会话是「${conversation}」）\n`
-
-    // 护栏：宿主构造器没解析到、或造出来的东西没有 id，就别往会话里塞。
-    // 宁可这一轮不叫醒（游标不动，下个 tick 再试），也不能写进去一条让整份日志打不开的事件。
-    const built = buildUserMessage({
-      content: [{
-        type: 'text',
-        text: `${head}群里有 ${incoming.length} 条新的（${who}）。\n\n${preview}\n\n去 ${READABLE} 看看。回不回、说什么，你自己定。`,
-      }],
-      source: { kind: 'group', form: 'signal' },
-    })
-    if (built === null || typeof built?.id !== 'string') {
-      logLine({
-        note: 'wake-skipped',
-        reason: createUserMessage === null ? 'fallback-built-without-id' : 'message-without-id',
-        member,
-        pending: incoming.length,
-      })
-      continue // 游标不动：这批消息还在，下个 tick 再试
-    }
-    agent.followup(built)
-
-    cursors[member] = lines.length
-    writeJson(CURSOR, cursors)
-    recordWake(wakes, member)
-    pending.delete(member)
-    console.log(`[${name}] 唤醒 ${labelOf(member)}：${incoming.length} 条`)
   }
 }
 
+/**
+ * 处理一条通道：有没有新消息、要不要叫醒。
+ * 返回 true 表示这一轮叫醒了一次（游标已推进）。
+ */
+function handleChannel({ agent, member, channel, cursors, wakes }) {
+  const lines = readLinesOf(channel.file)
+  if (lines.length === 0) return false
 
+  const seen = cursorOf(cursors, member, channel.key)
+  if (seen >= lines.length) return false
+
+  const incoming = []
+  for (const line of lines.slice(seen)) {
+    let record
+    try {
+      record = JSON.parse(line)
+    } catch {
+      return false // 半截行（另一个进程正在写）—— 本轮跳过，下个 tick 再读
+    }
+    if (record.from === member) continue
+    if (channel.kind === 'group') {
+      if (record.to === member || record.to === 'all') incoming.push(record)
+    } else if (record.to === member) {
+      incoming.push(record)
+    }
+  }
+
+  // 没有写给我的，也把游标推过去，免得下次重复扫
+  if (incoming.length === 0) {
+    setCursor(cursors, member, channel.key, lines.length)
+    writeJson(CURSOR, cursors)
+    return false
+  }
+
+  // 一下一阵：最后一条安静满 quietMs 才发车；一直在来就最多憋 maxWaitMs。
+  // 挡的是"叫醒"，不是"送达"—— 消息一直在文件里，游标不动而已。
+  const now = Date.now()
+  const lastTs = Date.parse(incoming[incoming.length - 1]?.ts ?? '') || 0
+  const pendingKey = `${member}:${channel.key}`
+  if (!pending.has(pendingKey)) pending.set(pendingKey, now)
+  const quietEnough = now - lastTs >= WAKE.quietMs
+  const waitedEnough = now - pending.get(pendingKey) >= WAKE.maxWaitMs
+  if (!quietEnough && !waitedEnough) return false
+
+  const blocked = gate(member, wakes)
+  if (blocked !== null) return false // 被闸挡住：不告警、不补发、游标不动
+
+  const who = incoming.map((record) => labelOf(record.from)).join('、')
+  const preview = incoming
+    .slice(-3)
+    .map((record) => `${labelOf(record.from)}：${record.text.slice(0, 60)}`)
+    .join('\n')
+
+  const conversation = CONVERSATIONS[sessionIdOf(agent) ?? ''] ?? ''
+  const head = conversation === '' ? '' : `（这段会话是「${conversation}」）\n`
+  const where = channel.kind === 'dm'
+    ? `${channel.who} 私下跟你说了 ${incoming.length} 句`
+    : `群里有 ${incoming.length} 条新的（${who}）`
+  const target = channel.kind === 'dm' ? channel.file : READABLE
+
+  // 护栏：宿主构造器没解析到、或造出来的东西没有 id，就别往会话里塞。
+  // 宁可这一轮不叫醒（游标不动，下个 tick 再试），也不能写进去一条让整份日志打不开的事件。
+  const built = buildUserMessage({
+    content: [{
+      type: 'text',
+      text: `${head}${where}。\n\n${preview}\n\n去 ${target} 看看。回不回、说什么，你自己定。`,
+    }],
+    source: { kind: channel.kind === 'dm' ? 'dm' : 'group', form: 'signal' },
+  })
+  if (built === null || typeof built?.id !== 'string') {
+    logLine({
+      note: 'wake-skipped',
+      reason: createUserMessage === null ? 'fallback-built-without-id' : 'message-without-id',
+      member,
+      channel: channel.key,
+      pending: incoming.length,
+    })
+    return false // 游标不动：这批消息还在，下个 tick 再试
+  }
+  agent.followup(built)
+
+  setCursor(cursors, member, channel.key, lines.length)
+  writeJson(CURSOR, cursors)
+  recordWake(wakes, member)
+  pending.delete(pendingKey)
+  console.log(`[${name}] 唤醒 ${labelOf(member)}：${channel.key} ${incoming.length} 条`)
+  return true
+}
 // ---------- 守夜：具体动作 ----------
 
 /** 端口有没有人在听。注意：这台机器上 Get-NetTCPConnection 不可靠，所以用直连。 */
