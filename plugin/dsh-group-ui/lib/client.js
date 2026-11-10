@@ -156,10 +156,9 @@ window.__ModuleLoader__.load({
           h('div', {
             style: {
               padding: '8px 12px', borderRadius: 'var(--dsw-radius-lg, 12px)',
-              background: mine
-                ? 'var(--dsw-alias-bg-layer-3, rgba(0,0,0,0.06))'
-                : 'var(--dsw-alias-bg-layer-2, rgba(0,0,0,0.03))',
-              border: '1px solid var(--dsw-alias-border-l1, rgba(0,0,0,0.08))',
+              padding: '8px 12px', borderRadius: 'var(--dsw-radius-lg, 12px)',
+              boxShadow: 'inset 0 0 0 1px ' + (mine ? 'rgba(74, 125, 189, 0.28)' : 'var(--dsw-alias-border-l2, rgba(0,0,0,0.14))'),
+              border: 'none',
               fontSize: 14, lineHeight: '22px',
               whiteSpace: 'pre-wrap', wordBreak: 'break-word',
             },
