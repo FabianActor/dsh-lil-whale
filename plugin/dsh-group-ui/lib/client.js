@@ -1126,9 +1126,8 @@ window.__ModuleLoader__.load({
         h('div', { style: { fontSize: 16, fontWeight: 500, lineHeight: '24px' } }, t.settingsTitle),
         h('div', { style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)', marginTop: 4 } }, t.settingsHint),
 
-        h(Section, { title: '面板', hint: '侧边栏上那一行叫什么。改完刷新页面生效。' },
+        h(Section, { title: '侧边栏标题' },
           h('div', { style: rowStyle },
-            h('span', { style: labelStyle }, '名称'),
             h('input', {
               value: config.panelLabel ?? '',
               maxLength: 12,
@@ -1136,8 +1135,11 @@ window.__ModuleLoader__.load({
               style: inputStyle,
             }),
           ),
+        ),
+
+        h(Section, { title: '消息区', hint: '气泡离面板左右边缘的距离。' },
           h('div', { style: rowStyle },
-            h('span', { style: labelStyle }, '消息左右留白'),
+            h('span', { style: labelStyle }, '左右留白'),
             h(NumberField, {
               value: config.gutter ?? 28, min: 10, max: 300, suffix: 'px（10–300）',
               onCommit: (next) => patch((draft) => { draft.gutter = next }),
