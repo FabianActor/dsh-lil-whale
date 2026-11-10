@@ -1,6 +1,6 @@
 {
   "name": "dsh-group-ui",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "群聊页面：侧边栏一个图标，点开是三条鱼的群（读写 lil-whale\\group\\messages.jsonl）",

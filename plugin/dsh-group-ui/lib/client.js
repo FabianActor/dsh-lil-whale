@@ -545,7 +545,7 @@ window.__ModuleLoader__.load({
                   title: '指定说话对象',
                   'data-at-anchor': '1',
                   style: {
-                    width: 32, height: 32, boxSizing: 'border-box', borderRadius: 9999, aspectRatio: '1 / 1', minWidth: 0, minHeight: 0, overflow: 'hidden', flex: '0 0 auto',
+                    flex: '0 0 32px', width: 32, height: 32, boxSizing: 'border-box', borderRadius: '50%', overflow: 'hidden', flex: '0 0 auto',
                     display: 'grid', placeItems: 'center', padding: 0,
                     border: '1px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12))',
                     background: pickerOpen ? 'var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,0.06))' : 'transparent',
@@ -562,7 +562,7 @@ window.__ModuleLoader__.load({
                   disabled: sending || text.trim() === '',
                   title: t.send,
                   style: {
-                    width: 32, height: 32, boxSizing: 'border-box', borderRadius: 9999, aspectRatio: '1 / 1', minWidth: 0, minHeight: 0, overflow: 'hidden', flex: '0 0 auto',
+                    flex: '0 0 32px', width: 32, height: 32, boxSizing: 'border-box', borderRadius: '50%', overflow: 'hidden', flex: '0 0 auto',
                     border: 'none',
                     background: 'var(--dsw-alias-brand-primary, #4a7dbd)',
                     color: 'var(--dsw-alias-label-primary-foreground, #fff)',
