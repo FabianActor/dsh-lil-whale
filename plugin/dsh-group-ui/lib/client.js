@@ -326,6 +326,7 @@ window.__ModuleLoader__.load({
       const [widthPct, setWidthPct] = useState(DEFAULT_CONFIG.contentWidth)
       const bottom = useRef(null)
       const scrollRef = useRef(null)
+      const inputRef = useRef(null)
 
       const refresh = useCallback(async () => {
         try {
@@ -484,10 +485,30 @@ window.__ModuleLoader__.load({
           messages.length === 0
             ? h('div', {
               style: {
-                height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: 'var(--dsw-alias-label-tertiary)', fontSize: 13,
+                height: '100%', display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center',
+                gap: 10, padding: '0 24px', textAlign: 'center',
               },
-            }, t.empty)
+            },
+              h('div', {
+                style: { fontSize: 15, fontWeight: 500, lineHeight: '22px', color: 'var(--dsw-alias-label-primary)' },
+              }, tab === 'dm' ? '这里还没有人说话' : '群里还没有人说话'),
+              h('div', {
+                style: { fontSize: 13, lineHeight: '20px', color: 'var(--dsw-alias-label-tertiary)' },
+              }, tab === 'dm'
+                ? '她私下写在给你的话会出现在这里。'
+                : '开口说一句，这条线才算通。'),
+              h('button', {
+                onClick: () => { inputRef.current?.focus() },
+                style: {
+                  height: 32, padding: '0 14px', boxSizing: 'border-box',
+                  borderRadius: 'var(--dsw-radius-md, 8px)',
+                  border: '0.5px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12))',
+                  background: 'transparent', color: 'var(--dsw-alias-label-primary)',
+                  fontSize: 13, fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer',
+                },
+              }, '说第一句'),
+            )
             : h('div', {
               style: { width: `${widthPct}%`, margin: '0 auto', position: 'relative' },
             },
@@ -568,6 +589,7 @@ window.__ModuleLoader__.load({
                       },
                     }, '×'))),
               h('textarea', {
+                ref: inputRef,
                 value: text,
                 onChange: (event) => setText(event.target.value),
                 onKeyDown: (event) => {
@@ -670,74 +692,92 @@ window.__ModuleLoader__.load({
         }
       }
 
-      const rowStyle = { display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }
+      const rowStyle = { display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }
       const inputStyle = {
         flex: 1, minWidth: 0, height: 32, padding: '0 10px', boxSizing: 'border-box',
         borderRadius: 'var(--dsw-radius-md, 8px)',
-        border: '1px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12))',
+        border: '0.5px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12))',
         background: 'var(--dsw-alias-bg-layer-1, #fff)',
         color: 'var(--dsw-alias-label-primary)', font: 'inherit', fontSize: 13,
       }
-      const sectionTitleStyle = { marginTop: 24, fontSize: 13, fontWeight: 600, color: 'var(--dsw-alias-label-primary)' }
-      const hintStyle = { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)', marginTop: 4 }
+      const labelStyle = { width: 84, fontSize: 13, color: 'var(--dsw-alias-label-secondary)' }
+
+      // 一个设置分组 = 一层描边卡片。照 dsh 的 token 画，不自造颜色。
+      const Section = ({ title, hint, children }) => h('div', {
+        style: {
+          marginTop: 16,
+          border: '0.5px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12))',
+          borderRadius: 'var(--dsw-radius-lg, 12px)',
+          background: 'var(--dsw-alias-bg-layer-1, #fff)',
+          overflow: 'hidden',
+        },
+      },
+        h('div', { style: { padding: '12px 16px 0' } },
+          h('div', { style: { fontSize: 13, fontWeight: 600, color: 'var(--dsw-alias-label-primary)' } }, title),
+          hint
+            ? h('div', { style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)', marginTop: 2 } }, hint)
+            : null,
+        ),
+        h('div', { style: { padding: '4px 16px 12px' } }, children),
+      )
 
       return h('div', { style: { ...baseStyle, padding: '22px 24px 24px' } },
         h('div', { style: { fontSize: 16, fontWeight: 500, lineHeight: '24px' } }, t.settingsTitle),
-        h('div', { style: hintStyle }, t.settingsHint),
+        h('div', { style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)', marginTop: 4 } }, t.settingsHint),
 
-        h('div', { style: { ...rowStyle, marginTop: 16 } },
-          h('span', { style: { width: 84, fontSize: 13, color: 'var(--dsw-alias-label-secondary)' } }, '侧边栏名称'),
-          h('input', {
-            value: config.panelLabel ?? '',
-            maxLength: 12,
-            onChange: (event) => patch((next) => { next.panelLabel = event.target.value }),
-            style: inputStyle,
-          }),
+        h(Section, { title: '面板', hint: '侧边栏上那一行叫什么。改完刷新页面生效。' },
+          h('div', { style: rowStyle },
+            h('span', { style: labelStyle }, '名称'),
+            h('input', {
+              value: config.panelLabel ?? '',
+              maxLength: 12,
+              onChange: (event) => patch((next) => { next.panelLabel = event.target.value }),
+              style: inputStyle,
+            }),
+          ),
         ),
 
-        h('div', { style: sectionTitleStyle }, '名字'),
-        h('div', { style: hintStyle },
-          '仅修改显示效果，无法修改 ta 的自我认知。若想让 ta 改名请试着直接和 ta 聊聊？'),
-        ['lee', 'whale', 'fabian'].map((member) => h('div', { key: `name-${member}`, style: rowStyle },
-          h(Avatar, { config, member, size: 26 }),
-          h('input', {
-            value: config.names?.[member] ?? NAMES[member] ?? '',
-            maxLength: 16,
-            onChange: (event) => patch((next) => {
-              next.names = { ...(next.names ?? {}) }
-              next.names[member] = event.target.value
+        h(Section, { title: '名字', hint: '仅修改显示效果，无法修改 ta 的自我认知。若想让 ta 改名请试着直接和 ta 聊聊？' },
+          ['lee', 'whale', 'fabian'].map((member) => h('div', { key: `name-${member}`, style: rowStyle },
+            h(Avatar, { config, member, size: 26 }),
+            h('input', {
+              value: config.names?.[member] ?? NAMES[member] ?? '',
+              maxLength: 16,
+              onChange: (event) => patch((next) => {
+                next.names = { ...(next.names ?? {}) }
+                next.names[member] = event.target.value
+              }),
+              style: inputStyle,
             }),
-            style: inputStyle,
-          }),
-        )),
+          )),
+        ),
 
-        h('div', { style: sectionTitleStyle }, '头像'),
-        h('div', { style: hintStyle },
-          '文字 1–2 个（也可以是 emoji），颜色是底色。'),
-        ['lee', 'whale', 'fabian'].map((member) => h('div', { key: `avatar-${member}`, style: rowStyle },
-          h(Avatar, { config, member, size: 28 }),
-          h('input', {
-            value: config.avatars?.[member]?.text ?? '',
-            maxLength: 2,
-            onChange: (event) => patch((next) => {
-              next.avatars = { ...(next.avatars ?? {}) }
-              next.avatars[member] = { ...(next.avatars?.[member] ?? {}), text: event.target.value }
+        h(Section, { title: '头像', hint: '文字 1–2 个（也可以是 emoji），颜色是底色。' },
+          ['lee', 'whale', 'fabian'].map((member) => h('div', { key: `avatar-${member}`, style: rowStyle },
+            h(Avatar, { config, member, size: 28 }),
+            h('input', {
+              value: config.avatars?.[member]?.text ?? '',
+              maxLength: 2,
+              onChange: (event) => patch((next) => {
+                next.avatars = { ...(next.avatars ?? {}) }
+                next.avatars[member] = { ...(next.avatars?.[member] ?? {}), text: event.target.value }
+              }),
+              style: { ...inputStyle, flex: '0 0 56px', minWidth: 56, textAlign: 'center' },
             }),
-            style: { ...inputStyle, flex: '0 0 56px', minWidth: 56, textAlign: 'center' },
-          }),
-          h('input', {
-            type: 'color',
-            value: config.avatars?.[member]?.tint ?? '#888888',
-            onChange: (event) => patch((next) => {
-              next.avatars = { ...(next.avatars ?? {}) }
-              next.avatars[member] = { ...(next.avatars?.[member] ?? {}), tint: event.target.value }
+            h('input', {
+              type: 'color',
+              value: config.avatars?.[member]?.tint ?? '#888888',
+              onChange: (event) => patch((next) => {
+                next.avatars = { ...(next.avatars ?? {}) }
+                next.avatars[member] = { ...(next.avatars?.[member] ?? {}), tint: event.target.value }
+              }),
+              style: { width: 32, height: 32, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' },
             }),
-            style: { width: 32, height: 32, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' },
-          }),
-          h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } }, nameOf(config, member)),
-        )),
+            h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } }, nameOf(config, member)),
+          )),
+        ),
 
-        h('div', { style: { ...rowStyle, marginTop: 24 } },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, marginTop: 20 } },
           h('button', {
             onClick: () => { void save() },
             disabled: saving,
