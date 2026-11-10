@@ -28,6 +28,7 @@ window.__ModuleLoader__.load({
 
     const DEFAULT_CONFIG = {
       panelLabel: '鱼群',
+      notifyScope: 'all',
       contentWidth: 72,
       avatars: {
         lee: { text: '大', tint: '#4a7dbd' },
@@ -1091,6 +1092,33 @@ window.__ModuleLoader__.load({
             }),
             h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } }, nameOf(config, member)),
           )),
+        ),
+
+        h(Section, { title: '红点', hint: '侧边栏和标签上的未读数算哪些话。私聊永远算（那里的话本来就是给你的）。' },
+          h('div', { style: { display: 'flex', gap: 8, marginTop: 8 } },
+            [
+              { key: 'all', label: '全部未读' },
+              { key: 'mentions', label: '只提醒 @ 我的' },
+            ].map((option) => {
+              const active = (config.notifyScope ?? 'all') === option.key
+              return h('button', {
+                key: option.key,
+                onClick: () => patch((next) => { next.notifyScope = option.key }),
+                style: {
+                  height: 32, padding: '0 12px', boxSizing: 'border-box', fontFamily: 'inherit', fontSize: 13,
+                  borderRadius: 'var(--dsw-radius-md, 8px)', cursor: 'pointer',
+                  border: '0.5px solid ' + (active ? 'var(--dsw-alias-state-business-primary)' : 'var(--dsw-alias-border-l2, rgba(0,0,0,0.12))'),
+                  background: active ? 'var(--dsw-alias-bg-layer-2, rgba(0,0,0,0.05))' : 'transparent',
+                  color: active ? 'var(--dsw-alias-state-business-primary)' : 'var(--dsw-alias-label-secondary)',
+                  fontWeight: active ? 600 : 400,
+                },
+              }, option.label)
+            }),
+          ),
+          h('div', { style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)', marginTop: 8 } },
+            (config.notifyScope ?? 'all') === 'mentions'
+              ? '群里只有 @ 所有人 或 直接给你的话才算未读；大肥鱼跟小肥鱼之间的对话不打扰你。'
+              : '群里任何人说的话都算未读（除了你自己发的）。'),
         ),
 
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, marginTop: 20 } },

@@ -33,6 +33,9 @@ const KNOWN_PEERS = Object.keys(LABEL).filter((id) => !DM_HIDDEN.has(id))
 const DEFAULT_CONFIG = {
   panelLabel: '鱼群',
   contentWidth: 72,
+  names: { lee: '大肥鱼', whale: '小肥鱼', fabian: 'Fabian' },
+  /** 未读口径：'all' = 所有不是自己说的话；'mentions' = 只算 @ 到我的（to 是 all 或 fabian）。 */
+  notifyScope: 'all',
   avatars: {
     lee: { text: '大', tint: '#4a7dbd' },
     whale: { text: '小', tint: '#c2705a' },
@@ -56,6 +59,7 @@ function readConfig() {
     return {
       panelLabel: typeof raw?.panelLabel === 'string' && raw.panelLabel.trim() ? raw.panelLabel.trim() : DEFAULT_CONFIG.panelLabel,
       contentWidth: normalizeWidth(raw?.contentWidth),
+      notifyScope: raw?.notifyScope === 'mentions' ? 'mentions' : 'all',
       names: {
         lee: normalizeName(raw?.names?.lee, DEFAULT_CONFIG.names.lee),
         whale: normalizeName(raw?.names?.whale, DEFAULT_CONFIG.names.whale),
@@ -114,8 +118,13 @@ function writeUiRead(next) {
   }
 }
 
-function countUnread(file, since) {
-  return readMessages(file).filter((message) => message.from !== 'fabian' && String(message.ts ?? '') > since).length
+function countUnread(file, since, scope = 'all') {
+  return readMessages(file).filter((message) => {
+    if (message.from === 'fabian') return false
+    if (String(message.ts ?? '') <= since) return false
+    if (scope === 'mentions' && message.to !== 'all' && message.to !== 'fabian') return false
+    return true
+  }).length
 }
 
 function lastTsOf(file) {
@@ -206,6 +215,7 @@ export function apply(ctx) {
       const next = {
         panelLabel: normalizeLabel(payload?.panelLabel),
         contentWidth: normalizeWidth(payload?.contentWidth),
+    notifyScope: payload?.notifyScope === 'mentions' ? 'mentions' : 'all',
         names: {
           lee: normalizeName(payload?.names?.lee, DEFAULT_CONFIG.names.lee),
           whale: normalizeName(payload?.names?.whale, DEFAULT_CONFIG.names.whale),
@@ -371,8 +381,8 @@ export function apply(ctx) {
         return
       }
       const state = readUiRead()
-      const group = countUnread(MESSAGES, state.group)
-      const dm = {}
+      const scope = readConfig().notifyScope
+      const group = countUnread(MESSAGES, state.group, scope)
       let total = group
       for (const peer of KNOWN_PEERS) {
         const count = countUnread(dmFileOf(peer), String(state.dm[peer] ?? ''))
