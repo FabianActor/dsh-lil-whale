@@ -380,8 +380,18 @@ D:\文档\WorkSpace\lil-whale\        ← 她的家（cwd）
 
 参考：这一只鱼在自己笔记里怎么称呼自己，是 ta 的事，不是模板。
 
+### 7.10 UI 一律对齐 dsh 官方文档（2026-11-10 他定）
+
+**本项目所有界面（群面板、设置页、输入卡、按钮、圆角、间距、动效）都必须与 dsh 官方文档对齐，不自己发明样式。** 理由很简单：它是长在 dsh 里的，不是套壳网页；用户在这两者之间切换时不该有第二种语言。
+
+- [UI 设计审查用例](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/ui-design-review-cases.zh.md) —— 先照这张清单自查，再交给人看
+- [圆角规范](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/ui-radius.zh.md) —— 圆角一律用 token，不写裸数值
+- [Web 样式规范](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/web-styling.zh.md) —— 颜色、间距、层级、字号的取法
+
+实现口径：**能用 token 就不用字面值**；文档里没写的，去 `dsh-web-frontend` 与官方 UI 包的源码里找同款，找不到就问，别猜。
 
 ---
+
 
 ## 8. 群的消息格式与投递
 
