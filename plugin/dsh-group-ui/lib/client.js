@@ -116,8 +116,10 @@ window.__ModuleLoader__.load({
 
     function measureInline(node) {
       if (!node) return 0
+      // 跟官方 layout 同一个量法：`el.getBoundingClientRect().width`（不是 clientWidth，
+      // 那个会砍掉边框、还会取整）。
       const rect = node.getBoundingClientRect?.()
-      return node.clientWidth || rect?.width || 0
+      return rect?.width || node.clientWidth || 0
     }
 
     function useNarrow(ref) {
