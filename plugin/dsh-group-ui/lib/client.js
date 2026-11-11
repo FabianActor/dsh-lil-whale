@@ -1030,6 +1030,8 @@ window.__ModuleLoader__.load({
         setActivePeer((current) => (current === peer ? null : peer))
         setMessages([])
         setText('')
+        // 换人也是一次"打开"：重新走一遍过场，否则中间会空一下
+        dmSplashReset()
       }
 
       const submit = useCallback(async () => {
