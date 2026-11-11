@@ -1149,6 +1149,10 @@ async function watchmanTick() {
         watchState.planFired[job.key] = todayKey(new Date())
         saveWatchState()
         watchmanLog('deliver', `why=plan ${job.tag}（窗开着，改递话）`)
+        // 递话也是一种叫醒（她的群 tailer 会因为这条新消息把她叫起来），所以同样记一笔。
+        // 不记的话，A7 的"15 分钟后回看"永远不会为早上这一条落数——
+        // 而那正是我们最想看的那一条。
+        markWake('whale', 'plan')
         continue
       }
       noteSkip('why=already-awake')
