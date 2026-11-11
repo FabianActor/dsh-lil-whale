@@ -164,6 +164,23 @@ function watchmanLog(result, why) {
 // 叫醒的"待结算"记录：**每个进程各写各的**。
 // 两个进程都会叫醒人（他叫醒我、我叫醒她），如果共用一份 state 文件，会互相覆盖。
 // 文件名按进程分（主进程用 lee、她那侧用 whale），文件里每条的 `member` 才是"被叫醒的是谁"。
+// 叫醒之后"有没有下文"的观察记录。
+// **刻意不写在 `logs\watchman.log` 里**：她每天 08:40 会读那份日志（morning-read 的 why 就是它），
+// 一个关于她的计数不管叫什么名字，放在她枕头边就会被读成"在审我"。
+// 指标住在哪儿，决定它审谁 —— 她 2026-11-11 说的，我改。
+const WAKE_METRICS = 'D:\\文档\\WorkSpace\\dsh-lil-whale\\logs\\wake-metrics.log'
+
+function metricLog(line) {
+  try {
+    mkdirSync(dirname(WAKE_METRICS), { recursive: true })
+    const d = new Date()
+    const pad = (n) => String(n).padStart(2, '0')
+    const ts = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+    appendFileSync(WAKE_METRICS, `${ts} | ${line}\n`, 'utf8')
+  } catch {
+    // 指标写不进去不能把 tick 打死
+  }
+}
 const WAKE_MARKS_FILE = join(HER_HOME, 'state', `wake-marks-${isMainProcess() ? 'lee' : 'whale'}.json`)
 
 function readMarks() {
@@ -209,7 +226,8 @@ function settleMarks() {
     }
     const after = Math.round((now - mark.at) / 1000)
     const since = new Date(mark.at).toTimeString().slice(0, 8)
-    watchmanLog(lines > 0 ? 'said' : 'silent', `member=${mark.member} kind=${mark.kind} since=${since} after=${after}s lines=${lines}`)
+    // 措辞也换了：不写 said/silent（那是以她为主语的判决），写"这次唤醒有没有下文"。
+    metricLog(`wake-followup | has-reply=${lines > 0 ? 'yes' : 'no'} member=${mark.member} kind=${mark.kind} since=${since} after=${after}s lines=${lines}`)
     wrote = true
   }
   if (wrote || keep.length !== marks.length) writeJson(WAKE_MARKS_FILE, keep)
