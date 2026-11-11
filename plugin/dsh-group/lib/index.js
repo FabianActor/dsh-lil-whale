@@ -739,8 +739,17 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
     } catch {
       return false // 半截行（另一个进程正在写）—— 本轮跳过，下个 tick 再读
     }
-    if (record.from === member) continue
     const addressed = typeof record.toSeat === 'string' && record.toSeat !== ''
+    // 自己写的不叫醒自己。但同一个人的两段会话共用一个成员 id，
+    // 如果这条闸一视同仁地挡，"大肥鱼 · 工"就永远说不到"大肥鱼 · 家"
+    // （2026-11-11 现场确认：那条消息在被挡的一侧根本没进 incoming）。
+    // 例外只开一个窄口子：**另一把椅子**（`s` 是它的座位号）**点名给我**的那条。
+    // 自己发给自己那把椅子（s === seat）仍然挡掉，不会自唤醒。
+    if (record.from === member) {
+      const fromOtherSeat = typeof record.s === 'string' && record.s !== '' && record.s !== seat
+      const addressedToMe = addressed && record.toSeat === seat
+      if (!(fromOtherSeat && addressedToMe)) continue
+    }
     if (addressed) {
       // 指名给某座位的：只有那一段收，且只看自己那本游标
       if (record.toSeat !== seat || index < seatSeen) continue
