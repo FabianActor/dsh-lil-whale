@@ -111,13 +111,17 @@ const WAKE_SETTLE_MS = 15 * 60_000
 let watchState = loadWatchState()
 
 /** 上限必须跨重启活着：一个会忘掉自己上限的守夜人，比没有上限更危险（她 2026-11-09 指出的）。 */
+// 这里只留"只有主进程会动"的东西（wakes / fails）。
+// errors 曾经也在这里 —— 但两个进程都会记 error，而这里是"读整份、改一格、写整份"：
+// 既会互相盖，又从来不是一个"总数"（她 2026-11-11 数的 611 ≈ 1225 ÷ 2，猜得对）。
+// 现在 error 计数按进程各存一份，见 errorCountFile()。
 function loadWatchState() {
   const day = new Date().toDateString()
   try {
     const raw = JSON.parse(readFileSync(WATCH_STATE_FILE, 'utf8'))
-    if (raw.day === day) return { day, wakes: Number(raw.wakes) || 0, fails: Number(raw.fails) || 0, errors: Number(raw.errors) || 0 }
+    if (raw.day === day) return { day, wakes: Number(raw.wakes) || 0, fails: Number(raw.fails) || 0 }
   } catch {}
-  return { day, wakes: 0, fails: 0, errors: 0 }
+  return { day, wakes: 0, fails: 0 }
 }
 
 /** 她 2026-11-09 的要求：绝对路径是"这次对了"不是"以后都对"，所以每次启动都报出它手里那把钥匙。 */
@@ -143,6 +147,29 @@ function isMainProcess() {
   return !(process.env.DSH_HOME ?? '').toLowerCase().includes('lil-whale')
 }
 
+// error 计数：每个进程各存一份。两个进程都可能撞上群 tick 的异常，
+// 共用一份文件必然互相盖 —— 而且"总数"这个说法本身就是错的。
+function errorCountFile(owner) {
+  return join(HER_HOME, 'state', `watchman-errors-${owner}.json`)
+}
+const OWN = isMainProcess() ? 'lee' : 'whale'
+const PEER = OWN === 'lee' ? 'whale' : 'lee'
+
+function readErrorCount(owner) {
+  try {
+    const raw = JSON.parse(readFileSync(errorCountFile(owner), 'utf8'))
+    if (raw?.day === new Date().toDateString()) return Number(raw.count) || 0
+  } catch {}
+  return 0
+}
+
+function bumpOwnError() {
+  try {
+    mkdirSync(join(HER_HOME, 'state'), { recursive: true })
+    writeFileSync(errorCountFile(OWN), JSON.stringify({ day: new Date().toDateString(), count: readErrorCount(OWN) + 1 }), 'utf8')
+  } catch {}
+}
+
 /** 一行一次：时间 | 结果 | 为什么（格式是她 19:07 定的）。 */
 /** 她 2026-11-10：error 行每 5 秒刷一次，会把 gap 压成 5s —— 所以 error 单独记连击数。 */
 let errorStreak = 0
@@ -153,7 +180,7 @@ function watchmanLog(result, why) {
     const pad = (n) => String(n).padStart(2, '0')
     const ts = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
     const streakSuffix = result === 'error' ? ` streak=${++errorStreak}` : ''
-    if (result === 'error') { watchState.errors = (watchState.errors ?? 0) + 1; saveWatchState() }
+    if (result === 'error') bumpOwnError()
     if (result !== 'error' && result !== 'started') errorStreak = 0
     appendFileSync(WATCHMAN_LOG, `${ts} | ${result} | ${why}${streakSuffix}\n`, 'utf8')
   } catch {
@@ -240,24 +267,22 @@ function settleMarks() {
  */
 function lastLogGapSec() {
   try {
-    if (!existsSync(WATCHMAN_LOG)) return null
-    const stat = statSync(WATCHMAN_LOG)
-    const start = Math.max(0, stat.size - 4096)
-    const tail = readFileSync(WATCHMAN_LOG, 'utf8').slice(-4096)
-      // 她 2026-11-10 指出的打架：error 行每 5 秒刷一次，会把 gap 压成 5s，
-      // 于是"吵吵闹闹地坏掉"看起来比平时还活跃。所以 gap 只量正常行，error 另算。
-      const lines = tail
-        .split('\n')
-        .filter((line) => /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \|/.test(line))
-        .filter((line) => !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \| error \|/.test(line))
-    const last = lines[lines.length - 1]
-    if (!last) return null
+    if (!existsSync(WATCHMAN_LOG)) return { gap: null, tailErrors: 0, missing: true }
+    // 她 2026-11-10 指出的打架：error 行每 5 秒刷一次，会把 gap 压成 5s，
+    // 于是"吵吵闹闹地坏掉"看起来比平时还活跃。所以 gap 只量正常行，error 另算。
+    const stamped = readFileSync(WATCHMAN_LOG, 'utf8').slice(-4096)
+      .split('\n')
+      .filter((line) => /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \|/.test(line))
+    const tailErrors = stamped.filter((line) => /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \| error \|/.test(line)).length
+    const normal = stamped.filter((line) => !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \| error \|/.test(line))
+    const last = normal[normal.length - 1]
+    if (!last) return { gap: null, tailErrors, missing: false }
     const m = last.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/)
-    if (!m) return null
+    if (!m) return { gap: null, tailErrors, missing: false }
     const at = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6]))
-    return Math.max(0, Math.round((Date.now() - at.getTime()) / 1000))
+    return { gap: Math.max(0, Math.round((Date.now() - at.getTime()) / 1000)), tailErrors, missing: false }
   } catch {
-    return null
+    return { gap: null, tailErrors: 0, missing: true }
   }
 }
 const PINS = join(GROUP_DIR, 'pins.json')
@@ -751,8 +776,13 @@ function apply(ctx) {
       watchmanLog('stopped', `reason=dispose pid=${process.pid} lived=${aliveSec}s`)
     })
     // gap = 距上一行日志多少秒（她 2026-11-10 要的）。今天那一行本该是 gap=21600s。
-    const gap = lastLogGapSec()
-    watchmanLog('started', `pid=${process.pid} gap=${gap === null ? 'first' : `${gap}s`} interval=${WATCH.intervalMs / 1000}s port=${WATCH.port} cap=${WATCH.maxWakesPerDay}/day errors_total=${watchState.errors ?? 0} exe=${pwshInfo()}`)
+    const logProbe = lastLogGapSec()
+    // gap 有三种"没有数"：
+    //   none   = 文件还没有（第一次起）
+    //   unseen = 尾巴 4KB 里全是 error，看不见上一行正常记录 —— 她要的那个意思
+    //   （以前两种情况都写成 first，"从头开始"和"我看不见前面"长得一模一样）
+    const gapText = logProbe.gap !== null ? `${logProbe.gap}s` : logProbe.missing ? 'none' : 'unseen'
+    watchmanLog('started', `pid=${process.pid} gap=${gapText} tail-errors=${logProbe.tailErrors} interval=${WATCH.intervalMs / 1000}s port=${WATCH.port} cap=${WATCH.maxWakesPerDay}/day errors_own=${readErrorCount(OWN)} errors_peer=${readErrorCount(PEER)} exe=${pwshInfo()}`)
     void watchmanTick().catch(() => {})
   }
 }
