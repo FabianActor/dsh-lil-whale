@@ -597,30 +597,29 @@ function recordWake(wakes, member) {
 function apply(ctx) {
   ensureDir()
 
-  // 宿主包异步装进来（不阻塞 apply）：解析不到也能先用裸对象注册，下一轮 tick 再补。
-  void resolveHost()
 
-  // 一行启动痕迹：确认"这个进程真的加载了我"，出问题时先看它
+  // 一行启动痕迹：确认"这个进程真的加载了我"，出问题时先看它。
+  // 这里**不写** defineTool 的状态 —— apply 的时候宿主包还没解析完，写进去永远会是
+  // "unresolved"，看起来像坏了。解析结果由后面那行 host-resolve 记，那里才是真相。
   try {
     appendFileSync(join(GROUP_DIR, "plugin.log"), JSON.stringify({
       at: new Date().toISOString(),
       pid: process.pid,
       home: process.env.DSH_HOME ?? "(unset)",
       cwd: process.cwd(),
-      defineTool: defineTool === null ? "unresolved" : "resolved",
-      createUserMessage: createUserMessage === null ? "fallback-local" : "resolved",
-      anchorErrors,
     }) + "\n", "utf8")
   } catch {}
 
   // 1. 发言：入队即返回，绝不等对方
-  // 解析不到 defineTool 时用裸对象注册（实测宿主也认），但必须留痕：
-  // 少了这层校验，参数/输出 schema 的检查就不在宿主手里了。
-  if (defineTool === null) {
-    logLine({ note: 'group_say-raw-spec', reason: 'defineTool-unresolved' })
-  }
-  const buildTool = defineTool ?? ((options) => options)
-  ctx.tools.register(buildTool({
+  // 先等宿主包解析出来，再用宿主的 defineTool 注册 —— 这样参数/输出 schema 的校验在宿主手里，
+  // 而不是"作者自己看着办"。解析不到才退回裸对象（实测宿主也认），并且必须留痕：
+  // 静默降级的代价是把错误推给别人的存档（今天的旧账）。
+  function registerGroupSay(hostOk) {
+    if (!hostOk || defineTool === null) {
+      logLine({ note: 'group_say-raw-spec', reason: 'defineTool-unresolved' })
+    }
+    const buildTool = hostOk && defineTool !== null ? defineTool : (options) => options
+    ctx.tools.register(buildTool({
     name: 'group_say',
     description: '说一句话。默认在群里说（三个人都看得见）；channel 给 dm 就是私下只对一个人说（不进群记录，其他人看不到这个窗口）。发出即返回，不等对方回复。',
     parameters: {
@@ -700,7 +699,22 @@ function apply(ctx) {
       kind: 'other',
       rawInput: args,
     }),
-  }))
+    }))
+  }
+
+  // 宿主包是异步装进来的：解析完了再注册（通常几十毫秒，远早于第一个 turn）。
+  // 失败也要注册一次裸对象，否则这个进程里就永远没有 group_say。
+  resolveHost()
+    .then((ok) => {
+      try {
+        registerGroupSay(ok)
+      } catch (error) {
+        logLine({ note: 'group_say-register-failed', error: String(error?.message ?? error) })
+      }
+    })
+    .catch((error) => {
+      logLine({ note: 'group_say-register-failed', error: String(error?.message ?? error) })
+    })
 
   // 2. 听：只在新消息到达时唤醒，不做心跳
   const timer = setInterval(() => {
