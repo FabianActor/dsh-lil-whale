@@ -125,12 +125,22 @@ window.__ModuleLoader__.load({
     }
 
     /** 头像：一块圆角方块，里面是 1–2 个字。颜色取自配置。 */
-    function Avatar({ config, member, size = 34 }) {
+    /**
+     * 头像。
+     *
+     * `onContextMenu` / `title` 故意挂在**头像自己**身上，而不是外面再包一层：
+     * 包一层的话，热区取决于那一层的宽度（曾经被拉成半个气泡那么宽），
+     * 右键哪里算"点在头像上"就说不清了。这里 34×34 就是 34×34。
+     */
+    function Avatar({ config, member, size = 34, onContextMenu, title }) {
       const avatar = avatarOf(config, member)
       return h('div', {
+        onContextMenu,
+        title,
         style: {
           width: size, height: size, borderRadius: Math.round(size * 0.3),
           flex: '0 0 auto',
+          cursor: onContextMenu ? 'context-menu' : undefined,
           background: avatar.tint,
           color: '#fff',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -395,15 +405,17 @@ window.__ModuleLoader__.load({
           flexDirection: mine ? 'row-reverse' : 'row',
         },
       },
-        h('div', {
-          // 右键头像就 @ 他：比先去面板里找人快
-          onContextMenu: (event) => {
-            event.preventDefault()
-            if (!mine && onMention) onMention(message.from)
-          },
-          title: mine ? undefined : `${t.mention}${who}`,
-          style: { cursor: mine ? 'default' : 'context-menu' },
-        }, h(Avatar, { config, member: message.from, size: 34 })),
+        h(Avatar, {
+          config,
+          member: message.from,
+          size: 34,
+          // 右键头像就 @ 他：比先去面板里找人快。
+          // 私聊页不传 onMention —— 那里没有"@给谁"这回事，右键就该是浏览器自己的菜单。
+          onContextMenu: mine || !onMention
+            ? undefined
+            : (event) => { event.preventDefault(); onMention(message.from) },
+          title: mine || !onMention ? undefined : `${t.mention}${who}`,
+        }),
         h('div', {
           style: {
             display: 'flex', flexDirection: 'column', gap: 4,
@@ -700,7 +712,25 @@ window.__ModuleLoader__.load({
         return () => clearTimeout(timer)
       }, [activePeer])
 
-      useEffect(() => { bottom.current?.scrollIntoView({ block: 'end' }) }, [messages.length])
+      /**
+       * 贴到底。
+       *
+       * 原来用 `bottom.scrollIntoView({block:'end'})`：它会连外层容器一起滚，
+       * 而 markdown（代码块、字体）排版落定后高度还会再变一次 —— 于是"打开就贴在底"
+       * 常常差几十像素，最后一条消息正好卡进底部那 46px 的渐隐带，看着像被切了。
+       * 这里改成直接设 scrollTop，并在下一帧、200ms 后各补一次。
+       */
+      const stickToBottom = useCallback(() => {
+        const el = scrollRef.current
+        if (el) el.scrollTop = el.scrollHeight
+      }, [])
+
+      useEffect(() => {
+        stickToBottom()
+        const raf = requestAnimationFrame(stickToBottom)
+        const timer = setTimeout(stickToBottom, 200)
+        return () => { cancelAnimationFrame(raf); clearTimeout(timer) }
+      }, [messages.length, activePeer, stickToBottom])
       useEffect(() => { if (activePeer !== null) inputRef.current?.focus() }, [activePeer])
 
       const pick = (peer) => {
@@ -810,7 +840,7 @@ window.__ModuleLoader__.load({
         h(WidthHandle, { key: 'right', side: 'right', width: dmWidth, containerRef: scrollRef, onChange: setDmWidth, onCommit: persistDmWidth }),
       ]
       // 私聊的左右边界跟群聊同款：拖住两侧，列宽实时变；宽度存在这台机器上。
-      const messageList = h('div', { ref: scrollRef, style: { flex: 1, overflowY: 'auto', padding: '8px 0 46px', minHeight: 0, ...fadeMask } },
+      const messageList = h('div', { ref: scrollRef, style: { flex: 1, overflowY: 'auto', padding: '8px 0 58px', minHeight: 0, ...fadeMask } },
         h('div', { style: { width: `${dmWidth}%`, margin: '0 auto', position: 'relative' } },
           messages.length === 0
             ? h('div', { style: { padding: '28px 20px', fontSize: 13, lineHeight: '20px', color: 'var(--dsw-alias-label-tertiary)' } },
@@ -825,6 +855,9 @@ window.__ModuleLoader__.load({
         h('div', {
           style: {
             width: `${dmWidth}%`, margin: '0 auto', boxSizing: 'border-box',
+            // 跟群聊那张卡同形：不写成 flex 列的话，textarea 只按自己的默认宽度（约 20 字）排，
+            // 右边会空出一大片 —— 输入框就"没占满整个区域"。
+            display: 'flex', flexDirection: 'column', position: 'relative',
             background: 'var(--dsw-specific-input-major, var(--dsw-alias-bg-layer-1, #fff))',
             borderRadius: 'var(--dsw-radius-panel, 16px)',
             boxShadow: 'var(--dsw-elevation-soft, 0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06))',
@@ -846,6 +879,7 @@ window.__ModuleLoader__.load({
             style: {
               border: 'none', outline: 'none', resize: 'none', background: 'transparent',
               color: 'var(--dsw-alias-label-primary)', font: 'inherit',
+              width: '100%', boxSizing: 'border-box',
               fontSize: 14, lineHeight: '24px', padding: '4px 2px', minHeight: 44, maxHeight: 220,
             },
           }),
@@ -997,9 +1031,18 @@ window.__ModuleLoader__.load({
         return () => clearInterval(timer)
       }, [refresh])
 
+      /** 贴到底：见 DmPage 里同一处的说明（scrollIntoView 会连外层一起滚，且排版会二次变化）。 */
+      const stickToBottom = useCallback(() => {
+        const el = scrollRef.current
+        if (el) el.scrollTop = el.scrollHeight
+      }, [])
+
       useEffect(() => {
-        bottom.current?.scrollIntoView({ block: 'end' })
-      }, [messages.length])
+        stickToBottom()
+        const raf = requestAnimationFrame(stickToBottom)
+        const timer = setTimeout(stickToBottom, 200)
+        return () => { cancelAnimationFrame(raf); clearTimeout(timer) }
+      }, [messages.length, tab, stickToBottom])
 
       const persistWidth = useCallback(() => {
         setWidthPct((current) => {
@@ -1119,7 +1162,7 @@ window.__ModuleLoader__.load({
           : h(React.Fragment, null,
         h('div', {
           ref: scrollRef,
-          style: { flex: 1, overflowY: 'auto', padding: '8px 0 46px', minHeight: 0, position: 'relative', WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)', maskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)' },
+          style: { flex: 1, overflowY: 'auto', padding: '8px 0 58px', minHeight: 0, position: 'relative', WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)', maskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)' },
         },
           messages.length === 0
             ? h('div', {
