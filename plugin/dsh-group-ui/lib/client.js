@@ -873,6 +873,47 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * 过场页：本地数据回来得太快，第一帧画了、第二帧就被真内容顶掉，人只会看到一次闪。
+     * 所以给一个最短显示时间——不是为了好看，是为了让"正在打开"这件事有存在感。
+     */
+    function useSplash(minMs = 420) {
+      const startedRef = useRef(Date.now())
+      const finishedRef = useRef(false)
+      const [visible, setVisible] = useState(true)
+      const done = useCallback(() => {
+        if (finishedRef.current) return
+        finishedRef.current = true
+        const wait = Math.max(0, minMs - (Date.now() - startedRef.current))
+        if (wait > 0) setTimeout(() => setVisible(false), wait)
+        else setVisible(false)
+      }, [minMs])
+      const reset = useCallback(() => {
+        finishedRef.current = false
+        startedRef.current = Date.now()
+        setVisible(true)
+      }, [])
+      return { visible, done, reset }
+    }
+
+    /** 转圈 + 一行小字。圈用 SVG 描边画，别指望 `border-radius`（这个壳上它漏过两次）。 */
+    function LoadingSplash({ label }) {
+      return h('div', {
+        style: {
+          position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: 12, pointerEvents: 'none',
+        },
+      },
+        h('svg', { width: 28, height: 28, viewBox: '0 0 28 28', style: { animation: 'dshGroupSpin .9s linear infinite' } },
+          h('circle', { cx: 14, cy: 14, r: 11, fill: 'none', stroke: 'var(--dsw-alias-border-l2, rgba(0,0,0,0.10))', strokeWidth: 2 }),
+          h('circle', {
+            cx: 14, cy: 14, r: 11, fill: 'none', strokeLinecap: 'round',
+            stroke: 'var(--dsw-alias-label-tertiary, rgba(0,0,0,0.45))', strokeWidth: 2,
+            strokeDasharray: '18 52',
+          })),
+        h('div', { style: { fontSize: 12, lineHeight: '16px', color: 'var(--dsw-alias-label-tertiary, rgba(0,0,0,0.45))' } }, label))
+    }
+
+    /**
      * 私聊页：宽屏时左边是能单独说话的人、右边是会话；窄屏时照微信那样分两屏
      * ——先选人，再进会话，会话页左上角一个返回。
      */
@@ -884,7 +925,7 @@ window.__ModuleLoader__.load({
       const [activePeer, setActivePeer] = useState(null)
       const [messages, setMessages] = useState([])
       // 第一屏数据到之前先画占位：别让人看见"还没有私下说过话"闪一下再变成列表。
-      const [dmLoaded, setDmLoaded] = useState(false)
+      const { visible: dmSplash, done: dmSplashDone, reset: dmSplashReset } = useSplash(420)
       const animateRef = useRef(false)
       const pickedOnceRef = useRef(false)
       const peerRef = useRef(null)
@@ -931,7 +972,7 @@ window.__ModuleLoader__.load({
       }, [])
 
       const loadMessages = useCallback(async () => {
-        if (activePeer === null) { setMessages([]); setDmLoaded(false); return }
+        if (activePeer === null) { setMessages([]); dmSplashReset(); return }
         try {
           const response = await fetch(`/group/api/dm?peer=${encodeURIComponent(activePeer)}`, { headers: { accept: 'application/json' } })
           if (!response.ok) throw new Error(`HTTP ${response.status}`)
@@ -944,7 +985,7 @@ window.__ModuleLoader__.load({
         } catch (e) {
           setError(String(e?.message ?? e))
         } finally {
-          setDmLoaded(true)
+          dmSplashDone()
         }
       }, [activePeer])
 
@@ -1117,24 +1158,15 @@ window.__ModuleLoader__.load({
       },
         h('div', { ref: scrollRef, onScroll: measureDmBottom, style: { flex: 1, overflowY: 'auto', padding: '8px 0 58px', minHeight: 0, ...fadeMask } },
           h('div', { style: { width: narrow ? '100%' : `${dmWidth}%`, margin: '0 auto', position: 'relative' } },
-            !dmLoaded
-              ? [0, 1, 2].map((index) => h('div', {
-                key: `dm-placeholder-${index}`,
-                style: {
-                  height: 40,
-                  width: index % 2 === 0 ? '58%' : '44%',
-                  margin: '14px 0 0',
-                  borderRadius: 'var(--dsw-radius-lg, 12px)',
-                  background: 'var(--dsw-alias-bg-layer-2, rgba(0,0,0,0.045))',
-                  animation: `dshGroupPulse 1.4s ${index * 0.12}s infinite ease-in-out`,
-                },
-              }))
+            dmSplash
+              ? null
             : messages.length === 0
             ? h('div', { style: { padding: '28px 20px', fontSize: 13, lineHeight: '20px', color: 'var(--dsw-alias-label-tertiary)' } },
               '还没有私下说过话。这里的话只有你们两个看得见。')
           : withDivider(messages, String(seenDm[activePeer] ?? ''), (message, index) => h(Bubble, { key: `${message.ts}-${index}`, config, message, animate: animateRef.current })),
             h('div', { ref: bottom }),
             widthHandles)),
+        dmSplash ? h(LoadingSplash, { label: '正在打开私聊…' }) : null,
         dmAtBottom ? null : h(JumpToBottom, {
           onClick: jumpDmBottom,
           rightInset: narrow ? '16px' : `calc(${(100 - dmWidth) / 2}% + 10px)`,
@@ -1272,7 +1304,7 @@ window.__ModuleLoader__.load({
       const seenGroupRef = useRef(null)
       const [seenGroup, setSeenGroup] = useState('')
       // 第一次拿到消息之前先画占位，别让人看见"还没有人说话"闪一下再变成列表。
-      const [loaded, setLoaded] = useState(false)
+      const { visible: splash, done: splashDone } = useSplash(420)
       // 列宽是"这台机器上怎么看"，不属于她家的数据，存在浏览器里。
       const [widthPct, setWidthPct] = useState(() => {
         try {
@@ -1304,7 +1336,7 @@ window.__ModuleLoader__.load({
         } catch (e) {
           setError(String(e?.message ?? e))
         } finally {
-          setLoaded(true)
+          splashDone()
         }
         try {
           const response = await fetch('/group/api/presence', { headers: { accept: 'application/json' } })
@@ -1494,20 +1526,8 @@ window.__ModuleLoader__.load({
           onScroll: measureBottom,
           style: { flex: 1, overflowY: 'auto', padding: '8px 0 58px', minHeight: 0, position: 'relative', WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)', maskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)' },
         },
-          !loaded
-            ? h('div', {
-              style: { width: `${widthPct}%`, margin: '0 auto', padding: '6px 0', display: 'flex', flexDirection: 'column', gap: 18 },
-            },
-              [0, 1, 2, 3].map((index) => h('div', {
-                key: `placeholder-${index}`,
-                style: {
-                  height: index === 0 ? 28 : 44,
-                  width: index === 0 ? '38%' : (index % 2 === 0 ? '62%' : '48%'),
-                  borderRadius: 'var(--dsw-radius-lg, 12px)',
-                  background: 'var(--dsw-alias-bg-layer-2, rgba(0,0,0,0.045))',
-                  animation: `dshGroupPulse 1.4s ${index * 0.12}s infinite ease-in-out`,
-                },
-              })))
+          splash
+            ? null
             : messages.length === 0
             ? h('div', {
               style: {
@@ -1556,6 +1576,8 @@ window.__ModuleLoader__.load({
               }),
             ),
         ),
+          // 过场页：盖住"从空到有"的那一下
+          splash ? h(LoadingSplash, { label: '正在打开群…' }) : null,
           // 回到底部：浮在消息区底部（不是输入框上），翻历史时才出现
           atBottom ? null : h(JumpToBottom, {
             onClick: jumpToBottom,
@@ -2070,12 +2092,12 @@ window.__ModuleLoader__.load({
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-group-ui] client build v6 · presence-reason:', Object.keys(MARKDOWN_LABELS).join(','))
-        // 「正在回复…」那三个点的呼吸动画。只在浏览器里注入一次。
+        console.info('[dsh-group-ui] client build v7 · splash:', Object.keys(MARKDOWN_LABELS).join(','))
+        // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-group-keyframes')) {
           const style = document.createElement('style')
           style.id = 'dsh-group-keyframes'
-      style.textContent = '@keyframes dshGroupPulse{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-1px)}}' + '@keyframes dshGroupRise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}'
+      style.textContent = '@keyframes dshGroupPulse{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-1px)}}' + '@keyframes dshGroupRise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}' + '@keyframes dshGroupSpin{to{transform:rotate(360deg)}}'
           document.head.appendChild(style)
         }
 
