@@ -385,6 +385,31 @@ window.__ModuleLoader__.load({
       }
     }
 
+    /**
+     * 消息上方的时间戳。
+     *
+     * 只写 `16:08` 会有歧义：可能是三分钟前，也可能是三个月前。规则（Fabian 2026-11-11 定）：
+     *   今天        → 「今天 16:08」
+     *   今年内更早  → 「11月10日 09:45」
+     *   去年及以前  → 「2025年12月31日 23:00」
+     * 判断"今天"用本地日历日，不用时间差 —— 差 8 小时和"跨了一次午夜"是两回事。
+     */
+    function formatStamp(ts) {
+      const date = new Date(ts ?? '')
+      if (Number.isNaN(date.getTime())) return ''
+      const pad = (n) => String(n).padStart(2, '0')
+      const clock = `${pad(date.getHours())}:${pad(date.getMinutes())}`
+      const now = new Date()
+      const today = date.getFullYear() === now.getFullYear()
+        && date.getMonth() === now.getMonth()
+        && date.getDate() === now.getDate()
+      if (today) return `今天 ${clock}`
+      const monthDay = `${date.getMonth() + 1}月${date.getDate()}日 ${clock}`
+      return date.getFullYear() === now.getFullYear()
+        ? monthDay
+        : `${date.getFullYear()}年${monthDay}`
+    }
+
     /** 一条消息：左边是别人，右边是自己。 */
     function Bubble({ config, message, onMention, animate = false }) {
       // 只在挂载时决定「要不要动画」：否则后续每次重渲染都会让老消息重新弹一遍。
@@ -394,11 +419,7 @@ window.__ModuleLoader__.load({
       // 指名到座位的消息，显示"→ 大肥鱼 · 家"，只写给这个人的显示"→ 大肥鱼"。
       const targetTo = message.toSeat ? `${message.to}@${message.toSeat}` : message.to
       const target = message.to && message.to !== 'all' ? ` → ${targetName(config, targetTo)}` : ''
-      const time = (() => {
-        const date = new Date(message.ts)
-        if (Number.isNaN(date.getTime())) return ''
-        return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
-      })()
+      const time = formatStamp(message.ts)
       return h('div', {
         style: {
           display: 'flex', gap: 10, padding: '6px 12px',
