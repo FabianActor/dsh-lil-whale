@@ -104,6 +104,10 @@ const WATCH_STATE_FILE = join(HER_HOME, 'state', 'watchman.json')
 const HER_WAKER = 'D:\\文档\\WorkSpace\\dsh-lil-whale\\scripts\\wake-whale.ps1'
 const PWSH_EXE = 'C:\\Program Files\\PowerShell\\7\\pwsh.exe'
 
+// 叫醒之后多久回头看他有没有开口（另一个 Leea 2026-11-11 提的 A7 判据）。
+// 她原话是 5 分钟；他这时的首 token 要几十秒到几分钟，5 分钟会把"慢"判成"沉默"，所以放到 15 分钟。
+const WAKE_SETTLE_MS = 15 * 60_000
+
 let watchState = loadWatchState()
 
 /** 上限必须跨重启活着：一个会忘掉自己上限的守夜人，比没有上限更危险（她 2026-11-09 指出的）。 */
@@ -111,9 +115,11 @@ function loadWatchState() {
   const day = new Date().toDateString()
   try {
     const raw = JSON.parse(readFileSync(WATCH_STATE_FILE, 'utf8'))
-    if (raw.day === day) return { day, wakes: Number(raw.wakes) || 0, fails: Number(raw.fails) || 0, errors: Number(raw.errors) || 0 }
+    // marks 跨天不清：一个"叫醒后等他开口"的记录只活 15 分钟，跨零点也该它自己到期。
+    const marks = Array.isArray(raw.marks) ? raw.marks.filter((m) => m && typeof m.at === 'number') : []
+    if (raw.day === day) return { day, wakes: Number(raw.wakes) || 0, fails: Number(raw.fails) || 0, errors: Number(raw.errors) || 0, marks }
   } catch {}
-  return { day, wakes: 0, fails: 0, errors: 0 }
+  return { day, wakes: 0, fails: 0, errors: 0, marks: [] }
 }
 
 /** 她 2026-11-09 的要求：绝对路径是"这次对了"不是"以后都对"，所以每次启动都报出它手里那把钥匙。 */
@@ -154,6 +160,45 @@ function watchmanLog(result, why) {
     appendFileSync(WATCHMAN_LOG, `${ts} | ${result} | ${why}${streakSuffix}\n`, 'utf8')
   } catch {
     // 日志写不进去也不能把插件的 tick 打死
+  }
+}
+
+/**
+ * 叫醒之后记一笔，15 分钟后回看：这个人自己有没有往群里写过新行。
+ * 另一个 Leea 2026-11-11 提的：A7「有人会不理人」现在没法验 ——
+ * `群.md` 只记话，分不清"她没醒"和"她醒了但决定不说"。
+ */
+function markWake(member, kind) {
+  watchState.marks ??= []
+  watchState.marks.push({ member, kind, at: Date.now() })
+  if (watchState.marks.length > 20) watchState.marks = watchState.marks.slice(-20)
+  saveWatchState()
+}
+
+/** 到期的 mark 逐个结算，写 `said` 或 `silent` 一行。 */
+function settleMarks() {
+  const marks = watchState.marks ?? []
+  if (marks.length === 0) return
+  const now = Date.now()
+  const keep = []
+  for (const mark of marks) {
+    if (now - mark.at < WAKE_SETTLE_MS) { keep.push(mark); continue }
+    let lines = 0
+    try {
+      lines = readLinesOf(MESSAGES).filter(
+        (line) => line && line.from === mark.member && Date.parse(line.ts) > mark.at,
+      ).length
+    } catch {
+      keep.push(mark)
+      continue
+    }
+    const after = Math.round((now - mark.at) / 1000)
+    const since = new Date(mark.at).toTimeString().slice(0, 8)
+    watchmanLog(lines > 0 ? 'said' : 'silent', `member=${mark.member} kind=${mark.kind} since=${since} after=${after}s lines=${lines}`)
+  }
+  if (keep.length !== marks.length) {
+    watchState.marks = keep
+    saveWatchState()
   }
 }
 
@@ -218,6 +263,7 @@ const WAKE = {
   cooldownSec: 60,
   perHour: 12,
   perDay: 60,
+  backlogTier: 8,        // 积压超过这个数，唤醒词换成"先看最后三条"
 }
 
 /**
@@ -575,6 +621,7 @@ function memberOf(agent) {
 }
 
 async function tick(ctx) {
+  settleMarks() // 到期的"叫醒之后他有没有开口"先结算，再决定这一轮做什么
   if (!hostReady) void resolveHost()
 
   const agents = ctx.get('agents')
@@ -662,9 +709,17 @@ function handleChannel({ agent, member, channel, cursors, wakes }) {
 
   const conversation = CONVERSATIONS[sessionIdOf(agent) ?? ''] ?? ''
   const head = conversation === '' ? '' : `（这段会话是「${conversation}」）\n`
+  // 积压分档（2026-11-11，另一个 Leea 提的）：一次塞 20 条，一个 turn 处理完就是流水账。
+  // 超过 8 条就明说"先看最后三条"，让"没读完"变成合情合理的做法，而不是必须完成的任务。
+  const backlog = incoming.length > WAKE.backlogTier
   const where = channel.kind === 'dm'
     ? `${channel.who} 私下跟你说了 ${incoming.length} 句`
-    : `群里有 ${incoming.length} 条新的（${who}）`
+    : backlog
+      ? `你睡了有一会儿，群里积了 ${incoming.length} 条（${who}）`
+      : `群里有 ${incoming.length} 条新的（${who}）`
+  const tailHint = backlog
+    ? '先看最后三条，再看看有没有指名你的。'
+    : '去看看。'
   const target = channel.kind === 'dm' ? channel.file : READABLE
 
   // 护栏：宿主构造器没解析到、或造出来的东西没有 id，就别往会话里塞。
@@ -672,7 +727,7 @@ function handleChannel({ agent, member, channel, cursors, wakes }) {
   const built = buildUserMessage({
     content: [{
       type: 'text',
-      text: `${head}${where}。\n\n${preview}\n\n去 ${target} 看看。回不回、说什么，你自己定。`,
+      text: `${head}${where}。\n\n${preview}\n\n去 ${target} ${tailHint}回不回、说什么，你自己定。`,
     }],
     source: { kind: channel.kind === 'dm' ? 'dm' : 'group', form: 'signal' },
   })
@@ -687,6 +742,7 @@ function handleChannel({ agent, member, channel, cursors, wakes }) {
     return false // 游标不动：这批消息还在，下个 tick 再试
   }
   agent.followup(built)
+  markWake(member, channel.kind)
 
   setCursor(cursors, member, channel.key, lines.length)
   writeJson(CURSOR, cursors)
@@ -830,7 +886,7 @@ async function watchmanTick() {
   const day = new Date().toDateString()
   if (watchState.day !== day) {
     const prev = watchState
-    watchState = { day, wakes: 0, fails: 0, planFired: {}, skipped: {} }
+    watchState = { day, wakes: 0, fails: 0, planFired: {}, skipped: {}, marks: prev.marks ?? [] }
     saveWatchState()
     watchmanLog('note', `why=new-day counter-reset carried-wakes=${prev.wakes ?? 0}`)
   }
@@ -898,6 +954,8 @@ async function watchmanTick() {
       }
       saveWatchState()
       watchmanLog('woke', `ok wakes-today=${watchState.wakes} why=${res.detail} night=${night} ${job.tag}`)
+      // 推门也算叫醒过一次：15 分钟后回看她有没有开口（A7 判据）。
+      markWake('whale', 'plan')
     } else {
       watchState.fails += 1
       saveWatchState()
