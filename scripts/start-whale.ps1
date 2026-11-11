@@ -1,41 +1,37 @@
-﻿# start-whale.ps1 -- 启动小肥鱼（ASCII 文件名，避免 cmd 里编码出错）
-# 用 UTF-8 BOM 存盘，这样 Windows PowerShell 5.1 双击/右键运行时也不会读成乱码。
-$ErrorActionPreference = 'Stop'
+﻿# start-whale.ps1 -- 给小肥鱼开机，专供守夜脚本调用（它不是给人双击的）。
+#
+# 契约（watchman.ps1 靠这几个词判断成败）：
+#   已经在跑  -> 输出 already-awake
+#   开起来了  -> 输出 awake
+#   没起来    -> 输出 failed（并带着日志尾巴）
+#
+# 人用的入口是 启动小肥鱼.cmd / 启动小肥鱼-检修.cmd，它们调 launch.ps1。
+param([int]$Port = 3082)
 
-$home_ = 'D:\文档\WorkSpace\lil-whale\dsh-home'
-$cwd   = 'D:\文档\WorkSpace\lil-whale'
-$port  = 3082
-$url   = "http://127.0.0.1:$port"
+$ErrorActionPreference = 'Stop'
+$launch = Join-Path $PSScriptRoot 'launch.ps1'
 
 function Test-Port([int]$p) {
   $c = New-Object System.Net.Sockets.TcpClient
   try { $c.Connect('127.0.0.1', $p); return $true } catch { return $false } finally { $c.Dispose() }
 }
 
-if (Test-Port $port) {
-  Write-Host "她已经在跑了，直接开窗。"
-  Start-Process $url
+if (Test-Port $Port) {
+  Write-Output "already-awake http://127.0.0.1:$Port"
   exit 0
 }
 
-$logdir = Join-Path $home_ 'logs'
-New-Item -ItemType Directory -Force -Path $logdir | Out-Null
-$command = "`$env:DSH_HOME='$home_'; dsh --profile whale --port $port --no-open"
-Start-Process -FilePath 'pwsh' -ArgumentList '-NoLogo','-NoProfile','-Command',$command `
-  -WorkingDirectory $cwd -WindowStyle Hidden `
-  -RedirectStandardOutput (Join-Path $logdir 'web-latest.log') `
-  -RedirectStandardError  (Join-Path $logdir 'web-latest.err.log') | Out-Null
-
-Write-Host "正在开机……"
-for ($i = 0; $i -lt 60; $i++) {
-  Start-Sleep -Milliseconds 500
-  if (Test-Port $port) { break }
+try {
+  & $launch -Target whale -Port $Port -NoBrowser | Out-Null
+  $code = $LASTEXITCODE
+} catch {
+  Write-Output ("failed " + $_.Exception.Message)
+  exit 1
 }
 
-if (Test-Port $port) {
-  Write-Host "起来了：$url"
-  Start-Process $url
-} else {
-  Write-Host "没起来。看日志：$logdir\web-latest.err.log"
-  Start-Sleep -Seconds 8
+if ($code -eq 0 -and (Test-Port $Port)) {
+  Write-Output "awake http://127.0.0.1:$Port"
+  exit 0
 }
+Write-Output 'failed'
+exit 1

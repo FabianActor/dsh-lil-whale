@@ -1,4 +1,4 @@
-# 【已搬进插件，2026-11-09 19:15】同一套规则现在住在 dsh-group 插件的定时器里（主进程每 60 秒看一次）。
+﻿# 【已搬进插件，2026-11-09 19:15】同一套规则现在住在 dsh-group 插件的定时器里（主进程每 60 秒看一次）。
 # 这个文件保留作手工兜底 / 排障用：逻辑会有两处，改规则时记得两边都对。
 # watchman.ps1 —— 守夜
 #
@@ -91,6 +91,11 @@ $fails = 0
 
 Log 'started' "interval=${IntervalSec}s port=$Port cap=${MaxWakesPerDay}/day dryrun=$($DryRun.IsPresent)"
 
+# 把自己的 PID 写出来：launch.ps1 靠这个判断「守夜在不在」。
+# 不靠命令行字符串匹配 —— 任何一个正在读这段文字的 pwsh 都会被误认成守夜。
+$pidFile = Join-Path $herHome 'logs\watchman.pid'
+Set-Content -LiteralPath $pidFile -Value $PID -Encoding ascii
+
 try {
   while ($true) {
     $now = (Get-Date).ToUniversalTime()
@@ -150,5 +155,8 @@ try {
   }
 } finally {
   Log 'stopped' "reason=exit wakes-today=$wakesToday fails=$fails"
+  try {
+    if ((Test-Path -LiteralPath $pidFile) -and ((Get-Content -LiteralPath $pidFile -Raw).Trim() -eq "$PID")) { Remove-Item -LiteralPath $pidFile -Force }
+  } catch { }
 }
 

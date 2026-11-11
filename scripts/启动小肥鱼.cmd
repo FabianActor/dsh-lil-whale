@@ -1,4 +1,5 @@
 @echo off
 chcp 65001 >nul
-pwsh -NoProfile -ExecutionPolicy Bypass -File "%~dp0start-whale.ps1"
-pause
+rem Launch fish. Window closes when it succeeds; stays open when it fails.
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0launch.ps1" -Target whale
+if errorlevel 1 pause
