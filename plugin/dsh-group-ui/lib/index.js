@@ -260,7 +260,7 @@ export function apply(ctx) {
       if (req.method !== 'GET') return sendJson(res, 405, { error: 'method not allowed' })
       const members = {}
       try {
-        const pins = JSON.parse(fs.readFileSync(PINS, 'utf8'))
+        const pins = JSON.parse(readFileSync(PINS, 'utf8'))
         const bySession = {}
         for (const [member, ids] of Object.entries(pins ?? {})) {
           for (const id of Array.isArray(ids) ? ids : [ids]) {
@@ -290,7 +290,7 @@ export function apply(ctx) {
       if (req.method !== 'GET') return sendJson(res, 405, { error: 'method not allowed' })
       const seats = []
       try {
-        const pins = JSON.parse(fs.readFileSync(PINS, 'utf8'))
+        const pins = JSON.parse(readFileSync(PINS, 'utf8'))
         for (const [member, ids] of Object.entries(pins ?? {})) {
           for (const id of Array.isArray(ids) ? ids : [ids]) {
             if (typeof id !== 'string') continue
