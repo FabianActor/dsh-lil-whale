@@ -51,11 +51,27 @@ window.__ModuleLoader__.load({
       groupOnly: '在群里说（谁会醒由阀门决定）',
       toOne: (name) => `只有 ${name} 会被叫醒`,
       typing: (names) => `${names} 正在回复…`,
+      // 两种"忙"分开说：一种是回群里，一种是别处忙（可能就在跟你私聊）。
+      // 宿主只给得出 reason，给不出"这句话回谁"——所以文案也只承诺到这一层。
+      typingGroup: (names) => `${names} 正在回复群里的消息…`,
+      typingElsewhere: (names) => `${names} 在忙别的（不是群里的消息）`,
       mention: '右键 @',
       settingsTitle: '小小肥鱼',
       settingsHint: '这些只改显示，不碰她的文件。',
     }
 
+    /**
+     * 一条 presence 记录 → { status, reason }。
+     * 兼容旧形状（直接是字符串）：服务端升级前后页面都别白。
+     */
+    function presenceOf(presence, id) {
+      const value = presence ? presence[id] : undefined
+      if (typeof value === 'string') return { status: value, reason: 'self' }
+      if (value && typeof value === 'object') {
+        return { status: String(value.status ?? 'idle'), reason: String(value.reason ?? 'self') }
+      }
+      return { status: 'idle', reason: 'self' }
+    }
     // 一份配置：模块级缓存，侧边栏 label 要能同步读到
     let cachedConfig = null
 
@@ -1010,8 +1026,11 @@ window.__ModuleLoader__.load({
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
           backButton,
           h('span', { style: { fontSize: 14, fontWeight: 500, color: 'var(--dsw-alias-label-primary)' } }, nameOf(config, activePeer)),
-          presence?.[activePeer] === 'working'
-            ? h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } }, t.typing(nameOf(config, activePeer)))
+          presenceOf(presence, activePeer).status === 'working'
+            ? h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } },
+              presenceOf(presence, activePeer).reason === 'group'
+                ? t.typingGroup(nameOf(config, activePeer))
+                : t.typingElsewhere(nameOf(config, activePeer)))
             : null))
 
       const fadeMask = { WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)', maskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)' }
@@ -1281,10 +1300,20 @@ window.__ModuleLoader__.load({
         }
       }, [text, to, sending, refresh, tab])
 
-      const busy = ['lee', 'whale'].filter((id) => presence?.[id] === 'working')
-      const typingLine = busy.length
-        ? t.typing(busy.map((id) => nameOf(config, id)).join('、'))
-        : null
+      // 两种忙分开报：群里被叫起来的 / 在别处忙的。宿主只给得出这一层。
+      const groupBusy = ['lee', 'whale'].filter((id) => {
+        const state = presenceOf(presence, id)
+        return state.status === 'working' && state.reason === 'group'
+      })
+      const otherBusy = ['lee', 'whale'].filter((id) => {
+        const state = presenceOf(presence, id)
+        return state.status === 'working' && state.reason !== 'group'
+      })
+      const typingLine = groupBusy.length
+        ? t.typingGroup(groupBusy.map((id) => nameOf(config, id)).join('、'))
+        : otherBusy.length
+          ? t.typingElsewhere(otherBusy.map((id) => nameOf(config, id)).join('、'))
+          : null
 
       return h('div', {
         style: { ...baseStyle, display: 'flex', flexDirection: 'column' },
@@ -1927,7 +1956,7 @@ window.__ModuleLoader__.load({
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-group-ui] client build v5 · history-divider+presence:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-group-ui] client build v6 · presence-reason:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-group-keyframes')) {
           const style = document.createElement('style')

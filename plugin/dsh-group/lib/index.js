@@ -432,13 +432,30 @@ function writePresence(member, agent) {
   try {
     const file = join(PRESENCE_DIR, `${member}.json`)
     ensureParent(file)
+    // `groupWakeAt` 是"最近一次被群里叫起来"的时刻，由 markGroupWake 写。
+    // 它不能被心跳覆盖掉：否则面板永远分不清"在回群"和"在跟你私聊"。
+    const prev = readJson(file, null)
+    const groupWakeAt = Number(prev?.groupWakeAt) || 0
     writeJson(file, {
       member,
       status: typeof agent?.status === 'string' ? agent.status : 'idle',
       at: Date.now(),
+      ...(groupWakeAt > 0 ? { groupWakeAt } : {}),
     })
   } catch {
     // 写不进去不能耽误叫醒
+  }
+}
+
+/** 记一笔"这次忙是被群里叫起来的"。面板据此区分两种忙，不猜。 */
+function markGroupWake(member) {
+  try {
+    const file = join(PRESENCE_DIR, `${member}.json`)
+    ensureParent(file)
+    const prev = readJson(file, null) ?? {}
+    writeJson(file, { ...prev, member, groupWakeAt: Date.now() })
+  } catch {
+    // 同上：记号丢了不影响叫醒
   }
 }
 
@@ -925,6 +942,7 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
     return false // 游标不动：这批消息还在，下个 tick 再试
   }
   agent.followup(built)
+  markGroupWake(member)
   markWake(member, channel.kind)
 
   setCursor(cursors, member, channel.key, lines.length)
