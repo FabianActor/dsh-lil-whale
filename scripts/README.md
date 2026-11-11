@@ -47,7 +47,7 @@ pwsh -File stop.ps1   -Target all|lee|whale [-Yes]
 | --- | --- |
 | `start-whale.ps1` | `watchman.ps1`。输出约定：`already-awake` / `awake` / `failed` |
 | `wake-whale.ps1` | `dsh-group` 插件的守夜定时器（`HER_WAKER`）：每 60 秒看一次，到点且她关着窗就跑它 |
-| `watchman.ps1` | 手工兜底的老守夜（`watchman-run.cmd` 起）。**现在门主要由插件推**，这个只在主 dsh 不常开时用 |
+| `watchman.ps1` | **手工兜底的老守夜，日常不必跑**。现在门由 `dsh-group` 插件推（见上一行）。主 dsh 不常开时才需要它：`pwsh -File scripts\watchman.ps1`（旧的双击入口在 `legacy\watchman-run.cmd`） |
 | `stop.ps1` | `bin\Stop*.cmd`。退出码 0 = 停了/本来没跑，1 = 没停干净 |
 | `launch.ps1` | `bin\Run*.cmd` |
 
@@ -61,7 +61,7 @@ pwsh -File stop.ps1   -Target all|lee|whale [-Yes]
 
 ## legacy\
 
-旧的入口：`tab-lee.ps1`、`tab-whale.ps1`、`RUN-双鱼.cmd`（Windows Terminal 双标签页那套）、`启动小肥鱼.ps1`、`唤醒小肥鱼.cmd`、`stop-whale.ps1`。没删，只是挪开。
+旧的入口：`tab-lee.ps1`、`tab-whale.ps1`、`RUN-双鱼.cmd`（Windows Terminal 双标签页那套）、`启动小肥鱼.ps1`、`唤醒小肥鱼.cmd`、`stop-whale.ps1`、`watchman-run.cmd`（老守夜的双击入口，改成手敲 `pwsh -File scripts\watchman.ps1` 了）。没删，只是挪开。
 
 ## 项目的 ASCII 入口
 
