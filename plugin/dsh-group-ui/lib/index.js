@@ -33,6 +33,13 @@ const KNOWN_PEERS = Object.keys(LABEL).filter((id) => !DM_HIDDEN.has(id))
 const DEFAULT_CONFIG = {
   panelLabel: '鱼群',
   names: { lee: '大肥鱼', whale: '小肥鱼', fabian: 'Fabian' },
+  /**
+   * 座位名：同一个人可能有几段会话同时在群里（`lee` 就有两段）。
+   * 键是会话 id 的前 6 位（`session-e17c3c91-…` → `e17c3c`），值是这段会话在群里显示的名字。
+   * 找不到座位名就回落到 `names[成员]` —— 所以不填也不影响用，只是看不出是哪一段说的。
+   * 打包给别人时这里应该是空对象，由用户在自己机器上填。
+   */
+  seats: {},
   /** 未读口径：'all' = 所有不是自己说的话；'mentions' = 只算 @ 到我的（to 是 all 或 fabian）。 */
   notifyScope: 'all',
   avatars: {
@@ -63,6 +70,7 @@ function readConfig() {
         whale: normalizeName(raw?.names?.whale, DEFAULT_CONFIG.names.whale),
         fabian: normalizeName(raw?.names?.fabian, DEFAULT_CONFIG.names.fabian),
       },
+      seats: normalizeSeats(raw?.seats),
       avatars: {
         lee: normalizeAvatar(raw?.avatars?.lee, DEFAULT_CONFIG.avatars.lee),
         whale: normalizeAvatar(raw?.avatars?.whale, DEFAULT_CONFIG.avatars.whale),
@@ -79,6 +87,20 @@ function normalizeName(value, fallback) {
   const text = value.trim()
   if (!text) return fallback
   return text.slice(0, 16)
+}
+
+/** 座位名：键必须是 6 位十六进制（会话 id 前 6 位）或 'ui'（面板发的），值最多 16 字。 */
+function normalizeSeats(value) {
+  const out = {}
+  if (!value || typeof value !== 'object') return out
+  for (const [key, name] of Object.entries(value)) {
+    if (!/^[0-9a-f]{6}$|^ui$/.test(key)) continue
+    if (typeof name !== 'string') continue
+    const text = name.trim()
+    if (!text) continue
+    out[key] = text.slice(0, 16)
+  }
+  return out
 }
 
 function normalizeAvatar(value, fallback) {
@@ -212,6 +234,7 @@ export function apply(ctx) {
           whale: normalizeName(payload?.names?.whale, DEFAULT_CONFIG.names.whale),
           fabian: normalizeName(payload?.names?.fabian, DEFAULT_CONFIG.names.fabian),
         },
+        seats: normalizeSeats(payload?.seats),
         avatars: {
           lee: normalizeAvatar(payload?.avatars?.lee, DEFAULT_CONFIG.avatars.lee),
           whale: normalizeAvatar(payload?.avatars?.whale, DEFAULT_CONFIG.avatars.whale),
@@ -255,6 +278,29 @@ export function apply(ctx) {
         // 读不到就当没人说话：宁可安静，不要假装有人在打字
       }
       sendJson(res, 200, { members })
+    },
+  }))
+
+  // 有哪些座位：把 pins.json 里每一段被钉住的会话列出来（id 前 6 位 + 属于谁）。
+  // 设置页据此给每一段一个可改的显示名——不硬编码，换机器、加会话都不用改代码。
+  disposers.push(ctx.webServer.register({
+    kind: 'exact',
+    path: '/group/api/seats',
+    handler(req, res) {
+      if (req.method !== 'GET') return sendJson(res, 405, { error: 'method not allowed' })
+      const seats = []
+      try {
+        const pins = JSON.parse(fs.readFileSync(PINS, 'utf8'))
+        for (const [member, ids] of Object.entries(pins ?? {})) {
+          for (const id of Array.isArray(ids) ? ids : [ids]) {
+            if (typeof id !== 'string') continue
+            seats.push({ prefix: id.replace(/^session-/, '').slice(0, 6), member, sessionId: id })
+          }
+        }
+      } catch {
+        // 读不到名册就返回空表；设置页会显示"还没有登记座位"
+      }
+      sendJson(res, 200, { seats })
     },
   }))
   disposers.push(ctx.webServer.register({

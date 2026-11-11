@@ -35,6 +35,8 @@ window.__ModuleLoader__.load({
         fabian: { text: 'F', tint: '#5c8a6a' },
       },
       names: { lee: '大肥鱼', whale: '小肥鱼', fabian: 'Fabian' },
+      /** 座位名：会话 id 前 6 位 → 这段会话在群里显示的名字（同一个人的第二段会话用得上）。 */
+      seats: {},
     }
 
     const t = {
@@ -82,7 +84,14 @@ window.__ModuleLoader__.load({
       return cachedConfig
     }
 
-    function nameOf(config, id) {
+    /**
+     * 名字：默认按成员 id 取。
+     * 但同一个人的多段会话会共用一个 id（`lee`），所以如果能拿到这条消息的 `s`，
+     * 就先在 `seats` 里找座位名 —— 群里因此能分出「大肥鱼·工」和「大肥鱼·家」。
+     */
+    function nameOf(config, id, s) {
+      const seat = s ? config?.seats?.[s] : ''
+      if (typeof seat === 'string' && seat.trim() !== '') return seat
       return config?.names?.[id] || NAMES[id] || id
     }
 
@@ -353,7 +362,7 @@ window.__ModuleLoader__.load({
       // 只在挂载时决定「要不要动画」：否则后续每次重渲染都会让老消息重新弹一遍。
       const animateOnMount = useRef(animate).current
       const mine = message.from === 'fabian'
-      const who = nameOf(config, message.from)
+      const who = nameOf(config, message.from, message.s)
       const target = message.to && message.to !== 'all' ? ` → ${nameOf(config, message.to)}` : ''
       const time = (() => {
         const date = new Date(message.ts)
@@ -1296,10 +1305,21 @@ window.__ModuleLoader__.load({
       const [config, setConfig] = useState(DEFAULT_CONFIG)
       const [status, setStatus] = useState('')
       const [dirty, setDirty] = useState(false)
+      const [seats, setSeats] = useState([])
       const timerRef = useRef(null)
 
       useEffect(() => {
         void loadConfig(true).then(setConfig)
+      }, [])
+
+      // 座位：名册里有几段被钉住的会话，就列几行（不硬编码，加会话不用改代码）。
+      useEffect(() => {
+        let alive = true
+        fetch('/group/api/seats')
+          .then((response) => (response.ok ? response.json() : null))
+          .then((data) => { if (alive && Array.isArray(data?.seats)) setSeats(data.seats) })
+          .catch(() => {})
+        return () => { alive = false }
       }, [])
 
       // 改一个字段就存一次（400ms 防抖）。没有「保存」按钮：
@@ -1388,6 +1408,30 @@ window.__ModuleLoader__.load({
               style: inputStyle,
             }),
           )),
+        ),
+
+        h(Section, {
+          title: '座位名',
+          hint: '同一个人可能有两段会话同时在群里。这里给每一段起个名字，群里就能分出是哪一段说的；留空则用上面的大名。',
+        },
+          seats.length === 0
+            ? h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', marginTop: 8 } }, '名册里还没有登记的会话。')
+            : seats.map((seat) => h('div', { key: `seat-${seat.prefix}`, style: rowStyle },
+              h(Avatar, { config, member: seat.member, size: 26 }),
+              h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', flex: '0 0 auto' } }, seat.prefix),
+              h('input', {
+                value: config.seats?.[seat.prefix] ?? '',
+                maxLength: 16,
+                placeholder: nameOf(config, seat.member),
+                onChange: (event) => patch((next) => {
+                  next.seats = { ...(next.seats ?? {}) }
+                  const text = event.target.value
+                  if (text.trim() === '') delete next.seats[seat.prefix]
+                  else next.seats[seat.prefix] = text
+                }),
+                style: inputStyle,
+              }),
+            )),
         ),
 
         h(Section, { title: '头像', hint: '文字 1–2 个（也可以是 emoji），颜色是底色。' },
