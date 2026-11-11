@@ -381,7 +381,9 @@ window.__ModuleLoader__.load({
       const animateOnMount = useRef(animate).current
       const mine = message.from === 'fabian'
       const who = nameOf(config, message.from, message.s)
-      const target = message.to && message.to !== 'all' ? ` → ${nameOf(config, message.to)}` : ''
+      // 指名到座位的消息，显示"→ 大肥鱼 · 家"，只写给这个人的显示"→ 大肥鱼"。
+      const targetTo = message.toSeat ? `${message.to}@${message.toSeat}` : message.to
+      const target = message.to && message.to !== 'all' ? ` → ${targetName(config, targetTo)}` : ''
       const time = (() => {
         const date = new Date(message.ts)
         if (Number.isNaN(date.getTime())) return ''
