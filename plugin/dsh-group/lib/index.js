@@ -421,6 +421,27 @@ function writeWakes(member, wakes) {
   writeJson(wakesFileOf(member), { [member]: wakes?.[member] ?? undefined })
 }
 
+const PRESENCE_DIR = join(HER_HOME, 'state', 'presence')
+
+/**
+ * 心跳：把"这个成员此刻忙不忙"写进文件（2026-11-11 17:05 加）。
+ * 两个进程各是独立 HOME，谁也看不见对方的 agent —— 面板要显示"小肥鱼 正在回复"，
+ * 只能靠这条每 5 秒一落盘的心跳，不能靠内存里问。
+ */
+function writePresence(member, agent) {
+  try {
+    const file = join(PRESENCE_DIR, `${member}.json`)
+    ensureParent(file)
+    writeJson(file, {
+      member,
+      status: typeof agent?.status === 'string' ? agent.status : 'idle',
+      at: Date.now(),
+    })
+  } catch {
+    // 写不进去不能耽误叫醒
+  }
+}
+
 function readLinesOf(file) {
   if (!existsSync(file)) return []
   return readFileSync(file, 'utf8').split('\n').filter((line) => line.trim() !== '')
@@ -766,6 +787,10 @@ async function tick(ctx) {
     if (member === null) continue
     // 只叫醒"钉住的那一段"：一个人可以登记多段会话，没登记的一律不碰。
     if (!pinnedSessions(member).includes(sessionIdOf(agent))) continue
+
+    // 心跳先写：不论忙不忙都写一行，面板才知道"这边有活人、只是没在干活"
+    writePresence(member, agent)
+
     if (agent.status !== 'idle') continue // 正在跑就先别插嘴，下个 tick 再说
 
     // 记账按成员分开读：这段进程只管它自己那几个成员，别再攥着别人的旧快照

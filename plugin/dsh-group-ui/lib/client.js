@@ -732,10 +732,47 @@ window.__ModuleLoader__.load({
           group: Number(data?.group) || 0,
           dm: data?.dm && typeof data.dm === 'object' ? data.dm : {},
           total: Number(data?.total) || 0,
+          // 上次看到哪儿：面板拿它画「以上为历史消息」那条线（他 2026-11-11 要的）
+          seen: {
+            group: typeof data?.seen?.group === 'string' ? data.seen.group : '',
+            dm: data?.seen?.dm && typeof data.seen.dm === 'object' ? data.seen.dm : {},
+          },
         }
       } catch {
         return null
       }
+    }
+
+    /** 一条淡灰细线 + 一行小字：上次看到这里，新的在下面。不抢眼，只做分界。 */
+    function HistoryDivider() {
+      const line = { flex: 1, height: '0.5px', background: 'var(--dsw-alias-border-l2, rgba(0,0,0,0.12))' }
+      return h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, margin: '14px 24px' } },
+        h('div', { style: line }),
+        h('span', {
+          style: {
+            fontSize: 12, lineHeight: '16px', whiteSpace: 'nowrap',
+            color: 'var(--dsw-alias-label-tertiary, rgba(0,0,0,0.45))',
+          },
+        }, '以上为历史消息'),
+        h('div', { style: line }))
+    }
+
+    /**
+     * 把分割线插在"第一条比 seenTs 新的消息"前面。
+     * 第一次打开（seenTs 为空）不画；没有更新的消息也不画 —— 一条永远出现在最后面的线不是信息。
+     */
+    function withDivider(messages, seenTs, renderBubble) {
+      const nodes = []
+      let placed = false
+      for (let index = 0; index < messages.length; index += 1) {
+        const message = messages[index]
+        if (!placed && seenTs !== '' && String(message?.ts ?? '') > seenTs) {
+          nodes.push(h(HistoryDivider, { key: 'history-divider' }))
+          placed = true
+        }
+        nodes.push(renderBubble(message, index))
+      }
+      return nodes
     }
 
     /**
@@ -756,6 +793,9 @@ window.__ModuleLoader__.load({
       const [sending, setSending] = useState(false)
       const [error, setError] = useState(null)
       const [unread, setUnread] = useState({ dm: {} })
+      // 每个对端"上次看到哪儿"，进这一段时冻结一次：之后边读边刷新不能让线跟着往下跑。
+      const seenDmRef = useRef({})
+      const [seenDm, setSeenDm] = useState({})
       const [sidebar, setSidebar] = useState(() => {
         try {
           const saved = Number(window.localStorage?.getItem('dsh-group-dm-sidebar'))
@@ -812,7 +852,16 @@ window.__ModuleLoader__.load({
           await loadContacts()
           await loadMessages()
           const counts = await loadUnread()
-          if (counts) setUnread(counts)
+          if (counts) {
+            setUnread(counts)
+            // 先到先冻：这一刻的 seen 才是"进来之前看到哪儿"。
+            // 1.5 秒后 markRead 会把游标推到最新，那之后再读就永远没有新消息了。
+            const peer = peerRef.current
+            if (peer && seenDmRef.current[peer] === undefined) {
+              seenDmRef.current[peer] = String(counts.seen?.dm?.[peer] ?? '')
+              setSeenDm({ ...seenDmRef.current })
+            }
+          }
         }
         void tick()
         const timer = setInterval(() => { void tick() }, 3000)
@@ -979,7 +1028,7 @@ window.__ModuleLoader__.load({
           messages.length === 0
             ? h('div', { style: { padding: '28px 20px', fontSize: 13, lineHeight: '20px', color: 'var(--dsw-alias-label-tertiary)' } },
               '还没有私下说过话。这里的话只有你们两个看得见。')
-          : messages.map((message, index) => h(Bubble, { key: `${message.ts}-${index}`, config, message, animate: animateRef.current })),
+          : withDivider(messages, String(seenDm[activePeer] ?? ''), (message, index) => h(Bubble, { key: `${message.ts}-${index}`, config, message, animate: animateRef.current })),
           h('div', { ref: bottom }),
           widthHandles))
 
@@ -1111,6 +1160,9 @@ window.__ModuleLoader__.load({
       const [pickerOpen, setPickerOpen] = useState(false)
       const [tab, setTab] = useState('group')
       const [unread, setUnread] = useState({ group: 0, dm: {}, total: 0 })
+      // 群聊"上次看到哪儿"：进这一页时冻结一次，线不跟着新消息往下跑。
+      const seenGroupRef = useRef(null)
+      const [seenGroup, setSeenGroup] = useState('')
       // 列宽是"这台机器上怎么看"，不属于她家的数据，存在浏览器里。
       const [widthPct, setWidthPct] = useState(() => {
         try {
@@ -1349,7 +1401,7 @@ window.__ModuleLoader__.load({
             : h('div', {
               style: { width: `${widthPct}%`, margin: '0 auto', position: 'relative' },
             },
-              messages.map((message, index) => h(Bubble, {
+              withDivider(messages, seenGroup, (message, index) => h(Bubble, {
                 key: `${message.ts}-${index}`,
                 config,
                 message,
@@ -1875,7 +1927,7 @@ window.__ModuleLoader__.load({
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-group-ui] client build v4 · avatars+members:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-group-ui] client build v5 · history-divider+presence:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-group-keyframes')) {
           const style = document.createElement('style')

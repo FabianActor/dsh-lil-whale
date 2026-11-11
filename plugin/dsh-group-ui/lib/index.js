@@ -26,6 +26,10 @@ const UI_CONFIG = join(GROUP_DIR, 'ui-config.json')
 // 「看到哪儿了」的游标：只在面板里看，不影响她那边读群的游标
 const UI_READ = join(GROUP_DIR, 'ui-read.json')
 const PINS = join(GROUP_DIR, 'pins.json')
+// 跨进程心跳：dsh-group 插件在各自那个进程里每 5 秒写一份 `state\presence\<成员>.json`。
+// 面板要显示"小肥鱼 正在回复"，只能读这个 —— 这个进程里的 ctx.agents 只有大肥鱼自己的会话。
+const PRESENCE_DIR = join(GROUP_DIR, '..', 'state', 'presence')
+const PRESENCE_FRESH_MS = 20_000
 
 // 头像照片：一个人一张，文件名固定 `<成员>.<扩展名>`，换一张就覆盖旧的。
 // 上限 1.5 MB —— 够一张头像了；再大就是有人把整张截图塞进来，不该让群目录跟着长胖。
@@ -400,12 +404,26 @@ export function apply(ctx) {
             if (typeof id === 'string') bySession[id] = member
           }
         }
+        // 1) 对方那个进程写的心跳文件：本进程看不见他们的 agent，只能读盘。
+        //    超过 20 秒没更新就当"不知道"（进程关了、卡了），不要假装对方在打字。
+        for (const member of Object.keys(pins ?? {})) {
+          try {
+            const beat = JSON.parse(readFileSync(join(PRESENCE_DIR, `${member}.json`), 'utf8'))
+            const at = Number(beat?.at) || 0
+            if (Date.now() - at <= PRESENCE_FRESH_MS) {
+              members[member] = beat?.status === 'idle' ? 'idle' : 'working'
+            }
+          } catch {
+            // 没心跳就当不知道
+          }
+        }
+        // 2) 本进程的 agent 状态更准（心跳最慢差 5 秒），有就以它为准。
         for (const agent of ctx.agents.list()) {
           const sessionId = agent?.session?.header?.id
           const member = bySession[sessionId]
           if (!member) continue
           const busy = agent?.status !== 'idle'
-          if (busy || members[member] === undefined) members[member] = busy ? 'working' : 'idle'
+          if (busy) members[member] = 'working'
         }
       } catch {
         // 读不到就当没人说话：宁可安静，不要假装有人在打字
@@ -567,7 +585,9 @@ export function apply(ctx) {
         dm[peer] = count
         total += count
       }
-      sendJson(res, 200, { group, dm, total })
+      // seen 是"这个窗口上次看到哪儿"的时间戳，面板拿它在消息列表里画一条
+      // 「以上为历史消息」的分割线（2026-11-11 他的要求）。
+      sendJson(res, 200, { group, dm, total, seen: { group: state.group, dm: state.dm } })
     },
   }))
 
