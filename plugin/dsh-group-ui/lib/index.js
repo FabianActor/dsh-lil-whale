@@ -280,14 +280,18 @@ export function apply(ctx) {
     path: '/group/api/avatar',
     async handler(req, res) {
       const url = new URL(req.url ?? '/', 'http://localhost')
-      const member = url.searchParams.get('member') ?? ''
-      if (!Object.hasOwn(LABEL, member)) {
-        sendJson(res, 400, { error: 'unknown-member' })
-        return
-      }
+      // member 既可以从 query 给，也可以从 body 给。只认其中一路的话，
+      // 另一路会收到一个没有解释的 400 —— 这个坑现场踩过（2026-11-11）。
+      let member = url.searchParams.get('member') ?? ''
       const pathOf = (ext) => join(AVATAR_DIR, `${member}.${ext}`)
+      const requireMember = () => {
+        if (Object.hasOwn(LABEL, member)) return true
+        sendJson(res, 400, { error: 'unknown-member', member, hint: 'member 从 query 或 body 给都行' })
+        return false
+      }
 
       if (req.method === 'GET') {
+        if (!requireMember()) return
         for (const [ext, type] of Object.entries(AVATAR_TYPES)) {
           const file = pathOf(ext)
           if (!existsSync(file)) continue
@@ -321,6 +325,9 @@ export function apply(ctx) {
         sendJson(res, 400, { error: 'bad-json' })
         return
       }
+
+      member = String(payload?.member ?? member)
+      if (!requireMember()) return
 
       const config = readConfig()
       const clear = () => {

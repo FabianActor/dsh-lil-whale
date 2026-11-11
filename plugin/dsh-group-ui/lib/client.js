@@ -1627,19 +1627,22 @@ window.__ModuleLoader__.load({
         const reader = new FileReader()
         setAvatarBusy(member)
         reader.onload = () => {
-          fetch('/group/api/avatar', {
+          fetch(`/group/api/avatar?member=${encodeURIComponent(member)}`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ member, dataUrl: reader.result }),
           })
-            .then((response) => (response.ok ? response.json() : null))
-            .then((saved) => {
-              if (saved) {
-                setConfig(saved)
+            .then((response) => response.json().catch(() => ({})).then((data) => ({ ok: response.ok, status: response.status, data })))
+            .then(({ ok, status, data }) => {
+              if (ok) {
+                setConfig(data)
                 setStatus('头像已保存')
-              } else {
-                setStatus('头像没存上（宿主那边拒绝了）')
+                return
               }
+              // 把宿主给的原因原样说出来。只说"失败了"等于没说 —— 现场为这句话多查了一轮。
+              const reason = data?.error ?? `HTTP ${status}`
+              const hint = data?.hint ? `（${data.hint}）` : ''
+              setStatus(`头像没存上：${reason}${hint}`)
             })
             .catch(() => setStatus('头像没存上（连不上宿主）'))
             .finally(() => setAvatarBusy(''))
@@ -1652,17 +1655,19 @@ window.__ModuleLoader__.load({
       }
 
       const clearAvatar = (member) => {
-        fetch('/group/api/avatar', {
+        fetch(`/group/api/avatar?member=${encodeURIComponent(member)}`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ member, clear: true }),
         })
-          .then((response) => (response.ok ? response.json() : null))
-          .then((saved) => {
-            if (saved) {
-              setConfig(saved)
+          .then((response) => response.json().catch(() => ({})).then((data) => ({ ok: response.ok, status: response.status, data })))
+          .then(({ ok, status, data }) => {
+            if (ok) {
+              setConfig(data)
               setStatus('照片已去掉')
+              return
             }
+            setStatus(`去不掉：${data?.error ?? `HTTP ${status}`}`)
           })
           .catch(() => setStatus('去不掉（连不上宿主）'))
       }
