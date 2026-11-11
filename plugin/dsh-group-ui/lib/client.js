@@ -895,12 +895,18 @@ window.__ModuleLoader__.load({
       return { visible, done, reset }
     }
 
-    /** 转圈 + 一行小字。圈用 SVG 描边画，别指望 `border-radius`（这个壳上它漏过两次）。 */
+    /**
+     * 转圈 + 一行小字。圈用 SVG 描边画，别指望 `border-radius`（这个壳上它漏过两次）。
+     *
+     * 底色必须是不透明的：内容在它后面照常渲染（这样滚到底部那一步在揭幕之前就做完了），
+     * 只是被盖住看不见 —— 否则揭幕那一刻会先看到最早的一条，再"跳"到最新。
+     */
     function LoadingSplash({ label }) {
       return h('div', {
         style: {
           position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center', gap: 12, pointerEvents: 'none',
+          background: 'var(--dsw-alias-bg-layer-1, #ffffff)',
         },
       },
         h('svg', { width: 28, height: 28, viewBox: '0 0 28 28', style: { animation: 'dshGroupSpin .9s linear infinite' } },
@@ -1023,7 +1029,7 @@ window.__ModuleLoader__.load({
       // 贴底/翻历史：跟群聊共用一套（见 useFollowTail 的说明）。
       // 早先这里是 `bottom.scrollIntoView({block:'end'})`：它会连外层容器一起滚，
       // 而 markdown 排版落定后高度还会再变一次 —— "打开就贴在底"常常差几十像素。
-      const { atBottom: dmAtBottom, measureBottom: measureDmBottom, jumpToBottom: jumpDmBottom } = useFollowTail(scrollRef, [messages.length, activePeer])
+      const { atBottom: dmAtBottom, measureBottom: measureDmBottom, jumpToBottom: jumpDmBottom } = useFollowTail(scrollRef, [messages.length, activePeer, dmSplash])
       useEffect(() => { if (activePeer !== null) inputRef.current?.focus() }, [activePeer])
 
       const pick = (peer) => {
@@ -1160,9 +1166,7 @@ window.__ModuleLoader__.load({
       },
         h('div', { ref: scrollRef, onScroll: measureDmBottom, style: { flex: 1, overflowY: 'auto', padding: '8px 0 58px', minHeight: 0, ...fadeMask } },
           h('div', { style: { width: narrow ? '100%' : `${dmWidth}%`, margin: '0 auto', position: 'relative' } },
-            dmSplash
-              ? null
-            : messages.length === 0
+            messages.length === 0
             ? h('div', { style: { padding: '28px 20px', fontSize: 13, lineHeight: '20px', color: 'var(--dsw-alias-label-tertiary)' } },
               '还没有私下说过话。这里的话只有你们两个看得见。')
           : withDivider(messages, String(seenDm[activePeer] ?? ''), (message, index) => h(Bubble, { key: `${message.ts}-${index}`, config, message, animate: animateRef.current })),
@@ -1392,7 +1396,7 @@ window.__ModuleLoader__.load({
       }, [refresh])
 
       // 贴底 / 翻历史 / 回到底部：跟私聊页共用一套（见 useFollowTail）。
-      const { atBottom, measureBottom, jumpToBottom } = useFollowTail(scrollRef, [messages.length, tab])
+      const { atBottom, measureBottom, jumpToBottom } = useFollowTail(scrollRef, [messages.length, tab, splash])
 
       const persistWidth = useCallback(() => {
         setWidthPct((current) => {
@@ -1528,9 +1532,7 @@ window.__ModuleLoader__.load({
           onScroll: measureBottom,
           style: { flex: 1, overflowY: 'auto', padding: '8px 0 58px', minHeight: 0, position: 'relative', WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)', maskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)' },
         },
-          splash
-            ? null
-            : messages.length === 0
+          messages.length === 0
             ? h('div', {
               style: {
                 height: '100%', display: 'flex', flexDirection: 'column',
@@ -1579,7 +1581,7 @@ window.__ModuleLoader__.load({
             ),
         ),
           // 过场页：盖住"从空到有"的那一下
-          splash ? h(LoadingSplash, { label: '正在打开群…' }) : null,
+          splash ? h(LoadingSplash, { label: '正在打开群聊…' }) : null,
           // 回到底部：浮在消息区底部（不是输入框上），翻历史时才出现
           atBottom ? null : h(JumpToBottom, {
             onClick: jumpToBottom,
