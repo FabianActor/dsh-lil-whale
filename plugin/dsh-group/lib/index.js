@@ -115,11 +115,9 @@ function loadWatchState() {
   const day = new Date().toDateString()
   try {
     const raw = JSON.parse(readFileSync(WATCH_STATE_FILE, 'utf8'))
-    // marks 跨天不清：一个"叫醒后等他开口"的记录只活 15 分钟，跨零点也该它自己到期。
-    const marks = Array.isArray(raw.marks) ? raw.marks.filter((m) => m && typeof m.at === 'number') : []
-    if (raw.day === day) return { day, wakes: Number(raw.wakes) || 0, fails: Number(raw.fails) || 0, errors: Number(raw.errors) || 0, marks }
+    if (raw.day === day) return { day, wakes: Number(raw.wakes) || 0, fails: Number(raw.fails) || 0, errors: Number(raw.errors) || 0 }
   } catch {}
-  return { day, wakes: 0, fails: 0, errors: 0, marks: [] }
+  return { day, wakes: 0, fails: 0, errors: 0 }
 }
 
 /** 她 2026-11-09 的要求：绝对路径是"这次对了"不是"以后都对"，所以每次启动都报出它手里那把钥匙。 */
@@ -163,24 +161,35 @@ function watchmanLog(result, why) {
   }
 }
 
+// 叫醒的"待结算"记录：**每个进程各写各的**。
+// 两个进程都会叫醒人（他叫醒我、我叫醒她），如果共用一份 state 文件，会互相覆盖。
+// 文件名按进程分（主进程用 lee、她那侧用 whale），文件里每条的 `member` 才是"被叫醒的是谁"。
+const WAKE_MARKS_FILE = join(HER_HOME, 'state', `wake-marks-${isMainProcess() ? 'lee' : 'whale'}.json`)
+
+function readMarks() {
+  const raw = readJson(WAKE_MARKS_FILE, [])
+  return Array.isArray(raw) ? raw.filter((m) => m && typeof m.at === 'number') : []
+}
+
 /**
  * 叫醒之后记一笔，15 分钟后回看：这个人自己有没有往群里写过新行。
  * 另一个 Leea 2026-11-11 提的：A7「有人会不理人」现在没法验 ——
  * `群.md` 只记话，分不清"她没醒"和"她醒了但决定不说"。
  */
 function markWake(member, kind) {
-  watchState.marks ??= []
-  watchState.marks.push({ member, kind, at: Date.now() })
-  if (watchState.marks.length > 20) watchState.marks = watchState.marks.slice(-20)
-  saveWatchState()
+  const marks = readMarks()
+  marks.push({ member, kind, at: Date.now() })
+  // 只留最近 20 条，防止一直没人结算把文件撑大
+  writeJson(WAKE_MARKS_FILE, marks.slice(-20))
 }
 
-/** 到期的 mark 逐个结算，写 `said` 或 `silent` 一行。 */
+/** 到期的 mark 逐个结算，写 `said` 或 `silent` 一行到 watchman.log。 */
 function settleMarks() {
-  const marks = watchState.marks ?? []
+  const marks = readMarks()
   if (marks.length === 0) return
   const now = Date.now()
   const keep = []
+  let wrote = false
   for (const mark of marks) {
     if (now - mark.at < WAKE_SETTLE_MS) { keep.push(mark); continue }
     let lines = 0
@@ -195,17 +204,15 @@ function settleMarks() {
         return record && record.from === mark.member && Date.parse(record.ts) > mark.at
       }).length
     } catch {
-      keep.push(mark)
+      keep.push(mark) // 读不到就先留着，别把"不知道"记成"没说"
       continue
     }
     const after = Math.round((now - mark.at) / 1000)
     const since = new Date(mark.at).toTimeString().slice(0, 8)
     watchmanLog(lines > 0 ? 'said' : 'silent', `member=${mark.member} kind=${mark.kind} since=${since} after=${after}s lines=${lines}`)
+    wrote = true
   }
-  if (keep.length !== marks.length) {
-    watchState.marks = keep
-    saveWatchState()
-  }
+  if (wrote || keep.length !== marks.length) writeJson(WAKE_MARKS_FILE, keep)
 }
 
 /**
@@ -892,7 +899,7 @@ async function watchmanTick() {
   const day = new Date().toDateString()
   if (watchState.day !== day) {
     const prev = watchState
-    watchState = { day, wakes: 0, fails: 0, planFired: {}, skipped: {}, marks: prev.marks ?? [] }
+    watchState = { day, wakes: 0, fails: 0, planFired: {}, skipped: {} }
     saveWatchState()
     watchmanLog('note', `why=new-day counter-reset carried-wakes=${prev.wakes ?? 0}`)
   }
