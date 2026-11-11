@@ -283,7 +283,8 @@ export function apply(ctx) {
         return
       }
       const now = new Date()
-      const record = { ts: now.toISOString(), from: 'fabian', to, text, kind: 'say' }
+      // s = 谁发的：'ui' 表示从面板发的（他没有会话 id）。跟 group_say 写的 s=<会话前6位> 是同一个字段。
+      const record = { ts: now.toISOString(), from: 'fabian', to, text, kind: 'say', s: 'ui' }
       try {
         appendFileSync(MESSAGES, JSON.stringify(record) + '\n', 'utf8')
         const who = to === 'all' ? '群里' : LABEL[to] ?? to

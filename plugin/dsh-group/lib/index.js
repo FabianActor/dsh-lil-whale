@@ -395,11 +395,11 @@ function sayPrivate(from, to, text) {
   return record
 }
 
-function say(from, to, text, channel = 'group') {
+function say(from, to, text, channel = 'group', s = '') {
   ensureDir()
   const isDm = channel === 'dm' || to === 'fabian'
   if (isDm) return { ...sayPrivate(from, to, text), channel: 'dm' }
-  const record = { ts: new Date().toISOString(), from, to, text, kind: 'say', channel: 'group' }
+  const record = { ts: new Date().toISOString(), from, to, text, kind: 'say', channel: 'group', ...(s === '' ? {} : { s }) }
   appendFileSync(MESSAGES, JSON.stringify(record) + '\n', 'utf8')
   appendFileSync(READABLE, `**${stamp()} · ${labelOf(from)}**\n\n${text}\n\n`, 'utf8')
   return { ...record, channel: 'group' }
@@ -558,7 +558,9 @@ function apply(ctx) {
       if (channel === 'dm' && args.to === 'all') {
         throw new Error('私下说话得指名对象：to 不能是 all。要不就 channel 留空（在群里说）。')
       }
-      const record = say(member, args.to, args.text, channel)
+      // s = 发起这段会话的 id 前 6 位（小肥鱼 2026-11-11 提的）：一个名字可以有两段会话。
+      // 写进去之后"谁说的"从记忆问题变成读取问题。UI 可以不理它。
+      const record = say(member, args.to, args.text, channel, sid === null ? '' : sid.replace(/^session-/, '').slice(0, 6))
       // channel 让发言的人一眼知道这句话去了哪：group = 大家都看得见；dm = 只有对方看得见，且不会叫醒谁。
       return { ts: record.ts, queued: true, channel: record.channel, to: args.to }
     },
