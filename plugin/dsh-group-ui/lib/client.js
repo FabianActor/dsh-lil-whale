@@ -105,20 +105,33 @@ window.__ModuleLoader__.load({
      * 边界值跟 dsh-pocket 用同一个：`(max-width: 1023px)`。它比"手机/电脑"更准确，
      * 因为窄的浏览器窗口和手机是同一类问题（横向放不下两栏）。
      *
-     * 更优先的信号是 `data-dsh-pocket-layout`：pocket 允许用 `?dsh-layout=desktop|mobile`
-     * 强制某一种模式，那个选择比窗口宽度更能代表"用户想怎么看"。pocket 没装时属性不存在，
-     * 这时才回落到宽度。
+     * 只看 `data-dsh-pocket-layout` 会出事：pocket 在**加载时**解一次布局就把结果写死在属性上，
+     * 之后窗口变宽它自己也不更新（它把那个 MediaQueryList 换成了一个 matches 恒为 true 的假对象）。
+     * 照着属性走，就会"一窄永窄"。
+     *
+     * 所以：只有用户**明确选过**布局时才听那个选择 —— pocket 把明确选择存在
+     * `localStorage['dsh-pocket.layout']`（值 `desktop` / `mobile`，来自 `?dsh-layout=`），
+     * 没选过时这个键是空的，这时跟随实时宽度。
      */
     const NARROW_QUERY = '(max-width: 1023px)'
 
-    function narrowNow() {
+    function pocketChosenLayout() {
+      // `?dsh-layout=mobile|desktop` 是用户当场说的话，最优先。
       try {
-        const mode = typeof document !== 'undefined' && document.body
-          ? document.body.getAttribute('data-dsh-pocket-layout')
-          : null
-        if (mode === 'mobile') return true
-        if (mode === 'desktop') return false
-      } catch { /* 读不到就当没有 */ }
+        const fromUrl = new URL(window.location.href).searchParams.get('dsh-layout')
+        if (fromUrl === 'mobile' || fromUrl === 'desktop') return fromUrl
+      } catch { /* 没有 URL 对象就算了 */ }
+      // pocket 也会把明确选择存在这里（它每次加载没有参数时会清掉这个键）。
+      try {
+        const stored = window.localStorage?.getItem('dsh-pocket.layout')
+        return stored === 'desktop' || stored === 'mobile' ? stored : ''
+      } catch { return '' }
+    }
+
+    function narrowNow() {
+      const chosen = pocketChosenLayout()
+      if (chosen === 'mobile') return true
+      if (chosen === 'desktop') return false
       try { return window.matchMedia(NARROW_QUERY).matches } catch { return false }
     }
 
@@ -131,7 +144,10 @@ window.__ModuleLoader__.load({
           mq = window.matchMedia(NARROW_QUERY)
           if (mq.addEventListener) mq.addEventListener('change', sync)
           else if (mq.addListener) mq.addListener(sync)
-        } catch { /* 没有 matchMedia 就只靠属性变化 */ }
+        } catch { /* 没有 matchMedia 就只靠 resize */ }
+        // resize 兜一层：有的内嵌 webview 不发 MediaQueryList 的 change 事件。
+        try { window.addEventListener('resize', sync) } catch { /* ignore */ }
+        // pocket 若重新应用布局（切 URL 参数），属性会变；那时重新判一次。
         let observer = null
         try {
           if (typeof MutationObserver !== 'undefined' && document.body) {
@@ -145,6 +161,7 @@ window.__ModuleLoader__.load({
             if (mq?.removeEventListener) mq.removeEventListener('change', sync)
             else if (mq?.removeListener) mq.removeListener(sync)
           } catch { /* ignore */ }
+          try { window.removeEventListener('resize', sync) } catch { /* ignore */ }
           observer?.disconnect()
         }
       }, [])
