@@ -506,7 +506,7 @@ window.__ModuleLoader__.load({
       const animateOnMount = useRef(animate).current
       const mine = message.from === 'fabian'
       const who = nameOf(config, message.from, message.s)
-      // 指名到座位的消息，显示"→ 大肥鱼 · 家"，只写给这个人的显示"→ 大肥鱼"。
+      // 指名到座位的消息，显示"→ 大肥鱼 · 日常"，只写给这个人的显示"→ 大肥鱼"。
       const targetTo = message.toSeat ? `${message.to}@${message.toSeat}` : message.to
       const target = message.to && message.to !== 'all' ? ` → ${targetName(config, targetTo)}` : ''
       const time = formatStamp(message.ts)
@@ -650,7 +650,7 @@ window.__ModuleLoader__.load({
           document.removeEventListener('keydown', onKey)
         }
       }, [onClose])
-      // 名字下面列出座位：同一个人有几段会话，就有几行「大肥鱼 · 工」这样可选。
+      // 名字下面列出座位：同一个人有几段会话，就有几行「大肥鱼 · 开发」这样可选。
       const rows = [{ id: 'all', label: t.toAll, plain: true }]
       for (const member of ['lee', 'whale']) {
         rows.push({ id: member, label: nameOf(config, member) })
@@ -1145,7 +1145,7 @@ window.__ModuleLoader__.load({
           // 存在感掉了就当没人说话，宁可安静
         }
         try {
-          // 座位：名册里有几段会话就列几段，@ 面板据此多出「大肥鱼 · 工」这种可选项
+          // 座位：名册里有几段会话就列几段，@ 面板据此多出「大肥鱼 · 开发」这种可选项
           const response = await fetch('/group/api/seats', { headers: { accept: 'application/json' } })
           if (response.ok) {
             const data = await response.json()
