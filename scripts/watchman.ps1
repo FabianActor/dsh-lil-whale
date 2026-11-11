@@ -29,7 +29,8 @@ param(
 
 $ErrorActionPreference = 'Continue'
 
-$herHome   = 'D:\文档\WorkSpace\lil-whale'
+. (Join-Path $PSScriptRoot 'common.ps1')
+$herHome   = $Cfg.HerHome
 $schedFile = if ($ScheduleFile) { $ScheduleFile } else { Join-Path $herHome 'dsh-home\storages\schedule.json' }
 $logFile   = Join-Path $herHome 'logs\watchman.log'
 $starter   = Join-Path $PSScriptRoot 'start-whale.ps1'

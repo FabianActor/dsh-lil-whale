@@ -8,10 +8,12 @@
 // 跑法：node scripts\rebuild-group-md.mjs            只看对照（有未归类差异 → exit 1）
 //       node scripts\rebuild-group-md.mjs --write    覆盖 群.md
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { config } from '../plugin/dsh-group/lib/config.js'
 
-const HOME = 'D:\\文档\\WorkSpace\\lil-whale'
-const MESSAGES = `${HOME}\\group\\messages.jsonl`
-const READABLE = `${HOME}\\group\\群.md`
+// 路径从 lil-whale.config.json 读（真源见 plugin/dsh-group/lib/config.js）
+const GROUP_DIR = config().groupDir
+const MESSAGES = `${GROUP_DIR}\\messages.jsonl`
+const READABLE = `${GROUP_DIR}\\群.md`
 const LABEL = { lee: '大肥鱼', whale: '小肥鱼', fabian: 'Fabian' }
 
 const pad = (n) => String(n).padStart(2, '0')

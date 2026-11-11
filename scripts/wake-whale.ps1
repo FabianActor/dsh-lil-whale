@@ -6,8 +6,10 @@ param([int]$Port = 3082, [int]$WaitSeconds = 25, [string]$Why = 'manual')
 
 $ErrorActionPreference = 'Stop'
 
-$home_  = 'D:\文档\WorkSpace\lil-whale\dsh-home'
-$cwd    = 'D:\文档\WorkSpace\lil-whale'
+. (Join-Path $PSScriptRoot 'common.ps1')
+
+$home_  = $Cfg.HerDshHome
+$cwd    = $Cfg.WhaleCwd
 $logdir = Join-Path $home_ 'logs'
 New-Item -ItemType Directory -Force -Path $logdir | Out-Null
 $outLog = Join-Path $logdir 'web-latest.log'

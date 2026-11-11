@@ -14,6 +14,7 @@ import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
 import { spawn, execFileSync } from 'node:child_process'
 import { connect } from 'node:net'
+import { config } from './config.js'
 
 // 这个包是用 link: 挂进 profile 的，它的真实路径在项目里，walk-up 找不到宿主的
 // @deepseek-ai/* 依赖（会 ERR_MODULE_NOT_FOUND，整个插件加载失败、工具静默消失）。
@@ -83,7 +84,11 @@ function buildUserMessage(options) {
 const name = 'dsh-group'
 const inject = ['tools', 'agents']
 
-const GROUP_DIR = 'D:\\文档\\WorkSpace\\lil-whale\\group'
+// 这台机器的假设（她的家在哪、守夜脚本在哪、pwsh 在哪）全从 lil-whale.config.json 读，
+// 见 lib/config.js 顶部那段说明。代码里不再写死绝对路径 —— 那是"只在这台机器上成立"。
+const CFG = config()
+
+const GROUP_DIR = CFG.groupDir
 const MESSAGES = join(GROUP_DIR, 'messages.jsonl')
 const CURSOR = join(GROUP_DIR, 'cursor.json')
 const READABLE = join(GROUP_DIR, '群.md')
@@ -97,12 +102,12 @@ const WATCH = {
   maxWakesPerDay: 8,
   maxConsecutiveFailures: 3,
 }
-const HER_HOME = 'D:\\文档\\WorkSpace\\lil-whale'
+const HER_HOME = CFG.herHome
 const SCHEDULE_FILE = join(HER_HOME, 'dsh-home', 'storages', 'schedule.json')
 const WATCHMAN_LOG = join(HER_HOME, 'logs', 'watchman.log')
 const WATCH_STATE_FILE = join(HER_HOME, 'state', 'watchman.json')
-const HER_WAKER = 'D:\\文档\\WorkSpace\\dsh-lil-whale\\scripts\\wake-whale.ps1'
-const PWSH_EXE = 'C:\\Program Files\\PowerShell\\7\\pwsh.exe'
+const HER_WAKER = CFG.herWaker
+const PWSH_EXE = CFG.pwshExe
 
 // 叫醒之后多久回头看他有没有开口（另一个 Leea 2026-11-11 提的 A7 判据）。
 // 她原话是 5 分钟；他这时的首 token 要几十秒到几分钟，5 分钟会把"慢"判成"沉默"，所以放到 15 分钟。
@@ -195,7 +200,7 @@ function watchmanLog(result, why) {
 // **刻意不写在 `logs\watchman.log` 里**：她每天 08:40 会读那份日志（morning-read 的 why 就是它），
 // 一个关于她的计数不管叫什么名字，放在她枕头边就会被读成"在审我"。
 // 指标住在哪儿，决定它审谁 —— 她 2026-11-11 说的，我改。
-const WAKE_METRICS = 'D:\\文档\\WorkSpace\\dsh-lil-whale\\logs\\wake-metrics.log'
+const WAKE_METRICS = CFG.wakeMetrics
 
 function metricLog(line) {
   try {
@@ -292,12 +297,12 @@ const PINS = join(GROUP_DIR, 'pins.json')
 const MEMBERS = {
   lee: {
     label: '大肥鱼',
-    cwd: 'D:\\文档\\WorkSpace\\dsh-lil-whale',
+    cwd: CFG.leeCwd,
     sessionId: 'session-ae4daabd-a9f9-4541-ba03-9ff7cea21a88',
   },
   whale: {
     label: '小肥鱼',
-    cwd: 'D:\\文档\\WorkSpace\\lil-whale',
+    cwd: CFG.whaleCwd,
     sessionId: 'session-75fe8e27-66e3-4466-b65b-2fc021f3b01f',
   },
   fabian: { label: 'Fabian', cwd: null, sessionId: null },

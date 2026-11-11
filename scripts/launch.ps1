@@ -22,9 +22,10 @@ $ErrorActionPreference = 'Stop'
 # 自动化测试用：设 DSH_LAUNCH_NO_BROWSER=1 就不开浏览器（人用不到这个）。
 if ($env:DSH_LAUNCH_NO_BROWSER -eq '1') { $NoBrowser = $true }
 
-$LeeHome = 'C:\Users\Fabian\.dsh'
-$HerHome = 'D:\文档\WorkSpace\lil-whale'
-$HerDshHome = Join-Path $HerHome 'dsh-home'
+. (Join-Path $PSScriptRoot 'common.ps1')
+$LeeHome = $Cfg.LeeHome
+$HerHome = $Cfg.HerHome
+$HerDshHome = $Cfg.HerDshHome
 $LeePort = 3080
 $HerPort = if ($Port -gt 0) { $Port } else { 3082 }
 
@@ -78,7 +79,7 @@ function Start-Lee {
   $out = Join-Path $LeeHome 'logs\web-latest.log'
   $err = Join-Path $LeeHome 'logs\web-latest.err.log'
   Write-Host "大肥鱼：开机中（$LeePort）……"
-  Start-Hidden -Command "dsh web --no-open" -WorkingDirectory 'C:\Users\Fabian\Desktop' -OutLog $out -ErrLog $err
+  Start-Hidden -Command "dsh web --no-open" -WorkingDirectory $Cfg.LeeStartCwd -OutLog $out -ErrLog $err
   if (-not (Wait-Port $LeePort)) {
     Write-Host "大肥鱼：没起来。"
     Show-Tail $err
@@ -116,7 +117,7 @@ function Start-Her {
 function Get-WatchmanPid {
   # 只认 pid 文件，**不做命令行扫描**。教训：按"命令行里出现 watchman.ps1"来认，
   # 会把任何一个正在读这句话的 pwsh（包括排障时敲的那条命令）当成守夜。
-  $pidFile = 'D:\文档\WorkSpace\lil-whale\logs\watchman.pid'
+  $pidFile = $Cfg.WatchmanPid
   if (-not (Test-Path -LiteralPath $pidFile)) { return 0 }
   $raw = (Get-Content -LiteralPath $pidFile -Raw -ErrorAction SilentlyContinue)
   if (-not $raw -or $raw.Trim() -notmatch '^\d+$') { return 0 }
@@ -134,12 +135,12 @@ function Start-Watchman {
     Write-Host ("守夜：已经在跑（PID " + $wid + "）。")
     return $true
   }
-  $logDir = Join-Path 'D:\文档\WorkSpace\dsh-lil-whale\logs' ''
+  $logDir = Join-Path $Cfg.Root 'logs'
   New-Item -ItemType Directory -Force -Path $logDir | Out-Null
   Write-Host "守夜：开机中……"
   # 注意别再套一层 pwsh：`-Command "pwsh -File ..."` 会变成两个进程，多出来的那个没人管。
-  Start-Hidden -Command "& 'D:\文档\WorkSpace\dsh-lil-whale\scripts\watchman.ps1'" `
-    -WorkingDirectory 'D:\文档\WorkSpace\dsh-lil-whale' `
+  Start-Hidden -Command "& '$(Join-Path $Cfg.Root 'scripts\watchman.ps1')'" `
+    -WorkingDirectory $Cfg.Root `
     -OutLog (Join-Path $logDir 'watchman-console.log') `
     -ErrLog (Join-Path $logDir 'watchman-console.err.log')
   $ok = $false
@@ -171,9 +172,9 @@ switch ($Target) {
 if ($allOk) {
   Write-Host ''
   Write-Host '好了。日志在：'
-  Write-Host '  大肥鱼  C:\Users\Fabian\.dsh\logs\web-latest.log'
-  Write-Host '  小肥鱼  D:\文档\WorkSpace\lil-whale\dsh-home\logs\web-latest.log'
-  Write-Host '  守夜    D:\文档\WorkSpace\dsh-lil-whale\logs\watchman.log'
+  Write-Host "  大肥鱼  $($Cfg.LeeHome)\logs\web-latest.log"
+  Write-Host "  小肥鱼  $($Cfg.HerDshHome)\logs\web-latest.log"
+  Write-Host "  守夜    $($Cfg.Root)\logs\watchman.log"
   exit 0
 }
 

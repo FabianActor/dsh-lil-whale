@@ -7,11 +7,13 @@
  */
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { config } from './config.js'
 
 export const name = 'dsh-group-ui'
 export const inject = ['webServer', 'agents']
 
-const GROUP_DIR = 'D:\\文档\\WorkSpace\\lil-whale\\group'
+// 她的家在哪从 lil-whale.config.json 读（见本包 lib/config.js）
+const GROUP_DIR = config().groupDir
 const MESSAGES = join(GROUP_DIR, 'messages.jsonl')
 const READABLE = join(GROUP_DIR, '群.md')
 const DM_DIR = join(GROUP_DIR, 'dm')

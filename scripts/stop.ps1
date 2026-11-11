@@ -15,6 +15,8 @@ param(
 )
 
 $ErrorActionPreference = 'Continue'
+
+. (Join-Path $PSScriptRoot 'common.ps1')
 $LeePort = 3080
 $HerPort = 3082
 
@@ -80,7 +82,7 @@ function Stop-Kind([string]$kind, [string]$label, [int]$port) {
 }
 
 function Stop-Watchman {
-  $pidFile = 'D:\文档\WorkSpace\lil-whale\logs\watchman.pid'
+  $pidFile = $Cfg.WatchmanPid
   if (-not (Test-Path -LiteralPath $pidFile)) { Write-Host '守夜：没在跑。'; return $true }
   $raw = (Get-Content -LiteralPath $pidFile -Raw -ErrorAction SilentlyContinue)
   if (-not $raw -or $raw.Trim() -notmatch '^\d+$') { Write-Host '守夜：pid 文件坏了，跳过。'; return $true }
