@@ -82,6 +82,7 @@ function buildUserMessage(options) {
 }
 
 const name = 'lil-whale-group'
+const PKG_VERSION = '1.0.0'  // 与 package.json 的 version 同步；启动痕迹里会带上它
 const inject = ['tools', 'agents']
 
 // 这台机器的假设（她的家在哪、守夜脚本在哪、pwsh 在哪）全从 lil-whale.config.json 读，
@@ -634,6 +635,8 @@ function apply(ctx) {
   try {
     appendFileSync(join(GROUP_DIR, "plugin.log"), JSON.stringify({
       at: new Date().toISOString(),
+      // 带上包名与版本：改完名重启以后，这一行就是"到底加载的是哪一份"的证据。
+      pkg: `${name}@${PKG_VERSION}`,
       pid: process.pid,
       home: process.env.DSH_HOME ?? "(unset)",
       cwd: process.cwd(),
