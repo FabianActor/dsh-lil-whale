@@ -761,7 +761,8 @@ window.__ModuleLoader__.load({
 
     /** 一条淡灰细线 + 一行小字：上次看到这里，新的在下面。不抢眼，只做分界。 */
     function HistoryDivider() {
-      const line = { flex: 1, height: '0.5px', background: 'var(--dsw-alias-border-l2, rgba(0,0,0,0.12))' }
+      // 0.5px 在 1x 屏上会碎成一排看不见的点。这条线是"从哪儿开始看"的唯一线索，用 1px。
+      const line = { flex: 1, height: 1, background: 'var(--dsw-alias-border-l3, rgba(0,0,0,0.16))' }
       return h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, margin: '14px 24px' } },
         h('div', { style: line }),
         h('span', {
@@ -792,6 +793,86 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * 贴着底部看，还是翻历史。
+     *
+     * 两件事分开：`stickToBottom` 是"把视图放到最下面"，`measureBottom` 是"现在到底算不算在最下面"。
+     * 只有本来就贴着底的时候，新消息才跟着滚 —— 否则人正翻到三天前，被一条新消息弹回今天。
+     * 40px 不是手感，是"人眼还能接受自己被打断"的范围。
+     */
+    function useFollowTail(scrollRef, deps) {
+      const atBottomRef = useRef(true)
+      const [atBottom, setAtBottom] = useState(true)
+      const stickToBottom = useCallback(() => {
+        const el = scrollRef.current
+        if (el) el.scrollTop = el.scrollHeight
+      }, [scrollRef])
+      const measureBottom = useCallback(() => {
+        const el = scrollRef.current
+        if (!el) return
+        const distance = el.scrollHeight - el.scrollTop - el.clientHeight
+        const next = distance <= 40
+        if (next !== atBottomRef.current) {
+          atBottomRef.current = next
+          setAtBottom(next)
+        }
+      }, [scrollRef])
+      const jumpToBottom = useCallback(() => {
+        atBottomRef.current = true
+        setAtBottom(true)
+        stickToBottom()
+        requestAnimationFrame(stickToBottom)
+      }, [stickToBottom])
+      useEffect(() => {
+        if (!atBottomRef.current) return undefined
+        stickToBottom()
+        const raf = requestAnimationFrame(stickToBottom)
+        const timer = setTimeout(stickToBottom, 200)
+        return () => { cancelAnimationFrame(raf); clearTimeout(timer) }
+      }, deps)
+      return { atBottom, measureBottom, jumpToBottom }
+    }
+
+    /**
+     * 回到底部按钮 —— 照 dsh 的 `EvIC1a_toBottom`：34px、悬浮在消息区底部上方、
+     * 贴着内容列的右边缘，不压输入框。
+     *
+     * 圆用内嵌 SVG 画而不是 `border-radius`：这个壳上 `border-radius` 出过两次
+     * "样式算对了、画出来还是圆角矩形"，改用 `<circle>` 之后一次就对了（见 PRD 附录 A.10/A.11）。
+     */
+    function JumpToBottom({ onClick, rightInset }) {
+      return h('div', {
+        style: {
+          position: 'absolute', left: 0, right: 0, bottom: 10, height: 0,
+          display: 'flex', justifyContent: 'flex-end', pointerEvents: 'none', zIndex: 8,
+        },
+      }, h('button', {
+        type: 'button',
+        onClick,
+        title: '回到底部',
+        'aria-label': '回到底部',
+        style: {
+          position: 'relative', width: 34, height: 34, marginTop: -34, padding: 0,
+          boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          border: 0, background: 'transparent', cursor: 'pointer', pointerEvents: 'auto',
+          color: 'var(--dsw-alias-label-primary, rgba(0,0,0,0.8))',
+          marginRight: rightInset,
+        },
+      },
+        h('svg', {
+          width: 34, height: 34, viewBox: '0 0 34 34',
+          style: {
+            position: 'absolute', inset: 0,
+            filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.10)) drop-shadow(0 4px 12px rgba(0,0,0,0.10))',
+          },
+        }, h('circle', { cx: 17, cy: 17, r: 17, fill: 'var(--dsw-alias-button-floating-fill, #ffffff)' })),
+        h('svg', { width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', style: { position: 'relative' } },
+          h('path', {
+            d: 'M4 6.5L8 10.5L12 6.5',
+            stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round',
+          }))))
+    }
+
+    /**
      * 私聊页：宽屏时左边是能单独说话的人、右边是会话；窄屏时照微信那样分两屏
      * ——先选人，再进会话，会话页左上角一个返回。
      */
@@ -802,6 +883,8 @@ window.__ModuleLoader__.load({
       const [contacts, setContacts] = useState([])
       const [activePeer, setActivePeer] = useState(null)
       const [messages, setMessages] = useState([])
+      // 第一屏数据到之前先画占位：别让人看见"还没有私下说过话"闪一下再变成列表。
+      const [dmLoaded, setDmLoaded] = useState(false)
       const animateRef = useRef(false)
       const pickedOnceRef = useRef(false)
       const peerRef = useRef(null)
@@ -848,7 +931,7 @@ window.__ModuleLoader__.load({
       }, [])
 
       const loadMessages = useCallback(async () => {
-        if (activePeer === null) { setMessages([]); return }
+        if (activePeer === null) { setMessages([]); setDmLoaded(false); return }
         try {
           const response = await fetch(`/group/api/dm?peer=${encodeURIComponent(activePeer)}`, { headers: { accept: 'application/json' } })
           if (!response.ok) throw new Error(`HTTP ${response.status}`)
@@ -860,6 +943,8 @@ window.__ModuleLoader__.load({
           setError(null)
         } catch (e) {
           setError(String(e?.message ?? e))
+        } finally {
+          setDmLoaded(true)
         }
       }, [activePeer])
 
@@ -894,25 +979,10 @@ window.__ModuleLoader__.load({
         return () => clearTimeout(timer)
       }, [activePeer])
 
-      /**
-       * 贴到底。
-       *
-       * 原来用 `bottom.scrollIntoView({block:'end'})`：它会连外层容器一起滚，
-       * 而 markdown（代码块、字体）排版落定后高度还会再变一次 —— 于是"打开就贴在底"
-       * 常常差几十像素，最后一条消息正好卡进底部那 46px 的渐隐带，看着像被切了。
-       * 这里改成直接设 scrollTop，并在下一帧、200ms 后各补一次。
-       */
-      const stickToBottom = useCallback(() => {
-        const el = scrollRef.current
-        if (el) el.scrollTop = el.scrollHeight
-      }, [])
-
-      useEffect(() => {
-        stickToBottom()
-        const raf = requestAnimationFrame(stickToBottom)
-        const timer = setTimeout(stickToBottom, 200)
-        return () => { cancelAnimationFrame(raf); clearTimeout(timer) }
-      }, [messages.length, activePeer, stickToBottom])
+      // 贴底/翻历史：跟群聊共用一套（见 useFollowTail 的说明）。
+      // 早先这里是 `bottom.scrollIntoView({block:'end'})`：它会连外层容器一起滚，
+      // 而 markdown 排版落定后高度还会再变一次 —— "打开就贴在底"常常差几十像素。
+      const { atBottom: dmAtBottom, measureBottom: measureDmBottom, jumpToBottom: jumpDmBottom } = useFollowTail(scrollRef, [messages.length, activePeer])
       useEffect(() => { if (activePeer !== null) inputRef.current?.focus() }, [activePeer])
 
       const pick = (peer) => {
@@ -1042,14 +1112,33 @@ window.__ModuleLoader__.load({
           h(WidthHandle, { key: 'right', side: 'right', width: dmWidth, containerRef: scrollRef, onChange: setDmWidth, onCommit: persistDmWidth }),
         ]
       // 私聊的左右边界跟群聊同款：拖住两侧，列宽实时变；宽度存在这台机器上。
-      const messageList = h('div', { ref: scrollRef, style: { flex: 1, overflowY: 'auto', padding: '8px 0 58px', minHeight: 0, ...fadeMask } },
-        h('div', { style: { width: narrow ? '100%' : `${dmWidth}%`, margin: '0 auto', position: 'relative' } },
-          messages.length === 0
+      const messageArea = h('div', {
+        style: { flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' },
+      },
+        h('div', { ref: scrollRef, onScroll: measureDmBottom, style: { flex: 1, overflowY: 'auto', padding: '8px 0 58px', minHeight: 0, ...fadeMask } },
+          h('div', { style: { width: narrow ? '100%' : `${dmWidth}%`, margin: '0 auto', position: 'relative' } },
+            !dmLoaded
+              ? [0, 1, 2].map((index) => h('div', {
+                key: `dm-placeholder-${index}`,
+                style: {
+                  height: 40,
+                  width: index % 2 === 0 ? '58%' : '44%',
+                  margin: '14px 0 0',
+                  borderRadius: 'var(--dsw-radius-lg, 12px)',
+                  background: 'var(--dsw-alias-bg-layer-2, rgba(0,0,0,0.045))',
+                  animation: `dshGroupPulse 1.4s ${index * 0.12}s infinite ease-in-out`,
+                },
+              }))
+            : messages.length === 0
             ? h('div', { style: { padding: '28px 20px', fontSize: 13, lineHeight: '20px', color: 'var(--dsw-alias-label-tertiary)' } },
               '还没有私下说过话。这里的话只有你们两个看得见。')
           : withDivider(messages, String(seenDm[activePeer] ?? ''), (message, index) => h(Bubble, { key: `${message.ts}-${index}`, config, message, animate: animateRef.current })),
-          h('div', { ref: bottom }),
-          widthHandles))
+            h('div', { ref: bottom }),
+            widthHandles)),
+        dmAtBottom ? null : h(JumpToBottom, {
+          onClick: jumpDmBottom,
+          rightInset: narrow ? '16px' : `calc(${(100 - dmWidth) / 2}% + 10px)`,
+        }))
 
       const composer = h('div', {
           // 窄屏时给 home 条留位置：`env(safe-area-inset-bottom)` 在没刘海的设备上就是 0。
@@ -1111,7 +1200,7 @@ window.__ModuleLoader__.load({
                 strokeLinecap: 'round', strokeLinejoin: 'round', style: { position: 'relative' },
               }, h('path', { d: 'M8 13V3M4 7l4-4 4 4' }))))))
 
-      const chatPane = h('div', { style: { flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' } }, chatHeader, messageList, composer)
+      const chatPane = h('div', { style: { flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' } }, chatHeader, messageArea, composer)
       const rightPane = activePeer === null ? blankPane : chatPane
       // 窄屏分两屏：没选人时只显示联系人，选了人只显示会话（返回键在会话头部）。
       const showList = narrow ? activePeer === null : true
@@ -1184,9 +1273,6 @@ window.__ModuleLoader__.load({
       const [seenGroup, setSeenGroup] = useState('')
       // 第一次拿到消息之前先画占位，别让人看见"还没有人说话"闪一下再变成列表。
       const [loaded, setLoaded] = useState(false)
-      // 贴着底才跟新消息走；翻历史时它停在原地，见 onScroll。
-      const atBottomRef = useRef(true)
-      const [atBottom, setAtBottom] = useState(true)
       // 列宽是"这台机器上怎么看"，不属于她家的数据，存在浏览器里。
       const [widthPct, setWidthPct] = useState(() => {
         try {
@@ -1271,40 +1357,8 @@ window.__ModuleLoader__.load({
         return () => clearInterval(timer)
       }, [refresh])
 
-      /** 贴到底：见 DmPage 里同一处的说明（scrollIntoView 会连外层一起滚，且排版会二次变化）。 */
-      const stickToBottom = useCallback(() => {
-        const el = scrollRef.current
-        if (el) el.scrollTop = el.scrollHeight
-      }, [])
-
-      /** 离底 40px 之内算"还在看最新"：这个数不是手感，是"人眼还能接受自己被打断"的范围。 */
-      const AT_BOTTOM_PX = 40
-      const measureBottom = useCallback(() => {
-        const el = scrollRef.current
-        if (!el) return
-        const distance = el.scrollHeight - el.scrollTop - el.clientHeight
-        const next = distance <= AT_BOTTOM_PX
-        if (next !== atBottomRef.current) {
-          atBottomRef.current = next
-          setAtBottom(next)
-        }
-      }, [])
-
-      const jumpToBottom = useCallback(() => {
-        atBottomRef.current = true
-        setAtBottom(true)
-        stickToBottom()
-        requestAnimationFrame(stickToBottom)
-      }, [stickToBottom])
-
-      useEffect(() => {
-        // 只在"本来就贴着底"时才跟新消息；翻历史的时候页面自己不许动。
-        if (!atBottomRef.current) return undefined
-        stickToBottom()
-        const raf = requestAnimationFrame(stickToBottom)
-        const timer = setTimeout(stickToBottom, 200)
-        return () => { cancelAnimationFrame(raf); clearTimeout(timer) }
-      }, [messages.length, tab, stickToBottom])
+      // 贴底 / 翻历史 / 回到底部：跟私聊页共用一套（见 useFollowTail）。
+      const { atBottom, measureBottom, jumpToBottom } = useFollowTail(scrollRef, [messages.length, tab])
 
       const persistWidth = useCallback(() => {
         setWidthPct((current) => {
@@ -1433,6 +1487,9 @@ window.__ModuleLoader__.load({
           ? h(DmPage, { config, presence })
           : h(React.Fragment, null,
         h('div', {
+          style: { flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' },
+        },
+        h('div', {
           ref: scrollRef,
           onScroll: measureBottom,
           style: { flex: 1, overflowY: 'auto', padding: '8px 0 58px', minHeight: 0, position: 'relative', WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)', maskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)' },
@@ -1499,30 +1556,15 @@ window.__ModuleLoader__.load({
               }),
             ),
         ),
-        h('div', {
-          style: { padding: '10px 0 14px', position: 'relative' },
-        },
-          // 翻历史时新消息不抢页面，只在输入框右上角留一个"回到底部"的圆钮
-          atBottom ? null : h('button', {
+          // 回到底部：浮在消息区底部（不是输入框上），翻历史时才出现
+          atBottom ? null : h(JumpToBottom, {
             onClick: jumpToBottom,
-            title: '跳到最新消息',
-            'aria-label': '跳到最新消息',
-            style: {
-              position: 'absolute',
-              right: `calc(${(100 - widthPct) / 2}% + 10px)`,
-              top: -8, width: 32, height: 32, padding: 0,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              borderRadius: '50%', cursor: 'pointer',
-              border: '0.5px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12))',
-              background: 'var(--dsw-alias-bg-layer-1, #fff)',
-              boxShadow: 'var(--dsw-elevation-soft, 0 1px 2px rgba(0,0,0,0.06), 0 6px 18px rgba(0,0,0,0.08))',
-              color: 'var(--dsw-alias-label-secondary, rgba(0,0,0,0.6))',
-            },
-          }, h('svg', { width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none' },
-            h('path', {
-              d: 'M4 6.5L8 10.5L12 6.5',
-              stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round',
-            }))),
+            rightInset: `calc(${(100 - widthPct) / 2}% + 10px)`,
+          }),
+        ),
+        h('div', {
+          style: { padding: '10px 0 14px' },
+        },
           h('div', { style: { width: `${widthPct}%`, margin: '0 auto' } },
             typingLine
               ? h('div', {
