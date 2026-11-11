@@ -26,8 +26,8 @@ if ($env:DSH_LAUNCH_NO_BROWSER -eq '1') { $NoBrowser = $true }
 $LeeHome = $Cfg.LeeHome
 $HerHome = $Cfg.HerHome
 $HerDshHome = $Cfg.HerDshHome
-$LeePort = 3080
-$HerPort = if ($Port -gt 0) { $Port } else { 3082 }
+$LeePort = $Cfg.LeePort
+$HerPort = if ($Port -gt 0) { $Port } else { $Cfg.HerPort }
 
 function Test-Port([int]$p) {
   $c = New-Object System.Net.Sockets.TcpClient

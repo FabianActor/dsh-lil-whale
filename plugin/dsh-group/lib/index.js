@@ -99,7 +99,7 @@ const WAKES = join(GROUP_DIR, 'wake-state.json')
 // 住在"一直开着的那个进程"里（Fabian 的判断），不另起系统进程、不进启动项。
 const WATCH = {
   intervalMs: 60_000,
-  port: 3082,
+  port: CFG.herPort,
   maxWakesPerDay: 8,
   maxConsecutiveFailures: 3,
 }

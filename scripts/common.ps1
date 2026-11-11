@@ -52,6 +52,8 @@ function Get-WhaleConfig {
     LeeHome     = & $pick 'leeHome' (Join-Path $HOME '.dsh')
     LeeProfile  = & $pick 'leeProfile' 'web'
     WhaleProfile= & $pick 'whaleProfile' 'whale'
+    HerPort     = & $pick 'herPort' 3082
+    LeePort     = & $pick 'leePort' 3080
   }
 }
 

@@ -17,8 +17,8 @@ param(
 $ErrorActionPreference = 'Continue'
 
 . (Join-Path $PSScriptRoot 'common.ps1')
-$LeePort = 3080
-$HerPort = 3082
+$LeePort = $Cfg.LeePort
+$HerPort = $Cfg.HerPort
 
 function Test-Port([int]$p) {
   $c = New-Object System.Net.Sockets.TcpClient

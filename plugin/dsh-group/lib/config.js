@@ -33,6 +33,8 @@ const DEFAULTS = {
   leeCwd: REPO_ROOT,
   leeProfile: 'web',
   whaleProfile: 'whale',
+  // 她那个进程开的端口。守夜要推门时敲的就是它；改端口必须同时改这里，否则守夜会去敲一扇没人的门。
+  herPort: 3082,
 }
 
 let cached = null
@@ -46,6 +48,7 @@ function derive(c) {
   const herHome = c.herHome
   return {
     ...c,
+    herPort: Number(c.herPort) || 3082,
     groupDir: c.groupDir || join(herHome, 'group'),
     herDshHome: c.herDshHome || join(herHome, 'dsh-home'),
     whaleCwd: c.whaleCwd || herHome,
