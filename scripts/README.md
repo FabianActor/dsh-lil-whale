@@ -15,6 +15,8 @@
 - **停止脚本只有普通版**：本来就短，出结果就停在那儿。
 - `Stop DSH` / `Stop All Whales` 会先问一句 `Y/N` —— 大肥鱼就是你在用的 3080，停掉会中断正在跑的那一轮。`Stop lil whale` 不问。
 
+**这些 .cmd 可以复制到任何地方**（桌面、任务栏固定、快捷方式）：它先找同目录的 `.ps1`，找不到就用项目接入口 `%USERPROFILE%\dsh-lil-whale\scripts\`（那是一个 Junction，指向 `D:\文档\WorkSpace\dsh-lil-whale`，见下）。所以拖一个到桌面双击也能跑。
+
 命名约定（后期加子代照这个来）：`Run lil whale-2.cmd`、`Run lil whale-2-Check.cmd`、`Stop lil whale-2.cmd`。编号只加到"哪条鱼"上，`Run All Whales` 的含义就是"所有编号"。
 
 ## 底层
@@ -52,6 +54,14 @@ pwsh -File stop.ps1   -Target all|lee|whale [-Yes]
 ## legacy\
 
 旧的入口：`tab-lee.ps1`、`tab-whale.ps1`、`RUN-双鱼.cmd`（Windows Terminal 双标签页那套）、`启动小肥鱼.ps1`、`唤醒小肥鱼.cmd`、`stop-whale.ps1`。没删，只是挪开。
+
+## 项目的 ASCII 入口
+
+`C:\Users\Fabian\dsh-lil-whale` 是一个 Junction，指向 `D:\文档\WorkSpace\dsh-lil-whale`。
+
+存在的理由：项目真实路径里有中文（`文档`），而 `.cmd` 里的中文会被 GBK 读错，脚本没法把一个含中文的绝对路径写死在 .cmd 里。有了这个纯 ASCII 的别名，`.cmd` 就能在任何位置（桌面副本、快捷方式）找到项目。
+
+删掉它不影响功能（只是 .cmd 副本在别处就找不到脚本了）。
 
 ## 三个真踩过的坑
 

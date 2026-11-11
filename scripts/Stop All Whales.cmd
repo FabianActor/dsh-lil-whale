@@ -1,5 +1,12 @@
 @echo off
 chcp 65001 >nul
-rem Stop fish.
-pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0stop.ps1" -Target all
-if errorlevel 1 pause
+setlocal
+rem Works from anywhere: prefers the copy of this script, falls back to the project junction.
+set "S=%~dp0stop.ps1"
+if not exist "%S%" set "S=%USERPROFILE%\dsh-lil-whale\scripts\stop.ps1"
+if not exist "%S%" ( echo Cannot find stop.ps1, expected next to this file or in the project. & pause & exit /b 1 )
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%S%" -Target all
+set "RC=%ERRORLEVEL%"
+endlocal & set "RC=%RC%"
+if not "%RC%"=="0" pause
+exit /b %RC%

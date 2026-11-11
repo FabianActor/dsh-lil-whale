@@ -1,5 +1,12 @@
 @echo off
 chcp 65001 >nul
-rem Launch fish. Window closes when it succeeds; stays open when it fails.
-pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0launch.ps1" -Target whale
-if errorlevel 1 pause
+setlocal
+rem Works from anywhere: prefers the copy of this script, falls back to the project junction.
+set "S=%~dp0launch.ps1"
+if not exist "%S%" set "S=%USERPROFILE%\dsh-lil-whale\scripts\launch.ps1"
+if not exist "%S%" ( echo Cannot find launch.ps1, expected next to this file or in the project. & pause & exit /b 1 )
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%S%" -Target whale
+set "RC=%ERRORLEVEL%"
+endlocal & set "RC=%RC%"
+if not "%RC%"=="0" pause
+exit /b %RC%
