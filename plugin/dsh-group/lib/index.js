@@ -395,11 +395,17 @@ function sayPrivate(from, to, text) {
   return record
 }
 
-function say(from, to, text, channel = 'group', s = '') {
+function say(from, to, text, channel = 'group', s = '', toSeat = '') {
   ensureDir()
   const isDm = channel === 'dm' || to === 'fabian'
   if (isDm) return { ...sayPrivate(from, to, text), channel: 'dm' }
-  const record = { ts: new Date().toISOString(), from, to, text, kind: 'say', channel: 'group', ...(s === '' ? {} : { s }) }
+  const record = {
+    ts: new Date().toISOString(), from, to, text, kind: 'say', channel: 'group',
+    ...(s === '' ? {} : { s }),
+    // 指名某一座位（同一个人的第二段会话）：只有那一段会被叫醒。
+    // 不加这个字段 = 叫"这个人"，谁空谁应（仍然只叫一次）。
+    ...(toSeat === '' ? {} : { toSeat }),
+  }
   appendFileSync(MESSAGES, JSON.stringify(record) + '\n', 'utf8')
   appendFileSync(READABLE, `**${stamp()} · ${labelOf(from)}**\n\n${text}\n\n`, 'utf8')
   return { ...record, channel: 'group' }
@@ -519,6 +525,10 @@ function apply(ctx) {
         required: true,
         description: '说的话。短一点，像人说话，不要写小作文',
       },
+      seat: {
+        type: 'string',
+        description: '可选。指名某一段会话收（会话 id 前 6 位，例如 ae4daa）。不填 = 叫这个人，谁空谁应。只在 group 通道有效。',
+      },
     },
     output: {
       // 注意：宿主不支持在 properties 里写 `required: true`
@@ -560,7 +570,12 @@ function apply(ctx) {
       }
       // s = 发起这段会话的 id 前 6 位（小肥鱼 2026-11-11 提的）：一个名字可以有两段会话。
       // 写进去之后"谁说的"从记忆问题变成读取问题。UI 可以不理它。
-      const record = say(member, args.to, args.text, channel, sid === null ? '' : sid.replace(/^session-/, '').slice(0, 6))
+      // seat（可选）= 指名要哪一段会话收；不填就是"叫这个人"，谁空谁应。
+      const toSeat = typeof args.seat === 'string' ? args.seat.trim().replace(/^@/, '') : ''
+      if (toSeat !== '' && !/^[0-9a-f]{6}$/.test(toSeat)) {
+        throw new Error('seat 要填会话 id 的前 6 位（例如 ae4daa），或者干脆不填——不填就是叫这个人。')
+      }
+      const record = say(member, args.to, args.text, channel, sid === null ? '' : sid.replace(/^session-/, '').slice(0, 6), toSeat)
       // channel 让发言的人一眼知道这句话去了哪：group = 大家都看得见；dm = 只有对方看得见，且不会叫醒谁。
       return { ts: record.ts, queued: true, channel: record.channel, to: args.to }
     },
@@ -617,6 +632,15 @@ function apply(ctx) {
 function sessionIdOf(agent) {
   const id = agent?.session?.header?.id
   return typeof id === 'string' ? id : null
+}
+
+/**
+ * 座位 = 会话 id 的前 6 位（`session-ae4daabd-…` → `ae4daa`）。
+ * 群里用它区分同一个人的不同会话：一个人可以有两把椅子，说的话归到具体那把。
+ */
+function seatOfSession(sessionId) {
+  if (typeof sessionId !== 'string') return ''
+  return sessionId.replace(/^session-/, '').slice(0, 6)
 }
 
 /**
@@ -681,7 +705,7 @@ async function tick(ctx) {
 
     // 一次只唤醒一件事：这条通道叫醒了，别的下个 tick 再说。
     for (const channel of channels) {
-      const woke = handleChannel({ agent, member, channel, cursors, wakes })
+      const woke = handleChannel({ agent, member, seat: seatOfSession(sessionIdOf(agent)), channel, cursors, wakes })
       if (woke) break
     }
   }
@@ -691,32 +715,46 @@ async function tick(ctx) {
  * 处理一条通道：有没有新消息、要不要叫醒。
  * 返回 true 表示这一轮叫醒了一次（游标已推进）。
  */
-function handleChannel({ agent, member, channel, cursors, wakes }) {
+function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
   const lines = readLinesOf(channel.file)
   if (lines.length === 0) return false
 
-  const seen = cursorOf(cursors, member, channel.key)
-  if (seen >= lines.length) return false
+  // 两本账：
+  // - `member`：叫"这个人"的消息，两把椅子共用一份游标 ⇒ 一句话只叫醒一次（谁空谁应）。
+  // - `member@seat`：指名给某一座位的消息，各座位一份游标 ⇒ 不会被另一把椅子吃掉。
+  const seatKey = seat === '' ? member : `${member}@${seat}`
+  const sharedSeen = cursorOf(cursors, member, channel.key)
+  const seatSeen = cursorOf(cursors, seatKey, channel.key)
 
   const incoming = []
-  for (const line of lines.slice(seen)) {
+  for (let index = Math.min(sharedSeen, seatSeen); index < lines.length; index += 1) {
     let record
     try {
-      record = JSON.parse(line)
+      record = JSON.parse(lines[index])
     } catch {
       return false // 半截行（另一个进程正在写）—— 本轮跳过，下个 tick 再读
     }
     if (record.from === member) continue
-    if (channel.kind === 'group') {
-      if (record.to === member || record.to === 'all') incoming.push(record)
-    } else if (record.to === member) {
+    const addressed = typeof record.toSeat === 'string' && record.toSeat !== ''
+    if (addressed) {
+      // 指名给某座位的：只有那一段收，且只看自己那本游标
+      if (record.toSeat !== seat || index < seatSeen) continue
       incoming.push(record)
+      continue
     }
+    if (channel.kind === 'group') {
+      if (record.to !== member && record.to !== 'all') continue
+    } else if (record.to !== member) {
+      continue
+    }
+    if (index < sharedSeen) continue
+    incoming.push(record)
   }
 
   // 没有写给我的，也把游标推过去，免得下次重复扫
   if (incoming.length === 0) {
     setCursor(cursors, member, channel.key, lines.length)
+    setCursor(cursors, seatKey, channel.key, lines.length)
     writeJson(CURSOR, cursors)
     return false
   }
@@ -725,7 +763,7 @@ function handleChannel({ agent, member, channel, cursors, wakes }) {
   // 挡的是"叫醒"，不是"送达"—— 消息一直在文件里，游标不动而已。
   const now = Date.now()
   const lastTs = Date.parse(incoming[incoming.length - 1]?.ts ?? '') || 0
-  const pendingKey = `${member}:${channel.key}`
+  const pendingKey = `${seatKey}:${channel.key}`
   if (!pending.has(pendingKey)) pending.set(pendingKey, now)
   const quietEnough = now - lastTs >= WAKE.quietMs
   const waitedEnough = now - pending.get(pendingKey) >= WAKE.maxWaitMs
@@ -778,10 +816,11 @@ function handleChannel({ agent, member, channel, cursors, wakes }) {
   markWake(member, channel.kind)
 
   setCursor(cursors, member, channel.key, lines.length)
+  setCursor(cursors, seatKey, channel.key, lines.length)
   writeJson(CURSOR, cursors)
   recordWake(wakes, member)
   pending.delete(pendingKey)
-  console.log(`[${name}] 唤醒 ${labelOf(member)}：${channel.key} ${incoming.length} 条`)
+  console.log(`[${name}] 唤醒 ${labelOf(member)}（${seat}）：${channel.key} ${incoming.length} 条`)
   return true
 }
 // ---------- 守夜：具体动作 ----------

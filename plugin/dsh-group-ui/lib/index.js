@@ -329,8 +329,14 @@ export function apply(ctx) {
         return
       }
       const now = new Date()
+      // toSeat（可选）：指名这个人的哪一段会话收（6 位十六进制）。不填 = 叫这个人，谁空谁应。
+      const rawSeat = typeof payload?.toSeat === 'string' ? payload.toSeat.trim() : ''
+      const toSeat = /^[0-9a-f]{6}$/.test(rawSeat) ? rawSeat : ''
       // s = 谁发的：'ui' 表示从面板发的（他没有会话 id）。跟 group_say 写的 s=<会话前6位> 是同一个字段。
-      const record = { ts: now.toISOString(), from: 'fabian', to, text, kind: 'say', s: 'ui' }
+      const record = {
+        ts: now.toISOString(), from: 'fabian', to, text, kind: 'say', s: 'ui',
+        ...(toSeat === '' ? {} : { toSeat }),
+      }
       try {
         appendFileSync(MESSAGES, JSON.stringify(record) + '\n', 'utf8')
         const who = to === 'all' ? '群里' : LABEL[to] ?? to

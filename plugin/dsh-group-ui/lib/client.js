@@ -99,6 +99,24 @@ window.__ModuleLoader__.load({
       return config?.avatars?.[id] || DEFAULT_CONFIG.avatars[id] || { text: '?', tint: '#8a8a8a' }
     }
 
+    /**
+     * 说话对象里可以带座位：`lee@ae4daa` = 指名大肥鱼的那一段。
+     * 不带 @ 就是叫这个人本身——两段谁空谁应。
+     */
+    function splitTarget(to) {
+      const text = typeof to === 'string' ? to : ''
+      const at = text.indexOf('@')
+      return at < 0 ? { base: text, seat: '' } : { base: text.slice(0, at), seat: text.slice(at + 1) }
+    }
+
+    function targetName(config, to) {
+      const { base, seat } = splitTarget(to)
+      if (seat === '') return nameOf(config, base)
+      const named = config?.seats?.[seat]
+      if (typeof named === 'string' && named.trim() !== '') return named
+      return `${nameOf(config, base)} · ${seat}`
+    }
+
     const baseStyle = {
       color: 'var(--dsw-alias-label-primary)',
       fontFamily: 'inherit',
@@ -487,7 +505,7 @@ window.__ModuleLoader__.load({
     }
 
     /** "@ 谁" 的小面板：一行一个成员，头像 + 名字。点「所有人」= 不指定对象。 */
-    function AtPicker({ config, current, onPick, onClose }) {
+    function AtPicker({ config, current, seats, onPick, onClose }) {
       const [hovered, setHovered] = useState(null)
       const boxRef = useRef(null)
       // 移出去不关；点别处才关。她自己点 @ 钮那种情况由 data-at-anchor 放行，
@@ -507,11 +525,18 @@ window.__ModuleLoader__.load({
           document.removeEventListener('keydown', onKey)
         }
       }, [onClose])
-      const rows = [
-        { id: 'all', label: t.toAll, plain: true },
-        { id: 'lee', label: nameOf(config, 'lee') },
-        { id: 'whale', label: nameOf(config, 'whale') },
-      ]
+      // 名字下面列出座位：同一个人有几段会话，就有几行「大肥鱼 · 工」这样可选。
+      const rows = [{ id: 'all', label: t.toAll, plain: true }]
+      for (const member of ['lee', 'whale']) {
+        rows.push({ id: member, label: nameOf(config, member) })
+        for (const seat of (seats ?? []).filter((item) => item.member === member)) {
+          rows.push({
+            id: `${member}@${seat.prefix}`,
+            label: config?.seats?.[seat.prefix] || `${nameOf(config, member)} · ${seat.prefix}`,
+            indented: true,
+          })
+        }
+      }
       return h('div', {
         ref: boxRef,
         style: {
@@ -539,17 +564,19 @@ window.__ModuleLoader__.load({
             transition: 'background 90ms ease',
           },
         },
-          row.plain
-            ? h('div', {
-              style: {
-                width: 26, height: 26, borderRadius: '50%',
-                border: '1px dashed var(--dsw-alias-border-l3, rgba(0,0,0,0.2))',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 12, color: 'var(--dsw-alias-label-tertiary)',
-              },
-            }, '群')
-            : h(Avatar, { config, member: row.id, size: 26 }),
-          h('span', { style: { flex: 1 } }, row.label),
+          h('div', { style: { marginLeft: row.indented ? 14 : 0, display: 'flex', flex: 1, minWidth: 0 } },
+            row.plain
+              ? h('div', {
+                style: {
+                  width: 26, height: 26, borderRadius: '50%',
+                  border: '1px dashed var(--dsw-alias-border-l3, rgba(0,0,0,0.2))',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 12, color: 'var(--dsw-alias-label-tertiary)',
+                },
+              }, '群')
+              : h(Avatar, { config, member: splitTarget(row.id).base, size: 26 }),
+            h('span', { style: { flex: 1, marginLeft: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, row.label),
+          ),
           active ? h('span', { style: { color: 'var(--dsw-alias-brand-primary, #4a7dbd)', fontSize: 12 } }, '✓') : null,
         )
       }))
@@ -899,6 +926,7 @@ window.__ModuleLoader__.load({
       const [error, setError] = useState(null)
       const [sending, setSending] = useState(false)
       const [presence, setPresence] = useState({})
+      const [seats, setSeats] = useState([])
       const [pickerOpen, setPickerOpen] = useState(false)
       const [tab, setTab] = useState('group')
       const [unread, setUnread] = useState({ group: 0, dm: {}, total: 0 })
@@ -934,6 +962,16 @@ window.__ModuleLoader__.load({
           }
         } catch {
           // 存在感掉了就当没人说话，宁可安静
+        }
+        try {
+          // 座位：名册里有几段会话就列几段，@ 面板据此多出「大肥鱼 · 工」这种可选项
+          const response = await fetch('/group/api/seats', { headers: { accept: 'application/json' } })
+          if (response.ok) {
+            const data = await response.json()
+            if (Array.isArray(data?.seats)) setSeats(data.seats)
+          }
+        } catch {
+          // 拿不到就不列座位，只保留"叫这个人"
         }
       }, [tab])
 
@@ -976,7 +1014,10 @@ window.__ModuleLoader__.load({
           const response = await fetch(endpoint, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify(tab === 'dm' ? { text: value } : { to, text: value }),
+            body: JSON.stringify(tab === 'dm' ? { text: value } : (() => {
+              const { base, seat } = splitTarget(to)
+              return seat === '' ? { to: base, text: value } : { to: base, toSeat: seat, text: value }
+            })()),
           })
           if (!response.ok) throw new Error(`HTTP ${response.status}`)
           setText('')
@@ -1171,8 +1212,8 @@ window.__ModuleLoader__.load({
                       fontSize: 12, color: 'var(--dsw-alias-label-secondary)',
                     },
                   },
-                    h(Avatar, { config, member: to, size: 18 }),
-                    h('span', null, nameOf(config, to)),
+                    h(Avatar, { config, member: splitTarget(to).base, size: 18 }),
+                    h('span', null, targetName(config, to)),
                     h('button', {
                       onClick: () => setTo('all'),
                       title: '取消指定',
@@ -1192,7 +1233,7 @@ window.__ModuleLoader__.load({
                     void submit()
                   }
                 },
-                placeholder: to === 'all' ? t.placeholder : `对 ${nameOf(config, to)} 说…`,
+                placeholder: to === 'all' ? t.placeholder : `对 ${targetName(config, to)} 说…`,
                 rows: 1,
                 style: {
                   border: 'none', outline: 'none', resize: 'none', background: 'transparent',
@@ -1220,7 +1261,7 @@ window.__ModuleLoader__.load({
                     })),
                   h('span', { style: { position: 'relative', fontSize: 15, lineHeight: 1, color: 'var(--dsw-alias-label-secondary)' } }, '@')),
                 h('div', { style: { flex: 1, fontSize: 11, color: 'var(--dsw-alias-label-caption)' } },
-                  to === 'all' ? t.groupOnly : t.toOne(nameOf(config, to))),
+                  to === 'all' ? t.groupOnly : t.toOne(targetName(config, to))),
                 h('button', {
                   onClick: () => { void submit() },
                   disabled: sending || text.trim() === '',
@@ -1244,6 +1285,7 @@ window.__ModuleLoader__.load({
               pickerOpen
                 ? h(AtPicker, {
                   config,
+                  seats,
                   current: to,
                   onPick: (id) => { setTo(id); setPickerOpen(false) },
                   onClose: () => setPickerOpen(false),
