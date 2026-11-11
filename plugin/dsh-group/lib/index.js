@@ -397,17 +397,22 @@ function sayPrivate(from, to, text) {
 
 function say(from, to, text, channel = 'group', s = '', toSeat = '') {
   ensureDir()
+  // 只追加的文件删不掉一行，所以空正文绝不能落盘。
+  // 现场（2026-11-11 16:23）：一条没有 text 的记录进了 messages.jsonl，
+  // 在 群.md 里显示成 undefined —— 一个空对象，读起来却像一句话。
+  const body = typeof text === 'string' ? text.trim() : ''
+  if (body === '') throw new Error('群消息不能没有正文（text 是空的，拒绝写入）')
   const isDm = channel === 'dm' || to === 'fabian'
-  if (isDm) return { ...sayPrivate(from, to, text), channel: 'dm' }
+  if (isDm) return { ...sayPrivate(from, to, body), channel: 'dm' }
   const record = {
-    ts: new Date().toISOString(), from, to, text, kind: 'say', channel: 'group',
+    ts: new Date().toISOString(), from, to, text: body, kind: 'say', channel: 'group',
     ...(s === '' ? {} : { s }),
     // 指名某一座位（同一个人的第二段会话）：只有那一段会被叫醒。
     // 不加这个字段 = 叫"这个人"，谁空谁应（仍然只叫一次）。
     ...(toSeat === '' ? {} : { toSeat }),
   }
   appendFileSync(MESSAGES, JSON.stringify(record) + '\n', 'utf8')
-  appendFileSync(READABLE, `**${stamp()} · ${labelOf(from)}**\n\n${text}\n\n`, 'utf8')
+  appendFileSync(READABLE, `**${stamp()} · ${labelOf(from)}**\n\n${body}\n\n`, 'utf8')
   return { ...record, channel: 'group' }
 }
 
