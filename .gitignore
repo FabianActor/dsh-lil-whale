@@ -16,3 +16,4 @@ tmp/
 # 探针/实验的临时产物
 probe/*.txt*
 probe/*.json
+plugin/*/pnpm-lock.yaml
