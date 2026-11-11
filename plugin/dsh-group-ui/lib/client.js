@@ -100,72 +100,75 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * 窄屏判定。
+     * 窄布局判定：量**自己这块地方**有多宽，不看窗口。
      *
-     * 边界值跟 dsh-pocket 用同一个：`(max-width: 1023px)`。它比"手机/电脑"更准确，
-     * 因为窄的浏览器窗口和手机是同一类问题（横向放不下两栏）。
+     * dsh 官方没有"手机模式"这个概念——界面按**容器宽度**自适应（`container-type: inline-size`
+     * 配 `@container (width <= N)`，例如官方 agent-preset 在 540px、permission-presets 在 460px
+     * 收缩），因为同一块界面可能被放进侧栏、主区或弹窗，窗口宽度说明不了它有多少可用空间。
+     * 这里用 ResizeObserver 量根元素的 inline-size，跟容器查询是同一个判据；
+     * 差别只在 `@container` 只能改样式，而"拆成两屏"是结构变化，必须在 JS 里决定。
      *
-     * 只看 `data-dsh-pocket-layout` 会出事：pocket 在**加载时**解一次布局就把结果写死在属性上，
-     * 之后窗口变宽它自己也不更新（它把那个 MediaQueryList 换成了一个 matches 恒为 true 的假对象）。
-     * 照着属性走，就会"一窄永窄"。
-     *
-     * 所以：只有用户**明确选过**布局时才听那个选择 —— pocket 把明确选择存在
-     * `localStorage['dsh-pocket.layout']`（值 `desktop` / `mobile`，来自 `?dsh-layout=`），
-     * 没选过时这个键是空的，这时跟随实时宽度。
+     * 阈值 640px 不是抄来的：两栏至少要放得下 320 的列表 + 320 的会话。
      */
-    const NARROW_QUERY = '(max-width: 1023px)'
+    const NARROW_INLINE_PX = 640
 
-    function pocketChosenLayout() {
-      // `?dsh-layout=mobile|desktop` 是用户当场说的话，最优先。
-      try {
-        const fromUrl = new URL(window.location.href).searchParams.get('dsh-layout')
-        if (fromUrl === 'mobile' || fromUrl === 'desktop') return fromUrl
-      } catch { /* 没有 URL 对象就算了 */ }
-      // pocket 也会把明确选择存在这里（它每次加载没有参数时会清掉这个键）。
-      try {
-        const stored = window.localStorage?.getItem('dsh-pocket.layout')
-        return stored === 'desktop' || stored === 'mobile' ? stored : ''
-      } catch { return '' }
+    function measureInline(node) {
+      if (!node) return 0
+      const rect = node.getBoundingClientRect?.()
+      return node.clientWidth || rect?.width || 0
     }
 
-    function narrowNow() {
-      const chosen = pocketChosenLayout()
-      if (chosen === 'mobile') return true
-      if (chosen === 'desktop') return false
-      try { return window.matchMedia(NARROW_QUERY).matches } catch { return false }
-    }
-
-    function useNarrow() {
-      const [narrow, setNarrow] = useState(narrowNow)
+    function useNarrow(ref) {
+      const [narrow, setNarrow] = useState(false)
       useEffect(() => {
-        const sync = () => setNarrow(narrowNow())
+        const node = ref?.current
+        if (!node) return undefined
+        const apply = (width) => setNarrow(Number.isFinite(width) && width > 0 && width < NARROW_INLINE_PX)
+        apply(measureInline(node))
+        if (typeof ResizeObserver === 'undefined') {
+          const onResize = () => apply(measureInline(node))
+          window.addEventListener('resize', onResize)
+          return () => window.removeEventListener('resize', onResize)
+        }
+        const observer = new ResizeObserver((entries) => {
+          const entry = entries[0]
+          if (!entry) return
+          const width = entry.contentBoxSize?.[0]?.inlineSize ?? entry.contentRect?.width
+          apply(width)
+        })
+        observer.observe(node)
+        return () => observer.disconnect()
+      }, [ref])
+      return narrow
+    }
+
+    /**
+     * 触控设备判定。官方输入卡用 `@media (pointer: coarse)` 把字号抬到 16px——
+     * iOS 聚焦小于 16px 的输入框会把整页放大一下。窄窗口不等于手指操作，两件事分开判。
+     */
+    const COARSE_QUERY = '(pointer: coarse)'
+
+    function useCoarsePointer() {
+      const [coarse, setCoarse] = useState(() => {
+        try { return window.matchMedia(COARSE_QUERY).matches } catch { return false }
+      })
+      useEffect(() => {
         let mq = null
+        try { mq = window.matchMedia(COARSE_QUERY) } catch { return undefined }
+        const sync = () => setCoarse(mq.matches)
         try {
-          mq = window.matchMedia(NARROW_QUERY)
           if (mq.addEventListener) mq.addEventListener('change', sync)
           else if (mq.addListener) mq.addListener(sync)
-        } catch { /* 没有 matchMedia 就只靠 resize */ }
-        // resize 兜一层：有的内嵌 webview 不发 MediaQueryList 的 change 事件。
-        try { window.addEventListener('resize', sync) } catch { /* ignore */ }
-        // pocket 若重新应用布局（切 URL 参数），属性会变；那时重新判一次。
-        let observer = null
-        try {
-          if (typeof MutationObserver !== 'undefined' && document.body) {
-            observer = new MutationObserver(sync)
-            observer.observe(document.body, { attributes: true, attributeFilter: ['data-dsh-pocket-layout'] })
-          }
-        } catch { /* 观察不了就算了 */ }
+        } catch { /* ignore */ }
         sync()
         return () => {
           try {
-            if (mq?.removeEventListener) mq.removeEventListener('change', sync)
-            else if (mq?.removeListener) mq.removeListener(sync)
+            if (mq.removeEventListener) mq.removeEventListener('change', sync)
+            else if (mq.removeListener) mq.removeListener(sync)
           } catch { /* ignore */ }
-          try { window.removeEventListener('resize', sync) } catch { /* ignore */ }
-          observer?.disconnect()
         }
       }, [])
-      return narrow
+      return coarse
     }
 
     /**
@@ -722,7 +725,9 @@ window.__ModuleLoader__.load({
      * ——先选人，再进会话，会话页左上角一个返回。
      */
     function DmPage({ config, presence }) {
-      const narrow = useNarrow()
+      const rootRef = useRef(null)
+      const narrow = useNarrow(rootRef)
+      const coarse = useCoarsePointer()
       const [contacts, setContacts] = useState([])
       const [activePeer, setActivePeer] = useState(null)
       const [messages, setMessages] = useState([])
@@ -995,7 +1000,7 @@ window.__ModuleLoader__.load({
               color: 'var(--dsw-alias-label-primary)', font: 'inherit',
               width: '100%', boxSizing: 'border-box',
               // 窄屏（多半是手机）用 16px：iOS 在聚焦小于 16px 的输入框时会把整页放大一下。
-              fontSize: narrow ? 16 : 14, lineHeight: '24px', padding: '4px 2px', minHeight: 44, maxHeight: 220,
+              fontSize: coarse ? 16 : 14, lineHeight: '24px', padding: '4px 2px', minHeight: 44, maxHeight: 220,
             },
           }),
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
@@ -1026,7 +1031,7 @@ window.__ModuleLoader__.load({
       const showList = narrow ? activePeer === null : true
       const showChat = narrow ? activePeer !== null : true
 
-      return h('div', { style: { flex: 1, minHeight: 0, height: '100%', display: 'flex' } },
+      return h('div', { ref: rootRef, style: { flex: 1, minHeight: 0, height: '100%', display: 'flex' } },
         showList
           ? h('div', { style: { width: narrow ? '100%' : sidebar, flex: 'none', position: 'relative', display: 'flex', minHeight: 0 } },
             h('div', { style: { flex: 1, overflowY: 'auto', padding: narrow ? '4px 0' : '6px 0', minWidth: 0 } }, contactList),

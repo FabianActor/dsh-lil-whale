@@ -404,6 +404,10 @@ D:\文档\WorkSpace\lil-whale\        ← 她的家（cwd）
 
 实现口径：**能用 token 就不用字面值**；文档里没写的，去 `dsh-web-frontend` 与官方 UI 包的源码里找同款，找不到就问，别猜。
 
+**第三方插件不是标准（2026-11-11 他定）。** `dsh-pocket` 这类插件可以看、可以借思路，但不能当依据——它的行为随时会变，而且它自己也可能错。这一天就撞过：群面板的窄布局跟着 pocket 写在 `<body>` 上的 `data-dsh-pocket-layout` 判断，结果窗口拖宽了页面不还原——因为 pocket 只在加载时解析一次布局就把结果写死，那个属性根本不是"当前状态"。
+
+**响应式以官方的做法为准**：官方没有"手机模式"这个概念，界面按**容器宽度**自适应（`container-type: inline-size` 配 `@container (width <= N)`，例如 `agent-preset` 在 540px、`permission-presets` 在 460px、`plugin-manager` 在 767px 收缩）。所以群面板量的是**自己这块地方**的宽度（`ResizeObserver` 读 inline-size），不是窗口宽度；阈值 **640px** 是我们两栏的物理下限（列表 320 + 会话 320），不是抄来的数字。触控另判：输入框在 `(pointer: coarse)` 下用 16px，因为 iOS 聚焦小于 16px 的输入框会把整页放大。
+
 ---
 
 
