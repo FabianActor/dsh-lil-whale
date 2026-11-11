@@ -410,6 +410,7 @@ D:\文档\WorkSpace\lil-whale\        ← 她的家（cwd）
 
 **断点取官方的数，不自己编**（`dsh-client-ui-layout/lib/client.js`）：`SIDEBAR_AUTO_COLLAPSE = 1024` 是侧栏自动收成窄轨的断点；`const drawer = viewport < 768` 是侧栏变成抽屉的断点。群面板**不能直接套 768**：768 判的是 frame（整个窗口），而面板拿到的是 frame 减掉侧栏之后的宽度，套上去等于把侧栏重复扣一次。面板按"放不放得下两栏"取 **640**（列表 280 + 会话 360）；640 还落在"侧栏收起会腾出约 224px"这个跳变之外，拖宽拖窄不会来回翻。量容器而不是窗口是有意的：同一块界面可能被挤进侧栏或弹窗，窗口宽度说明不了它有多少地方。触控另判：输入框在 `(pointer: coarse)` 下用 16px，因为 iOS 聚焦小于 16px 的输入框会把整页放大。
 
+
 ---
 
 
@@ -524,7 +525,7 @@ B 的一切（递话、页面、闹钟）都建在"本地包能不能真的 appl
 | **M3** | 阀门 | **部分通过**（冷却 60s 实测拦住过：三条连发只叫醒两次、不报错不补发。每小时 12 / 每天 60 **未实测**；静默段已定 00:00–08:00 且夜里推门照响、日志标 `night=true`） |
 | **M4** | 人类入口与记录 | **通过**（2026-11-10 首版 / 2026-11-11 验收收尾）：他在侧边栏「鱼群」面板里直接发言、被看见；私聊独立成页；不打开任何会话就能读懂群（`群.md` + 面板 + 未读红点）。成型的功能：可拖列宽（30–92%）、`@` 到某一段座位（`toSeat`，·工 / ·家）、时间戳分三档、窄屏（面板 ≤640px）私聊拆成"列表 / 会话"两屏。**验收证据（2026-11-11 他本人）**：窗口拖到 650 左右切换形态，来回一次不劫持、不复位。未做：他不打开 dsh 也能读（那需要一个不依赖 3080 的入口） |
 | **M5** | 一周观察 | §3 的 A1–A8 有结论（成或不成都要有结论） |
-| **M6** | 打包 | 别人照文档能养出**自己的**一只 |
+| **M6** | 打包 | 别人照文档能养出**自己的**一只。**发行前必须改的（他 2026-11-11 点出）**：三个包的 `name` 还是工作名 —— `dsh-group`（宿主：群文件 + 唤醒 + 工具）、`dsh-group-ui`（宿主路由 + 客户端面板）、以及已退役的 `dsh-group-probe`；版本号也还是 0.1.0 / 0.2.0 这种临时值。发行时统一成一套正式名字（建议 `dsh-lil-whale` 前缀）与 1.0.0 |
 | 远景 | 看得见的家（G5） | 优先级最后；先吸纳现成做法 |
 
 **顺序理由**：M0.5 是唯一"可能根本做不到"的一步（钥匙），M1 是唯一"整条路悬在它上面"的一步（插件坑）。两个先撞完，再谈功能。
@@ -585,11 +586,18 @@ or export DEEPSEEK_API_KEY in the launching environment
 - 客户端 bundle 改完**不用重启**（HMR 会重发、`rev` 变、URL 变）；要重启的是宿主的 `lib/index.js`。判断"浏览器还在跑旧代码"的最快办法：在 `apply()` 里打一行带版本号的自报（`console.info('[dsh-group-ui] client build v3 …')`），刷新后看它出不出来。
 
 **A.12 响应式：量自己容器的绝对像素（2026-11-11 定，踩过两个坑）**
-
 - **官方怎么判**：`viewport` 初值是 `window.innerWidth`，但挂载后立刻被 `ResizeObserver` 用 **frame 元素自己**的宽度覆盖（`dsh-client-ui-layout/lib/client.js:229-231`：`const width = el.getBoundingClientRect().width; if (width > 0) actions.setViewportWidth(width)`）。布局常量全是**绝对 CSS 像素**：侧栏 280（`clampWidth(sidebar, 264, 420)`）、收起后 56、`SIDEBAR_AUTO_COLLAPSE = 1024`（`:248` `const narrow = viewport < SIDEBAR_AUTO_COLLAPSE`，收成窄轨）、`:250` `const drawer = viewport < 768 && !windowsTitlebar`（变抽屉）。唯一的比例值是**右栏**：`RIGHTBAR_MAX_RATIO = .7`、`:265` `rightbarPreference = layoutInfo.rightbar ?? viewport * .45`。
 - **坑一：别把 frame 的断点套到面板上。** 群面板拿到的是 `frame − 侧栏`，`768` 判的是 frame，套上去等于**把侧栏宽度重复扣一次**。面板按"放不放得下两栏"取 **640**（列表 280 + 会话 360）。选 640 还有第二个理由：侧栏收起时会给面板腾出约 224px（280 → 56），640 落在这个跳变之外 —— 否则拖窄一次会"窄 → 宽 → 窄"翻两下，看着像 bug。
 - **坑二：别拿第三方插件当判据。** 一开始跟 `dsh-pocket` 的 `data-dsh-pocket-layout` 判窄布局：那是 pocket **加载时**算一次就写死的属性（layout 为 mobile 时它还把 MediaQueryList 换成 `matches` 恒真的假对象），于是"一窄永窄"，拖宽不还原。他 2026-11-11 明确：**第三方插件不是标准，以 dsh 官方为准**。
 - **触控另判**：`(pointer: coarse)` 下输入框字号 16px —— iOS 聚焦小于 16px 的输入框会把整页放大。窄窗口 ≠ 手指操作，两件事分开判。
+
+**A.13 头像照片怎么存（2026-11-11 定）**
+
+- 照片不进 `ui-config.json`：字节写到 `D:\文档\WorkSpace\lil-whale\group\avatars\<成员>.<扩展名>`（`png` / `jpg` / `webp`，一个人一张，换一张覆盖旧的）。配置里只记两样：`image`（扩展名）和 `version`（换图时的时间戳）。
+- 前端 URL 是 `/group/api/avatar?member=lee&v=<version>`：**版本号在 URL 里，所以这张图可以永久缓存**，换图等于换 URL，不用去清浏览器缓存。
+- 上传走 data URL（`POST /group/api/avatar`，`{member, dataUrl}` / `{member, clear:true}`），不引 multipart 解析器 —— 图就是头像那么大。上限 **1.5 MB**，超出直接拒（`413`），不至于让群目录跟着长胖。
+- 显示规则：**有照片就画照片，没有才退回文字**；照片永远优先，所以换回文字头像要去掉照片，而不是改文字。
+
 
 ---
 
