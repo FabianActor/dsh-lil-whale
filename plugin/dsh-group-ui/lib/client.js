@@ -108,9 +108,11 @@ window.__ModuleLoader__.load({
      * 这里用 ResizeObserver 量根元素的 inline-size，跟容器查询是同一个判据；
      * 差别只在 `@container` 只能改样式，而"拆成两屏"是结构变化，必须在 JS 里决定。
      *
-     * 阈值 640px 不是抄来的：两栏至少要放得下 320 的列表 + 320 的会话。
+     * 阈值取 768，就是官方 layout 的 drawer 断点（`dsh-client-ui-layout/lib/client.js`:
+     * `SIDEBAR_AUTO_COLLAPSE = 1024` 自动收成窄轨、`const drawer = viewport < 768` 变成抽屉）。
+     * 我们量的是自己的容器而不是窗口：这块面板被侧栏挤过一道，窗口 1000px 时它可能只剩 700px。
      */
-    const NARROW_INLINE_PX = 640
+    const NARROW_INLINE_PX = 768
 
     function measureInline(node) {
       if (!node) return 0

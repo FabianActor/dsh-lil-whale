@@ -406,7 +406,9 @@ D:\文档\WorkSpace\lil-whale\        ← 她的家（cwd）
 
 **第三方插件不是标准（2026-11-11 他定）。** `dsh-pocket` 这类插件可以看、可以借思路，但不能当依据——它的行为随时会变，而且它自己也可能错。这一天就撞过：群面板的窄布局跟着 pocket 写在 `<body>` 上的 `data-dsh-pocket-layout` 判断，结果窗口拖宽了页面不还原——因为 pocket 只在加载时解析一次布局就把结果写死，那个属性根本不是"当前状态"。
 
-**响应式以官方的做法为准**：官方没有"手机模式"这个概念，界面按**容器宽度**自适应（`container-type: inline-size` 配 `@container (width <= N)`，例如 `agent-preset` 在 540px、`permission-presets` 在 460px、`plugin-manager` 在 767px 收缩）。所以群面板量的是**自己这块地方**的宽度（`ResizeObserver` 读 inline-size），不是窗口宽度；阈值 **640px** 是我们两栏的物理下限（列表 320 + 会话 320），不是抄来的数字。触控另判：输入框在 `(pointer: coarse)` 下用 16px，因为 iOS 聚焦小于 16px 的输入框会把整页放大。
+**响应式以官方的做法为准**：官方没有"手机模式"这个概念，界面按**容器宽度**自适应（`container-type: inline-size` 配 `@container (width <= N)`，例如 `agent-preset` 在 540px、`permission-presets` 在 460px、`plugin-manager` 在 767px 收缩）。所以群面板量的是**自己这块地方**的宽度（`ResizeObserver` 读 inline-size），不是窗口宽度。
+
+**断点取官方的数，不自己编**（`dsh-client-ui-layout/lib/client.js`）：`SIDEBAR_AUTO_COLLAPSE = 1024` 是侧栏自动收成窄轨的断点；`const drawer = viewport < 768` 是侧栏变成抽屉的断点。群面板用 **768**——到了抽屉那一档，主区才真的没有第二栏的余地。量容器而不是窗口是有意的：这块面板被侧栏挤过一道，窗口 1000px 时它可能只剩 700px，按窗口判会晚一步。触控另判：输入框在 `(pointer: coarse)` 下用 16px，因为 iOS 聚焦小于 16px 的输入框会把整页放大。
 
 ---
 
