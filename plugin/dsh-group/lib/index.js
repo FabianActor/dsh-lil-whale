@@ -185,9 +185,15 @@ function settleMarks() {
     if (now - mark.at < WAKE_SETTLE_MS) { keep.push(mark); continue }
     let lines = 0
     try {
-      lines = readLinesOf(MESSAGES).filter(
-        (line) => line && line.from === mark.member && Date.parse(line.ts) > mark.at,
-      ).length
+      lines = readLinesOf(MESSAGES).filter((raw) => {
+        let record
+        try {
+          record = JSON.parse(raw)
+        } catch {
+          return false // 半截行：既不算说，也不算没说
+        }
+        return record && record.from === mark.member && Date.parse(record.ts) > mark.at
+      }).length
     } catch {
       keep.push(mark)
       continue
