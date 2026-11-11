@@ -17,3 +17,6 @@ tmp/
 probe/*.txt*
 probe/*.json
 plugin/*/pnpm-lock.yaml
+
+# 本机配置（含绝对路径），模板是 lil-whale.config.example.json
+lil-whale.config.json

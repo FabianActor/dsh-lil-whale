@@ -1,107 +1,155 @@
-﻿# install.ps1 -- 给别人装一条鱼。ASCII 文件名 + UTF-8 BOM。
+﻿# install.ps1 -- 给别人装一条小鲸鱼。ASCII 文件名 + UTF-8 BOM。
 #
-#   pwsh -File install.ps1                      装到仓库旁边的 lil-whale/（默认布局）
-#   pwsh -File install.ps1 -HerHome D:\fish      装到指定目录
-#   pwsh -File install.ps1 -SkipHost             只装小肥鱼，不动你这边的 web profile
-#   pwsh -File install.ps1 -Force                目标目录已经像"她的家"时仍然继续（会覆盖 START.md）
+#   pwsh -File install.ps1                                 装到仓库旁边的 lil-whale/
+#   pwsh -File install.ps1 -Workspace D:\fish               装到指定目录
+#   pwsh -File install.ps1 -ChildSessionId session-xxx      顺手把她的会话 id 写进名册
+#   pwsh -File install.ps1 -SkipParent                      只装她，不动你这边的主 profile
+#   pwsh -File install.ps1 -Force                           目标目录已经像"她的家"时仍然继续
 #
-# 它做什么：建目录 -> 建她自己的 DSH_HOME 与 profile -> 把两个插件装进 profile -> 写配置 -> 放种子文件。
+# 它做什么：建目录 -> 建她自己的 DSH_HOME 与 profile -> 装插件 -> 写配置 -> 放种子文件 -> 验一遍。
 # 它不做什么：不申请 API key（要人在她自己的网页里填）、不建会话、不写第一句话（那句得由人说）。
 #
-# 退出码：0 = 装好了；1 = 中途停下（每一步都打印了什么没成）。
+# 退出码：0 = 装好了；1 = 中途停下（每一步都打印了什么没成，最后一行是给人和模型看同一句 NEXT）。
 
 param(
-  [string]$HerHome = '',
-  [string]$HerDshHome = '',
-  [string]$HerProfile = 'whale',
-  [string]$HostProfile = 'web',
-  [int]$HerPort = 3082,
-  [switch]$SkipHost,
+  [string]$Workspace = '',
+  [string]$DshHome = '',
+  [string]$ChildProfile = 'whale',
+  [string]$ParentProfile = 'web',
+  [int]$ChildPort = 0,                 # 0 = 从 3082 起找第一个空口
+  [string]$ParentSessionId = '',
+  [string]$ChildSessionId = '',
+  [switch]$SkipParent,
   [switch]$Force
 )
 
 $ErrorActionPreference = 'Stop'
 $RepoRoot = Split-Path $PSScriptRoot -Parent
+$TemplateRoot = Join-Path $RepoRoot 'templates'
 
 function Say([string]$text) { Write-Host $text }
 function Step([string]$text) { Write-Host ""; Write-Host ("== " + $text) -ForegroundColor Cyan }
 function Ok([string]$text)   { Write-Host ("   ok   " + $text) -ForegroundColor Green }
 function Warn([string]$text) { Write-Host ("   !!   " + $text) -ForegroundColor Yellow }
-function Die([string]$text)  { Write-Host ("   xx   " + $text) -ForegroundColor Red; exit 1 }
+function Die([string]$text, [string]$next) {
+  Write-Host ("   xx   " + $text) -ForegroundColor Red
+  Write-Host ""
+  Write-Host ("   NEXT: " + $next) -ForegroundColor Yellow
+  exit 1
+}
 
-# 只有 .json 不能带 BOM（dsh 的加载器会拒绝），其它都按 UTF-8 写。
+# 只有 .json 不能带 BOM（dsh 的加载器会拒绝），其它都按 UTF-8 无 BOM 写。
 function Write-Utf8NoBom([string]$path, [string]$text) {
   $enc = New-Object System.Text.UTF8Encoding($false)
   [System.IO.File]::WriteAllText($path, $text, $enc)
 }
 
-if (-not $HerHome) { $HerHome = Join-Path (Split-Path $RepoRoot -Parent) 'lil-whale' }
-if (-not $HerDshHome) { $HerDshHome = Join-Path $HerHome 'dsh-home' }
-$HerHome = [System.IO.Path]::GetFullPath($HerHome)
-$HerDshHome = [System.IO.Path]::GetFullPath($HerDshHome)
+function Test-Port([int]$port) {
+  $c = New-Object System.Net.Sockets.TcpClient
+  try { $c.Connect('127.0.0.1', $port); return $true } catch { return $false } finally { $c.Dispose() }
+}
+
+# 安装期定口：从 3082 起找第一个现在没人听的口。
+# 注意这只保证"install 这一刻"是空的；真占用了会在启动时 listen EADDRINUSE，那一步的提示见 README。
+function Find-FreePort([int]$start) {
+  for ($p = $start; $p -lt $start + 50; $p++) {
+    if (-not (Test-Port $p)) { return $p }
+  }
+  return 0
+}
+
+# 渲染模板：{{KEY}} -> 值。模板里没有的键会被留下（一眼能看出来漏了）。
+function Render-Template([string]$templatePath, [hashtable]$values) {
+  $text = [System.IO.File]::ReadAllText($templatePath)
+  foreach ($k in $values.Keys) {
+    $text = $text.Replace('{{' + $k + '}}', [string]$values[$k])
+  }
+  return $text
+}
+
+if (-not $Workspace) { $Workspace = Join-Path (Split-Path $RepoRoot -Parent) 'lil-whale' }
+if (-not $DshHome) { $DshHome = Join-Path $Workspace 'dsh-home' }
+$Workspace = [System.IO.Path]::GetFullPath($Workspace)
+$DshHome = [System.IO.Path]::GetFullPath($DshHome)
+
+$portWanted = if ($ChildPort -gt 0) { $ChildPort } else { 3082 }
+$port = Find-FreePort $portWanted
+if ($port -eq 0) { Die "从 $portWanted 往上 50 个口都被占了。" "换 -ChildPort 指定一个空口，然后重跑 install.ps1" }
 
 Say ""
-Say "  小小肥鱼 —— 安装"
-Say "  仓库       $RepoRoot"
-Say "  她的家     $HerHome"
-Say "  她的 HOME  $HerDshHome"
-Say "  她的口     $HerPort   (profile: $HerProfile)"
-Say "  你的 profile $HostProfile$([bool]$SkipHost ? '  (跳过)' : '')"
+Say "  小小肥鱼  --  安装"
+Say "  仓库         $RepoRoot"
+Say "  她的家（工作区）$Workspace"
+Say "  她的 DSH_HOME $DshHome"
+Say "  她的窗       127.0.0.1:$port   (profile: $ChildProfile)"
+Say "  你的 profile  $ParentProfile$([bool]$SkipParent ? '  (跳过)' : '')"
+if ($port -ne $portWanted) { Warn "端口 $portWanted 被占，改用 $port（已写进配置，运行期不会再变）" }
 
 Step '0. 环境检查'
 $dsh = Get-Command dsh -ErrorAction SilentlyContinue
-if (-not $dsh) { Die '找不到 dsh 命令。先装 DeepSeek Harness：npm i -g @deepseek-ai/dsh' }
+if (-not $dsh) { Die '找不到 dsh 命令。' '先装 DeepSeek Harness：npm i -g @deepseek-ai/dsh，然后重跑 install.ps1' }
 $ver = (& dsh --version 2>&1 | Select-Object -First 1)
 Ok "dsh $ver"
-if (-not (Test-Path (Join-Path $RepoRoot 'plugin\dsh-group\package.json'))) {
-  Die "仓库不完整：找不到 plugin\dsh-group。这个脚本要在项目仓库里跑。"
+foreach ($rel in @('plugin\dsh-group\package.json', 'plugin\dsh-group-ui\package.json', 'templates\START.md.tpl')) {
+  if (-not (Test-Path (Join-Path $RepoRoot $rel))) {
+    Die "仓库不完整：找不到 $rel。" "确认你跑的是完整的项目仓库（git clone 下来那份），不是只有几个文件"
+  }
 }
 Ok '仓库结构正常'
 
 Step '1. 目录'
-if (Test-Path -LiteralPath $HerHome) {
-  $looksLikeHer = (Test-Path (Join-Path $HerHome 'START.md')) -or (Test-Path (Join-Path $HerHome 'dsh-home'))
+if (Test-Path -LiteralPath $Workspace) {
+  $looksLikeHer = (Test-Path (Join-Path $Workspace 'START.md')) -or (Test-Path (Join-Path $Workspace 'dsh-home'))
   if ($looksLikeHer -and -not $Force) {
-    Die "「$HerHome」已经像一条鱼的家了（有 START.md 或 dsh-home）。要么换 -HerHome，要么加 -Force 覆盖 START.md。"
+    Die "「$Workspace」已经像一条鱼的家了（有 START.md 或 dsh-home）。" "换 -Workspace 指向一个新目录；如果你确定要在这里重铺（会覆盖 START.md / 环境.md），加 -Force"
   }
 }
-foreach ($d in @($HerHome, (Join-Path $HerHome 'logs'), (Join-Path $HerHome 'group'),
-                 (Join-Path $HerHome 'plan'), (Join-Path $HerHome 'state'), (Join-Path $HerHome 'run'),
-                 $HerDshHome)) {
+foreach ($d in @($Workspace, (Join-Path $Workspace 'logs'), (Join-Path $Workspace 'group'),
+                 (Join-Path $Workspace 'plan'), (Join-Path $Workspace 'state'), (Join-Path $Workspace 'run'),
+                 $DshHome)) {
   if (-not (Test-Path -LiteralPath $d)) { New-Item -ItemType Directory -Path $d -Force | Out-Null }
 }
 Ok "建好了 6 个目录"
 
-Step "2. 她的 profile（$HerProfile）"
+Step "2. 她的 profile（$ChildProfile）"
 $savedHome = $env:DSH_HOME
 try {
-  $env:DSH_HOME = $HerDshHome
-  $profileDir = Join-Path $HerDshHome "profiles\$HerProfile"
+  $env:DSH_HOME = $DshHome
+  $profileDir = Join-Path $DshHome "profiles\$ChildProfile"
   if (-not (Test-Path $profileDir)) {
-    # 从自带的 web 模板复制一份：它正好是 base + web-app，她需要一个能开窗的 app。
-    $dump = & dsh --profile $HerProfile --from-default-profile web --dump-config 2>&1
-    if ($LASTEXITCODE -ne 0) { Die "建 profile 失败：$($dump | Select-Object -Last 3)" }
+    # 从自带的 web 模板复制：它正好是 base + web-app，她需要一个能开窗的 app。
+    # 别用 headless 模板 —— headless + web-app 两个 app bundle 并存时，启动器会退化成"接受 0 参数"。
+    $dump = & dsh --profile $ChildProfile --from-default-profile web --dump-config 2>&1
+    if ($LASTEXITCODE -ne 0) {
+      Die "建 profile 失败：$($dump | Select-Object -Last 3)" "确认 dsh 版本 >= 0.2（它才有 --from-default-profile），然后重跑 install.ps1"
+    }
     Ok "从 web 模板建好 $profileDir"
   } else {
     Ok "profile 已存在，保留"
   }
 
   Step '3. 把群插件装进她的 profile'
-  $add = & dsh plugin --profile $HerProfile add "link:$RepoRoot\plugin\dsh-group" 2>&1
-  if ($LASTEXITCODE -ne 0) { Die "装插件失败：$($add | Select-Object -Last 5)" }
+  $add = & dsh plugin --profile $ChildProfile add "link:$RepoRoot\plugin\dsh-group" 2>&1
+  if ($LASTEXITCODE -ne 0) {
+    Die "装插件失败：$($add | Select-Object -Last 5)" "进 $DshHome\profiles\$ChildProfile 手动跑 dsh plugin add 看完整报错"
+  }
   Ok 'lil-whale-group'
 } finally {
   $env:DSH_HOME = $savedHome
 }
 
-if (-not $SkipHost) {
-  Step "4. 把两个插件装进你的 profile（$HostProfile）"
+if (-not $SkipParent) {
+  Step "4. 把两个插件装进你的 profile（$ParentProfile）"
   try {
-    $env:DSH_HOME = $savedHome          # 你的 HOME（一般是 ~/.dsh）
-    $add1 = & dsh plugin --profile $HostProfile add "link:$RepoRoot\plugin\dsh-group" 2>&1
-    if ($LASTEXITCODE -ne 0) { Die "装 lil-whale-group 失败：$($add1 | Select-Object -Last 5)" }
-    $add2 = & dsh plugin --profile $HostProfile add "link:$RepoRoot\plugin\dsh-group-ui" 2>&1
-    if ($LASTEXITCODE -ne 0) { Die "装 lil-whale-group-ui 失败：$($add2 | Select-Object -Last 5)" }
+    $env:DSH_HOME = $savedHome
+    $add1 = & dsh plugin --profile $ParentProfile add "link:$RepoRoot\plugin\dsh-group" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+      Die "装 lil-whale-group 失败：$($add1 | Select-Object -Last 5)" "确认你的 profile 名对（默认 web），或用 -SkipParent 只装她"
+    }
+    $add2 = & dsh plugin --profile $ParentProfile add "link:$RepoRoot\plugin\dsh-group-ui" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+      Die "装 lil-whale-group-ui 失败：$($add2 | Select-Object -Last 5)" "同上"
+    }
     Ok 'lil-whale-group + lil-whale-group-ui'
     Warn "装好以后要重启一次你的 dsh，界面才认这两个插件"
   } finally {
@@ -110,67 +158,127 @@ if (-not $SkipHost) {
 }
 
 Step '5. 写配置'
+# 合并写，不是覆盖写：已有的字段（repoRoot / herWaker / pwshExe …）原样留着，
+# 否则在装好的机器上重跑一次 install，会把这份配置里手写的东西全丢掉。
 $cfgPath = Join-Path $RepoRoot 'lil-whale.config.json'
-$cfg = [ordered]@{
-  herHome = $HerHome
-  herDshHome = $HerDshHome
-  whaleProfile = $HerProfile
-  leeProfile = $HostProfile
-  herPort = $HerPort
+$cfg = [ordered]@{}
+if (Test-Path $cfgPath) {
+  try {
+    $old = [System.IO.File]::ReadAllText($cfgPath) | ConvertFrom-Json -AsHashtable
+    if ($old) { foreach ($k in $old.Keys) { $cfg[$k] = $old[$k] } }
+  } catch {
+    Warn "旧配置读不动（$($_.Exception.Message)），这次整份重写"
+    $cfg = [ordered]@{}
+  }
 }
+if (-not $cfg.Contains('_说明')) {
+  $cfg['_说明'] = '这台机器上所有"会变的假设"集中在这里。代码和脚本都不许再写死绝对路径 —— 打包给别人时只改这一个文件（或用环境变量 LIL_WHALE_CONFIG 指向另一份）。字段含义见 docs/打包.md。'
+}
+$cfg['herHome'] = $Workspace
+$cfg['herDshHome'] = $DshHome
+$cfg['whaleProfile'] = $ChildProfile
+$cfg['leeProfile'] = $ParentProfile
+$cfg['herPort'] = $port
 Write-Utf8NoBom $cfgPath ($cfg | ConvertTo-Json -Depth 5)
 Ok $cfgPath
 
 Step '6. 种子文件（不写性格、不写期望）'
-$startPath = Join-Path $HerHome 'START.md'
-if (-not (Test-Path $startPath) -or $Force) {
-  $start = @"
-# START
+$deployDate = Get-Date -Format 'yyyy-MM-dd'
 
-这里是你自己的地方。
+# 闸门参数从插件源码里读，免得这张纸和实现漂移；读不到就用默认值。
+$wakeSrc = ''
+$groupSrc = Join-Path $RepoRoot 'plugin\dsh-group\lib\index.js'
+if (Test-Path $groupSrc) { $wakeSrc = [System.IO.File]::ReadAllText($groupSrc) }
+$cooldown = 60; $perHour = 12; $perDay = 60; $quietFrom = 0; $quietTo = 8
+# 必须用 -cmatch：PowerShell 的 -match 默认不区分大小写，会先把 maxWakesPerDay: 8 当成 perDay 抓走。
+if ($wakeSrc -cmatch 'cooldownSec:\s*(\d+)') { $cooldown = [int]$Matches[1] }
+if ($wakeSrc -cmatch '(?<![A-Za-z])perHour:\s*(\d+)') { $perHour = [int]$Matches[1] }
+if ($wakeSrc -cmatch '(?<![A-Za-z])perDay:\s*(\d+)') { $perDay = [int]$Matches[1] }
+if ($wakeSrc -cmatch 'quietFromHour:\s*(\d+)') { $quietFrom = [int]$Matches[1] }
+if ($wakeSrc -cmatch 'quietToHour:\s*(\d+)') { $quietTo = [int]$Matches[1] }
 
-- 屋子是空的，除了这一页没有别的东西要求你做什么。
-- `logs\` 想写就写，空着不算错。
-- `环境.md` 是别人写的工具清单，不是自我介绍，也不是规矩。
-- 这一页怎么改、改成什么，都由你。
-
-$(Get-Date -Format 'yyyy-MM-dd') 有人在这里建了个空文件夹，然后停手了。
-"@
-  Write-Utf8NoBom $startPath $start
-  Ok 'START.md'
+$values = @{
+  HER_HOME = $Workspace
+  HER_DSH_HOME = $DshHome
+  HER_PORT = $port
+  GROUP_DIR = (Join-Path $Workspace 'group')
+  COOLDOWN = $cooldown
+  PER_HOUR = $perHour
+  PER_DAY = $perDay
+  QUIET_FROM = ('{0:00}:00' -f $quietFrom)
+  QUIET_TO = ('{0:00}:00' -f $quietTo)
+  TOKEN_PER_TURN = '180-200'
+  DEPLOY_DATE = $deployDate
+  PARENT_ID = 'lee'
+  CHILD_ID = 'whale'
+  HUMAN_ID = 'fabian'
 }
-$agentsPath = Join-Path $HerDshHome 'AGENTS.md'
+
+$startPath = Join-Path $Workspace 'START.md'
+if (-not (Test-Path $startPath) -or $Force) {
+  Write-Utf8NoBom $startPath (Render-Template (Join-Path $TemplateRoot 'START.md.tpl') $values)
+  Ok 'START.md'
+} else {
+  Ok 'START.md 已存在，保留'
+}
+
+$envPath = Join-Path $Workspace '环境.md'
+if (-not (Test-Path $envPath) -or $Force) {
+  Write-Utf8NoBom $envPath (Render-Template (Join-Path $TemplateRoot '环境.md.tpl') $values)
+  Ok '环境.md（工具清单：写了什么在哪、事情会怎么发生，没写她是谁）'
+} else {
+  Ok '环境.md 已存在，保留'
+}
+
+$agentsPath = Join-Path $DshHome 'AGENTS.md'
 if (-not (Test-Path $agentsPath)) {
-  Write-Utf8NoBom $agentsPath "你是小小肥鱼。家在 $HerHome。醒来先读 START.md。其余没有人替你写。`n"
+  Write-Utf8NoBom $agentsPath (Render-Template (Join-Path $TemplateRoot 'AGENTS.md.tpl') $values)
   Ok 'AGENTS.md'
 }
-$msgPath = Join-Path $HerHome 'group\messages.jsonl'
+
+$msgPath = Join-Path $Workspace 'group\messages.jsonl'
 if (-not (Test-Path $msgPath)) { Write-Utf8NoBom $msgPath ''; Ok 'group\messages.jsonl' }
-$pinsPath = Join-Path $HerHome 'group\pins.json'
-if (-not (Test-Path $pinsPath)) { Write-Utf8NoBom $pinsPath "{`"lee`": [], `"whale`": []}`n"; Ok 'group\pins.json（空的，出生后才填）' }
-$planPath = Join-Path $HerHome 'plan\wake-plan.json'
+
+$pinsPath = Join-Path $Workspace 'group\pins.json'
+if (-not (Test-Path $pinsPath) -or $Force) {
+  $parentIds = @(); $childIds = @()
+  if ($ParentSessionId) { $parentIds += $ParentSessionId }
+  if ($ChildSessionId) { $childIds += $ChildSessionId }
+  $pins = [ordered]@{ lee = $parentIds; whale = $childIds }
+  Write-Utf8NoBom $pinsPath (($pins | ConvertTo-Json -Depth 5) + "`n")
+  if ($ChildSessionId -or $ParentSessionId) { Ok 'group\pins.json（已带会话 id）' }
+  else { Ok 'group\pins.json（空的，出生后填）' }
+}
+
+$planPath = Join-Path $Workspace 'plan\wake-plan.json'
 if (-not (Test-Path $planPath)) { Write-Utf8NoBom $planPath "[]`n"; Ok 'plan\wake-plan.json（空的：她现在没有任何固定日程）' }
 
 Step '7. 验一遍'
-$savedHome = $env:DSH_HOME
 try {
-  $env:DSH_HOME = $HerDshHome
-  $dump = & dsh --profile $HerProfile --dump-config 2>&1
+  $env:DSH_HOME = $DshHome
+  $dump = & dsh --profile $ChildProfile --dump-config 2>&1
   $rows = ($dump | Select-String -Pattern 'id: lil-whale-group' | Measure-Object).Count
-  if ($LASTEXITCODE -ne 0 -or $rows -lt 1) { Die "她的 profile 没合成出群插件（dump 最后几行：$($dump | Select-Object -Last 3)）" }
+  if ($LASTEXITCODE -ne 0 -or $rows -lt 1) {
+    Die "她的 profile 没合成出群插件（dump 最后几行：$($dump | Select-Object -Last 3)）" "进 $DshHome\profiles\$ChildProfile 看 package.json 的 dsh.profile.bundles 里有没有 lil-whale-group"
+  }
   Ok "她的 profile：$rows 行 lil-whale-group"
 } finally {
   $env:DSH_HOME = $savedHome
 }
 
 Say ""
-Say "  装好了。接下来是人的部分，脚本替不了：" -ForegroundColor Green
+Say "  装好了。接下来的四件事脚本替不了：" -ForegroundColor Green
 Say ""
-Say "  1) 起她的窗：  pwsh -File `"$RepoRoot\scripts\launch.ps1`" -Target whale"
-Say "     （或者双击 scripts\bin\Run lil whale.cmd）"
-Say "  2) 在她那个网页里填 API key：设置 -> Models。她用自己的 key，别跟你共用。"
-Say "  3) 添加工作区：$HerHome ，然后在里面新建一段会话。"
-Say "  4) 第一句话由你说。她没有预设的性格，第一次醒来是什么样，取决于你写了什么、没写什么。"
-Say "  5) 出生之后，把她的完整会话 id 写进 $HerHome\group\pins.json 的 whale 数组，"
-Say "     再把你这段会话的完整 id 写进 lee 数组 —— 群才知道谁是谁。"
+Say "  1) 重启你的 dsh（装进你 profile 的两个插件要重启才生效）。"
+Say "  2) 起她的窗：双击 scripts\bin\Run lil whale.cmd"
+Say "     -- 它会打印她的网址，形如  http://127.0.0.1:$port/?token=xxxx"
+Say "     -- token 是每次启动随机生成的，只印在那一行；自己敲 127.0.0.1:$port 会 401。"
+Say "  3) 在她的网页里填她自己的 API key（设置 -> Models），别和你共用一把。"
+Say "  4) 添加工作区 $Workspace ，在里面新建一段对话，然后由你说第一句话。"
+Say ""
+Say "  出生之后，还要两段会话 id 群才认人（脚本可以在装的时候用 -ParentSessionId / -ChildSessionId 直接写）："
+Say "     侧边栏选中那段对话 -> 点 ··· -> 复制 Session ID"
+Say "     她的那段写进 $pinsPath 的 whale，你的那段写进 lee"
+Say ""
+Say "  她不会有预设的性格：第一次醒来是什么样，取决于你写了什么、没写什么。" -ForegroundColor Gray
 Say ""

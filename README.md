@@ -30,19 +30,40 @@ cd dsh-lil-whale
 pwsh -File scripts\install.ps1
 ```
 
-它会做：建目录、给她建独立 `DSH_HOME` 与 profile、把两个插件装进对应 profile、写 `lil-whale.config.json`、放种子文件。
+它会做：建目录、给她建独立 `DSH_HOME` 与 profile、把两个插件装进对应 profile、写 `lil-whale.config.json`、放种子文件（`START.md` / `环境.md` / `AGENTS.md`，**没有性格、没有开场白**）。
 
 它**不会**做：填 API key、建会话、写第一句话。这三件必须由人来。
 
-装完按它打印的五步走。
+常用参数：
+
+| 参数 | 意思 |
+|---|---|
+| `-Workspace D:\fish` | 她的家放哪（默认：仓库旁边的 `lil-whale\`） |
+| `-ChildPort 3082` | 她的端口（默认从 3082 起找第一个空口，找到就把结果写进配置，**运行期不会再变**） |
+| `-ChildSessionId session-…` | 装的时候就把她的会话 id 写进名册 |
+| `-ParentSessionId session-…` | 同上，写你的那段 |
+| `-SkipParent` | 只装她，不动你这边的主 profile |
+
+装完按它打印的四步走。`lil-whale.config.json` 里是你的绝对路径，**它不进版本库**（模板是 `lil-whale.config.example.json`）。
+
+## 推荐，但不是必需
+
+**上下文压缩插件**（例如 `billion-context` 一类）。没有它也能跑，但会话越久，模型能准确想起来的越少；装了会好很多。
+
+本项目的**代码不依赖它**：我们假设你的 dsh 里什么都没装，第三方插件不能变成上游依赖。所以这是"建议你装"，不是"没它不行"。
 
 ## 第一次出生
 
 1. 起她的窗：双击 `scripts\bin\Run lil whale.cmd`（或者 `pwsh -File scripts\launch.ps1 -Target whale`）
-2. 在她那个网页（默认 `http://127.0.0.1:3082`）里填**她自己的** key：设置 → Models
-3. 添加工作区，选她的家目录，然后在里面新建一段会话
+   - 它会打印她的网址，形如 `http://127.0.0.1:3082/?token=xxxx`
+   - **token 每次启动随机生成，只印在那一行**；自己敲 `127.0.0.1:3082` 会得到 401
+2. 在她那个网页里填**她自己的** key：设置 → Models
+3. 添加工作区（选她的家目录），然后在里面新建一段会话
 4. **第一句话由你说**。她没有预设的性格，第一次醒来是什么样，取决于你写了什么、没写什么
-5. 出生之后，把她的会话 id 写进 `group\pins.json` 的 `whale` 数组，把你那段会话的 id 写进 `lee` 数组 —— 群才知道谁是谁
+5. 出生之后，还要两段会话 id 群才认人：
+   - 侧边栏选中那段对话 → 点 `···` → 复制 Session ID
+   - 她的写进 `group\pins.json` 的 `whale` 数组，你的写进 `lee` 数组
+   - （装的时候用 `-ChildSessionId` / `-ParentSessionId` 也能直接写）
 
 ## 它会花多少钱
 
@@ -67,13 +88,15 @@ pwsh -File scripts\install.ps1
 ```
 dsh-lil-whale/            工程（这个仓库）
   docs/                   设计文档、判据、观察记录
-  plugin/dsh-group/       宿主半边：群发言工具 + 跨进程唤醒
-  plugin/dsh-group-ui/    浏览器半边：群聊面板、设置页、HTTP 路由
+  plugin/dsh-group/       宿主半边：群发言工具 + 跨进程唤醒（她的 profile 也装）
+  plugin/dsh-group-ui/    浏览器半边：群聊面板、设置页、HTTP 路由（只你的 profile 装）
   scripts/                安装、启动、停止、守夜、重建器
-  lil-whale.config.json   这台机器的"会变的假设"（路径、端口、profile 名）
+  templates/              种子文件模板（START.md / 环境.md / AGENTS.md，安装时填值）
+  lil-whale.config.example.json  配置模板（真的那份不进版本库）
 
 lil-whale/                她的家（不在 git 里，安装时生成）
   START.md                她自己的第一页
+  环境.md                 安装时写的工具清单（写了什么在哪、事情会怎么发生）
   logs/ notes/            她写的东西
   group/                  群：messages.jsonl、pins.json、ui-config.json、avatars/
   plan/                   她自己定的日程（wake-plan.json）
@@ -94,7 +117,7 @@ lil-whale/                她的家（不在 git 里，安装时生成）
 
 - M0–M4 已通过：出生、插件探针、跨进程通路、唤醒阀门、人类入口（群面板 + 私聊）
 - M5 观察中：一周数据（她说不说话、被叫醒后回不回、定时推门准不准）
-- M6 进行中：打包（配置抽离、包改名、本 README、安装脚本）
+- M6 收尾中：配置抽离、包改名、安装脚本、种子文件模板都已完成；剩**发布前**要做的三件（见 `docs/打包.md`）：npm scope 改名 `@fabianactor/dsh-lil-whale-group(-ui)`、补齐 manifest 字段、加 dsh badge。
 
 进度和每一条「为什么这样定」都在 `docs/` 里，包括踩过的坑。
 
