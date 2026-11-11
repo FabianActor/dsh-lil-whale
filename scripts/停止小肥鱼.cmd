@@ -1,3 +1,5 @@
 @echo off
 chcp 65001 >nul
-pwsh -NoProfile -ExecutionPolicy Bypass -File "%~dp0stop-whale.ps1" %*
+rem Stop fish.
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0stop.ps1" -Target whale
+if errorlevel 1 pause

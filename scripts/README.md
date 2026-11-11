@@ -12,7 +12,12 @@
 | `启动全部-检修.cmd` | 同「启动全部」，但窗口**永远留着** | 不关 |
 | `启动大肥鱼-检修.cmd` | 同「启动大肥鱼」，窗口永远留着 | 不关 |
 | `启动小肥鱼-检修.cmd` | 同「启动小肥鱼」，窗口永远留着 | 不关 |
-| `停止小肥鱼.cmd` | 只停她的 node（认 `--profile whale`，不会误杀 3080） | 留着 |
+| `停止全部.cmd` | 小肥鱼 + 大肥鱼 + 脚本版守夜 | 留着 |
+| `停止大肥鱼.cmd` | 只停 3080 | 留着 |
+| `停止小肥鱼.cmd` | 只停 3082（认 `--profile whale`，不会误杀 3080） | 留着 |
+
+停止脚本只有普通版（没有检修版）：它们本来就短，出结果就停在那儿。
+**停大肥鱼 / 停全部会先问一句 Y/N** —— 大肥鱼就是你在用的 3080，停掉会中断正在跑的那一轮。
 
 六个「启动」都走同一个 `launch.ps1`，只是参数不同：
 
@@ -32,7 +37,7 @@ pwsh -File launch.ps1 -Target all|lee|whale [-NoBrowser] [-Port n] [-WithWatchma
 | `start-whale.ps1` | `watchman.ps1`。输出约定：`already-awake` / `awake` / `failed` |
 | `wake-whale.ps1` | `dsh-group` 插件的守夜定时器（`HER_WAKER`）。插件里每 60 秒看一次，到点且她关着窗就跑它 |
 | `watchman.ps1` | 手工兜底用的老守夜（`watchman-run.cmd` 起来）。**现在门主要由插件推**，这个只在主 dsh 不常开时用 |
-| `stop-whale.ps1` | `停止小肥鱼.cmd` |
+| `stop.ps1` | `停止*.cmd` 三个。退出码 0 = 停了/本来没跑，1 = 没停干净 |
 
 ## 日志在哪
 
@@ -52,3 +57,4 @@ pwsh -File launch.ps1 -Target all|lee|whale [-NoBrowser] [-Port n] [-WithWatchma
 
 1. **别按命令行字符串判断"某进程在不在"**：`Get-CimInstance` 里搜 `watchman.ps1`，会把任何一个正在读这句话的 pwsh（包括你排障时敲的那条命令）都算成守夜。现在守夜自己往 `logs\watchman.pid` 写 PID，只认这个文件。
 2. **别套两层 pwsh**：`Start-Process pwsh -Command "pwsh -File x.ps1"` 会多出一个没人管的父进程。要跑脚本就用 `-Command "& 'x.ps1'"`，让 `Start-Process` 直接持有它。
+3. **杀进程要和 1 号坑反着来**：`stop.ps1` 只认「`node.exe` 的第一个参数就是 `bin.js`」的进程，然后才看它带不带 `--profile whale`。只搜「命令行里出现过 `bin.js` 和 `--profile whale`」的话，会把一个正在读这两个词的人的 shell 当成鱼杀掉 —— 这个我测试时真撞上了。
