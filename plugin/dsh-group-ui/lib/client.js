@@ -10,7 +10,7 @@
  * /group/api/config、/group/api/presence），不在浏览器里直接读文件。
  */
 window.__ModuleLoader__.load({
-  id: 'dsh-group-ui',
+  id: 'lil-whale-group-ui',
   factory(require) {
     const React = require('react')
     const h = React.createElement
@@ -268,11 +268,11 @@ window.__ModuleLoader__.load({
         // dsh 的 MarkdownText 是 React.memo(...) 包出来的，typeof 是 "object" 不是 "function"。
         // 只认 function 会把它判成"没有"——这个坑我踩过一次。
         if (md && (typeof md === 'function' || typeof md === 'object')) return md
-        console.warn('[dsh-group-ui] primitives 里没有可用的 MarkdownText，用自带渲染兜底')
+        console.warn('[lil-whale-group-ui] primitives 里没有可用的 MarkdownText，用自带渲染兜底')
         return null
       } catch (error) {
         // 退化成纯文本可以接受，但必须留一条痕迹：静默降级等于把错误藏起来。
-        console.warn('[dsh-group-ui] 取不到 @deepseek-ai/dsh-client-ui-primitives，退回纯文本：', error?.message ?? error)
+        console.warn('[lil-whale-group-ui] 取不到 @deepseek-ai/dsh-client-ui-primitives，退回纯文本：', error?.message ?? error)
         return null
       }
     })()
@@ -482,7 +482,7 @@ window.__ModuleLoader__.load({
       }
 
       componentDidCatch(error) {
-        console.warn('[dsh-group-ui] MarkdownText 渲染失败，这条改用自带渲染：', error?.message ?? error)
+        console.warn('[lil-whale-group-ui] MarkdownText 渲染失败，这条改用自带渲染：', error?.message ?? error)
       }
 
       render() {
@@ -2096,11 +2096,11 @@ window.__ModuleLoader__.load({
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-group-ui] client build v7 · splash:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[lil-whale-group-ui] client build v7 · splash:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
-        if (typeof document !== 'undefined' && !document.getElementById('dsh-group-keyframes')) {
+        if (typeof document !== 'undefined' && !document.getElementById('lil-whale-group-keyframes')) {
           const style = document.createElement('style')
-          style.id = 'dsh-group-keyframes'
+          style.id = 'lil-whale-group-keyframes'
       style.textContent = '@keyframes dshGroupPulse{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-1px)}}' + '@keyframes dshGroupRise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}' + '@keyframes dshGroupSpin{to{transform:rotate(360deg)}}'
           document.head.appendChild(style)
         }

@@ -9,7 +9,7 @@ import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, rmS
 import { join } from 'node:path'
 import { config } from './config.js'
 
-export const name = 'dsh-group-ui'
+export const name = 'lil-whale-group-ui'
 export const inject = ['webServer', 'agents']
 
 // 她的家在哪从 lil-whale.config.json 读（见本包 lib/config.js）

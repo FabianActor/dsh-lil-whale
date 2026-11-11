@@ -81,7 +81,7 @@ function buildUserMessage(options) {
   return makeUserMessageFallback(options)
 }
 
-const name = 'dsh-group'
+const name = 'lil-whale-group'
 const inject = ['tools', 'agents']
 
 // 这台机器的假设（她的家在哪、守夜脚本在哪、pwsh 在哪）全从 lil-whale.config.json 读，
