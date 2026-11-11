@@ -1097,6 +1097,11 @@ function planDue(now) {
   }
   return out
 }
+/** 守夜递的那句话。开着的窗直接用；刚被推开的窗也递进去，等她起来自己读到。 */
+function planDeliveryText(job) {
+  return `守夜递话：\`${job.key}\` 到点了（${job.tag}）。\n\n表上写的理由：${job.itemWhy || '（没写）'}\n\n做着看不做也行，你定。这条只递一次。`
+}
+
 async function watchmanTick() {
   const now = Date.now()
   const day = new Date().toDateString()
@@ -1136,7 +1141,7 @@ async function watchmanTick() {
           noteSkip('why=already-delivered')
           continue
         }
-        const text = `守夜递话：\`${job.key}\` 到点了（${job.tag}）。\n\n表上写的理由：${job.itemWhy || '（没写）'}\n\n做着看不做也行，你定。这条只递一次。`
+        const text = planDeliveryText(job)
         try {
           say('lee', 'whale', text)
         } catch {}
@@ -1172,6 +1177,17 @@ async function watchmanTick() {
       watchmanLog('woke', `ok wakes-today=${watchState.wakes} why=${res.detail} night=${night} ${job.tag}`)
       // 推门也算叫醒过一次：15 分钟后回看她有没有开口（A7 判据）。
       markWake('whale', 'plan')
+      // 窗是被"推"开的，里面还没人接话：所以把同一句话也递进群，
+      // 她起来之后 tailer 会读到。不加这一步，睡着的那个早上只会"窗口开了、人不知道该干什么"——
+      // 她 2026-11-10 的原话：plan 不是叫醒，是提醒一个活着的人去做事。
+      if (job.from === 'plan') {
+        try {
+          say('lee', 'whale', planDeliveryText(job))
+          watchmanLog('deliver', `why=plan-after-wake ${job.tag}（窗是推开的，话已递进去）`)
+        } catch (error) {
+          watchmanLog('error', `why=plan-deliver-failed detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)} ${job.tag}`)
+        }
+      }
     } else {
       watchState.fails += 1
       saveWatchState()
