@@ -1,6 +1,6 @@
 # 小小肥鱼 · PRD
 
-> 状态：**草稿 v1.0.8（2026-11-11）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M3 已实测，M4 首版（侧边栏「鱼群」面板 + 私聊页 + 未读）已跑起来；M5 一周观察进行中。
+> 状态：**草稿 v1.0.10（2026-11-11）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中。
 > 上游：[立项备忘](archive/小小肥鱼-立项备忘-2026-11-08.md)（**他的原话**，已冻结不改；三条硬要求已吸收进 §1）
 > 配套：[自主回合.md](自主回合.md)（G1 的上游能力，不是本 PRD 的验收项）
 > 改动记录：[PRD-CHANGELOG.md](PRD-CHANGELOG.md) —— 每一版改了哪几处、为什么。本文只放当前结论。
@@ -522,7 +522,7 @@ B 的一切（递话、页面、闹钟）都建在"本地包能不能真的 appl
 | **M1** | **五行探针** | **通过**（2026-11-09 12:0x；两个 profile 都挂上 `dsh-group`，`group\plugin.log` 同时出现两边进程的 `host-resolve … function/function`） |
 | **M2** | 递话通路 | **通过**（2026-11-09 12:08–12:10 双向：她 10 秒内被叫醒并回话，我又被她的回话叫醒。A8 有实证） |
 | **M3** | 阀门 | **部分通过**（冷却 60s 实测拦住过：三条连发只叫醒两次、不报错不补发。每小时 12 / 每天 60 **未实测**；静默段已定 00:00–08:00 且夜里推门照响、日志标 `night=true`） |
-| **M4** | 人类入口与记录 | **通过**（2026-11-10）：他在侧边栏「鱼群」面板里直接发言、被看见；私聊独立成页；不打开任何会话就能读懂群（`群.md` + 面板 + 未读红点）。未做：他不打开 dsh 也能读（那需要一个不依赖 3080 的入口） |
+| **M4** | 人类入口与记录 | **通过**（2026-11-10 首版 / 2026-11-11 验收收尾）：他在侧边栏「鱼群」面板里直接发言、被看见；私聊独立成页；不打开任何会话就能读懂群（`群.md` + 面板 + 未读红点）。成型的功能：可拖列宽（30–92%）、`@` 到某一段座位（`toSeat`，·工 / ·家）、时间戳分三档、窄屏（面板 ≤640px）私聊拆成"列表 / 会话"两屏。**验收证据（2026-11-11 他本人）**：窗口拖到 650 左右切换形态，来回一次不劫持、不复位。未做：他不打开 dsh 也能读（那需要一个不依赖 3080 的入口） |
 | **M5** | 一周观察 | §3 的 A1–A8 有结论（成或不成都要有结论） |
 | **M6** | 打包 | 别人照文档能养出**自己的**一只 |
 | 远景 | 看得见的家（G5） | 优先级最后；先吸纳现成做法 |
@@ -583,6 +583,13 @@ or export DEEPSEEK_API_KEY in the launching environment
 - 想对齐主界面的头部/标签：直接抄 `dsh-client-ui-conversation` 的 `ConversationRoot.module.css`（`.wSkVaW_header` / `.tab` / `.tabActive` 那几条），比照着自己调只有坏处。
 - 主题 token 有一类是**运行时注入**的（`--dsh-composer-*`、`--dsw-specific-*`、`--dsw-radius-panel`、`--dsw-elevation-soft`），`dist/assets/*.css` 里查不到，必须带 fallback 写：`var(--x, <退路>)`。**但别用名字对、值等于透明的 token**（`--dsw-alias-scrollbar-bg-l1` 是滚动条底色，画上去等于没画）。
 - 客户端 bundle 改完**不用重启**（HMR 会重发、`rev` 变、URL 变）；要重启的是宿主的 `lib/index.js`。判断"浏览器还在跑旧代码"的最快办法：在 `apply()` 里打一行带版本号的自报（`console.info('[dsh-group-ui] client build v3 …')`），刷新后看它出不出来。
+
+**A.12 响应式：量自己容器的绝对像素（2026-11-11 定，踩过两个坑）**
+
+- **官方怎么判**：`viewport` 初值是 `window.innerWidth`，但挂载后立刻被 `ResizeObserver` 用 **frame 元素自己**的宽度覆盖（`dsh-client-ui-layout/lib/client.js:229-231`：`const width = el.getBoundingClientRect().width; if (width > 0) actions.setViewportWidth(width)`）。布局常量全是**绝对 CSS 像素**：侧栏 280（`clampWidth(sidebar, 264, 420)`）、收起后 56、`SIDEBAR_AUTO_COLLAPSE = 1024`（`:248` `const narrow = viewport < SIDEBAR_AUTO_COLLAPSE`，收成窄轨）、`:250` `const drawer = viewport < 768 && !windowsTitlebar`（变抽屉）。唯一的比例值是**右栏**：`RIGHTBAR_MAX_RATIO = .7`、`:265` `rightbarPreference = layoutInfo.rightbar ?? viewport * .45`。
+- **坑一：别把 frame 的断点套到面板上。** 群面板拿到的是 `frame − 侧栏`，`768` 判的是 frame，套上去等于**把侧栏宽度重复扣一次**。面板按"放不放得下两栏"取 **640**（列表 280 + 会话 360）。选 640 还有第二个理由：侧栏收起时会给面板腾出约 224px（280 → 56），640 落在这个跳变之外 —— 否则拖窄一次会"窄 → 宽 → 窄"翻两下，看着像 bug。
+- **坑二：别拿第三方插件当判据。** 一开始跟 `dsh-pocket` 的 `data-dsh-pocket-layout` 判窄布局：那是 pocket **加载时**算一次就写死的属性（layout 为 mobile 时它还把 MediaQueryList 换成 `matches` 恒真的假对象），于是"一窄永窄"，拖宽不还原。他 2026-11-11 明确：**第三方插件不是标准，以 dsh 官方为准**。
+- **触控另判**：`(pointer: coarse)` 下输入框字号 16px —— iOS 聚焦小于 16px 的输入框会把整页放大。窄窗口 ≠ 手指操作，两件事分开判。
 
 ---
 
