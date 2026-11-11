@@ -214,21 +214,31 @@ window.__ModuleLoader__.load({
      */
     function Avatar({ config, member, size = 34, onContextMenu, title }) {
       const avatar = avatarOf(config, member)
-      return h('div', {
-        onContextMenu,
-        title,
-        style: {
-          width: size, height: size, borderRadius: Math.round(size * 0.3),
-          flex: '0 0 auto',
-          cursor: onContextMenu ? 'context-menu' : undefined,
-          background: avatar.tint,
-          color: '#fff',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: Math.max(11, Math.round(size * 0.42)),
-          fontWeight: 500,
-          userSelect: 'none',
-        },
-      }, avatar.text)
+      const box = {
+        width: size, height: size, borderRadius: Math.round(size * 0.3),
+        flex: '0 0 auto',
+        cursor: onContextMenu ? 'context-menu' : undefined,
+        background: avatar.tint,
+        color: '#fff',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: Math.max(11, Math.round(size * 0.42)),
+        fontWeight: 500,
+        userSelect: 'none',
+        overflow: 'hidden',
+      }
+      // 有照片就画照片，没有才退回文字。`v` 是换图时间戳：
+      // 同一张脸换了图，URL 跟着变，浏览器不用清缓存。
+      if (avatar.image) {
+        return h('div', { onContextMenu, title, style: box },
+          h('img', {
+            src: `/group/api/avatar?member=${encodeURIComponent(member)}&v=${avatar.version || 0}`,
+            alt: nameOf(config, member),
+            draggable: false,
+            style: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' },
+          }),
+        )
+      }
+      return h('div', { onContextMenu, title, style: box }, avatar.text)
     }
     /**
      * dsh 自己的 Markdown 渲染器，来自浏览器静态模块表（`@deepseek-ai/dsh-client-ui-primitives`）。
@@ -1144,6 +1154,16 @@ window.__ModuleLoader__.load({
         } catch {
           // 拿不到就不列座位，只保留"叫这个人"
         }
+        try {
+          // 外观设置也每轮对一下：在设置页换了头像/名字，回到群里应该马上是新样子，
+          // 而不是等整页刷新。内容没变就不 set，免得每 3 秒重渲染一次。
+          const fresh = await loadConfig(true)
+          if (fresh) {
+            setConfig((prev) => (JSON.stringify(prev) === JSON.stringify(fresh) ? prev : fresh))
+          }
+        } catch {
+          // 取不到就沿用旧的
+        }
       }, [tab])
 
       useEffect(() => {
@@ -1582,6 +1602,71 @@ window.__ModuleLoader__.load({
         color: 'var(--dsw-alias-label-primary)', font: 'inherit', fontSize: 13,
       }
       const labelStyle = { width: 84, fontSize: 13, color: 'var(--dsw-alias-label-secondary)' }
+      const smallBtnStyle = {
+        height: 32, padding: '0 10px', boxSizing: 'border-box', fontFamily: 'inherit', fontSize: 12,
+        borderRadius: 'var(--dsw-radius-md, 8px)', cursor: 'pointer',
+        border: '0.5px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12))',
+        background: 'transparent', color: 'var(--dsw-alias-label-secondary)',
+      }
+
+      // 头像照片：选一张 → 读成 data URL → 交给宿主写进 group\avatars\。
+      // 大小和格式在这里先挡一道，用户就不用等到"上传失败"才知道图太大。
+      const fileInputs = useRef({})
+      const [avatarBusy, setAvatarBusy] = useState('')
+
+      const uploadAvatar = (member, file) => {
+        if (!file) return
+        if (!/^image\/(png|jpeg|webp)$/.test(file.type)) {
+          setStatus('只收 png / jpg / webp。')
+          return
+        }
+        if (file.size > 1.5 * 1024 * 1024) {
+          setStatus('这张图太大（超过 1.5 MB），换一张小点的。')
+          return
+        }
+        const reader = new FileReader()
+        setAvatarBusy(member)
+        reader.onload = () => {
+          fetch('/group/api/avatar', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ member, dataUrl: reader.result }),
+          })
+            .then((response) => (response.ok ? response.json() : null))
+            .then((saved) => {
+              if (saved) {
+                setConfig(saved)
+                setStatus('头像已保存')
+              } else {
+                setStatus('头像没存上（宿主那边拒绝了）')
+              }
+            })
+            .catch(() => setStatus('头像没存上（连不上宿主）'))
+            .finally(() => setAvatarBusy(''))
+        }
+        reader.onerror = () => {
+          setAvatarBusy('')
+          setStatus('这个文件读不出来。')
+        }
+        reader.readAsDataURL(file)
+      }
+
+      const clearAvatar = (member) => {
+        fetch('/group/api/avatar', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ member, clear: true }),
+        })
+          .then((response) => (response.ok ? response.json() : null))
+          .then((saved) => {
+            if (saved) {
+              setConfig(saved)
+              setStatus('照片已去掉')
+            }
+          })
+          .catch(() => setStatus('去不掉（连不上宿主）'))
+      }
+
 
       // 一个设置分组 = 一层描边卡片。照 dsh 的 token 画，不自造颜色。
       const Section = ({ title, hint, children }) => h('div', {
@@ -1617,68 +1702,99 @@ window.__ModuleLoader__.load({
           ),
         ),
 
-        h(Section, { title: '名字', hint: '仅修改显示效果，无法修改 ta 的自我认知。若想让 ta 改名请试着直接和 ta 聊聊？' },
-          ['lee', 'whale', 'fabian'].map((member) => h('div', { key: `name-${member}`, style: rowStyle },
-            h(Avatar, { config, member, size: 26 }),
-            h('input', {
-              value: config.names?.[member] ?? NAMES[member] ?? '',
-              maxLength: 16,
-              onChange: (event) => patch((next) => {
-                next.names = { ...(next.names ?? {}) }
-                next.names[member] = event.target.value
-              }),
-              style: inputStyle,
-            }),
-          )),
-        ),
-
-        h(Section, {
-          title: '座位名',
-          hint: '同一个人可能有两段会话同时在群里。这里给每一段起个名字，群里就能分出是哪一段说的；留空则用上面的大名。',
-        },
-          seats.length === 0
-            ? h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', marginTop: 8 } }, '名册里还没有登记的会话。')
-            : seats.map((seat) => h('div', { key: `seat-${seat.prefix}`, style: rowStyle },
-              h(Avatar, { config, member: seat.member, size: 26 }),
-              h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', flex: '0 0 auto' } }, seat.prefix),
-              h('input', {
-                value: config.seats?.[seat.prefix] ?? '',
-                maxLength: 16,
-                placeholder: nameOf(config, seat.member),
-                onChange: (event) => patch((next) => {
-                  next.seats = { ...(next.seats ?? {}) }
-                  const text = event.target.value
-                  if (text.trim() === '') delete next.seats[seat.prefix]
-                  else next.seats[seat.prefix] = text
+        // 名字 / 头像 / 座位名讲的是同一件事：这一位在群里长什么样。
+        // 所以放同一张卡里，一人一组，座位跟在它所属的那个人下面
+        // （座位本来就是"同一个人另一段会话"，不是另一种东西）。
+        h(Section, { title: '成员', hint: '仅修改显示效果，无法修改 ta 的自我认知。若想让 ta 改名请试着直接和 ta 聊聊？' },
+          ['lee', 'whale', 'fabian'].map((member, index) => {
+            const avatar = avatarOf(config, member)
+            const seatsOfMember = seats.filter((seat) => seat.member === member)
+            return h('div', {
+              key: `member-${member}`,
+              style: {
+                padding: index === 0 ? '6px 0 12px' : '12px 0',
+                borderTop: index === 0 ? 'none' : '0.5px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12))',
+              },
+            },
+              h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
+                h(Avatar, { config, member, size: 32 }),
+                h('input', {
+                  value: config.names?.[member] ?? NAMES[member] ?? '',
+                  maxLength: 16,
+                  onChange: (event) => patch((next) => {
+                    next.names = { ...(next.names ?? {}) }
+                    next.names[member] = event.target.value
+                  }),
+                  style: inputStyle,
                 }),
-                style: inputStyle,
-              }),
-            )),
-        ),
+              ),
 
-        h(Section, { title: '头像', hint: '文字 1–2 个（也可以是 emoji），颜色是底色。' },
-          ['lee', 'whale', 'fabian'].map((member) => h('div', { key: `avatar-${member}`, style: rowStyle },
-            h(Avatar, { config, member, size: 28 }),
-            h('input', {
-              value: config.avatars?.[member]?.text ?? '',
-              maxLength: 2,
-              onChange: (event) => patch((next) => {
-                next.avatars = { ...(next.avatars ?? {}) }
-                next.avatars[member] = { ...(next.avatars?.[member] ?? {}), text: event.target.value }
-              }),
-              style: { ...inputStyle, flex: '0 0 56px', minWidth: 56, textAlign: 'center' },
-            }),
-            h('input', {
-              type: 'color',
-              value: config.avatars?.[member]?.tint ?? '#888888',
-              onChange: (event) => patch((next) => {
-                next.avatars = { ...(next.avatars ?? {}) }
-                next.avatars[member] = { ...(next.avatars?.[member] ?? {}), tint: event.target.value }
-              }),
-              style: { width: 32, height: 32, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' },
-            }),
-            h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } }, nameOf(config, member)),
-          )),
+              h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, paddingLeft: 42, flexWrap: 'wrap' } },
+                h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', width: 48, flex: '0 0 auto' } }, '头像'),
+                h('input', {
+                  value: avatar.text,
+                  maxLength: 2,
+                  title: '文字 1–2 个（也可以是 emoji）',
+                  onChange: (event) => patch((next) => {
+                    next.avatars = { ...(next.avatars ?? {}) }
+                    next.avatars[member] = { ...(next.avatars?.[member] ?? {}), text: event.target.value }
+                  }),
+                  style: { ...inputStyle, flex: '0 0 52px', minWidth: 52, textAlign: 'center' },
+                }),
+                h('input', {
+                  type: 'color',
+                  value: avatar.tint,
+                  title: '底色',
+                  onChange: (event) => patch((next) => {
+                    next.avatars = { ...(next.avatars ?? {}) }
+                    next.avatars[member] = { ...(next.avatars?.[member] ?? {}), tint: event.target.value }
+                  }),
+                  style: { width: 32, height: 32, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', flex: '0 0 auto' },
+                }),
+                h('button', {
+                  onClick: () => fileInputs.current[member]?.click(),
+                  disabled: avatarBusy === member,
+                  style: { ...smallBtnStyle, opacity: avatarBusy === member ? 0.6 : 1 },
+                }, avatarBusy === member ? '上传中…' : (avatar.image ? '换一张照片' : '上传照片')),
+                avatar.image
+                  ? h('button', { onClick: () => clearAvatar(member), style: smallBtnStyle }, '去掉照片')
+                  : null,
+                // 选文件用真的 input[type=file]，只是藏起来 —— 点按钮等于点它
+                h('input', {
+                  type: 'file',
+                  accept: 'image/png,image/jpeg,image/webp',
+                  ref: (node) => { fileInputs.current[member] = node },
+                  onChange: (event) => {
+                    uploadAvatar(member, event.target.files?.[0])
+                    event.target.value = ''
+                  },
+                  style: { display: 'none' },
+                }),
+                avatar.image
+                  ? h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } }, '照片优先于文字')
+                  : null,
+              ),
+
+              seatsOfMember.map((seat) => h('div', { key: `seat-${seat.prefix}`, style: { ...rowStyle, marginTop: 8, paddingLeft: 42 } },
+                h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', flex: '0 0 auto' } }, seat.prefix),
+                h('input', {
+                  value: config.seats?.[seat.prefix] ?? '',
+                  maxLength: 16,
+                  placeholder: `座位名（留空就用「${nameOf(config, member)}」）`,
+                  onChange: (event) => patch((next) => {
+                    next.seats = { ...(next.seats ?? {}) }
+                    const text = event.target.value
+                    if (text.trim() === '') delete next.seats[seat.prefix]
+                    else next.seats[seat.prefix] = text
+                  }),
+                  style: inputStyle,
+                }),
+              )),
+            )
+          }),
+          seats.length === 0
+            ? h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', marginTop: 8 } }, '名册里还没有登记的会话，所以没有座位名可填。')
+            : null,
         ),
 
         h(Section, { title: '红点', hint: '侧边栏和标签上的未读数算哪些话。私聊永远算（那里的话本来就是给你的）。' },
@@ -1754,7 +1870,7 @@ window.__ModuleLoader__.load({
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-group-ui] client build v3 · markdown labels:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-group-ui] client build v4 · avatars+members:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-group-keyframes')) {
           const style = document.createElement('style')

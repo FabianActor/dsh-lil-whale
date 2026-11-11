@@ -5,7 +5,7 @@
  * 而 webServer 有现成的具名路由。群里那份 messages.jsonl 本来就是接口，
  * 这里只是给它开一扇 HTTP 的门。
  */
-import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from 'node:fs'
+import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 
 export const name = 'dsh-group-ui'
@@ -26,6 +26,12 @@ const UI_CONFIG = join(GROUP_DIR, 'ui-config.json')
 // 「看到哪儿了」的游标：只在面板里看，不影响她那边读群的游标
 const UI_READ = join(GROUP_DIR, 'ui-read.json')
 const PINS = join(GROUP_DIR, 'pins.json')
+
+// 头像照片：一个人一张，文件名固定 `<成员>.<扩展名>`，换一张就覆盖旧的。
+// 上限 1.5 MB —— 够一张头像了；再大就是有人把整张截图塞进来，不该让群目录跟着长胖。
+const AVATAR_DIR = join(GROUP_DIR, 'avatars')
+const AVATAR_MAX_BYTES = 1.5 * 1024 * 1024
+const AVATAR_TYPES = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp' }
 
 const LABEL = { lee: '大肥鱼', whale: '小肥鱼', fabian: 'Fabian' }
 const KNOWN_PEERS = Object.keys(LABEL).filter((id) => !DM_HIDDEN.has(id))
@@ -106,10 +112,21 @@ function normalizeSeats(value) {
 function normalizeAvatar(value, fallback) {
   const text = typeof value?.text === 'string' ? Array.from(value.text.trim()).slice(0, 2).join('') : ''
   const tint = typeof value?.tint === 'string' && /^#[0-9a-fA-F]{6}$/.test(value.tint.trim()) ? value.tint.trim() : ''
+  // 照片：只记扩展名，真正的字节在 `group\avatars\<成员>.<扩展名>`。
+  // `version` 是换图时的时间戳，前端拿它拼 `?v=`，浏览器就不用猜缓存有没有过期。
+  const image = typeof value?.image === 'string' && Object.hasOwn(AVATAR_TYPES, value.image) ? value.image : ''
+  const version = Number.isFinite(value?.version) ? Math.trunc(value.version) : 0
   return {
     text: text || fallback.text,
     tint: tint || fallback.tint,
+    image,
+    version: image ? version : 0,
   }
+}
+
+function writeConfig(config) {
+  writeFileSync(UI_CONFIG, JSON.stringify(config, null, 2) + '\n', 'utf8')
+  return config
 }
 
 function readUiRead() {
@@ -168,13 +185,13 @@ function readMessages(file = MESSAGES) {
   return out
 }
 
-function readBody(req) {
+function readBody(req, limit = 256 * 1024) {
   return new Promise((resolve, reject) => {
     const chunks = []
     let size = 0
     req.on('data', (chunk) => {
       size += chunk.length
-      if (size > 256 * 1024) {
+      if (size > limit) {
         reject(new Error('body too large'))
         req.destroy()
         return
@@ -242,12 +259,121 @@ export function apply(ctx) {
         },
       }
       try {
-        writeFileSync(UI_CONFIG, JSON.stringify(next, null, 2) + '\n', 'utf8')
+        writeConfig(next)
       } catch (error) {
         sendJson(res, 500, { error: 'write-failed', detail: String(error?.message ?? error) })
         return
       }
       sendJson(res, 200, next)
+    },
+  }))
+
+  /**
+   * 头像照片：读一张、换一张、去掉。
+   *
+   * 为什么走 data URL 而不是 multipart：图就是一张头像，多一个解析器不划算。
+   * `GET /group/api/avatar?member=lee&v=<版本>` 直接回二进制，`v` 变了 URL 就变了，
+   * 浏览器那层缓存不用特意去清。
+   */
+  disposers.push(ctx.webServer.register({
+    kind: 'exact',
+    path: '/group/api/avatar',
+    async handler(req, res) {
+      const url = new URL(req.url ?? '/', 'http://localhost')
+      const member = url.searchParams.get('member') ?? ''
+      if (!Object.hasOwn(LABEL, member)) {
+        sendJson(res, 400, { error: 'unknown-member' })
+        return
+      }
+      const pathOf = (ext) => join(AVATAR_DIR, `${member}.${ext}`)
+
+      if (req.method === 'GET') {
+        for (const [ext, type] of Object.entries(AVATAR_TYPES)) {
+          const file = pathOf(ext)
+          if (!existsSync(file)) continue
+          try {
+            const bytes = readFileSync(file)
+            res.writeHead(200, {
+              'content-type': type,
+              // 版本号在 URL 里，所以这张图可以永久缓存；换图会换成新 URL。
+              'cache-control': 'public, max-age=31536000, immutable',
+              'content-length': bytes.length,
+            })
+            res.end(bytes)
+            return
+          } catch {
+            // 读失败就当没有，接着试别的格式
+          }
+        }
+        sendJson(res, 404, { error: 'no-avatar' })
+        return
+      }
+
+      if (req.method !== 'POST') {
+        sendJson(res, 405, { error: 'method-not-allowed' })
+        return
+      }
+
+      let payload
+      try {
+        payload = JSON.parse(await readBody(req, 4 * 1024 * 1024))
+      } catch {
+        sendJson(res, 400, { error: 'bad-json' })
+        return
+      }
+
+      const config = readConfig()
+      const clear = () => {
+        for (const ext of Object.keys(AVATAR_TYPES)) {
+          const file = pathOf(ext)
+          if (!existsSync(file)) continue
+          try { rmSync(file) } catch { /* 删不掉就留着，下次覆盖 */ }
+        }
+        config.avatars[member] = { ...config.avatars[member], image: '', version: 0 }
+        writeConfig(config)
+        sendJson(res, 200, config)
+      }
+
+      if (payload?.clear === true) {
+        clear()
+        return
+      }
+
+      const match = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/.exec(String(payload?.dataUrl ?? ''))
+      if (!match) {
+        sendJson(res, 400, { error: 'bad-image', hint: '只收 png / jpeg / webp 的 data URL' })
+        return
+      }
+      const ext = match[1] === 'jpeg' ? 'jpg' : match[1]
+      let bytes
+      try {
+        bytes = Buffer.from(match[2], 'base64')
+      } catch {
+        sendJson(res, 400, { error: 'bad-base64' })
+        return
+      }
+      if (bytes.length === 0 || bytes.length > AVATAR_MAX_BYTES) {
+        sendJson(res, 413, { error: 'too-large', maxBytes: AVATAR_MAX_BYTES, got: bytes.length })
+        return
+      }
+
+      try {
+        mkdirSync(AVATAR_DIR, { recursive: true })
+        // 换了格式就把旧文件删掉，免得同一个人留两份脸
+        for (const old of Object.keys(AVATAR_TYPES)) {
+          if (old === ext) continue
+          const stale = pathOf(old)
+          if (existsSync(stale)) rmSync(stale)
+        }
+        writeFileSync(pathOf(ext), bytes)
+      } catch (error) {
+        sendJson(res, 500, { error: 'write-failed', detail: String(error?.message ?? error) })
+        return
+      }
+
+      config.avatars[member] = { ...config.avatars[member], image: ext, version: Date.now() }
+      writeConfig(config)
+      sendJson(res, 200, config)
     },
   }))
 
