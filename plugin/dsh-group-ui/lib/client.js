@@ -100,6 +100,58 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * 窄屏判定。
+     *
+     * 边界值跟 dsh-pocket 用同一个：`(max-width: 1023px)`。它比"手机/电脑"更准确，
+     * 因为窄的浏览器窗口和手机是同一类问题（横向放不下两栏）。
+     *
+     * 更优先的信号是 `data-dsh-pocket-layout`：pocket 允许用 `?dsh-layout=desktop|mobile`
+     * 强制某一种模式，那个选择比窗口宽度更能代表"用户想怎么看"。pocket 没装时属性不存在，
+     * 这时才回落到宽度。
+     */
+    const NARROW_QUERY = '(max-width: 1023px)'
+
+    function narrowNow() {
+      try {
+        const mode = typeof document !== 'undefined' && document.body
+          ? document.body.getAttribute('data-dsh-pocket-layout')
+          : null
+        if (mode === 'mobile') return true
+        if (mode === 'desktop') return false
+      } catch { /* 读不到就当没有 */ }
+      try { return window.matchMedia(NARROW_QUERY).matches } catch { return false }
+    }
+
+    function useNarrow() {
+      const [narrow, setNarrow] = useState(narrowNow)
+      useEffect(() => {
+        const sync = () => setNarrow(narrowNow())
+        let mq = null
+        try {
+          mq = window.matchMedia(NARROW_QUERY)
+          if (mq.addEventListener) mq.addEventListener('change', sync)
+          else if (mq.addListener) mq.addListener(sync)
+        } catch { /* 没有 matchMedia 就只靠属性变化 */ }
+        let observer = null
+        try {
+          if (typeof MutationObserver !== 'undefined' && document.body) {
+            observer = new MutationObserver(sync)
+            observer.observe(document.body, { attributes: true, attributeFilter: ['data-dsh-pocket-layout'] })
+          }
+        } catch { /* 观察不了就算了 */ }
+        sync()
+        return () => {
+          try {
+            if (mq?.removeEventListener) mq.removeEventListener('change', sync)
+            else if (mq?.removeListener) mq.removeListener(sync)
+          } catch { /* ignore */ }
+          observer?.disconnect()
+        }
+      }, [])
+      return narrow
+    }
+
+    /**
      * 说话对象里可以带座位：`lee@ae4daa` = 指名大肥鱼的那一段。
      * 不带 @ 就是叫这个人本身——两段谁空谁应。
      */
@@ -648,8 +700,12 @@ window.__ModuleLoader__.load({
       }
     }
 
-    /** 私聊页：左边是能单独说话的人，右边默认空白；点谁开谁，再点一次收起。 */
+    /**
+     * 私聊页：宽屏时左边是能单独说话的人、右边是会话；窄屏时照微信那样分两屏
+     * ——先选人，再进会话，会话页左上角一个返回。
+     */
     function DmPage({ config, presence }) {
+      const narrow = useNarrow()
       const [contacts, setContacts] = useState([])
       const [activePeer, setActivePeer] = useState(null)
       const [messages, setMessages] = useState([])
@@ -800,7 +856,7 @@ window.__ModuleLoader__.load({
             title: active ? '再点一次收起' : `和 ${nameOf(config, contact.peer)} 说话`,
             style: {
               width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-              padding: '8px 12px', border: 'none', textAlign: 'left',
+              padding: narrow ? '12px 14px' : '8px 12px', border: 'none', textAlign: 'left',
               background: active ? 'var(--dsw-alias-bg-layer-2, rgba(0,0,0,0.05))' : 'transparent',
               cursor: 'pointer', fontFamily: 'inherit',
             },
@@ -845,24 +901,41 @@ window.__ModuleLoader__.load({
         h('div', { style: { fontSize: 13, lineHeight: '20px', color: 'var(--dsw-alias-label-tertiary)' } },
           '左边是能私下说话的人。这里的话不进群记录。'))
 
+      const backButton = narrow
+        ? h('button', {
+            onClick: () => setActivePeer(null),
+            title: '返回联系人',
+            style: {
+              flex: '0 0 28px', width: 28, height: 28, padding: 0, border: 'none',
+              background: 'transparent', color: 'var(--dsw-alias-label-secondary)',
+              cursor: 'pointer', display: 'grid', placeItems: 'center', marginLeft: -6,
+            },
+          },
+            h('svg', { width: 18, height: 18, viewBox: '0 0 18 18', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' },
+              h('path', { d: 'M11 3L5.5 9L11 15' })))
+        : null
+
       const chatHeader = h('div', {
-        style: { flex: 'none', padding: '10px 20px', borderBottom: '0.5px solid var(--dsw-alias-border-l3, rgba(0,0,0,0.1))' },
+        style: { flex: 'none', padding: narrow ? '8px 12px' : '10px 20px', borderBottom: '0.5px solid var(--dsw-alias-border-l3, rgba(0,0,0,0.1))' },
       },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+          backButton,
           h('span', { style: { fontSize: 14, fontWeight: 500, color: 'var(--dsw-alias-label-primary)' } }, nameOf(config, activePeer)),
           presence?.[activePeer] === 'working'
             ? h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } }, t.typing(nameOf(config, activePeer)))
             : null))
 
       const fadeMask = { WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)', maskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)' }
-      // 滚到边界时消息在输入框后面渐隐（照 dsh 的样子）：用 mask 而不是盖一层渐变，免得挡住点击。
-      const widthHandles = [
-        h(WidthHandle, { key: 'left', side: 'left', width: dmWidth, containerRef: scrollRef, onChange: setDmWidth, onCommit: persistDmWidth }),
-        h(WidthHandle, { key: 'right', side: 'right', width: dmWidth, containerRef: scrollRef, onChange: setDmWidth, onCommit: persistDmWidth }),
-      ]
+      // 窄屏没有"两栏"这回事，拖列宽也就没意义（手指也没有 14px 的精度，只会误触）。
+      const widthHandles = narrow
+        ? []
+        : [
+          h(WidthHandle, { key: 'left', side: 'left', width: dmWidth, containerRef: scrollRef, onChange: setDmWidth, onCommit: persistDmWidth }),
+          h(WidthHandle, { key: 'right', side: 'right', width: dmWidth, containerRef: scrollRef, onChange: setDmWidth, onCommit: persistDmWidth }),
+        ]
       // 私聊的左右边界跟群聊同款：拖住两侧，列宽实时变；宽度存在这台机器上。
       const messageList = h('div', { ref: scrollRef, style: { flex: 1, overflowY: 'auto', padding: '8px 0 58px', minHeight: 0, ...fadeMask } },
-        h('div', { style: { width: `${dmWidth}%`, margin: '0 auto', position: 'relative' } },
+        h('div', { style: { width: narrow ? '100%' : `${dmWidth}%`, margin: '0 auto', position: 'relative' } },
           messages.length === 0
             ? h('div', { style: { padding: '28px 20px', fontSize: 13, lineHeight: '20px', color: 'var(--dsw-alias-label-tertiary)' } },
               '还没有私下说过话。这里的话只有你们两个看得见。')
@@ -871,11 +944,14 @@ window.__ModuleLoader__.load({
           widthHandles))
 
       const composer = h('div', {
-          style: { flex: 'none', padding: '10px 0 18px' },
+          // 窄屏时给 home 条留位置：`env(safe-area-inset-bottom)` 在没刘海的设备上就是 0。
+          style: narrow
+            ? { flex: 'none', padding: '8px 12px calc(8px + env(safe-area-inset-bottom, 0px))' }
+            : { flex: 'none', padding: '10px 0 18px' },
       },
         h('div', {
           style: {
-            width: `${dmWidth}%`, margin: '0 auto', boxSizing: 'border-box',
+            width: narrow ? '100%' : `${dmWidth}%`, margin: '0 auto', boxSizing: 'border-box',
             // 跟群聊那张卡同形：不写成 flex 列的话，textarea 只按自己的默认宽度（约 20 字）排，
             // 右边会空出一大片 —— 输入框就"没占满整个区域"。
             display: 'flex', flexDirection: 'column', position: 'relative',
@@ -901,7 +977,8 @@ window.__ModuleLoader__.load({
               border: 'none', outline: 'none', resize: 'none', background: 'transparent',
               color: 'var(--dsw-alias-label-primary)', font: 'inherit',
               width: '100%', boxSizing: 'border-box',
-              fontSize: 14, lineHeight: '24px', padding: '4px 2px', minHeight: 44, maxHeight: 220,
+              // 窄屏（多半是手机）用 16px：iOS 在聚焦小于 16px 的输入框时会把整页放大一下。
+              fontSize: narrow ? 16 : 14, lineHeight: '24px', padding: '4px 2px', minHeight: 44, maxHeight: 220,
             },
           }),
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
@@ -928,49 +1005,56 @@ window.__ModuleLoader__.load({
 
       const chatPane = h('div', { style: { flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' } }, chatHeader, messageList, composer)
       const rightPane = activePeer === null ? blankPane : chatPane
+      // 窄屏分两屏：没选人时只显示联系人，选了人只显示会话（返回键在会话头部）。
+      const showList = narrow ? activePeer === null : true
+      const showChat = narrow ? activePeer !== null : true
 
       return h('div', { style: { flex: 1, minHeight: 0, height: '100%', display: 'flex' } },
-        h('div', { style: { width: sidebar, flex: 'none', position: 'relative', display: 'flex', minHeight: 0 } },
-          h('div', { style: { flex: 1, overflowY: 'auto', padding: '6px 0', minWidth: 0 } }, contactList),
-          h('div', {
-            title: '拖这里改变左侧宽度',
-            onPointerDown: (event) => {
-              event.preventDefault()
-              const startX = event.clientX
-              const startWidth = sidebar
-              const target = event.currentTarget
-              target.setPointerCapture(event.pointerId)
-              const move = (moveEvent) => {
-                const next = Math.max(140, Math.min(420, startWidth + (moveEvent.clientX - startX)))
-                setSidebar(next)
-              }
-              const up = () => {
-                target.removeEventListener('pointermove', move)
-                target.removeEventListener('pointerup', up)
-                target.removeEventListener('pointercancel', up)
-                setSidebar((current) => { try { window.localStorage?.setItem('dsh-group-dm-sidebar', String(current)) } catch {} ; return current })
-              }
-              target.addEventListener('pointermove', move)
-              target.addEventListener('pointerup', up)
-              target.addEventListener('pointercancel', up)
-            },
-            style: {
-              position: 'absolute', top: 0, bottom: 0, right: -3, width: 7,
-              cursor: 'col-resize', touchAction: 'none', zIndex: 5,
-            },
-          },
-            h('div', {
-              'aria-hidden': 'true',
-              style: {
-                position: 'absolute', top: 0, bottom: 0, right: 3, width: 1,
-                background: 'var(--dsw-alias-border-l3, rgba(0,0,0,0.12))',
+        showList
+          ? h('div', { style: { width: narrow ? '100%' : sidebar, flex: 'none', position: 'relative', display: 'flex', minHeight: 0 } },
+            h('div', { style: { flex: 1, overflowY: 'auto', padding: narrow ? '4px 0' : '6px 0', minWidth: 0 } }, contactList),
+            narrow ? null : h('div', {
+              title: '拖这里改变左侧宽度',
+              onPointerDown: (event) => {
+                event.preventDefault()
+                const startX = event.clientX
+                const startWidth = sidebar
+                const target = event.currentTarget
+                target.setPointerCapture(event.pointerId)
+                const move = (moveEvent) => {
+                  const next = Math.max(140, Math.min(420, startWidth + (moveEvent.clientX - startX)))
+                  setSidebar(next)
+                }
+                const up = () => {
+                  target.removeEventListener('pointermove', move)
+                  target.removeEventListener('pointerup', up)
+                  target.removeEventListener('pointercancel', up)
+                  setSidebar((current) => { try { window.localStorage?.setItem('dsh-group-dm-sidebar', String(current)) } catch {} ; return current })
+                }
+                target.addEventListener('pointermove', move)
+                target.addEventListener('pointerup', up)
+                target.addEventListener('pointercancel', up)
               },
-            }))),
-        h('div', { style: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' } },
-          rightPane,
-          error
-            ? h('div', { style: { flex: 'none', padding: '0 16px 8px', fontSize: 12, color: 'var(--dsw-alias-label-error, #c0392b)' } }, error)
-            : null))
+              style: {
+                position: 'absolute', top: 0, bottom: 0, right: -3, width: 7,
+                cursor: 'col-resize', touchAction: 'none', zIndex: 5,
+              },
+            },
+              h('div', {
+                'aria-hidden': 'true',
+                style: {
+                  position: 'absolute', top: 0, bottom: 0, right: 3, width: 1,
+                  background: 'var(--dsw-alias-border-l3, rgba(0,0,0,0.12))',
+                },
+              })))
+          : null,
+        showChat
+          ? h('div', { style: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' } },
+            rightPane,
+            error
+              ? h('div', { style: { flex: 'none', padding: '0 16px 8px', fontSize: 12, color: 'var(--dsw-alias-label-error, #c0392b)' } }, error)
+              : null)
+          : null)
     }
     /** 主面板：群聊。 */
     function GroupPage() {
