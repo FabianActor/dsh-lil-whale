@@ -19,6 +19,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# 自动化测试用：设 DSH_LAUNCH_NO_BROWSER=1 就不开浏览器（人用不到这个）。
+if ($env:DSH_LAUNCH_NO_BROWSER -eq '1') { $NoBrowser = $true }
+
 $LeeHome = 'C:\Users\Fabian\.dsh'
 $HerHome = 'D:\文档\WorkSpace\lil-whale'
 $HerDshHome = Join-Path $HerHome 'dsh-home'
@@ -75,7 +78,7 @@ function Start-Lee {
   $out = Join-Path $LeeHome 'logs\web-latest.log'
   $err = Join-Path $LeeHome 'logs\web-latest.err.log'
   Write-Host "大肥鱼：开机中（$LeePort）……"
-  Start-Hidden -Command "dsh web" -WorkingDirectory 'C:\Users\Fabian\Desktop' -OutLog $out -ErrLog $err
+  Start-Hidden -Command "dsh web --no-open" -WorkingDirectory 'C:\Users\Fabian\Desktop' -OutLog $out -ErrLog $err
   if (-not (Wait-Port $LeePort)) {
     Write-Host "大肥鱼：没起来。"
     Show-Tail $err
