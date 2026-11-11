@@ -1710,7 +1710,7 @@ window.__ModuleLoader__.load({
         // 名字 / 头像 / 座位名讲的是同一件事：这一位在群里长什么样。
         // 所以放同一张卡里，一人一组，座位跟在它所属的那个人下面
         // （座位本来就是"同一个人另一段会话"，不是另一种东西）。
-        h(Section, { title: '成员', hint: '仅修改显示效果，无法修改 ta 的自我认知。若想让 ta 改名请试着直接和 ta 聊聊？' },
+        h(Section, { title: '成员', hint: '此处修改名称仅修改显示效果，无法修改 ta 的自我认知。若想让 ta 改名请试着直接和 ta 聊聊？' },
           ['lee', 'whale', 'fabian'].map((member, index) => {
             const avatar = avatarOf(config, member)
             const seatsOfMember = seats.filter((seat) => seat.member === member)
