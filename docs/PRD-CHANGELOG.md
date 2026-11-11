@@ -7,7 +7,7 @@
 
 - 新增 §7.10 两条口径：**第三方插件不是标准**（撞过的案子：跟 `dsh-pocket` 的 `data-dsh-pocket-layout` 判窄布局，窗口拖宽不还原）；**响应式以官方做法为准**（容器宽度 + `@container`，群面板用 `ResizeObserver` 量自己那块；触控走 `(pointer: coarse)`）。
 - 起因：私聊页窄屏两屏制上线后，他测出"窄屏起效后拖宽不回退"；追下去是我把第三方的解析结果当成了实时状态。
-- 断点改用官方数值：`dsh-client-ui-layout` 的 `SIDEBAR_AUTO_COLLAPSE = 1024`（侧栏收窄轨）与 `drawer = viewport < 768`（侧栏变抽屉）；群面板取 768。原先我自己算的 640 作废。
+- 断点改用官方数值：`dsh-client-ui-layout` 的 `SIDEBAR_AUTO_COLLAPSE = 1024`（侧栏收窄轨）与 `drawer = viewport < 768`（侧栏变抽屉）。群面板**不能套 768**（那是 frame 的尺子，面板是 frame 减侧栏），按"放得下两栏"取 640，且 640 避开侧栏收起腾出的 224px 跳变。
 
 ---
 

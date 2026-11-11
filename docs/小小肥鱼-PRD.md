@@ -408,7 +408,7 @@ D:\文档\WorkSpace\lil-whale\        ← 她的家（cwd）
 
 **响应式以官方的做法为准**：官方没有"手机模式"这个概念，界面按**容器宽度**自适应（`container-type: inline-size` 配 `@container (width <= N)`，例如 `agent-preset` 在 540px、`permission-presets` 在 460px、`plugin-manager` 在 767px 收缩）。所以群面板量的是**自己这块地方**的宽度（`ResizeObserver` 读 inline-size），不是窗口宽度。
 
-**断点取官方的数，不自己编**（`dsh-client-ui-layout/lib/client.js`）：`SIDEBAR_AUTO_COLLAPSE = 1024` 是侧栏自动收成窄轨的断点；`const drawer = viewport < 768` 是侧栏变成抽屉的断点。群面板用 **768**——到了抽屉那一档，主区才真的没有第二栏的余地。量容器而不是窗口是有意的：这块面板被侧栏挤过一道，窗口 1000px 时它可能只剩 700px，按窗口判会晚一步。触控另判：输入框在 `(pointer: coarse)` 下用 16px，因为 iOS 聚焦小于 16px 的输入框会把整页放大。
+**断点取官方的数，不自己编**（`dsh-client-ui-layout/lib/client.js`）：`SIDEBAR_AUTO_COLLAPSE = 1024` 是侧栏自动收成窄轨的断点；`const drawer = viewport < 768` 是侧栏变成抽屉的断点。群面板**不能直接套 768**：768 判的是 frame（整个窗口），而面板拿到的是 frame 减掉侧栏之后的宽度，套上去等于把侧栏重复扣一次。面板按"放不放得下两栏"取 **640**（列表 280 + 会话 360）；640 还落在"侧栏收起会腾出约 224px"这个跳变之外，拖宽拖窄不会来回翻。量容器而不是窗口是有意的：同一块界面可能被挤进侧栏或弹窗，窗口宽度说明不了它有多少地方。触控另判：输入框在 `(pointer: coarse)` 下用 16px，因为 iOS 聚焦小于 16px 的输入框会把整页放大。
 
 ---
 
