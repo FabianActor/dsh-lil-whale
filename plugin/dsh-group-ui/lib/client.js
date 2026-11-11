@@ -1182,6 +1182,11 @@ window.__ModuleLoader__.load({
       // 群聊"上次看到哪儿"：进这一页时冻结一次，线不跟着新消息往下跑。
       const seenGroupRef = useRef(null)
       const [seenGroup, setSeenGroup] = useState('')
+      // 第一次拿到消息之前先画占位，别让人看见"还没有人说话"闪一下再变成列表。
+      const [loaded, setLoaded] = useState(false)
+      // 贴着底才跟新消息走；翻历史时它停在原地，见 onScroll。
+      const atBottomRef = useRef(true)
+      const [atBottom, setAtBottom] = useState(true)
       // 列宽是"这台机器上怎么看"，不属于她家的数据，存在浏览器里。
       const [widthPct, setWidthPct] = useState(() => {
         try {
@@ -1203,8 +1208,17 @@ window.__ModuleLoader__.load({
           setError(null)
           const counts = await loadUnread()
           if (counts) setUnread(counts)
+          // 冻结"上次看到哪儿"：必须赶在 1.5 秒后 markRead 之前。
+          // 漏了这一句的后果不是线偏几像素，是这条线永远不画（seenTs 恒为空串）。
+          if (counts && seenGroupRef.current === null) {
+            const frozen = String(counts.seen?.group ?? '')
+            seenGroupRef.current = frozen
+            setSeenGroup(frozen)
+          }
         } catch (e) {
           setError(String(e?.message ?? e))
+        } finally {
+          setLoaded(true)
         }
         try {
           const response = await fetch('/group/api/presence', { headers: { accept: 'application/json' } })
@@ -1263,7 +1277,29 @@ window.__ModuleLoader__.load({
         if (el) el.scrollTop = el.scrollHeight
       }, [])
 
+      /** 离底 40px 之内算"还在看最新"：这个数不是手感，是"人眼还能接受自己被打断"的范围。 */
+      const AT_BOTTOM_PX = 40
+      const measureBottom = useCallback(() => {
+        const el = scrollRef.current
+        if (!el) return
+        const distance = el.scrollHeight - el.scrollTop - el.clientHeight
+        const next = distance <= AT_BOTTOM_PX
+        if (next !== atBottomRef.current) {
+          atBottomRef.current = next
+          setAtBottom(next)
+        }
+      }, [])
+
+      const jumpToBottom = useCallback(() => {
+        atBottomRef.current = true
+        setAtBottom(true)
+        stickToBottom()
+        requestAnimationFrame(stickToBottom)
+      }, [stickToBottom])
+
       useEffect(() => {
+        // 只在"本来就贴着底"时才跟新消息；翻历史的时候页面自己不许动。
+        if (!atBottomRef.current) return undefined
         stickToBottom()
         const raf = requestAnimationFrame(stickToBottom)
         const timer = setTimeout(stickToBottom, 200)
@@ -1398,9 +1434,24 @@ window.__ModuleLoader__.load({
           : h(React.Fragment, null,
         h('div', {
           ref: scrollRef,
+          onScroll: measureBottom,
           style: { flex: 1, overflowY: 'auto', padding: '8px 0 58px', minHeight: 0, position: 'relative', WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)', maskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)' },
         },
-          messages.length === 0
+          !loaded
+            ? h('div', {
+              style: { width: `${widthPct}%`, margin: '0 auto', padding: '6px 0', display: 'flex', flexDirection: 'column', gap: 18 },
+            },
+              [0, 1, 2, 3].map((index) => h('div', {
+                key: `placeholder-${index}`,
+                style: {
+                  height: index === 0 ? 28 : 44,
+                  width: index === 0 ? '38%' : (index % 2 === 0 ? '62%' : '48%'),
+                  borderRadius: 'var(--dsw-radius-lg, 12px)',
+                  background: 'var(--dsw-alias-bg-layer-2, rgba(0,0,0,0.045))',
+                  animation: `dshGroupPulse 1.4s ${index * 0.12}s infinite ease-in-out`,
+                },
+              })))
+            : messages.length === 0
             ? h('div', {
               style: {
                 height: '100%', display: 'flex', flexDirection: 'column',
@@ -1449,8 +1500,29 @@ window.__ModuleLoader__.load({
             ),
         ),
         h('div', {
-          style: { padding: '10px 0 14px' },
+          style: { padding: '10px 0 14px', position: 'relative' },
         },
+          // 翻历史时新消息不抢页面，只在输入框右上角留一个"回到底部"的圆钮
+          atBottom ? null : h('button', {
+            onClick: jumpToBottom,
+            title: '跳到最新消息',
+            'aria-label': '跳到最新消息',
+            style: {
+              position: 'absolute',
+              right: `calc(${(100 - widthPct) / 2}% + 10px)`,
+              top: -8, width: 32, height: 32, padding: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              borderRadius: '50%', cursor: 'pointer',
+              border: '0.5px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12))',
+              background: 'var(--dsw-alias-bg-layer-1, #fff)',
+              boxShadow: 'var(--dsw-elevation-soft, 0 1px 2px rgba(0,0,0,0.06), 0 6px 18px rgba(0,0,0,0.08))',
+              color: 'var(--dsw-alias-label-secondary, rgba(0,0,0,0.6))',
+            },
+          }, h('svg', { width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none' },
+            h('path', {
+              d: 'M4 6.5L8 10.5L12 6.5',
+              stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round',
+            }))),
           h('div', { style: { width: `${widthPct}%`, margin: '0 auto' } },
             typingLine
               ? h('div', {
