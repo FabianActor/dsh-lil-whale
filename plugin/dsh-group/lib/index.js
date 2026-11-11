@@ -349,6 +349,78 @@ function writeJson(file, value) {
   renameSync(tmp, file)
 }
 
+// ---------- 每成员一份的账（2026-11-11 17:01 修） ----------
+// 现场：同一条消息把小肥鱼叫醒了两次。她的诊断对了一半——她猜"两套游标并存时比较错了对象"，
+// 真因是**两个进程**各跑一个 tick（lee 的 web、whale 的 web），而两边都"读整个文件 → 改自己那一格
+// → 整个写回去"。后写的那个会把对方刚推进的游标、刚加上的配额盖回旧值：
+//   whale 进程读到 107 → 叫醒她 → 写 108
+//   lee   进程手里还攥着 107 的旧快照 → 写回 107
+//   whale 进程下一轮读到 107 → 同一条再叫醒一次（烧的是真钱）
+// 修法：按成员分文件，一个成员只会被它自己那个进程写。旧的单一文件只在首次迁移时读一次。
+const LEGACY_CURSOR = CURSOR
+const LEGACY_WAKES = WAKES
+
+function cursorFileOf(member) {
+  return join(HER_HOME, 'state', 'cursors', `${member}.json`)
+}
+
+function wakesFileOf(member) {
+  return join(HER_HOME, 'state', 'wakes', `${member}.json`)
+}
+
+function ensureParent(file) {
+  try {
+    mkdirSync(dirname(file), { recursive: true })
+  } catch {
+    // 建不出来就让后面的写自己报错，别在这里吞掉整个 tick
+  }
+}
+
+/** 读这个成员的游标；第一次读不到就从整体 cursor.json 里摘出属于他的键。 */
+function readCursors(member) {
+  const own = readJson(cursorFileOf(member), null)
+  if (own !== null && typeof own === 'object' && !Array.isArray(own)) return own
+  const seeded = {}
+  for (const [key, value] of Object.entries(readJson(LEGACY_CURSOR, {}) ?? {})) {
+    if (key === member || key.startsWith(`${member}@`)) seeded[key] = value
+  }
+  return seeded
+}
+
+/**
+ * 写游标前顺手剪掉"让出去的椅子"的影子游标：座位号已经不在 pins.json 里的，那一格不该再留着。
+ * （她 2026-11-11 17:01 的观察：`lee@e17c3c` 停在 102，人已经不在群里了，账还挂着。）
+ */
+function writeCursors(member, cursors) {
+  const liveSeats = new Set(
+    pinnedSessions(member).map((sid) => sid.replace(/^session-/, '').slice(0, 6)),
+  )
+  const kept = {}
+  for (const [key, value] of Object.entries(cursors ?? {})) {
+    if (key === member) {
+      kept[key] = value
+      continue
+    }
+    const [who, seat] = key.split('@')
+    if (who !== member || typeof seat !== 'string' || seat === '') continue
+    if (liveSeats.has(seat)) kept[key] = value
+  }
+  ensureParent(cursorFileOf(member))
+  writeJson(cursorFileOf(member), kept)
+}
+
+function readWakes(member) {
+  const own = readJson(wakesFileOf(member), null)
+  if (own !== null && typeof own === 'object' && !Array.isArray(own)) return own
+  const legacy = readJson(LEGACY_WAKES, {})?.[member]
+  return legacy === undefined ? {} : { [member]: legacy }
+}
+
+function writeWakes(member, wakes) {
+  ensureParent(wakesFileOf(member))
+  writeJson(wakesFileOf(member), { [member]: wakes?.[member] ?? undefined })
+}
+
 function readLinesOf(file) {
   if (!existsSync(file)) return []
   return readFileSync(file, 'utf8').split('\n').filter((line) => line.trim() !== '')
@@ -479,7 +551,7 @@ function recordWake(wakes, member) {
   state.hourCount += 1
   state.dayCount += 1
   wakes[member] = state
-  writeJson(WAKES, wakes)
+  writeWakes(member, wakes)
 }
 
 // ---------- 主函数 ----------
@@ -689,15 +761,16 @@ async function tick(ctx) {
   const agents = ctx.get('agents')
   if (agents === undefined) return
 
-  const cursors = readJson(CURSOR, {})
-  const wakes = readJson(WAKES, {})
-
   for (const agent of agents.list()) {
     const member = memberOf(agent)
     if (member === null) continue
     // 只叫醒"钉住的那一段"：一个人可以登记多段会话，没登记的一律不碰。
     if (!pinnedSessions(member).includes(sessionIdOf(agent))) continue
     if (agent.status !== 'idle') continue // 正在跑就先别插嘴，下个 tick 再说
+
+    // 记账按成员分开读：这段进程只管它自己那几个成员，别再攥着别人的旧快照
+    const cursors = readCursors(member)
+    const wakes = readWakes(member)
 
     // 两条通道分别记账：群一条，私聊每一段对话一条。
     // 游标分开的理由：群里读到哪儿、私下读到哪儿是两件事，混在一起会互相盖掉。
@@ -769,7 +842,7 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
   if (incoming.length === 0) {
     setCursor(cursors, member, channel.key, lines.length)
     setCursor(cursors, seatKey, channel.key, lines.length)
-    writeJson(CURSOR, cursors)
+    writeCursors(member, cursors)
     return false
   }
 
@@ -831,7 +904,7 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
 
   setCursor(cursors, member, channel.key, lines.length)
   setCursor(cursors, seatKey, channel.key, lines.length)
-  writeJson(CURSOR, cursors)
+  writeCursors(member, cursors)
   recordWake(wakes, member)
   pending.delete(pendingKey)
   console.log(`[${name}] 唤醒 ${labelOf(member)}（${seat}）：${channel.key} ${incoming.length} 条`)
