@@ -714,13 +714,13 @@ export function apply(ctx) {
       }
       try {
         appendFileSync(MESSAGES, JSON.stringify(record) + '\n', 'utf8')
-        // 投影格式必须和宿主 say() 逐字一致（只写「时间 · 谁」）——
-        // 2026-11-12 16:07 这条写成了「Fabian → 小肥鱼」，重建器复现不出来，
-        // 成了"说不清的差异"。收信人是记录里的 to 字段，不写进投影：面板自己会画。
+        // 投影格式必须和宿主 say() 逐字一致（2026-11-12 19:46 起：指名时写「时间 · 谁 → 收信人」）。
+        // 收信人写在投影里，是为了让"读记录"的人知道这条是在对谁说话——不写，指名和公开在纸上一样。
         const body = image === null
           ? text
           : `（图片 images/${image.month}/${image.id}.${image.ext}）${text === '' ? '' : `\n\n${text}`}`
-        appendFileSync(READABLE, `**${stamp(now)} · Fabian**\n\n${body}\n\n`, 'utf8')
+        const toLabel = to !== '' && to !== 'all' ? ` → ${LABEL[to] ?? to}` : ''
+        appendFileSync(READABLE, `**${stamp(now)} · Fabian${toLabel}**\n\n${body}\n\n`, 'utf8')
       } catch (error) {
         sendJson(res, 500, { error: 'write-failed', detail: String(error?.message ?? error) })
         return

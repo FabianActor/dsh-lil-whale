@@ -971,7 +971,10 @@ function say(from, to, text, channel = 'group', s = '', toSeat = '', image = nul
     ...(image === null ? {} : { image }),
   }
   appendFileSync(MESSAGES, JSON.stringify(record) + '\n', 'utf8')
-  appendFileSync(READABLE, `**${stamp()} · ${labelOf(from)}**\n\n${readableBodyOf(body, image)}\n\n`, 'utf8')
+  // 投影里带上收信人：指名和公开在纸上必须长得不一样，否则读记录的人学不到"可以指名"。
+  // 2026-11-12 19:46 起：`**时间 · 谁 → 收信人**`，只有指名（to 是某个成员）才写箭头。
+  const toLabel = to !== '' && to !== 'all' ? ` → ${labelOf(to)}` : ''
+  appendFileSync(READABLE, `**${stamp()} · ${labelOf(from)}${toLabel}**\n\n${readableBodyOf(body, image)}\n\n`, 'utf8')
   return { ...record, channel: 'group' }
 }
 

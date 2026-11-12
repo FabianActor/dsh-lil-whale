@@ -7,6 +7,7 @@
 //
 // 跑法：node scripts\rebuild-group-md.mjs            只看对照（有未归类差异 → exit 1）
 //       node scripts\rebuild-group-md.mjs --write    覆盖 群.md
+//       node scripts\rebuild-group-md.mjs --migrate  格式迁移：跳过差异闸、整本重写（先备份！）
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
 import { config } from '../plugin/dsh-group/lib/config.js'
 
@@ -14,7 +15,27 @@ import { config } from '../plugin/dsh-group/lib/config.js'
 const GROUP_DIR = config().groupDir
 const MESSAGES = `${GROUP_DIR}\\messages.jsonl`
 const READABLE = `${GROUP_DIR}\\群.md`
-const LABEL = { lee: '大肥鱼', whale: '小肥鱼', fabian: 'Fabian' }
+
+// 显示名从名册读（A.25/A.32：成员表只有一个真源）。读不到就退回旧三条。
+function loadLabel() {
+  const fallback = { lee: '大肥鱼', whale: '小肥鱼', fabian: 'Fabian' }
+  try {
+    const file = config().membersFile
+    if (!file || !existsSync(file)) return fallback
+    const parsed = JSON.parse(readFileSync(file, 'utf8'))
+    // 名册的顶层是 { version, updatedAt, members: {…} }；也接受直接是成员表的旧形状。
+    const roster = parsed?.members ?? parsed
+    const label = {}
+    for (const [key, member] of Object.entries(roster ?? {})) {
+      if (key.startsWith('_') || typeof member !== 'object' || member === null) continue
+      label[key] = String(member?.name ?? key)
+    }
+    return Object.keys(label).length > 0 ? label : fallback
+  } catch {
+    return fallback
+  }
+}
+const LABEL = loadLabel()
 
 const pad = (n) => String(n).padStart(2, '0')
 
@@ -47,17 +68,23 @@ function blockOf(record) {
   const image = record?.image !== null && typeof record?.image === 'object' ? record.image : null
   if (text === '' && image === null) return ''
   const who = LABEL[String(record?.from ?? '')] ?? String(record?.from ?? '?')
+  // 收信人：2026-11-12 19:46 起的投影格式，只有指名（to 是某个成员）才写箭头。
+  // 不写箭头 = 公开（to:"all"）；读记录的人靠这个分辨"这条在对谁说话"。
+  const to = String(record?.to ?? '')
+  const toLabel = to !== '' && to !== 'all' ? ` → ${LABEL[to] ?? to}` : ''
   // 带图的记录也要重建出来 —— 2026-11-12 现场：只有图没有字的消息被这里整条跳过，
   // 于是 群.md 里有那行、重建结果里没有，对不上就成了"说不清的差异"。
   const body = image === null
     ? text
     : `（图片 images/${image.month}/${image.id}.${image.ext}）${text === '' ? '' : `\n\n${text}`}`
-  return `**${stampOf(String(record?.ts ?? ''))} · ${who}**\n\n${body}\n`
+  return `**${stampOf(String(record?.ts ?? ''))} · ${who}${toLabel}**\n\n${body}\n`
 }
 
 const blocks = records.map(blockOf).filter(Boolean)
 // 第一行是标题。它是这份文件的一部分，不是某个人说的，所以由脚本负责。
-const rebuilt = '# 群\n' + blocks.join('\n')
+// 第二行是分界标记：格式被推翻过的地方必须留痕，否则读的人分不清"没写收信人"和"不指名"。
+const HEADER_NOTE = '> 2026-11-12 19:46 起：指名消息的表头写成 `时间 · 谁 → 收信人`（不写箭头 = 公开）。更早的消息也按同一规则重排过，原始备份 `群.md.bak-20261112-194734`。\n'
+const rebuilt = `# 群\n\n${HEADER_NOTE}\n` + blocks.join('\n')
 
 /** 行级 LCS，用来把"插入/删除"对齐成块，而不是从头开始错位比。 */
 function lineDiff(a, b) {
@@ -207,6 +234,15 @@ if (existsSync(DM_DIR)) {
   }
 }
 if (dmUnexplained > 0) process.exitCode = 1
+
+// 格式迁移：跳过"说不清就不许整本写"这道闸，整本重写一次。
+// 前提是已经手工备份（本脚本不替你备份）——迁移是把旧的投影按新规则重排，
+// 差异必然"说不清"，所以这一刻只能靠人先留底。
+if (process.argv.includes('--migrate')) {
+  writeFileSync(READABLE, rebuilt, 'utf8')
+  console.log(`已按新格式整本重写 群.md（${blocks.length} 段，指名带箭头的 ${records.filter((r) => r?.to && r.to !== 'all').length} 条）`)
+  process.exitCode = 0
+}
 
 if (process.argv.includes('--write')) {
   writeFileSync(READABLE, rebuilt, 'utf8')
