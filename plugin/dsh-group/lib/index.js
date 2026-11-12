@@ -753,6 +753,22 @@ function apply(ctx) {
       if (toSeat !== '' && !/^[0-9a-f]{6}$/.test(toSeat)) {
         throw new Error('seat 要填会话 id 的前 6 位（例如 ae4daa），或者干脆不填——不填就是叫这个人。')
       }
+      // 2026-11-12 栽过一次：seat 填成"自己这段"的前缀，收件人对不上任何座位，
+      // 消息进了文件却谁也不会被叫醒（游标照常前进）——发的人以为送出去了。
+      // 座位在发送时校验，别让它变成一个只在收件人那边才失败的地址。
+      if (toSeat !== '' && args.to === 'all') {
+        throw new Error('seat 是"指名某一段会话"，不能和 to=all 一起用——要么点名，要么广播。')
+      }
+      if (toSeat !== '') {
+        const liveSeats = pinnedSessions(args.to).map((id) => seatOfSession(id))
+        if (!liveSeats.includes(toSeat)) {
+          throw new Error(
+            `seat 填错了：${toSeat} 不是 ${labelOf(args.to)} 名下的会话（名下现在是 ${
+              liveSeats.length === 0 ? '一个都没登记' : liveSeats.join(' / ')
+            }）。不填 seat 就是"叫这个人，谁空谁应"。`,
+          )
+        }
+      }
       const record = say(member, args.to, args.text, channel, sid === null ? '' : sid.replace(/^session-/, '').slice(0, 6), toSeat)
       // channel 让发言的人一眼知道这句话去了哪：group = 大家都看得见；dm = 只有对方看得见，且不会叫醒谁。
       return { ts: record.ts, queued: true, channel: record.channel, to: args.to }
