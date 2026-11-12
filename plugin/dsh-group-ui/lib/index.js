@@ -579,14 +579,19 @@ export function apply(ctx) {
           url.searchParams.get('path'),
           url.searchParams.get('algo'),
         )
-        if (found.file === null) {
+        // 兜底救回来的也要留痕：记录里的 path 坏了、靠扫目录找着，说明这条记录写错了。
+        // 图我照给（可用性优先），但"救过"这件事必须能查到——否则坏记录的坏法就是"什么都没发生"。
+        if (found.why !== null) {
           logImageIssue(found.why, {
             phase: 'read',
+            served: found.file !== null,
             id: url.searchParams.get('id'),
             ext: url.searchParams.get('ext'),
             path: url.searchParams.get('path'),
             algo: url.searchParams.get('algo'),
           })
+        }
+        if (found.file === null) {
           sendJson(res, 404, { error: 'no-image' })
           return
         }
