@@ -1250,6 +1250,9 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
   const seatSeen = cursorOf(cursors, seatKey, channel.key)
 
   const incoming = []
+  // 记下"最后递出去的那条"在文件里的绝对行号（1 基）。小肥鱼 2026-11-12 的判据：
+  // 只有时间戳的话，两条隔 3 秒的重复仍然只能猜；有行号才能说"同一行递了两次"。
+  let lastIncomingIndex = -1
   for (let index = Math.min(sharedSeen, seatSeen); index < lines.length; index += 1) {
     let record
     try {
@@ -1272,6 +1275,7 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
       // 指名给某座位的：只有那一段收，且只看自己那本游标
       if (record.toSeat !== seat || index < seatSeen) continue
       incoming.push(record)
+      lastIncomingIndex = index
       continue
     }
     if (channel.kind === 'group') {
@@ -1281,6 +1285,7 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
     }
     if (index < sharedSeen) continue
     incoming.push(record)
+    lastIncomingIndex = index
   }
 
   // 没有写给我的，也把游标推过去，免得下次重复扫
@@ -1345,8 +1350,10 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
     return false // 游标不动：这批消息还在，下个 tick 再试
   }
   // 记账：递之前先记下"这一条要递给谁、递的是哪一条、递到第几行"。
-  // `id` 是构造出来的 user message id，用来跟会话日志对账（见 wakeDeliverLog 的注释）。
-  const deliveryNote = `id=${built.id} member=${member} channel=${channel.key} seat=${seat === '' ? '-' : seat} pending=${incoming.length} cursor=${lines.length} last-ts=${lastTs || 0}`
+  // `id` 是构造出来的 user message id，用来跟会话日志对账（见 wakeDeliverLog 的注释）；
+  // `last-line` 是那条消息在通道文件里的绝对行号（1 基），`last-from` 是它谁写的。
+  // 有这两个字段，"同一条被递了两次"和"我们自己叫了两次"才分得开 —— 只看时间戳分不开。
+  const deliveryNote = `id=${built.id} member=${member} channel=${channel.key} seat=${seat === '' ? '-' : seat} pending=${incoming.length} last-line=${lastIncomingIndex + 1} last-from=${incoming[incoming.length - 1]?.from ?? '-'} last-ts=${lastTs || 0} cursor=${lines.length}`
   try {
     agent.followup(built)
   } catch (error) {

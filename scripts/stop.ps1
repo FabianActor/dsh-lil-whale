@@ -11,7 +11,9 @@
 # 退出码：0 = 都停了（本来就没在跑也算 0）；1 = 还有没停掉的。
 param(
   [ValidateSet('all', 'lee', 'whale')][string]$Target = 'all',
-  [switch]$Yes
+  [switch]$Yes,
+  [string]$By = 'fabian',
+  [string]$Why = ''
 )
 
 $ErrorActionPreference = 'Continue'
@@ -109,9 +111,13 @@ if (($Target -eq 'lee' -or $Target -eq 'all') -and -not $Yes) {
 $ok = $true
 switch ($Target) {
   'lee'   { $ok = Stop-Kind 'lee' '大肥鱼' $LeePort }
-  'whale' { $ok = Stop-Kind 'whale' '小肥鱼' $HerPort }
+  'whale' {
+    $ok = Stop-Kind 'whale' '小肥鱼' $HerPort
+    if ($ok) { Write-WindowLog -Event 'close' -By $By -Why $Why }
+  }
   'all' {
     $a = Stop-Kind 'whale' '小肥鱼' $HerPort
+    if ($a) { Write-WindowLog -Event 'close' -By $By -Why $Why }
     $b = Stop-Kind 'lee' '大肥鱼' $LeePort
     $c = Stop-Watchman
     $ok = ($a -and $b -and $c)

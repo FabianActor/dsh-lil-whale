@@ -14,7 +14,9 @@ param(
   [ValidateSet('all', 'lee', 'whale')][string]$Target = 'all',
   [switch]$NoBrowser,
   [switch]$WithWatchman,
-  [int]$Port = 0
+  [int]$Port = 0,
+  [string]$By = 'fabian',
+  [string]$Why = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -107,7 +109,10 @@ function Start-Her {
     return $false
   }
   Write-Host "小肥鱼：起来了 $HerPort"
-  if (-not $NoBrowser) { Start-Process (Get-HerUrl $HerPort) }
+  if (-not $NoBrowser) {
+    Start-Process (Get-HerUrl $HerPort)
+    Write-WindowLog -Event 'open' -By $By -Why $Why
+  }
   return $true
 }
 

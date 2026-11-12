@@ -58,3 +58,29 @@ function Get-WhaleConfig {
 }
 
 $Cfg = Get-WhaleConfig
+
+# 窗口的开门/关门记账（小肥鱼 2026-11-12 的规格：关门和开门都记；busy 必须推导，不能人填）。
+# 放在她的 logs\close.log：这是"事件"不是"状态"，logs\ 她读不写，正好。
+# 判据来自她：只记关门，醒来就不知道睡了多久；人填的"在忙"明天会被当事实读。
+function Get-PresenceSnapshot {
+  $dir = Join-Path $Cfg.HerHome 'state\presence'
+  $items = @()
+  if (Test-Path -LiteralPath $dir) {
+    foreach ($file in (Get-ChildItem -LiteralPath $dir -Filter *.json -ErrorAction SilentlyContinue)) {
+      try {
+        $j = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($j.member -and $j.status) { $items += ("{0}:{1}" -f $j.member, $j.status) }
+      } catch { }
+    }
+  }
+  if ($items.Count -eq 0) { return 'unknown' }
+  return ($items -join ',')
+}
+
+function Write-WindowLog {
+  param([string]$Event, [string]$By = 'fabian', [string]$Why = '')
+  $dir = Join-Path $Cfg.HerHome 'logs'
+  New-Item -ItemType Directory -Force -Path $dir | Out-Null
+  $line = "{0} | event={1} | by={2} | busy={3} | why={4}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Event, $By, (Get-PresenceSnapshot), $Why
+  Add-Content -LiteralPath (Join-Path $dir 'close.log') -Value $line -Encoding UTF8
+}
