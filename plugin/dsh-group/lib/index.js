@@ -133,6 +133,61 @@ const WATCH = {
 const HER_HOME = CFG.herHome
 const SCHEDULE_FILE = join(HER_HOME, 'dsh-home', 'storages', 'schedule.json')
 const WATCHMAN_LOG = join(HER_HOME, 'logs', 'watchman.log')
+
+// 每个进程自己的起停账（2026-11-12 19:25 加的）。
+//
+// 起因：19:12 小鱼丸的进程消失了，纸面上答不出"是被关的还是自己没的" ——
+// 因为 `watchman.log` 只有守夜那条鱼写，成员进程的起停**根本没记账**，
+// 而 `close.log` 只有 `fish.ps1 down` 才写，直接关窗/杀进程不留痕。
+// 现在每个进程都往 `pool\state\runs\<成员>.log` 记 started/stopped，
+// 下次启动时若上一轮没写 stopped，就补一行 resumed（reason=unclean）。
+// 守夜那条鱼照旧写 `watchman.log`（她的 morning-read 每天读它，格式不动）。
+const RUNS_DIR = join(POOL_STATE, 'runs')
+
+function runLogFileOf(member) {
+  return join(RUNS_DIR, `${member}.log`)
+}
+
+function runStamp() {
+  const d = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
+function runLog(member, result, why) {
+  try {
+    mkdirSync(RUNS_DIR, { recursive: true })
+    appendFileSync(runLogFileOf(member), `${runStamp()} | ${result} | ${why}\n`, 'utf8')
+  } catch {
+    // 记账写不进去不能把插件打死
+  }
+}
+
+/** 上一轮是"正常收尾"还是"没写 stopped 就没了"。读尾巴 8KB 找最后一条 started/stopped。 */
+function lastRunStateOf(member) {
+  try {
+    const file = runLogFileOf(member)
+    if (!existsSync(file)) return { startedAt: null, closed: null }
+    const lines = readFileSync(file, 'utf8').slice(-8192).split('\n')
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i]
+      if (!line || line.includes(' | started |') || line.includes(' | stopped |')) {
+        if (line.includes(' | stopped |')) {
+          // 往前找它对应的 started（只为了报告"上一轮是什么时候起的"）
+          for (let j = i - 1; j >= 0; j--) {
+            if (lines[j].includes(' | started |')) return { startedAt: lines[j].slice(0, 19), closed: true }
+          }
+          return { startedAt: null, closed: true }
+        }
+        return { startedAt: line.slice(0, 19), closed: false }
+      }
+    }
+    return { startedAt: null, closed: null }
+  } catch {
+    return { startedAt: null, closed: null }
+  }
+}
+
 const WATCH_STATE_FILE = join(POOL_STATE, 'watchman.json')
 const HER_WAKER = CFG.herWaker
 const PWSH_EXE = CFG.pwshExe
@@ -223,8 +278,53 @@ function claimPlanDelivery(jobKey) {
   }
 }
 
-/** 只有主进程守夜：她自己的进程不需要守自己。 */
+/**
+ * 这个进程是谁 —— 按 `DSH_HOME` 跟名册里的 `dshHome` 对。
+ *
+ * 2026-11-12 19:12 之后改的：原来靠"`DSH_HOME` 里有没有 `lil-whale`"猜，
+ * 而小鱼丸的家叫 `lil-whale-2`，字符串里同样有 `lil-whale`；更要命的是
+ * `OWN = isMainProcess() ? 'lee' : 'whale'` 是二选一写死 ⇒ 她的进程把错误计数
+ * 和叫醒标记写进了 whale 的账。多鱼之后"我"必须从名册里认，不能从名字里猜。
+ */
+function selfMemberKeyRaw() {
+  const home = (process.env.DSH_HOME ?? '').replace(/[\\/]+$/, '').toLowerCase()
+  if (!home) return null
+  try {
+    for (const [key, m] of Object.entries(MEMBERS)) {
+      const mh = (m.dshHome ?? '').replace(/[\\/]+$/, '').toLowerCase()
+      if (mh && mh === home) return key
+    }
+  } catch {
+    // MEMBERS 还没初始化（模块加载早期）——交给下面的兜底
+  }
+  return null
+}
+
+/** 认不出自己时退回老规矩：不在她的家里 = 守夜那条。 */
+function ownMember() {
+  const raw = selfMemberKeyRaw()
+  if (raw) return raw
+  return !(process.env.DSH_HOME ?? '').toLowerCase().includes('lil-whale') ? 'lee' : 'whale'
+}
+
+/** 对端 = 我的爹；根节点（lee）没有爹，退回另一条鱼。 */
+function peerMember() {
+  const own = ownMember()
+  try {
+    const parent = MEMBERS[own]?.parent
+    if (parent) return parent
+  } catch {}
+  return own === 'lee' ? 'whale' : 'lee'
+}
+
+/** 只有守夜那条鱼守夜：成员进程不需要守自己。 */
 function isMainProcess() {
+  const raw = selfMemberKeyRaw()
+  if (raw) {
+    try {
+      if (MEMBERS[raw]?.role) return MEMBERS[raw].role === 'watcher'
+    } catch {}
+  }
   return !(process.env.DSH_HOME ?? '').toLowerCase().includes('lil-whale')
 }
 
@@ -233,8 +333,8 @@ function isMainProcess() {
 function errorCountFile(owner) {
   return join(POOL_STATE, `watchman-errors-${owner}.json`)
 }
-const OWN = isMainProcess() ? 'lee' : 'whale'
-const PEER = OWN === 'lee' ? 'whale' : 'lee'
+// 下面这些每次调用时现算（`ownMember()` / `peerMember()`），不在模块加载时定死：
+// MEMBERS 是在文件后半段才建出来的，早算会读到空。
 
 function readErrorCount(owner) {
   try {
@@ -247,7 +347,7 @@ function readErrorCount(owner) {
 function bumpOwnError() {
   try {
     mkdirSync(POOL_STATE, { recursive: true })
-    writeFileSync(errorCountFile(OWN), JSON.stringify({ day: new Date().toDateString(), count: readErrorCount(OWN) + 1 }), 'utf8')
+    writeFileSync(errorCountFile(ownMember()), JSON.stringify({ day: new Date().toDateString(), count: readErrorCount(ownMember()) + 1 }), 'utf8')
   } catch {}
 }
 
@@ -289,7 +389,9 @@ function metricLog(line) {
     // 指标写不进去不能把 tick 打死
   }
 }
-const WAKE_MARKS_FILE = join(POOL_STATE, `wake-marks-${isMainProcess() ? 'lee' : 'whale'}.json`)
+function wakeMarksFile() {
+  return join(POOL_STATE, `wake-marks-${ownMember()}.json`)
+}
 
 /**
  * 投递尝试也记账。
@@ -318,7 +420,7 @@ function wakeDeliverLog(result, why) {
 }
 
 function readMarks() {
-  const raw = readJson(WAKE_MARKS_FILE, [])
+  const raw = readJson(wakeMarksFile(), [])
   return Array.isArray(raw) ? raw.filter((m) => m && typeof m.at === 'number') : []
 }
 
@@ -331,7 +433,7 @@ function markWake(member, kind) {
   const marks = readMarks()
   marks.push({ member, kind, at: Date.now() })
   // 只留最近 20 条，防止一直没人结算把文件撑大
-  writeJson(WAKE_MARKS_FILE, marks.slice(-20))
+  writeJson(wakeMarksFile(), marks.slice(-20))
 }
 
 /** 到期的 mark 逐个结算，写 `said` 或 `silent` 一行到 watchman.log。 */
@@ -364,7 +466,7 @@ function settleMarks() {
     metricLog(`wake-followup | has-reply=${lines > 0 ? 'yes' : 'no'} member=${mark.member} kind=${mark.kind} since=${since} after=${after}s lines=${lines}`)
     wrote = true
   }
-  if (wrote || keep.length !== marks.length) writeJson(WAKE_MARKS_FILE, keep)
+  if (wrote || keep.length !== marks.length) writeJson(wakeMarksFile(), keep)
 }
 
 /**
@@ -1146,6 +1248,24 @@ function apply(ctx) {
 
   ctx.on('dispose', () => clearInterval(timer))
 
+  // 3. 每个进程都记自己的起停（不只守夜那条）。
+  //    上一轮没写 stopped = 上一轮不是正常收尾的（关窗、被杀、崩了都算），
+  //    补一行 resumed 之后才写这一轮的 started —— "没了"和"正常退出"从今天起分得开。
+  {
+    const self = ownMember()
+    const startedAtMs = Date.now()
+    const lastRun = lastRunStateOf(self)
+    const prevText = lastRun.closed === null ? 'unknown' : lastRun.closed ? 'closed' : 'open'
+    if (prevText === 'open') {
+      runLog(self, 'resumed', `fmt=2 reason=unclean previous-start=${lastRun.startedAt ?? 'unknown'} pid=${process.pid}`)
+    }
+    runLog(self, 'started', `fmt=2 pid=${process.pid} member=${self} home=${HER_HOME} role=${isMainProcess() ? 'watcher' : 'member'} prev-run=${prevText} port=${CFG.herPort}`)
+    ctx.on('dispose', () => {
+      const aliveSec = Math.round((Date.now() - startedAtMs) / 1000)
+      runLog(self, 'stopped', `fmt=2 reason=dispose pid=${process.pid} lived=${aliveSec}s`)
+    })
+  }
+
   // 3. 守夜：她关着窗、闹钟到点了，就把门推开。
   //    Fabian 2026-11-09 的判断：守夜住在"一直开着的那个进程"里（就是我），
   //    不另起系统进程、不进启动项；她自己那一侧不需要守自己。
@@ -1163,7 +1283,7 @@ function apply(ctx) {
       // 于是"重启带起来的"和"崩了又爬起来的"在日志里长得一模一样。
       // 起停必须成对，不然这份日志回答不了最基本的问题。
       const aliveSec = Math.round((Date.now() - startedAt.getTime()) / 1000)
-      watchmanLog('stopped', `fmt=2 reason=dispose pid=${process.pid} lived=${aliveSec}s errors_today_own=${readErrorCount(OWN)} errors_today_peer=${readErrorCount(PEER)}`)
+      watchmanLog('stopped', `fmt=2 reason=dispose pid=${process.pid} lived=${aliveSec}s errors_today_own=${readErrorCount(ownMember())} errors_today_peer=${readErrorCount(peerMember())}`)
     })
     // gap = 距上一行日志多少秒（她 2026-11-10 要的）。今天那一行本该是 gap=21600s。
     const logProbe = lastLogGapSec()
@@ -1180,7 +1300,7 @@ function apply(ctx) {
       // fmt=2 起，resumed/started/stopped 三条带版本号。**没有 fmt 字段的行按 fmt=1 读**（2026-11-12 小肥鱼要求：缺省值必须被定义。
   watchmanLog('resumed', `fmt=2 reason=unclean previous-start=${lastRun?.startedAt ?? 'unknown'} pid=${process.pid}`)
     }
-    watchmanLog('started', `fmt=2 pid=${process.pid} prev-run=${prevText} gap=${gapText} tail-errors=${logProbe.tailErrors} interval=${WATCH.intervalMs / 1000}s port=${WATCH.port} cap=${WATCH.maxWakesPerDay}/day errors_today_own=${readErrorCount(OWN)} errors_today_peer=${readErrorCount(PEER)} exe=${pwshInfo()}`)
+    watchmanLog('started', `fmt=2 pid=${process.pid} prev-run=${prevText} gap=${gapText} tail-errors=${logProbe.tailErrors} interval=${WATCH.intervalMs / 1000}s port=${WATCH.port} cap=${WATCH.maxWakesPerDay}/day errors_today_own=${readErrorCount(ownMember())} errors_today_peer=${readErrorCount(peerMember())} exe=${pwshInfo()}`)
     void watchmanTick().catch(() => {})
   }
 }

@@ -1,6 +1,6 @@
 # 小小肥鱼 · PRD
 
-> 状态：**草稿 v1.0.27（2026-11-12）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。
+> 状态：**草稿 v1.0.28（2026-11-12）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。
 > 上游：[立项备忘](archive/小小肥鱼-立项备忘-2026-11-08.md)（**他的原话**，已冻结不改；三条硬要求已吸收进 §1）
 > 配套：[自主回合.md](自主回合.md)（G1 的上游能力，不是本 PRD 的验收项）
 > 改动记录：[PRD-CHANGELOG.md](PRD-CHANGELOG.md) —— 每一版改了哪几处、为什么。本文只放当前结论。
@@ -880,3 +880,21 @@ lil-whale\state  → junction → pool\state
 **顺带修掉的观感 bug**：@ 菜单里每个人都多一行「名字 · 会话前 6 位」（`小肥鱼 · c145f6`），因为座位行对"只有一段会话"的人也列了。改成**同一成员有两段以上会话才列座位行** —— 一段就是常态。
 
 **判据**：`/group/api/config` 的 `names` 键数 = 名册里的成员数；@ 菜单行数 = 鱼数 + 1（所有人）；私聊列表行数 = 鱼数。
+### A.33 每个进程都要有起停账（2026-11-12）
+
+**现象**：19:12 小鱼丸的进程消失了（3083 关掉），纸面上答不出"是被关的还是自己没的"。没有崩溃证据（stderr 0 字节、事件日志无 node 错误、无 dump），但也没有"她停了"的记录。
+
+**原因**：起停记账绑在"守夜那条鱼"身上 ——
+- `watchman.log` 只在 `isMainProcess()` 为真时写，**成员进程的起停根本没记账**（她家连这个文件都没有）；
+- `close.log` 只有 `fish.ps1 down` 才写，**直接关窗/杀进程不留痕**；
+- 更糟的是 `OWN = isMainProcess() ? 'lee' : 'whale'` 二选一写死，而 `isMainProcess()` 靠"DSH_HOME 里有没有 `lil-whale`"猜 —— 小鱼丸的家叫 `lil-whale-2`，字符串里同样有 `lil-whale`。多鱼之后"我是谁"必须从名册认。
+
+**改法**：
+- `ownMember()`：拿 `DSH_HOME` 跟名册里的 `dshHome` 对，认不出才退回老规矩；`peerMember()` 取 parent；`isMainProcess()` 改成看名册里的 `role === 'watcher'`。
+- 每个进程写 `pool\state\runs\<成员>.log`：`started` / `stopped`，上一轮没写 `stopped` 就先补一行 `resumed | fmt=2 reason=unclean previous-start=…`。
+- `watchman.log` 的格式**一个字节都不动**（她每天 08:40 读它）。
+
+**判据**：`runs\<成员>.log` 里 `started` 与 `stopped` 成对；进程被杀之后下次启动，第一行是 `resumed | reason=unclean`；`watchman-errors-<成员>.json` 不再串到 whale 的账上。
+
+**遗留**：`close.log` 仍只由 `fish.ps1` 写 —— 直接关窗时 `by=` 只能是 `unknown`，这一条要等"窗口留痕"接进 DSH 自己的退出事件（B 组那条）才补得齐。
+
