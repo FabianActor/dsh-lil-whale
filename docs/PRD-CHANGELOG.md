@@ -12,6 +12,12 @@
 ---
 
 
+## v1.0.15（2026-11-12）
+
+- **新增附录 A.17「版本号只有一个出处」**：宿主 `PKG_VERSION` 写死过 `'1.0.0'`，而 `package.json` 已是 1.1.0 ⇒ 启动痕迹说 1.0.0，我拿这一行判断"新代码生效没有"，差点误判成没生效。改成从 `package.json` 读，读不到写 `unknown`（不写 0.0.0）。
+- **A.16 补私聊与打包两段**（v1.0.14 已记，这里只是索引）：`/group/api/dm` 收 `image`、像素与群共用 `group\images\`；`scripts\pack.ps1` 的口径与坑。
+- 状态行 → v1.0.15。
+
 ## v1.0.14（2026-11-12）
 
 - **A.16 补两段**：私聊也能发图（`/group/api/dm` 收 `image`，像素与群聊共用 `group\images\`，面板侧一个 `useImageAttach()` 两页共用）；`scripts\pack.ps1` 的打包口径（`git archive` + 从 `git ls-files` 里挑，排除根的 `archive\`；`git archive` 不支持 `:(exclude)` 且失败时仍返回 0）。

@@ -10,7 +10,7 @@
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, renameSync, rmSync, statSync } from 'node:fs'
 import { join, dirname } from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { pathToFileURL, fileURLToPath } from 'node:url'
 import { randomUUID, createHash } from 'node:crypto'
 import { spawn, execFileSync } from 'node:child_process'
 import { connect } from 'node:net'
@@ -82,7 +82,16 @@ function buildUserMessage(options) {
 }
 
 const name = 'lil-whale-group'
-const PKG_VERSION = '1.0.0'  // 与 package.json 的 version 同步；启动痕迹里会带上它
+// 版本号只有一个出处：package.json。写死过一次，那天 package.json 是 1.1.0、常量还是 1.0.0，
+// 于是"重启了但插件没生效"这个判据本身开始说谎——日志说 1.0.0，人以为是旧代码。
+const PKG_VERSION = (() => {
+  try {
+    const pkgPath = fileURLToPath(new URL('../package.json', import.meta.url))
+    return JSON.parse(readFileSync(pkgPath, 'utf8')).version ?? 'unknown'
+  } catch {
+    return 'unknown'
+  }
+})()
 const inject = ['tools', 'agents']
 
 // 这台机器的假设（她的家在哪、守夜脚本在哪、pwsh 在哪）全从 lil-whale.config.json 读，
