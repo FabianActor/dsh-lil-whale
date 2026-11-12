@@ -15,6 +15,10 @@ window.__ModuleLoader__.load({
     const React = require('react')
     const h = React.createElement
     const { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } = React
+    // 官方的原图查看器（dsh 自己的聊天里点图片看大图就是它）：点外面/按 Esc 关。
+    // 不自己画遮罩：官方那套的观感与交互（portal 到 body、关闭按钮、Esc）都是现成的，
+    // 我们只负责"什么时候打开它"。
+    const { ImageLightbox } = require('@deepseek-ai/dsh-client-ui-primitives')
 
     const PANEL_ID = 'group'
     const SETTINGS_ID = 'lil-whale'
@@ -540,18 +544,22 @@ const imageUrlOf = (image) => {
 function Bubble({ config, message, onMention, animate = false }) {
       // 只在挂载时决定「要不要动画」：否则后续每次重渲染都会让老消息重新弹一遍。
       const animateOnMount = useRef(animate).current
+      // 点图片打开官方看图器（大图、点外面关）。
+      const [preview, setPreview] = useState(false)
+      const imageSrc = message.image ? imageUrlOf(message.image) : null
       const mine = message.from === 'fabian'
       const who = nameOf(config, message.from, message.s)
       // 指名到座位的消息，显示"→ 大肥鱼 · 日常"，只写给这个人的显示"→ 大肥鱼"。
       const targetTo = message.toSeat ? `${message.to}@${message.toSeat}` : message.to
       const target = message.to && message.to !== 'all' ? ` → ${targetName(config, targetTo)}` : ''
       const time = formatStamp(message.ts)
-      return h('div', {
-        style: {
-          display: 'flex', gap: 10, padding: '6px 12px',
-          flexDirection: mine ? 'row-reverse' : 'row',
+      return h(React.Fragment, null,
+        h('div', {
+          style: {
+            display: 'flex', gap: 10, padding: '6px 12px',
+            flexDirection: mine ? 'row-reverse' : 'row',
+          },
         },
-      },
         h(Avatar, {
           config,
           member: message.from,
@@ -587,14 +595,10 @@ function Bubble({ config, message, onMention, animate = false }) {
               },
               message.image
                 ? h('img', {
-                  src: imageUrlOf(message.image),
+                  src: imageSrc,
                   alt: '图片',
                   loading: 'lazy',
-                  onClick: () => {
-                    try {
-                      window.open(imageUrlOf(message.image), '_blank')
-                    } catch { /* 弹窗被拦就算了，图本身已经在页面上 */ }
-                  },
+                  onClick: () => setPreview(true),
                   style: {
                     display: 'block', maxWidth: 260, maxHeight: 260,
                     borderRadius: 'var(--dsw-radius-md, 8px)', cursor: 'zoom-in',
@@ -603,7 +607,16 @@ function Bubble({ config, message, onMention, animate = false }) {
                 })
                 : null,
               message.text ? h(SafeMarkdown, { text: message.text }) : null),
-        ),
+        )),
+        // 看图器挂在气泡外面：它是 portal 到 body 的，放哪都一样，但放在气泡里会让气泡多一层嵌套。
+        preview && imageSrc
+          ? h(ImageLightbox, {
+            src: imageSrc,
+            alt: '图片',
+            labels: { dialog: '图片', close: '关闭' },
+            onClose: () => setPreview(false),
+          })
+          : null,
       )
     }
 
@@ -2409,7 +2422,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[lil-whale-group-ui] client build v15 · busy-labels:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[lil-whale-group-ui] client build v16 · official-lightbox:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('lil-whale-group-keyframes')) {
           const style = document.createElement('style')
