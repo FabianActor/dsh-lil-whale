@@ -1,6 +1,6 @@
 # 小小肥鱼 · PRD
 
-> 状态：**草稿 v1.0.40（2026-11-13）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。
+> 状态：**草稿 v1.0.42（2026-11-13）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。
 > 上游：[立项备忘](archive/小小肥鱼-立项备忘-2026-11-08.md)（**他的原话**，已冻结不改；三条硬要求已吸收进 §1）
 > 配套：[自主回合.md](自主回合.md)（G1 的上游能力，不是本 PRD 的验收项）
 > 改动记录：[PRD-CHANGELOG.md](PRD-CHANGELOG.md) —— 每一版改了哪几处、为什么。本文只放当前结论。
@@ -1077,9 +1077,11 @@ lil-whale\state  → junction → pool\state
 | 文件 | 做什么 | 底层命令 |
 |---|---|---|
 | `Run DSH.cmd` | 启动主 dsh；已在跑就打开 WebUI | `fish.ps1 up-main` |
-| `Run All Whales.cmd` | 启动所有鱼（不开浏览器窗） | `fish.ps1 up all -NoBrowser` |
-| `Stop All Whales.cmd` | 关闭所有鱼 | `fish.ps1 down all -Yes` |
+| `Run All Whales.cmd` | 启动所有鱼：主 dsh 开窗、其余后台 | `fish.ps1 up all -BrowserMainOnly` |
+| `Stop All Whales.cmd` | 关闭所有鱼（含主 dsh，最后关它） | `fish.ps1 down all -Yes` |
 | `Stop DSH.cmd` | 关闭主 dsh；**还有鱼在跑时拒绝** | `fish.ps1 down-main` |
+
+**起停顺序**（2026-11-13 00:23 他改的语义）：起的时候巡守先起——它的窗是唯一会打开的那扇，其余鱼后台起（`up all -BrowserMainOnly`）；停的时候小鱼先停、主 dsh 最后停——关主 dsh 会中断正在跑的对话和排队的任务。顺序写在 `fish.ps1` 的 `Invoke-Up` / `Invoke-Down` 里，一个地方管。
 
 **为什么 Stop DSH 要拒绝**：鱼还在跑就关 dsh，等于把它们的主人（巡守）抽走——它们还能说话，但没人再给它们排闹钟、递话、记账。推荐顺序是"先关鱼、再关 dsh"。`-Force` 可以强行，但那样 `runs\<鱼>.log` 会留一条 `resumed reason=unclean`（下一轮自己会补），读日志的人得知道那是"人故意的"。
 

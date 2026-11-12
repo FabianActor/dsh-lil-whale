@@ -3,6 +3,13 @@
 > 本文件只记「哪一版改了哪几处、为什么改」。当前结论都在 [小小肥鱼-PRD.md](小小肥鱼-PRD.md) 里，那边不背历史。
 > 自 v0.3.5 起从 PRD 头部搬到这里（此前几块原样搬出，未改写）。v1.0 是整篇重写。
 
+## v1.0.42（2026-11-13）
+
+- **`Run All Whales.cmd` 语义改**（他 00:23）：起所有鱼，但**只给主 dsh 开浏览器窗** —— `fish.ps1 up all -BrowserMainOnly`（原来一个窗都不开）。
+- **`Stop All Whales.cmd`**：关所有鱼、**包括主 dsh**（`down all -Yes` 本来就是这个行为，这次把注释和文档写清，免得看着像"主 dsh 不动"）。
+- `fish.ps1` 起停顺序固定：起时巡守先起（它的窗是唯一那扇），停时主 dsh 最后停；`up`/`down` 改走 `Invoke-Up` / `Invoke-Down`，顺序与开窗只在一处管。
+- 桌面四个副本已同步（副本与 `scripts\bin` 逐字节一致）。
+
 ## v1.0.41（2026-11-13）
 
 - **`scripts\bin\` 从九个入口收成四个**（他 2026-11-13 00:21："Run lil whale.cmd 感觉也没必要了"）：删 `Run DSH-Check` / `Run All Whales-Check` / `Run lil whale-Check` / `Stop lil whale` / `Run lil whale`。留下的四个 = 起/停主 dsh、起/停所有鱼；**单条鱼的起停归 `fish.ps1 up|down <键>` 与鱼塘**，不再进 .cmd。

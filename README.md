@@ -54,7 +54,7 @@ pwsh -File scripts\install.ps1
 
 ## 第一次出生
 
-1. 起她的窗：`pwsh -File scripts\fish.ps1 up whale`（或双击 `scripts\bin\Run All Whales.cmd`，把所有鱼都起来）
+1. 起她的窗：`pwsh -File scripts\fish.ps1 up whale`（或双击 `scripts\bin\Run All Whales.cmd`，把主 dsh 和所有鱼都起来、只开主 dsh 一个窗）
    - 它会打印她的网址，形如 `http://127.0.0.1:3082/?token=xxxx`
    - **token 每次启动随机生成，只印在那一行**；自己敲 `127.0.0.1:3082` 会得到 401
 2. 在她那个网页里填**她自己的** key：设置 → Models
@@ -186,8 +186,8 @@ pwsh -File scripts\fish.ps1 doctor       # 体检
 | 快捷方式 | 做什么 |
 |---|---|
 | `Run DSH.cmd` | 启动主 dsh；已经在跑就直接帮你把 WebUI 打开 |
-| `Run All Whales.cmd` | 启动所有鱼（不含主 dsh，不开浏览器窗） |
-| `Stop All Whales.cmd` | 关闭所有鱼（主 dsh 不动） |
+| `Run All Whales.cmd` | 启动所有鱼：主 dsh 起来并开窗，其余鱼在后台起 |
+| `Stop All Whales.cmd` | 关闭所有鱼，**包括主 dsh**（先关小鱼，最后关主 dsh） |
 | `Stop DSH.cmd` | 关闭主 dsh。**还有鱼在跑时它会拒绝**并告诉你是哪几条——推荐先关鱼、再关 dsh（`-Force` 可强行，但鱼会留下"没停干净"的账） |
 
 **不做"关 dsh 时自动关鱼"**：关 dsh 只能从命令行或窗口关，插件拿不到"我马上要退了"这个可靠时刻；硬做会变成"有时关了、有时没关"，比不做更坏。

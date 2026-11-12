@@ -6,15 +6,17 @@
 #   pwsh -File fish.ps1                    看所有鱼（默认 list）
 #   pwsh -File fish.ps1 list
 #   pwsh -File fish.ps1 up whale           开一条（开完自动开浏览器）
-#   pwsh -File fish.ps1 up all             全开（巡守那条 + 所有鱼）
+#   pwsh -File fish.ps1 up all             全开（巡守那条 + 所有鱼，每条鱼各开一个窗）
+#   pwsh -File fish.ps1 up all -BrowserMainOnly  全开，但只给主 dsh 开窗（Run All Whales.cmd 用）
 #   pwsh -File fish.ps1 down whale         停一条
-#   pwsh -File fish.ps1 down all           全停
+#   pwsh -File fish.ps1 down all -Yes      全停（含主 dsh；Stop All Whales.cmd 用）
 #   pwsh -File fish.ps1 up-main            启动主 dsh（快捷方式用；已在跑就直接开浏览器）
 #   pwsh -File fish.ps1 down-main          关闭主 dsh（还有鱼在跑时拒绝，除非 -Force）
 #   pwsh -File fish.ps1 doctor             体检（现在只对配置里那条鱼）
 #   pwsh -File fish.ps1 help
 #
-# 选项：-NoBrowser（不开浏览器） -Yes（不停下来问） -By/-Why（记账用） -Port（覆盖端口）
+# 选项：-NoBrowser（不开浏览器） -BrowserMainOnly（只给主 dsh 开窗） -Yes（不停下来问）
+#       -Force（down-main 带着鱼一起关） -By/-Why（记账用） -Port（覆盖端口）
 #
 # 退出码：0 = 都成了；1 = 有一项没成（原因在上面）。
 param(
@@ -26,7 +28,9 @@ param(
   [string]$Why = '',
   [int]$Port = 0,
   # 只给 down-main 用：明知还有鱼在跑也关主 dsh（默认拒绝——"先停鱼再关 dsh"是推荐用法）。
-  [switch]$Force
+  [switch]$Force,
+  # 起多条鱼时只给巡守（主 dsh）开浏览器窗，其余鱼后台起。Run All Whales.cmd 用。
+  [switch]$BrowserMainOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -330,17 +334,47 @@ fish.ps1 -- 鱼群唯一的入口
   pwsh -File fish.ps1                  看所有鱼
   pwsh -File fish.ps1 list
   pwsh -File fish.ps1 up whale         开一条
-  pwsh -File fish.ps1 up all           全开
+  pwsh -File fish.ps1 up all           全开（每条鱼各开一个窗）
+  pwsh -File fish.ps1 up all -BrowserMainOnly  全开，只给主 dsh 开窗
   pwsh -File fish.ps1 down whale       停一条
-  pwsh -File fish.ps1 down all         全停
+  pwsh -File fish.ps1 down all -Yes    全停（含主 dsh）
   pwsh -File fish.ps1 up-main          启动主 dsh（已在跑就打开它的 WebUI）
   pwsh -File fish.ps1 down-main        关闭主 dsh（还有鱼在跑时拒绝，-Force 强行）
   pwsh -File fish.ps1 doctor           体检
   pwsh -File fish.ps1 refresh whale    重新生成环境.md（模板/名册/工具变了以后）
   pwsh -File fish.ps1 help
 
-选项：-NoBrowser -Yes -Force -By <谁> -Why <为什么> -Port <n>
+选项：-NoBrowser -BrowserMainOnly -Yes -Force -By <谁> -Why <为什么> -Port <n>
 '@ | Write-Host
+}
+
+# ---------- 起/停：谁先谁后、谁开窗 ----------
+# 起：巡守先起（它的浏览器窗是唯一会打开的那扇），其余鱼后台起。
+# 停：先停小鱼，最后停巡守（关主 dsh 会中断正在跑的对话，放最后）。
+function Invoke-Up([string]$name) {
+  $members = @(Resolve-Targets $name)
+  $members = @($members | Sort-Object -Property @{ Expression = { if ($_.Role -eq 'watcher') { 0 } else { 1 } } })
+  $okAll = $true
+  foreach ($m in $members) {
+    $saved = $NoBrowser
+    if ($BrowserMainOnly -and $m.Role -ne 'watcher') { $NoBrowser = $true }
+    try {
+      if (-not (Start-Fish $m)) { $okAll = $false }
+    } finally {
+      $NoBrowser = $saved
+    }
+  }
+  return $okAll
+}
+
+function Invoke-Down([string]$name) {
+  $members = @(Resolve-Targets $name)
+  $members = @($members | Sort-Object -Property @{ Expression = { if ($_.Role -eq 'watcher') { 1 } else { 0 } } })
+  $okAll = $true
+  foreach ($m in $members) {
+    if (-not (Stop-Fish $m)) { $okAll = $false }
+  }
+  return $okAll
 }
 
 # ---------- 分发 ----------
@@ -359,10 +393,10 @@ try {
   switch ($cmd) {
     'list'   { Show-List }
     'ls'     { Show-List }
-    'up'     { foreach ($m in (Resolve-Targets $Name)) { if (-not (Start-Fish $m)) { $ok = $false } } }
-    'start'  { foreach ($m in (Resolve-Targets $Name)) { if (-not (Start-Fish $m)) { $ok = $false } } }
-    'down'   { foreach ($m in (Resolve-Targets $Name)) { if (-not (Stop-Fish $m)) { $ok = $false } } }
-    'stop'   { foreach ($m in (Resolve-Targets $Name)) { if (-not (Stop-Fish $m)) { $ok = $false } } }
+    'up'     { if (-not (Invoke-Up $Name)) { $ok = $false } }
+    'start'  { if (-not (Invoke-Up $Name)) { $ok = $false } }
+    'down'   { if (-not (Invoke-Down $Name)) { $ok = $false } }
+    'stop'   { if (-not (Invoke-Down $Name)) { $ok = $false } }
     'refresh' { foreach ($m in (Resolve-Targets $Name)) { if (-not (Invoke-RefreshEnv $m)) { $ok = $false } } }
     'up-main' {
       $m = Get-Fish 'lee'

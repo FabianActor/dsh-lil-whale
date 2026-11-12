@@ -9,7 +9,7 @@
 | 启动 | 停 |
 | --- | --- |
 | `Run DSH.cmd` —— 起主 dsh；已经在跑就直接打开它的 WebUI | `Stop DSH.cmd` —— 关主 dsh；**还有鱼在跑时会拒绝**并点名 |
-| `Run All Whales.cmd` —— 起所有鱼（不含主 dsh，不开浏览器窗） | `Stop All Whales.cmd` —— 关所有鱼（主 dsh 不动） |
+| `Run All Whales.cmd` —— 起所有鱼（主 dsh 开窗、其余后台） | `Stop All Whales.cmd` —— 关所有鱼（**含主 dsh**） |
 
 **为什么从九个删到四个**（删了 `Run DSH-Check` / `Run All Whales-Check` / `Run lil whale-Check` / `Stop lil whale` / `Run lil whale`）：
 
