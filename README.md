@@ -120,6 +120,20 @@ lil-whale-pool/           共享区（不在任何一条鱼的家里面）
   state/                  cursors/、wakes/、presence/、wake-marks-*.json、watchman-*.json
 ```
 
+## 鱼多了以后：一个入口
+
+`scripts\fish.ps1` 是唯一的启动器实现，名册（`pool\members.json`）驱动 —— 新鱼进名册就自动被认识，不用再改脚本：
+
+```powershell
+pwsh -File scripts\fish.ps1              # 看所有鱼：端口、在不在跑、心跳
+pwsh -File scripts\fish.ps1 up whale     # 开一条
+pwsh -File scripts\fish.ps1 up all       # 全开
+pwsh -File scripts\fish.ps1 down whale   # 停一条
+pwsh -File scripts\fish.ps1 doctor       # 体检
+```
+
+`launch.ps1` / `stop.ps1` 还在，但只剩"翻译参数"——桌面 `.cmd` 和守夜脚本照旧能用。**新增一条鱼不要新增一个脚本**：改名册。
+
 ## 端口
 
 | 端口 | 谁 |
