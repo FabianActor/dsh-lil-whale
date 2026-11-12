@@ -104,6 +104,14 @@ const GROUP_DIR = CFG.groupDir
 const IMAGES_DIR = join(GROUP_DIR, 'images')
 const IMAGE_MAX_BYTES = 8 * 1024 * 1024
 const IMAGE_EXT = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' }
+
+/**
+ * 图片指针的格式版本。**没有 fmt 字段的行按 fmt=1 读**——fmt=1 只有 {id,ext,bytes,month}，
+ * 路径靠"id/ext/month 拼一下"这个隐式约定；fmt=2 起补了 path（明路）与 algo（指纹算法）。
+ * 拿"有没有 path 字段"当分界是不合格的：新代码若漏写 path，会和老格式长得一模一样。
+ */
+const IMAGE_FMT = 2
+const IMAGE_ALGO = 'sha256'
 const MESSAGES = join(GROUP_DIR, 'messages.jsonl')
 const CURSOR = join(GROUP_DIR, 'cursor.json')
 const READABLE = join(GROUP_DIR, '群.md')
@@ -691,7 +699,14 @@ function storeImage(buffer, extRaw) {
   const file = join(dir, `${id}.${ext}`)
   if (!existsSync(file)) writeFileSync(file, buffer)
   // path 是相对 group\ 的定位（'images/202611/<id>.png'）。写进记录里，读取端就不用再猜拼法。
-  return { id, ext, bytes: buffer.length, month, path: `images/${month}/${id}.${ext}` }
+  // path 是相对 group\ 的定位（images/202611/<id>.png），读取端不用再猜拼法；
+  // algo 写在纸上，换算法那天会有人喊（unknown-algo），而不是静默全库变孤儿。
+  return {
+    fmt: IMAGE_FMT,
+    id, ext, bytes: buffer.length, month,
+    path: `images/${month}/${id}.${ext}`,
+    algo: IMAGE_ALGO,
+  }
 }
 
 /** 从本地文件读一张图（工具参数给的是路径）。 */
@@ -713,6 +728,8 @@ function imagePathOf(image) {
   const id = String(image?.id || '')
   const ext = String(image?.ext || '').toLowerCase()
   if (!/^[0-9a-f]{16}$/.test(id) || !IMAGE_EXT[ext]) return null
+  // 指针对应的算法必须是当前这个：换了算法，全库一起报 unknown-algo，而不是静默的孤儿。
+  if (String(image?.algo || IMAGE_ALGO) !== IMAGE_ALGO) return null
   // 记录里有 path 就以它为准；但只信"images/... 且文件名与 id/ext 对得上"的写法。
   const hint = String(image?.path || '').replace(/\\/g, '/').replace(/^\.\//, '')
   if (hint !== '') {

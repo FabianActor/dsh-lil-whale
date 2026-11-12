@@ -43,6 +43,9 @@ const AVATAR_DIR = join(GROUP_DIR, 'avatars')
 const IMAGES_DIR = join(GROUP_DIR, 'images')
 const IMAGE_MAX_BYTES = 8 * 1024 * 1024
 const IMAGE_EXT = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' }
+// 没有 fmt 字段的图片指针按 fmt=1 读；fmt=2 起有 path / algo。
+const IMAGE_FMT = 2
+const IMAGE_ALGO = 'sha256'
 
 /**
  * 读不到的图片必须留痕，否则"没有图"和"图丢了"看起来一样（小肥鱼的原话：
@@ -61,10 +64,12 @@ function logImageIssue(why, detail) {
  * 按 id + ext（可选 path）找图片；月份不知道就扫目录（一个群不会有很多月份）。
  * 返回 { file, why }：file 为 null 时 why 说清卡在哪一步，调用方负责写日志。
  */
-function imagePathOf(id, ext, pathHint) {
+function imagePathOf(id, ext, pathHint, algoHint) {
   const safeId = String(id || '')
   const safeExt = String(ext || '').toLowerCase()
   if (!/^[0-9a-f]{16}$/.test(safeId) || !IMAGE_EXT[safeExt]) return { file: null, why: 'bad-id-or-ext' }
+  // 指纹算法标在纸上：换了算法，全库返回 unknown-algo，而不是静默孤儿。
+  if (String(algoHint || IMAGE_ALGO) !== IMAGE_ALGO) return { file: null, why: 'unknown-algo' }
 
   // 记录里有 path 就以它为准；但只信"images/ 开头、不含 ..、文件名对得上"的写法。
   const hint = String(pathHint || '').replace(/\\/g, '/').replace(/^\.\//, '')
@@ -105,7 +110,7 @@ function storeImageDataUrl(dataUrl) {
   mkdirSync(dir, { recursive: true })
   const file = join(dir, `${id}.${ext}`)
   if (!existsSync(file)) writeFileSync(file, buffer)
-  return { id, ext, bytes: buffer.length, month, path: `images/${month}/${id}.${ext}` }
+  return { fmt: IMAGE_FMT, id, ext, bytes: buffer.length, month, path: `images/${month}/${id}.${ext}`, algo: IMAGE_ALGO }
 }
 /**
  * 把前端传来的 image 指针变成要写进记录的字段（补齐 path）。
@@ -114,7 +119,7 @@ function storeImageDataUrl(dataUrl) {
  */
 function imageFieldOf(rawImage) {
   if (!rawImage || typeof rawImage !== 'object') return null
-  const found = imagePathOf(rawImage.id, rawImage.ext, rawImage.path)
+  const found = imagePathOf(rawImage.id, rawImage.ext, rawImage.path, rawImage.algo)
   if (found.file === null) {
     logImageIssue(found.why, { phase: 'send', id: rawImage.id, ext: rawImage.ext, hint: rawImage.path })
     throw new Error('先调 /group/api/image 上传，再带 id/ext 发消息')
@@ -123,7 +128,7 @@ function imageFieldOf(rawImage) {
   const id = String(rawImage.id)
   const ext = String(rawImage.ext).toLowerCase()
   const month = String(rawImage.month || file.split(/[\\/]/).slice(-2)[0] || '')
-  return { id, ext, bytes: statSync(file).size, month, path: `images/${month}/${id}.${ext}` }
+  return { fmt: IMAGE_FMT, id, ext, bytes: statSync(file).size, month, path: `images/${month}/${id}.${ext}`, algo: IMAGE_ALGO }
 }
 
 const AVATAR_MAX_BYTES = 1.5 * 1024 * 1024
