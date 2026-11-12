@@ -571,9 +571,22 @@ export function apply(ctx) {
     async handler(req, res) {
       const url = new URL(req.url ?? '/', 'http://127.0.0.1')
       if (req.method === 'GET') {
-        const found = imagePathOf(url.searchParams.get('id'), url.searchParams.get('ext'))
+        // path / algo 由记录带过来（面板的 img 请求会把它们拼在 URL 上）：读取端优先认记录自己的说法，
+        // 认不出才回落到按 month 扫目录。认不出时必须留痕——静默读不到等于"什么都没发生"。
+        const found = imagePathOf(
+          url.searchParams.get('id'),
+          url.searchParams.get('ext'),
+          url.searchParams.get('path'),
+          url.searchParams.get('algo'),
+        )
         if (found.file === null) {
-          logImageIssue(found.why, { phase: 'read', id: url.searchParams.get('id'), ext: url.searchParams.get('ext') })
+          logImageIssue(found.why, {
+            phase: 'read',
+            id: url.searchParams.get('id'),
+            ext: url.searchParams.get('ext'),
+            path: url.searchParams.get('path'),
+            algo: url.searchParams.get('algo'),
+          })
           sendJson(res, 404, { error: 'no-image' })
           return
         }

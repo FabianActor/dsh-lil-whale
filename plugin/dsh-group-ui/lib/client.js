@@ -517,7 +517,14 @@ window.__ModuleLoader__.load({
     }
 
     /** 一条消息：左边是别人，右边是自己。 */
-    function Bubble({ config, message, onMention, animate = false }) {
+    /** 一条消息里的图片怎么取：id/ext 必须有，path/algo 有就带上（读取端优先认记录自己的说法）。 */
+const imageUrlOf = (image) => {
+  const params = new URLSearchParams({ id: String(image.id), ext: String(image.ext) })
+  if (typeof image.path === 'string' && image.path !== '') params.set('path', image.path)
+  if (typeof image.algo === 'string' && image.algo !== '') params.set('algo', image.algo)
+  return `/group/api/image?${params.toString()}`
+}
+function Bubble({ config, message, onMention, animate = false }) {
       // 只在挂载时决定「要不要动画」：否则后续每次重渲染都会让老消息重新弹一遍。
       const animateOnMount = useRef(animate).current
       const mine = message.from === 'fabian'
@@ -567,12 +574,12 @@ window.__ModuleLoader__.load({
               },
               message.image
                 ? h('img', {
-                  src: `/group/api/image?id=${message.image.id}&ext=${message.image.ext}`,
+                  src: imageUrlOf(message.image),
                   alt: '图片',
                   loading: 'lazy',
                   onClick: () => {
                     try {
-                      window.open(`/group/api/image?id=${message.image.id}&ext=${message.image.ext}`, '_blank')
+                      window.open(imageUrlOf(message.image), '_blank')
                     } catch { /* 弹窗被拦就算了，图本身已经在页面上 */ }
                   },
                   style: {
@@ -2401,7 +2408,7 @@ window.__ModuleLoader__.load({
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[lil-whale-group-ui] client build v10 · group-and-dm-images:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[lil-whale-group-ui] client build v11 · image-fingerprint:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('lil-whale-group-keyframes')) {
           const style = document.createElement('style')

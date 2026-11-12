@@ -10,6 +10,7 @@
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, renameSync, rmSync, statSync } from 'node:fs'
 import { join, dirname } from 'node:path'
+import { homedir } from 'node:os'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import { randomUUID, createHash } from 'node:crypto'
 import { spawn, execFileSync } from 'node:child_process'
@@ -886,7 +887,9 @@ function apply(ctx) {
   const bootRecord = {
     pkg: `${name}@${PKG_VERSION}`,
     pid: process.pid,
-    home: process.env.DSH_HOME ?? '(unset)',
+    // DSH_HOME 没设时 DSH 用的是默认家（~/.dsh）。只写 '(unset)' 会让人以为"没有家"——
+    // 从桌面快捷方式启动就是这样（2026-11-12 实测：他自己的 3080 那条痕迹写着 (unset)，害我怀疑了半天）。
+    home: process.env.DSH_HOME ?? `(unset; 默认 ${join(homedir(), '.dsh')})`,
     cwd: process.cwd(),
     herHome: CFG.herHome,
     herPort: CFG.herPort,
