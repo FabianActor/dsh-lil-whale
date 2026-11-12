@@ -505,6 +505,32 @@ function bornOrder(a, b) {
   return 0
 }
 
+// 自启动开关（2026-11-12 23:55 他要的）：存 pool\state\settings.json。
+// 宿主插件启动时读它；这里只负责读写，不负责启动。
+const POND_SETTINGS_FILE = join(POOL_STATE, 'settings.json')
+
+function readPondSettings() {
+  try {
+    const json = JSON.parse(readFileSync(POND_SETTINGS_FILE, 'utf8'))
+    return { autoStartFish: json?.autoStartFish === true }
+  } catch {
+    return { autoStartFish: false }
+  }
+}
+
+function writePondSettings(payload) {
+  const settings = {
+    version: 1,
+    autoStartFish: payload?.autoStartFish === true,
+    updatedAt: new Date().toISOString(),
+  }
+  mkdirSync(POOL_STATE, { recursive: true })
+  const tmp = `${POND_SETTINGS_FILE}.tmp-${process.pid}`
+  writeFileSync(tmp, JSON.stringify(settings, null, 2) + '\n', 'utf8')
+  renameSync(tmp, POND_SETTINGS_FILE)
+  return { autoStartFish: settings.autoStartFish }
+}
+
 async function pondStatus() {
   const members = pondMembers()
   const fish = []
@@ -1125,6 +1151,33 @@ export function apply(ctx) {
         sendJson(res, 200, { ok: true, ...status, polledAt: new Date().toISOString() })
       } catch (error) {
         sendJson(res, 500, { ok: false, error: 'status-failed', detail: String(error?.message ?? error) })
+      }
+    },
+  }))
+
+  disposers.push(ctx.webServer.register({
+    kind: 'exact',
+    path: '/pond/api/settings',
+    async handler(req, res) {
+      if (req.method === 'GET') {
+        sendJson(res, 200, { ok: true, settings: readPondSettings() })
+        return
+      }
+      if (req.method !== 'POST') {
+        sendJson(res, 405, { error: 'method-not-allowed' })
+        return
+      }
+      let payload
+      try {
+        payload = JSON.parse(await readBody(req))
+      } catch {
+        sendJson(res, 400, { error: 'bad-json' })
+        return
+      }
+      try {
+        sendJson(res, 200, { ok: true, settings: writePondSettings(payload) })
+      } catch (error) {
+        sendJson(res, 500, { ok: false, error: 'settings-failed', detail: String(error?.message ?? error) })
       }
     },
   }))

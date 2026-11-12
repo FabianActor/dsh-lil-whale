@@ -2513,6 +2513,9 @@ function Bubble({ config, message, onMention, animate = false }) {
       demoOn: '看一个大家族的示例',
       demoOff: '回到真实鱼塘',
       demoHint: '谱系示例：模拟的名册，不会启动或关闭任何进程。',
+      autoStartLabel: '主 dsh 启动时自动唤醒所有鱼',
+      autoStartHint: '下次启动主 dsh 生效：巡守起来 8 秒后按名册逐条唤醒，不开浏览器窗。',
+      autoStartFailed: '开关没保存：',
       generation: (n) => (n <= 0 ? '根' : `第 ${n} 代`),
     }
 
@@ -2613,6 +2616,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       const [openBusy, setOpenBusy] = useState(null)
       const [result, setResult] = useState(null)
       const [demo, setDemo] = useState(false)
+      const [autoStart, setAutoStart] = useState(false)
 
       const load = useCallback(async () => {
         try {
@@ -2633,6 +2637,33 @@ function Bubble({ config, message, onMention, animate = false }) {
         }, POND_POLL_MS)
         return () => clearInterval(timer)
       }, [load])
+
+      // 自启动开关：读一次、改一次。改完下次启动主 dsh 生效。
+      useEffect(() => {
+        fetch('/pond/api/settings', { headers: { accept: 'application/json' } })
+          .then((response) => response.json())
+          .then((data) => {
+            if (data?.settings) setAutoStart(data.settings.autoStartFish === true)
+          })
+          .catch(() => {})
+      }, [])
+
+      const toggleAutoStart = useCallback(async (next) => {
+        setAutoStart(next)
+        try {
+          const response = await fetch('/pond/api/settings', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ autoStartFish: next }),
+          })
+          const data = await response.json()
+          if (!response.ok) throw new Error(data?.detail || data?.error || `HTTP ${response.status}`)
+          setAutoStart(data?.settings?.autoStartFish === true)
+        } catch (e) {
+          setAutoStart(!next)
+          setError(POND.autoStartFailed + String(e?.message ?? e))
+        }
+      }, [])
 
       const act = useCallback(
         async (action, key) => {
@@ -2911,6 +2942,24 @@ function Bubble({ config, message, onMention, animate = false }) {
             { onClick: () => setDemo((value) => !value), style: pondButtonStyle(false) },
             demo ? POND.demoOff : POND.demoOn,
           ),
+          h(
+            'label',
+            {
+              title: POND.autoStartHint,
+              style: {
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                fontSize: 12, color: 'var(--dsw-alias-label-secondary, #6b7076)',
+                cursor: 'pointer', whiteSpace: 'nowrap',
+              },
+            },
+            h('input', {
+              type: 'checkbox',
+              checked: autoStart,
+              disabled: demo,
+              onChange: (event) => { void toggleAutoStart(event.target.checked) },
+            }),
+            POND.autoStartLabel,
+          ),
         ),
         demo
           ? h('div', { style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary, #8a8f98)' } }, POND.demoHint)
@@ -2975,7 +3024,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[lil-whale-group-ui] client build v24 · pond-tree:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[lil-whale-group-ui] client build v25 · auto-start:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('lil-whale-group-keyframes')) {
           const style = document.createElement('style')

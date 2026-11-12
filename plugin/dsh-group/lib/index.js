@@ -191,6 +191,11 @@ function lastRunStateOf(member) {
 const WATCH_STATE_FILE = join(POOL_STATE, 'watchman.json')
 const HER_WAKER = CFG.herWaker
 const PWSH_EXE = CFG.pwshExe
+// 自启动开关（2026-11-12 23:55 他要的）：主 dsh 起来时要不要顺手唤醒其他鱼。
+// 开关存 pool\state\settings.json —— 它是**数据**，不是配置：鱼塘页能改，下次启动生效。
+const FISH_PS1 = join(CFG.repoRoot, 'scripts', 'fish.ps1')
+const SETTINGS_FILE = join(POOL_STATE, 'settings.json')
+const AUTOSTART_LOG = join(POOL_STATE, 'autostart.log')
 
 // 叫醒之后多久回头看他有没有开口（另一个 Leea 2026-11-11 提的 A7 判据）。
 // 她原话是 5 分钟；他这时的首 token 要几十秒到几分钟，5 分钟会把"慢"判成"沉默"，所以放到 15 分钟。
@@ -315,6 +320,42 @@ function peerMember() {
     if (parent) return parent
   } catch {}
   return own === 'lee' ? 'whale' : 'lee'
+}
+
+// ---------- 自启动（2026-11-12 23:55 他要的） ----------
+// 主 dsh 起来后等 8 秒，再走 `fish.ps1 up all -NoBrowser` 把其他鱼唤醒：
+// ①与命令行、鱼塘是同一条路（A.42 的边界：不在这里重写起停逻辑）；
+// ②它幂等（端口通就跳过），所以和用户手动点"全部唤醒"不会打架；
+// ③不开浏览器窗——只该弹出主 dsh 的那一扇。
+function readAutoStartSettings() {
+  const json = readJson(SETTINGS_FILE, null)
+  return { autoStartFish: json?.autoStartFish === true }
+}
+
+function autostartLog(result, detail) {
+  try {
+    appendFileSync(AUTOSTART_LOG, `${stamp()} | ${result} | ${detail}\n`, 'utf8')
+  } catch {}
+}
+
+function scheduleAutoStart(ctx) {
+  if (!readAutoStartSettings().autoStartFish) return
+  const timer = setTimeout(() => {
+    let child
+    try {
+      child = spawn(PWSH_EXE, ['-NoProfile', '-File', FISH_PS1, 'up', 'all', '-NoBrowser'], {
+        windowsHide: true,
+        stdio: 'ignore',
+      })
+    } catch (error) {
+      autostartLog('fail', `spawn-error=${String(error?.message ?? error)}`)
+      return
+    }
+    child.once('error', (error) => autostartLog('fail', `error=${String(error?.message ?? error)}`))
+    child.once('exit', (code) => autostartLog(code === 0 ? 'ok' : 'fail', `exit=${code} script=fish.ps1 up all`))
+  }, 8000)
+  timer.unref?.()
+  ctx.on('dispose', () => clearTimeout(timer))
 }
 
 /** 只有巡守那条鱼巡守：成员进程不需要守自己。 */
@@ -1310,6 +1351,8 @@ function apply(ctx) {
   //    Fabian 2026-11-09 的判断：巡守住在"一直开着的那个进程"里（就是我），
   //    不另起系统进程、不进启动项；她自己那一侧不需要守自己。
   if (isMainProcess()) {
+    // 自启动：开关在 pool\state\settings.json，默认关；开着的用户才走这一支。
+    scheduleAutoStart(ctx)
     const watchTimer = setInterval(() => {
       void watchmanTick().catch((error) => {
         watchmanLog('note', `why=tick-error detail=${String(error?.message ?? error).replace(/\s+/g, ' ')}`)

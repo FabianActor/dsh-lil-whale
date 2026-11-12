@@ -9,6 +9,8 @@
 #   pwsh -File fish.ps1 up all             全开（巡守那条 + 所有鱼）
 #   pwsh -File fish.ps1 down whale         停一条
 #   pwsh -File fish.ps1 down all           全停
+#   pwsh -File fish.ps1 up-main            启动主 dsh（快捷方式用；已在跑就直接开浏览器）
+#   pwsh -File fish.ps1 down-main          关闭主 dsh（还有鱼在跑时拒绝，除非 -Force）
 #   pwsh -File fish.ps1 doctor             体检（现在只对配置里那条鱼）
 #   pwsh -File fish.ps1 help
 #
@@ -22,7 +24,9 @@ param(
   [switch]$Yes,
   [string]$By = 'fabian',
   [string]$Why = '',
-  [int]$Port = 0
+  [int]$Port = 0,
+  # 只给 down-main 用：明知还有鱼在跑也关主 dsh（默认拒绝——"先停鱼再关 dsh"是推荐用法）。
+  [switch]$Force
 )
 
 $ErrorActionPreference = 'Stop'
@@ -147,6 +151,36 @@ function Write-FishWindowLog($member, [string]$Event) {
   New-Item -ItemType Directory -Force -Path $dir | Out-Null
   $line = "{0} | event={1} | by={2} | busy={3} | why={4}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Event, $By, (Get-PresenceSnapshot), $Why
   Add-Content -LiteralPath (Join-Path $dir 'close.log') -Value $line -Encoding UTF8
+}
+
+# ---------- 启动锁 ----------
+# 为什么要有：自启动（巡守起来 8 秒后跑一次 up all）和用户手动点「全部唤醒」可能同时发生。
+# 两条 up all 都先探端口、都看到"没开"，然后各起一份 —— 那就是一条鱼两个进程。
+# 锁只覆盖"批量启动"这一段（单条 up 不抢锁：用户明确点了某条鱼，不该被别人的批量动作挡掉）。
+function Enter-UpLock {
+  $file = Join-Path $Cfg.PoolState 'up-all.lock'
+  New-Item -ItemType Directory -Force -Path (Split-Path $file) | Out-Null
+  for ($try = 0; $try -lt 2; $try++) {
+    try {
+      $fs = [System.IO.File]::Open($file, 'CreateNew', 'Write', 'None')
+      $bytes = [System.Text.Encoding]::UTF8.GetBytes("pid=$PID at=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')")
+      $fs.Write($bytes, 0, $bytes.Length)
+      $fs.Close()
+      return $true
+    } catch {
+      # 已有锁：超过 3 分钟当上一轮残留（崩了没来得及删），删掉再抢一次。
+      try {
+        $age = (Get-Date) - (Get-Item -LiteralPath $file).LastWriteTime
+        if ($age.TotalSeconds -gt 180) { Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue; continue }
+      } catch { }
+      return $false
+    }
+  }
+  return $false
+}
+
+function Exit-UpLock {
+  Remove-Item -LiteralPath (Join-Path $Cfg.PoolState 'up-all.lock') -Force -ErrorAction SilentlyContinue
 }
 
 # ---------- list ----------
@@ -299,18 +333,30 @@ fish.ps1 -- 鱼群唯一的入口
   pwsh -File fish.ps1 up all           全开
   pwsh -File fish.ps1 down whale       停一条
   pwsh -File fish.ps1 down all         全停
+  pwsh -File fish.ps1 up-main          启动主 dsh（已在跑就打开它的 WebUI）
+  pwsh -File fish.ps1 down-main        关闭主 dsh（还有鱼在跑时拒绝，-Force 强行）
   pwsh -File fish.ps1 doctor           体检
   pwsh -File fish.ps1 refresh whale    重新生成环境.md（模板/名册/工具变了以后）
   pwsh -File fish.ps1 help
 
-选项：-NoBrowser -Yes -By <谁> -Why <为什么> -Port <n>
+选项：-NoBrowser -Yes -Force -By <谁> -Why <为什么> -Port <n>
 '@ | Write-Host
 }
 
 # ---------- 分发 ----------
 $ok = $true
+$locked = $false
+$cmd = $Command.ToLower()
+$targetsAll = ($Name -eq '' -or $Name -eq 'all')
+if (($cmd -eq 'up' -or $cmd -eq 'start') -and $targetsAll) {
+  if (-not (Enter-UpLock)) {
+    Write-Host '另一个批量启动正在进行（pool\state\up-all.lock），这次跳过。'
+    exit 0
+  }
+  $locked = $true
+}
 try {
-  switch ($Command.ToLower()) {
+  switch ($cmd) {
     'list'   { Show-List }
     'ls'     { Show-List }
     'up'     { foreach ($m in (Resolve-Targets $Name)) { if (-not (Start-Fish $m)) { $ok = $false } } }
@@ -318,6 +364,32 @@ try {
     'down'   { foreach ($m in (Resolve-Targets $Name)) { if (-not (Stop-Fish $m)) { $ok = $false } } }
     'stop'   { foreach ($m in (Resolve-Targets $Name)) { if (-not (Stop-Fish $m)) { $ok = $false } } }
     'refresh' { foreach ($m in (Resolve-Targets $Name)) { if (-not (Invoke-RefreshEnv $m)) { $ok = $false } } }
+    'up-main' {
+      $m = Get-Fish 'lee'
+      if (-not $m) { throw '名册里没有巡守那条鱼（lee）' }
+      $wasRunning = Test-Port (Get-PortOf $m)
+      if (-not (Start-Fish $m)) { $ok = $false }
+      elseif ($wasRunning -and -not $NoBrowser) {
+        # 已经在跑：Start-Fish 只打印地址；但用户点的是"启动 dsh"，该把窗口给他打开。
+        Start-Process (Get-Url $m) | Out-Null
+        Write-Host '已经开着，帮你把 WebUI 打开了。'
+      }
+    }
+    'down-main' {
+      $m = Get-Fish 'lee'
+      if (-not $m) { throw '名册里没有巡守那条鱼（lee）' }
+      $runningFish = @($MEMBERS.Values | Where-Object {
+        $_.Kind -eq 'fish' -and $_.Role -ne 'watcher' -and (Test-Port (Get-PortOf $_))
+      })
+      if ($runningFish.Count -gt 0 -and -not $Force) {
+        Write-Host ('还有 {0} 条鱼在跑：{1}' -f $runningFish.Count, (($runningFish | ForEach-Object { $_.Label }) -join '、'))
+        Write-Host '推荐先关鱼再关 dsh：鱼塘里点「全部休眠」，或运行 scripts\bin\Stop All Whales.cmd。'
+        Write-Host '（确定要带着鱼一起关主 dsh，加 -Force。）'
+        $ok = $false
+      } else {
+        if (-not (Stop-Fish $m)) { $ok = $false }
+      }
+    }
     'doctor' { $ok = Invoke-Doctor }
     'help'   { Show-Help }
     default  { Write-Host "不认识的命令：$Command"; Show-Help; $ok = $false }
@@ -325,6 +397,8 @@ try {
 } catch {
   Write-Host ("没做成：" + $_.Exception.Message)
   $ok = $false
+} finally {
+  if ($locked) { Exit-UpLock }
 }
 
 if ($ok) { exit 0 }

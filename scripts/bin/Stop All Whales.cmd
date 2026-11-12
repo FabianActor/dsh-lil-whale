@@ -1,13 +1,9 @@
 @echo off
 chcp 65001 >nul
 setlocal
-rem Prefers the real layout (..\PS1), then this folder, then the ASCII project junction.
-set "S=%~dp0..\stop.ps1"
-if not exist "%S%" set "S=%~dp0stop.ps1"
-if not exist "%S%" set "S=%USERPROFILE%\dsh-lil-whale\scripts\stop.ps1"
-if not exist "%S%" ( echo Cannot find stop.ps1. Run this from scripts\bin, or check that %USERPROFILE%\dsh-lil-whale exists. & pause & exit /b 1 )
-pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%S%" -Target all
-set "RC=%ERRORLEVEL%"
-endlocal & set "RC=%RC%"
-if not "%RC%"=="0" pause
-exit /b %RC%
+rem 关闭所有鱼（主 dsh 不动）。
+set "S=%~dp0..\fish.ps1"
+if not exist "%S%" set "S=%USERPROFILE%\dsh-lil-whale\scripts\fish.ps1"
+if not exist "%S%" ( echo Cannot find fish.ps1. & pause & exit /b 1 )
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%S%" down all -Yes
+if errorlevel 1 pause
