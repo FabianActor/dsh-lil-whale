@@ -1143,12 +1143,27 @@ function apply(ctx) {
         },
       },
       // 回执要让人一眼看出"这句话去了哪一间屋"。
-      render: (_args, value) => [{
-        type: 'text',
-        text: value.channel === 'dm'
-          ? `已写进私聊（${value.ts}）：只有 ${value.to} 看得见，群里不会出现这句。`
-          : `已入群（${value.ts}）：群里的人都看得见。`,
-      }],
+      // 2026-11-12 补：还要说清"**谁会收到通知**" —— `to` 是叫醒谁，不是谁看得见。
+      // 小肥鱼 19:18 把一条该给大肥鱼的汇报发成了 to=all，所有人都被叫醒；
+      // 机制没错，是纸面上没写清楚（她的环境.md 只写了"三个房间"，没写 to 的这一层）。
+      render: (args, value) => {
+        const mentioned = []
+        const text = typeof args?.text === 'string' ? args.text : ''
+        for (const [key, m] of Object.entries(MEMBERS)) {
+          if (key === value.from) continue
+          const label = m?.label
+          if (label && text.includes(`@${label}`)) mentioned.push(label)
+        }
+        const base = value.channel === 'dm'
+          ? `已写进私聊（${value.ts}）：只有 ${labelOf(value.to)} 看得见，群里不会出现这句。`
+          : value.to && value.to !== 'all'
+            ? `已入群（${value.ts}）：写进群记录，**只有 ${labelOf(value.to)} 会被叫醒**（别人翻记录看得见）。`
+            : `已入群（${value.ts}）：群里的人都看得见，**醒着的都会被叫醒**。`
+        const hint = value.channel !== 'dm' && value.to === 'all' && mentioned.length > 0
+          ? `\n\n提示：正文里 @ 了 ${mentioned.join('、')}，但 to=all —— 这条会叫醒所有醒着的鱼。只想叫其中一个，就把 to 写成他的 id（例如 to:"lee"），话照样进群、别人看得见。`
+          : ''
+        return [{ type: 'text', text: base + hint }]
+      },
     },
     execute(args, exec) {
       // 工具是进程级注册的：这个 profile 里所有会话都看得见 group_say。
