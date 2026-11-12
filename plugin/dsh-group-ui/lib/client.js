@@ -1038,10 +1038,12 @@ function Bubble({ config, message, onMention, animate = false }) {
       const pickedOnceRef = useRef(false)
       const peerRef = useRef(null)
       const [text, setText] = useState('')
+      const [sending, setSending] = useState(false)
+      // setError 必须先声明再传下去：`const` 有暂时性死区，先用到后声明是 ReferenceError，
+      // 整页白屏（2026-11-12 他报的 bug：私聊页面白屏）。
+      const [error, setError] = useState(null)
       // 私聊一样能发图：和群聊共用 useImageAttach，只是发出去的地址不同。
       const { pendingImage, setPendingImage, imageBusy, attachImage, fileRef } = useImageAttach(setError)
-      const [sending, setSending] = useState(false)
-      const [error, setError] = useState(null)
       const [unread, setUnread] = useState({ dm: {} })
       // 每个对端"上次看到哪儿"，进这一段时冻结一次：之后边读边刷新不能让线跟着往下跑。
       const seenDmRef = useRef({})
@@ -2382,7 +2384,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[lil-whale-group-ui] client build v12 · settings-focus:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[lil-whale-group-ui] client build v13 · dm-tdz-fix:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('lil-whale-group-keyframes')) {
           const style = document.createElement('style')
