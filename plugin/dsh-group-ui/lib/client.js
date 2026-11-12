@@ -1542,6 +1542,20 @@ function Bubble({ config, message, onMention, animate = false }) {
       const [seats, setSeats] = useState([])
       const [pickerOpen, setPickerOpen] = useState(false)
       const [tab, setTab] = useState('group')
+      // 切回群聊时给一次过场：从私聊/鱼塘回来，也是一整屏换掉，
+      // 没有过场就像卡了一下（2026-11-12 他报"鱼塘→群聊会卡"）。
+      const [tabSplash, setTabSplash] = useState(false)
+      const tabSplashTimer = useRef(null)
+      const switchTab = useCallback((key) => {
+        if (key === tab) return
+        if (key === 'group') {
+          setTabSplash(true)
+          if (tabSplashTimer.current) clearTimeout(tabSplashTimer.current)
+          tabSplashTimer.current = setTimeout(() => setTabSplash(false), 420)
+        }
+        setTab(key)
+      }, [tab])
+      useEffect(() => () => { if (tabSplashTimer.current) clearTimeout(tabSplashTimer.current) }, [])
       const [unread, setUnread] = useState({ group: 0, dm: {}, total: 0 })
       // 群聊"上次看到哪儿"：进这一页时冻结一次，线不跟着新消息往下跑。
       const seenGroupRef = useRef(null)
@@ -1762,7 +1776,7 @@ function Bubble({ config, message, onMention, animate = false }) {
               const active = tab === item.key
               return h('button', {
                 key: item.key,
-                onClick: () => setTab(item.key),
+                onClick: () => switchTab(item.key),
                 style: {
                   position: 'relative',
                   minHeight: 35,
@@ -1866,8 +1880,8 @@ function Bubble({ config, message, onMention, animate = false }) {
               }),
             ),
         ),
-          // 过场页：盖住"从空到有"的那一下
-          splash ? h(LoadingSplash, { label: '正在打开群聊…' }) : null,
+          // 过场页：盖住"从空到有"的那一下，以及从别的 tab 切回群聊的那一下
+          (splash || tabSplash) ? h(LoadingSplash, { label: '正在打开群聊…' }) : null,
           // 回到上次看到的位置：线在视口上方时才出现（刚进来、或往下翻过头了）
           historyAbove ? h(JumpToHistory, {
             onClick: jumpToHistory,
@@ -2493,6 +2507,20 @@ function Bubble({ config, message, onMention, animate = false }) {
       }
     }
 
+    /** 鱼塘的记号：一汪水 + 一条鱼。原来画在侧边栏图标上，改挂成 tab 之后挪到页内。 */
+    function PondMark({ size = 18 }) {
+      return h('svg', {
+        width: size, height: size, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': 'true',
+        style: { flex: '0 0 auto', color: 'var(--dsw-alias-label-secondary, #6b7280)' },
+      },
+        h('ellipse', { cx: 8, cy: 10.2, rx: 6.3, ry: 3.4, stroke: 'currentColor', strokeWidth: 1.2, opacity: 0.5 }),
+        h('path', { d: 'M4.4 8.6c1.4-1.7 3.7-1.7 5.1 0-1.4 1.7-3.7 1.7-5.1 0z', stroke: 'currentColor', strokeWidth: 1.2, strokeLinejoin: 'round' }),
+        h('path', { d: 'M9.9 8.6l1.9-1.2v2.4z', fill: 'currentColor' }),
+        h('circle', { cx: 6.3, cy: 4.1, r: 0.85, stroke: 'currentColor', strokeWidth: 1 }),
+        h('circle', { cx: 9.4, cy: 2.9, r: 0.65, stroke: 'currentColor', strokeWidth: 1 }),
+      )
+    }
+
     function PondPage(props) {
       const embedded = props?.embedded === true
       const [status, setStatus] = useState(null)
@@ -2604,6 +2632,16 @@ function Bubble({ config, message, onMention, animate = false }) {
             }),
             h('span', { style: { fontSize: 14, fontWeight: 600 } }, item.name),
             h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-secondary, #8a8f98)' } }, item.key),
+            Number.isInteger(item.generation) && item.generation > 0
+              ? h('span', {
+                style: {
+                  fontSize: 11,
+                  padding: '0 5px',
+                  color: 'var(--dsw-alias-label-secondary, #8a8f98)',
+                  background: 'var(--dsw-alias-bg-layer-2, #f4f5f6)',
+                },
+              }, `第 ${item.generation} 代`)
+              : null,
             h(
               'span',
               {
@@ -2693,6 +2731,8 @@ function Bubble({ config, message, onMention, animate = false }) {
         h(
           'div',
           { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
+          h(PondMark, { size: 20 }),
+          h('div', { style: { fontSize: 14, fontWeight: 600, marginRight: 2 } }, POND.title),
           pondChip(`${running} / ${total} 在跑`),
           pondChip(error ? '连不上本机服务' : POND.polling),
           h(
@@ -2776,7 +2816,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[lil-whale-group-ui] client build v21 · pond-tab:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[lil-whale-group-ui] client build v22 · pond-tree:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('lil-whale-group-keyframes')) {
           const style = document.createElement('style')

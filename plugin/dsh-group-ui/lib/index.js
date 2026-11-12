@@ -484,6 +484,27 @@ function pondUrlOf(member) {
   return `http://127.0.0.1:${port}/${token ? `?token=${token}` : ''}`
 }
 
+/** 世代：顺着 parent 往上数（根 = 0）。parent 断了就按 0 算 —— 一条坏数据不该把整张表卡住。 */
+function generationOf(key, members, seen = new Set()) {
+  if (seen.has(key)) return 0
+  seen.add(key)
+  const parent = members?.[key]?.parent
+  if (!parent || !members[parent]) return 0
+  return 1 + generationOf(parent, members, seen)
+}
+
+/** 出生顺序：bornAt 是日期字符串；没有 bornAt 的排同代最后，再按键。 */
+function bornOrder(a, b) {
+  const ta = Date.parse(a ?? '')
+  const tb = Date.parse(b ?? '')
+  const hasA = Number.isFinite(ta)
+  const hasB = Number.isFinite(tb)
+  if (hasA && hasB) return ta === tb ? 0 : ta - tb
+  if (hasA) return -1
+  if (hasB) return 1
+  return 0
+}
+
 async function pondStatus() {
   const members = pondMembers()
   const fish = []
@@ -499,6 +520,8 @@ async function pondStatus() {
       role: member?.role === 'watcher' ? 'watcher' : 'member',
       status: member?.status ?? 'resident',
       parent: member?.parent ?? null,
+      generation: generationOf(key, members),
+      bornAt: typeof member?.bornAt === 'string' ? member.bornAt : null,
       port: Number.isInteger(port) && port > 0 ? port : null,
       portOpen,
       pid: run?.pid ?? null,
@@ -510,7 +533,14 @@ async function pondStatus() {
       url: portOpen ? pondUrlOf(member) : null,
     })
   }
-  fish.sort((a, b) => (a.role === b.role ? String(a.key).localeCompare(String(b.key)) : a.role === 'watcher' ? -1 : 1))
+  // 排序 = 家谱顺序（2026-11-12 他要的）：世代浅的在前；同代按出生日期，早的在前；
+  // 没有出生日期的排同代最后；最后才按键（保证同一份数据两次排序结果一样）。
+  fish.sort((a, b) => {
+    if (a.generation !== b.generation) return a.generation - b.generation
+    const byBirth = bornOrder(a.bornAt, b.bornAt)
+    if (byBirth !== 0) return byBirth
+    return String(a.key).localeCompare(String(b.key))
+  })
   return { fish, summary: { total: fish.length, running: fish.filter((item) => item.portOpen).length } }
 }
 
