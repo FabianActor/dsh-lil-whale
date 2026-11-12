@@ -55,9 +55,26 @@ window.__ModuleLoader__.load({
       // 宿主只给得出 reason，给不出"这句话回谁"——所以文案也只承诺到这一层。
       typingGroup: (names) => `${names} 正在回复群里的消息…`,
       typingElsewhere: (names) => `${names} 在忙别的（不是群里的消息）`,
+      // 私聊页用这个：在私聊窗口里说"正在回复群里的消息"是答非所问。
+      // 只承诺"她很忙"，不承诺她在回谁。
+      busy: (names) => `${names} 正在忙…`,
       mention: '右键 @',
       settingsTitle: '小小肥鱼',
       settingsHint: '这些只改显示，不碰她的文件。',
+    }
+
+    // 没发出去的字不能因为"切走看一眼"就没。草稿只存在这台机器的浏览器里
+    // （localStorage，按会话分键），不进她的家、不进群记录。
+    const GROUP_DRAFT_KEY = 'dsh-group-draft'
+    const dmDraftKeyOf = (peer) => `dsh-group-dm-draft-${peer}`
+    const readDraft = (key) => {
+      try { return window.localStorage?.getItem(key) ?? '' } catch { return '' }
+    }
+    const writeDraft = (key, value) => {
+      try {
+        if (value) window.localStorage?.setItem(key, value)
+        else window.localStorage?.removeItem(key)
+      } catch { /* 存不进去也让打字继续：草稿没了是遗憾，打字卡住是故障 */ }
     }
 
     /**
@@ -1044,6 +1061,11 @@ function Bubble({ config, message, onMention, animate = false }) {
       const [error, setError] = useState(null)
       // 私聊一样能发图：和群聊共用 useImageAttach，只是发出去的地址不同。
       const { pendingImage, setPendingImage, imageBusy, attachImage, fileRef } = useImageAttach(setError)
+      // 切到谁，就把他/她那段没写完的草稿捞回来（每个人一份，存在这台机器上）。
+      useEffect(() => {
+        if (activePeer === null) return
+        setText(readDraft(dmDraftKeyOf(activePeer)))
+      }, [activePeer])
       const [unread, setUnread] = useState({ dm: {} })
       // 每个对端"上次看到哪儿"，进这一段时冻结一次：之后边读边刷新不能让线跟着往下跑。
       const seenDmRef = useRef({})
@@ -1169,6 +1191,7 @@ function Bubble({ config, message, onMention, animate = false }) {
           })
           if (!response.ok) throw new Error(`HTTP ${response.status}`)
           setText('')
+          writeDraft(dmDraftKeyOf(activePeer), '')
           setPendingImage(null)
           await loadMessages()
           await loadContacts()
@@ -1266,8 +1289,8 @@ function Bubble({ config, message, onMention, animate = false }) {
           presenceOf(presence, activePeer).status === 'working'
             ? h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } },
               presenceOf(presence, activePeer).reason === 'group'
-                ? t.typingGroup(nameOf(config, activePeer))
-                : t.typingElsewhere(nameOf(config, activePeer)))
+                ? t.busy(nameOf(config, activePeer))
+                : t.typing(nameOf(config, activePeer)))
             : null))
 
       const fadeMask = { WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)', maskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)' }
@@ -1337,7 +1360,10 @@ function Bubble({ config, message, onMention, animate = false }) {
           h('textarea', {
             ref: inputRef,
             value: text,
-            onChange: (event) => setText(event.target.value),
+            onChange: (event) => {
+              setText(event.target.value)
+              if (activePeer !== null) writeDraft(dmDraftKeyOf(activePeer), event.target.value)
+            },
             onPaste: (event) => {
               const items = event.clipboardData?.items
               if (!items) return
@@ -1488,12 +1514,15 @@ function Bubble({ config, message, onMention, animate = false }) {
       const animateRef = useRef(false)
       const pickedOnceRef = useRef(false)
       const [messages, setMessages] = useState([])
-      const [text, setText] = useState('')
+      const [text, setText] = useState(() => readDraft(GROUP_DRAFT_KEY))
       const [to, setTo] = useState('all')
       const [error, setError] = useState(null)
       const [sending, setSending] = useState(false)
       // 待发送的图（data URL）。上传在 submit 里做，这里只存"用户选了哪张"。
       const { pendingImage, setPendingImage, imageBusy, attachImage, fileRef } = useImageAttach(setError)
+      // 群聊草稿：改一个字就存，切走 / 刷新 / 重新进页面都还在。
+      // 发出去以后 text 变空串，这里顺手把草稿删掉（见 writeDraft 的空值分支）。
+      useEffect(() => { writeDraft(GROUP_DRAFT_KEY, text) }, [text])
       const [presence, setPresence] = useState({})
       const [seats, setSeats] = useState([])
       const [pickerOpen, setPickerOpen] = useState(false)
@@ -1716,7 +1745,7 @@ function Bubble({ config, message, onMention, animate = false }) {
               const active = tab === item.key
               return h('button', {
                 key: item.key,
-                onClick: () => { setTab(item.key); setText('') },
+                onClick: () => setTab(item.key),
                 style: {
                   position: 'relative',
                   minHeight: 35,
@@ -2384,7 +2413,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[lil-whale-group-ui] client build v13 · dm-tdz-fix:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[lil-whale-group-ui] client build v14 · drafts-and-image-history:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('lil-whale-group-keyframes')) {
           const style = document.createElement('style')

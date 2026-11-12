@@ -272,12 +272,18 @@ function readMessages(file = MESSAGES) {
     if (!text) continue
     try {
       const record = JSON.parse(text)
+      // 投影要带全：面板靠这些字段画图、画「→ 某人的哪一段」、判断私聊/群。早先只留了
+      // ts/from/to/text/kind，结果她发的图在面板里根本不显示 —— 记录里有、列表里没有。
       out.push({
         ts: record.ts,
         from: record.from,
         to: record.to,
         text: record.text,
         kind: record.kind ?? 'say',
+        ...(record.s ? { s: record.s } : {}),
+        ...(record.channel ? { channel: record.channel } : {}),
+        ...(record.toSeat ? { toSeat: record.toSeat } : {}),
+        ...(record.image ? { image: record.image } : {}),
       })
     } catch {
       // 半截行（另一个进程正在写）——跳过，下一次轮询就整了
