@@ -1546,6 +1546,23 @@ function Bubble({ config, message, onMention, animate = false }) {
       // 没有过场就像卡了一下（2026-11-12 他报"鱼塘→群聊会卡"）。
       const [tabSplash, setTabSplash] = useState(false)
       const tabSplashTimer = useRef(null)
+      // 过场只盖信息流区域（2026-11-12 23:15 他要的）：量一下头部（标题 + tab 条）有多高，
+      // 过场从那条线往下盖 —— 和"从外部进入鱼群"的过场范围一致，不盖头部和 tab 条。
+      const headerRef = useRef(null)
+      const [headerH, setHeaderH] = useState(0)
+      useEffect(() => {
+        const el = headerRef.current
+        if (!el) return
+        const measure = () => setHeaderH(el.getBoundingClientRect().height)
+        measure()
+        const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure)
+        if (observer) observer.observe(el)
+        window.addEventListener('resize', measure)
+        return () => {
+          if (observer) observer.disconnect()
+          window.removeEventListener('resize', measure)
+        }
+      }, [])
       const switchTab = useCallback((key) => {
         if (key === tab) return
         if (key !== 'group') {
@@ -1752,6 +1769,7 @@ function Bubble({ config, message, onMention, animate = false }) {
         style: { ...baseStyle, display: 'flex', flexDirection: 'column', position: 'relative' },
       },
         h('div', {
+          ref: headerRef,
           style: {
             flex: 'none',
             padding: '10px 28px 0 20px',
@@ -1830,7 +1848,7 @@ function Bubble({ config, message, onMention, animate = false }) {
         ),
         // 切回群聊的过场：挂在页根上，所以旧 tab 还在时也能先画出来。
         tabSplash
-          ? h('div', { style: { position: 'absolute', inset: 0, zIndex: 30 } }, h(LoadingSplash, { label: '正在打开群聊…' }))
+          ? h('div', { style: { position: 'absolute', left: 0, right: 0, top: headerH, bottom: 0, zIndex: 30 } }, h(LoadingSplash, { label: '正在打开群聊…' }))
           : null,
         tab === 'dm'
           ? h(DmPage, { config, presence })
@@ -2520,6 +2538,17 @@ function Bubble({ config, message, onMention, animate = false }) {
       { key: 'dew', name: '小露', role: 'member', generation: 4, port: 3098, portOpen: true, bornAt: '2026-12-25T06:45:00+08:00', heartbeatAgeMs: 260000, canManage: true },
     ]
 
+    // 谱系示例里"谁是谁的子代"：树是按 parent 画的，generation 只是标签。
+    const POND_DEMO_PARENT = {
+      lee: null,
+      whale: 'lee', fishball: 'lee', shell: 'lee', star: 'lee',
+      scale: 'whale', tide: 'whale',
+      algae: 'fishball', bubble: 'fishball', sand: 'fishball',
+      fin: 'scale', tail: 'scale', moss: 'tide', bean: 'fishball', foam: 'bubble',
+      feather: 'moss', glimmer: 'moss', dew: 'fin',
+    }
+    for (const item of POND_DEMO_FISH) item.parent = POND_DEMO_PARENT[item.key] ?? null
+
     function pondChip(text) {
       return h(
         'span',
@@ -2657,18 +2686,86 @@ function Bubble({ config, message, onMention, animate = false }) {
       const total = demo ? POND_DEMO_FISH.length : (status?.summary?.total ?? 0)
       const busyAny = busy !== null
 
-      // 按代分组：同一代并排，下一代缩进一格 —— 谱系就是这样看出来的。
-      const generations = useMemo(() => {
-        const buckets = new Map()
+      // 谱系树（2026-11-12 23:15 他要的）：像文件树那样，子代挂在父代下面，
+      // 用缩进 + 左侧竖线表达"这是谁的子代"，而不是只按代分组。
+      // parent 指向名册里不存在的键（或自己指自己）时当根处理，防止坏数据画出环。
+      const tree = useMemo(() => {
+        const byKey = new Map(fish.map((item) => [item.key, item]))
+        const childrenOf = new Map()
+        const roots = []
         for (const item of fish) {
-          const generation = Number.isInteger(item.generation) ? item.generation : 0
-          if (!buckets.has(generation)) buckets.set(generation, [])
-          buckets.get(generation).push(item)
+          const parent = item.parent && item.parent !== item.key && byKey.has(item.parent) ? item.parent : null
+          if (parent === null) {
+            roots.push(item)
+          } else {
+            if (!childrenOf.has(parent)) childrenOf.set(parent, [])
+            childrenOf.get(parent).push(item)
+          }
         }
-        return [...buckets.entries()].sort((a, b) => a[0] - b[0])
+        const byBirth = (a, b) => {
+          const at = Date.parse(a.bornAt ?? '')
+          const bt = Date.parse(b.bornAt ?? '')
+          const aOk = Number.isFinite(at)
+          const bOk = Number.isFinite(bt)
+          if (aOk && bOk && at !== bt) return at - bt
+          if (aOk !== bOk) return aOk ? -1 : 1
+          return String(a.key).localeCompare(String(b.key))
+        }
+        roots.sort(byBirth)
+        for (const list of childrenOf.values()) list.sort(byBirth)
+        return { roots, childrenOf, byKey }
       }, [fish])
 
-      const card = (item) => {
+      // 一条鱼 = 一张卡 + 它自己的子代（递归）。seen 防环，depth 兜底。
+      const nodeOf = (item, depth, seen) => {
+        if (seen.has(item.key) || depth > 12) return null
+        const nextSeen = new Set(seen)
+        nextSeen.add(item.key)
+        const kids = tree.childrenOf.get(item.key) ?? []
+        const parentItem = item.parent ? tree.byKey.get(item.parent) ?? null : null
+        return h(
+          'div',
+          { key: item.key, style: { display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 } },
+          h(
+            'div',
+            { style: { display: 'flex', alignItems: 'stretch', minWidth: 0 } },
+            depth > 0
+              ? h(
+                'div',
+                { style: { flex: '0 0 16px', position: 'relative' }, 'aria-hidden': 'true' },
+                h('div', {
+                  style: {
+                    position: 'absolute', left: 7, top: 0, bottom: 0, width: 1,
+                    background: 'var(--dsw-alias-border-l2, rgba(0,0,0,0.1))',
+                  },
+                }),
+                h('div', {
+                  style: {
+                    position: 'absolute', left: 7, top: 26, width: 9, height: 1,
+                    background: 'var(--dsw-alias-border-l2, rgba(0,0,0,0.1))',
+                  },
+                }),
+              )
+              : null,
+            h('div', { style: { flex: 1, minWidth: 0 } }, card(item, parentItem)),
+          ),
+          kids.length
+            ? h(
+              'div',
+              {
+                style: {
+                  display: 'flex', flexDirection: 'column', gap: 8,
+                  marginLeft: 7, paddingLeft: 9,
+                  borderLeft: '0.5px solid var(--dsw-alias-border-l1, rgba(0,0,0,0.06))',
+                },
+              },
+              kids.map((kid) => nodeOf(kid, depth + 1, nextSeen)),
+            )
+            : null,
+        )
+      }
+
+      const card = (item, parentItem) => {
         const self = item.canManage === false
         const hb = item.heartbeatAgeMs
         const hbText = hb === null || hb === undefined ? POND.noHeartbeat : POND.heartbeatAgo(Math.floor(hb / 60000))
@@ -2734,6 +2831,7 @@ function Bubble({ config, message, onMention, animate = false }) {
             h('span', null, `${POND.port} ${item.port ?? '—'}`),
             h('span', null, item.portOpen ? POND.running : POND.stopped),
             h('span', null, `${POND.heartbeat} ${hbText}`),
+            parentItem ? h('span', null, `父代 ${parentItem.name}`) : null,
           ),
           item.lastRun
             ? h(
@@ -2782,7 +2880,7 @@ function Bubble({ config, message, onMention, animate = false }) {
 
       return h(
         'div',
-        { style: { display: 'flex', flexDirection: 'column', gap: 12, padding: embedded ? '12px 0 24px' : '4px 0 24px', minHeight: 0, flex: 1, overflowY: 'auto' } },
+        { style: { display: 'flex', flexDirection: 'column', gap: 12, padding: embedded ? '12px 20px 24px' : '4px 20px 24px', minHeight: 0, flex: 1, overflowY: 'auto' } },
         h(
           'div',
           { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
@@ -2790,12 +2888,7 @@ function Bubble({ config, message, onMention, animate = false }) {
           h('div', { style: { fontSize: 14, fontWeight: 600, marginRight: 2 } }, POND.title),
           pondChip(`${running} / ${total} 在跑`),
           pondChip(error && !demo ? '连不上本机服务' : POND.polling),
-          h(
-            'button',
-            { onClick: () => setDemo((value) => !value), style: pondButtonStyle(false) },
-            demo ? POND.demoOff : POND.demoOn,
-          ),
-          h('div', { style: { marginLeft: 'auto', display: 'flex', gap: 8 } },
+          h('div', { style: { display: 'flex', gap: 8 } },
             h(
               'button',
               { onClick: () => act('up-all'), disabled: busyAny || demo, style: pondButtonStyle(true) },
@@ -2812,6 +2905,11 @@ function Bubble({ config, message, onMention, animate = false }) {
               },
               busy === 'down-all' ? POND.busy : POND.allDown,
             ),
+          ),
+          h(
+            'button',
+            { onClick: () => setDemo((value) => !value), style: pondButtonStyle(false) },
+            demo ? POND.demoOff : POND.demoOn,
           ),
         ),
         demo
@@ -2834,29 +2932,11 @@ function Bubble({ config, message, onMention, animate = false }) {
         fish.length === 0
           ? h('div', { style: { fontSize: 13, color: 'var(--dsw-alias-label-secondary, #8a8f98)' } }, POND.empty)
           : null,
-        generations.map(([generation, members]) => h(
+        h(
           'div',
-          {
-            key: `gen-${generation}`,
-            style: {
-              display: 'flex', flexDirection: 'column', gap: 8,
-              paddingLeft: generation > 0 ? 14 : 0,
-              borderLeft: generation > 0 ? '0.5px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.1))' : 'none',
-            },
-          },
-          h('div', {
-            style: {
-              fontSize: 11, lineHeight: '16px', letterSpacing: 0.2,
-              color: 'var(--dsw-alias-label-tertiary, #8a8f98)',
-              display: 'flex', alignItems: 'center', gap: 8,
-            },
-          }, POND.generation(generation), h('span', { style: { flex: 1, height: 1, background: 'var(--dsw-alias-border-l1, rgba(0,0,0,0.06))' } })),
-          h(
-            'div',
-            { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 } },
-            members.map(card),
-          ),
-        )),
+          { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
+          tree.roots.map((item) => nodeOf(item, 0, new Set())),
+        ),
         result
           ? h(
             'div',
@@ -2895,7 +2975,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[lil-whale-group-ui] client build v23 · pond-official:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[lil-whale-group-ui] client build v24 · pond-tree:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('lil-whale-group-keyframes')) {
           const style = document.createElement('style')
