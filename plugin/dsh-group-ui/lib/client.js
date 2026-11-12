@@ -1758,7 +1758,7 @@ function Bubble({ config, message, onMention, animate = false }) {
               alignItems: 'flex-start',
             },
           },
-            [{ key: 'group', label: '群聊' }, { key: 'dm', label: '私聊' }].map((item) => {
+            [{ key: 'group', label: '群聊' }, { key: 'dm', label: '私聊' }, { key: 'pond', label: '鱼塘' }].map((item) => {
               const active = tab === item.key
               return h('button', {
                 key: item.key,
@@ -1782,7 +1782,9 @@ function Bubble({ config, message, onMention, animate = false }) {
               },
                 item.key === 'group'
                   ? (unread.group > 0 ? item.label + ' (' + unread.group + ')' : item.label)
-                  : (dmTotal(unread) > 0 ? item.label + ' (' + dmTotal(unread) + ')' : item.label),
+                  : item.key === 'dm'
+                    ? (dmTotal(unread) > 0 ? item.label + ' (' + dmTotal(unread) + ')' : item.label)
+                    : item.label,
                 h('span', {
                   style: {
                     position: 'absolute',
@@ -1805,7 +1807,9 @@ function Bubble({ config, message, onMention, animate = false }) {
         ),
         tab === 'dm'
           ? h(DmPage, { config, presence })
-          : h(React.Fragment, null,
+          : tab === 'pond'
+            ? h(PondPage, { embedded: true })
+            : h(React.Fragment, null,
         h('div', {
           style: { flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' },
         },
@@ -2434,7 +2438,6 @@ function Bubble({ config, message, onMention, animate = false }) {
     //
     // 巡守那条（role=watcher，就是你现在看的这个 3080）不给按钮：关掉它等于把
     // 正在看的这扇窗自己拔了。页面里会写清楚为什么。
-    const POND_ID = 'pond'
     const POND_POLL_MS = 4000
 
     const POND = {
@@ -2461,27 +2464,6 @@ function Bubble({ config, message, onMention, animate = false }) {
       empty: '名册里还没有鱼。',
       roleWatcher: '巡守',
       roleMember: '成员',
-    }
-
-    function PondIcon() {
-      return h(
-        'svg',
-        { width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': 'true' },
-        h('path', {
-          d: 'M1.5 6.1c1.6 0 1.6-1 3.2-1s1.6 1 3.2 1 1.6-1 3.2-1 1.6 1 3.2 1',
-          stroke: 'currentColor',
-          strokeWidth: 1.2,
-          strokeLinecap: 'round',
-        }),
-        h('path', {
-          d: 'M1.5 9.3c1.6 0 1.6-1 3.2-1s1.6 1 3.2 1 1.6-1 3.2-1 1.6 1 3.2 1',
-          stroke: 'currentColor',
-          strokeWidth: 1.2,
-          strokeLinecap: 'round',
-          opacity: 0.5,
-        }),
-        h('circle', { cx: 11.2, cy: 4.3, r: 1.1, fill: 'currentColor' }),
-      )
     }
 
     function pondChip(text) {
@@ -2511,7 +2493,8 @@ function Bubble({ config, message, onMention, animate = false }) {
       }
     }
 
-    function PondPage() {
+    function PondPage(props) {
+      const embedded = props?.embedded === true
       const [status, setStatus] = useState(null)
       const [error, setError] = useState(null)
       const [busy, setBusy] = useState(null)
@@ -2698,34 +2681,20 @@ function Bubble({ config, message, onMention, animate = false }) {
 
       return h(
         'div',
-        { style: { display: 'flex', flexDirection: 'column', gap: 14, padding: '4px 0 24px', minHeight: 0 } },
-        h(
-          'div',
-          { style: { display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' } },
-          h('div', { style: { fontSize: 16, fontWeight: 600 } }, POND.title),
-          h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #8a8f98)' } }, POND.subtitle),
-          h(
-            'div',
-            {
-              style: {
-                marginLeft: 'auto',
-                fontSize: 12,
-                color: 'var(--dsw-alias-label-secondary, #8a8f98)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-              },
-            },
-            h('span', {
-              style: { width: 6, height: 6, background: error ? '#e5484d' : '#4a9d6a', display: 'inline-block' },
-            }),
-            error ? '连不上本机服务' : POND.polling,
-          ),
-        ),
+        { style: { display: 'flex', flexDirection: 'column', gap: 14, padding: embedded ? '12px 0 24px' : '4px 0 24px', minHeight: 0, flex: 1, overflowY: 'auto' } },
+        embedded
+          ? null
+          : h(
+              'div',
+              { style: { display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' } },
+              h('div', { style: { fontSize: 16, fontWeight: 600 } }, POND.title),
+              h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #8a8f98)' } }, POND.subtitle),
+            ),
         h(
           'div',
           { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
           pondChip(`${running} / ${total} 在跑`),
+          pondChip(error ? '连不上本机服务' : POND.polling),
           h(
             'button',
             { onClick: () => act('up-all'), disabled: busyAny, style: pondButtonStyle(true) },
@@ -2807,7 +2776,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[lil-whale-group-ui] client build v20 · fish-pond:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[lil-whale-group-ui] client build v21 · pond-tab:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('lil-whale-group-keyframes')) {
           const style = document.createElement('style')
@@ -2836,19 +2805,6 @@ function Bubble({ config, message, onMention, animate = false }) {
           order: 50,
           label: () => t.settingsTitle,
         }, SettingsPage))
-
-        // 「鱼塘」：管理开关的一页。order 放在鱼群后面 —— 聊天是常用的，开关是偶尔的。
-        ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
-          name: 'sidebar.panellist',
-          id: POND_ID,
-          order: 6,
-          label: () => POND.title,
-        }, PondIcon))
-
-        ctx.slots.inject('main', () => ctx.slots.register({
-          name: 'main',
-          key: POND_ID,
-        }, PondPage))
       },
     }
   },
