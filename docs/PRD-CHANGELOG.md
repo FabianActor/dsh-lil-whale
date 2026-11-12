@@ -3,6 +3,14 @@
 > 本文件只记「哪一版改了哪几处、为什么改」。当前结论都在 [小小肥鱼-PRD.md](小小肥鱼-PRD.md) 里，那边不背历史。
 > 自 v0.3.5 起从 PRD 头部搬到这里（此前几块原样搬出，未改写）。v1.0 是整篇重写。
 
+## v1.0.18（2026-11-12）
+
+- **A.19 的"遗留"落成做法（备好，未启用）**：中立 persona 只能靠新增一档 preset——`dsh-persona` 那行只在 preset 内部挂载，用来遮蔽部署级人设，改部署级 `system-prompt.personaPrefix` 会被 `standard` 的 persona 行盖掉。
+- **新增 `scripts\gen-neutral-preset.mjs`**：从当前装着的 dsh 现读 `preset-standard` 的 `plugins` 清单（`--dump-config`），只把 `persona` 的 `prefix` 换成能力陈述，输出 `templates\preset-neutral.yml`（`- insert:` 形式）。**为什么生成而不是手抄**：preset 的 `plugins` 是完整快照，覆盖后不会自动合并上游更新——手抄等于把今天这份冻结进仓库，生成则升级 dsh 后重跑一次就跟着走。
+- **已验证（不用重启）**：生成物插进 `whale` profile 的临时副本，`dsh --profile whale --dump-config` exit 0，`- id: preset-neutral` 出现且 `standard` 仍在。**未验证**：真会话选 `neutral` 后的行为（要重启 + 搬家当天）。
+- **两个坑**：①`prefix` 里含 `: `，裸写会被 YAML 当 mapping（`bad indentation of a mapping entry`）⇒ 单引号包住；②沙箱里用 `import.meta.url.pathname` 手算仓库根会留下 `%E6%96%87…` 编码（`cwd` 不存在 ⇒ `spawnSync` 返回 `status=null` 且无 error），要用 `fileURLToPath`。
+- 同步：`docs\出生流程.md`「以后换段怎么办」第 5 步写了用法与"升级后重跑"；`docs\待办-2026-11-12.md` 加 D5 行。
+
 ## v1.0.17（2026-11-12）
 
 - **新增附录 A.19「交接在文件里，不在会话里」**：她 14:04 答完 B 组三问后，按她的要求做了交接演练——临时干净 `DSH_HOME` + 只放 `START.md` / `notes\当下的我.md` 的会话，问"哪一步 / 定了什么 / 欠什么"，三问全对；同时演练抓出她简报自相矛盾（时间戳 08:02 与 rev `17:16Z` 并存、"欠 08:40"与"已验成"并存）⇒ 她整篇重写（`rev 1→2`）并定下硬规矩"只许整篇重写、不许局部替换"。第二轮审计按她给的三问（时区 / 矛盾条目 / 欠账里有没有已解决）跑：时区缺失、`两条/表满三格` 矛盾、`三条等重启生效` 只标一条——三问都没全过，等她改完再考。

@@ -1,6 +1,6 @@
 # 小小肥鱼 · PRD
 
-> 状态：**草稿 v1.0.17（2026-11-12）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段协议已演练（A.19）**，待她改完简报再审一轮。
+> 状态：**草稿 v1.0.18（2026-11-12）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段协议已演练（A.19）**，待她改完简报再审一轮。
 > 上游：[立项备忘](archive/小小肥鱼-立项备忘-2026-11-08.md)（**他的原话**，已冻结不改；三条硬要求已吸收进 §1）
 > 配套：[自主回合.md](自主回合.md)（G1 的上游能力，不是本 PRD 的验收项）
 > 改动记录：[PRD-CHANGELOG.md](PRD-CHANGELOG.md) —— 每一版改了哪几处、为什么。本文只放当前结论。
@@ -666,7 +666,10 @@ or export DEEPSEEK_API_KEY in the launching environment
   3. **关窗留痕 `logs\close.log`**：`ts | event=close|open | by=<谁>[@座位] | busy=<推导值> | why=<人填>`；`busy=` 从 `state\presence\*.json` 推导——"人填的叫判断，机器推的叫事实"。
   4. **搬家那一刻** `pins.json` 一次原子替换（`replace` 语义），不许"先加后删"（先加后删会有一个瞬间两个会话都算她）。已实现：`scripts\pins.mjs --member whale --id <新会话id>[,<旧会话id>]`（读 `lil-whale.config.json` 的 `groupDir`，写临时文件再 `rename`；非法 id、坏 JSON、重复 id 都拒；`--id ''` 表示暂时没有会话）。
 - **同族**：A.17（判据的出处必须是那件事本身）、A.14（别让"没发生"长得像"发生了"）。交接这条的版本是：**"能读"和"准"长得一样，演练只能证前者。**
-- **遗留（她的决定，搬段时一起做）**：新会话的 persona 换成"中立"——她不要 `You are a coding agent…` 这种**身份断言**，要**能力陈述**；理由是"人设该从行为里长出来，不该从预设里写进去"。上游现有 preset 是 `standard` / `ptc` / `minimal` / `cordis` 四档，没有现成的"中立"，做法要在她的 profile 里加一档（细节待搬段当天定，未做）。
+- **persona 换中立（她的决定）**：她不要 `You are a coding agent…` 这种**身份断言**，要**能力陈述**；理由是"人设该从行为里长出来，不该从预设里写进去"。上游四档（`standard` / `ptc` / `minimal` / `cordis`）没有现成的"中立"；`dsh-persona` 这一行只能挂在 preset 内部，用来**遮蔽**部署级人设，所以只能新增一档 preset。
+- **怎么加（已备好，搬段当天用）**：`scripts\gen-neutral-preset.mjs` 从当前装着的 dsh 现读 `standard` 的 `plugins` 清单（`--dump-config`），只把 `persona` 那行的 `prefix` 换成能力陈述，输出 `templates\preset-neutral.yml`（`- insert:` 形式，可整段插进她的 profile patch）。**为什么是生成而不是手抄**：preset 的 `plugins` 是完整快照，覆盖后不会自动合并上游更新（`dsh-agent-preset-registry` README 原话），手抄等于把今天这份冻结进仓库；生成则升级 dsh 后重跑一次就跟着走。
+- **已验证（不用重启）**：把生成物插进 `whale` profile 的临时副本，`dsh --profile whale --dump-config` exit 0，`- id: preset-neutral` 出现、`standard` 仍在。**未验证**：真会话上选 `neutral` 后的实际行为（要重启 + 搬家那天才做）。
+- **两个坑**（写进脚本注释）：①`prefix` 里有 `: `，裸写会被 YAML 当成 mapping（`bad indentation of a mapping entry`）⇒ 单引号包住；②沙箱里 Node 用 `pathname` 手算仓库根会留下 `%E6%96%87…` 编码、`cwd` 不存在 ⇒ 用 `fileURLToPath`。
 
 
 
@@ -727,3 +730,4 @@ or export DEEPSEEK_API_KEY in the launching environment
 | 养法 | 机制与规则；与"她这个人"相对 |
 | 空转 | 群里只有寒暄、没有新信息（A6 反例） |
 | 五行探针 | 一个只写一行字的本地包，用来证明"插件能不能真的 apply 并落盘" |
+
