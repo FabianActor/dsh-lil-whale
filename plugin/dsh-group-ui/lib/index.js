@@ -45,10 +45,16 @@ const IMAGE_MAX_BYTES = 8 * 1024 * 1024
 const IMAGE_EXT = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' }
 
 /** 按 id + ext 找到图片路径；月份不知道就扫目录（一个群不会有很多月份）。 */
-function imagePathOf(id, ext) {
+function imagePathOf(id, ext, pathHint) {
   const safeId = String(id || '')
   const safeExt = String(ext || '').toLowerCase()
   if (!/^[0-9a-f]{16}$/.test(safeId) || !IMAGE_EXT[safeExt]) return null
+  // 记录里有 path 就以它为准（只信 images/ + 文件名对得上的写法）。
+  const hint = String(pathHint || '').replace(/\\/g, '/').replace(/^\.\//, '')
+  if (hint !== '' && hint.startsWith('images/') && !hint.includes('..') && hint.endsWith('/' + safeId + '.' + safeExt)) {
+    const hinted = join(GROUP_DIR, hint)
+    if (existsSync(hinted)) return hinted
+  }
   try {
     for (const month of readdirSync(IMAGES_DIR)) {
       const candidate = join(IMAGES_DIR, month, `${safeId}.${safeExt}`)
@@ -74,8 +80,23 @@ function storeImageDataUrl(dataUrl) {
   mkdirSync(dir, { recursive: true })
   const file = join(dir, `${id}.${ext}`)
   if (!existsSync(file)) writeFileSync(file, buffer)
-  return { id, ext, bytes: buffer.length, month }
+  return { id, ext, bytes: buffer.length, month, path: `images/${month}/${id}.${ext}` }
 }
+/**
+ * 把前端传来的 image 指针变成要写进记录的字段（补齐 path）。
+ * 没有图返回 null；指针无效抛错，错误码 unknown-image。
+ * 两处（群发 / 私聊）共用，别各写一份——各写一份就会各漂各的。
+ */
+function imageFieldOf(rawImage) {
+  if (!rawImage || typeof rawImage !== 'object') return null
+  const file = imagePathOf(rawImage.id, rawImage.ext, rawImage.path)
+  if (file === null) throw new Error('先调 /group/api/image 上传，再带 id/ext 发消息')
+  const id = String(rawImage.id)
+  const ext = String(rawImage.ext).toLowerCase()
+  const month = String(rawImage.month || file.split(/[\\/]/).slice(-2)[0] || '')
+  return { id, ext, bytes: statSync(file).size, month, path: `images/${month}/${id}.${ext}` }
+}
+
 const AVATAR_MAX_BYTES = 1.5 * 1024 * 1024
 const AVATAR_TYPES = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp' }
 
@@ -567,21 +588,13 @@ export function apply(ctx) {
       }
       const text = typeof payload?.text === 'string' ? payload.text.trim() : ''
       const to = payload?.to
-      // 图片（可选）：{ id, ext, bytes, month }，由 /group/api/image 先上传拿到。
-      const rawImage = payload?.image
+      // 图片（可选）：{ id, ext, bytes, month, path }，由 /group/api/image 先上传拿到。
       let image = null
-      if (rawImage && typeof rawImage === 'object') {
-        const file = imagePathOf(rawImage.id, rawImage.ext)
-        if (file === null) {
-          sendJson(res, 400, { error: 'unknown-image', detail: '先调 /group/api/image 上传，再带 id/ext 发消息' })
-          return
-        }
-        image = {
-          id: String(rawImage.id),
-          ext: String(rawImage.ext).toLowerCase(),
-          bytes: statSync(file).size,
-          month: String(rawImage.month || file.split(/[\\/]/).slice(-2)[0] || ''),
-        }
+      try {
+        image = imageFieldOf(payload?.image)
+      } catch (error) {
+        sendJson(res, 400, { error: 'unknown-image', detail: String(error?.message ?? error) })
+        return
       }
       if (!text && image === null) {
         sendJson(res, 400, { error: 'empty-message', detail: '至少要有文字或一张图片' })
@@ -647,20 +660,12 @@ export function apply(ctx) {
       }
       const text = typeof payload?.text === 'string' ? payload.text.trim() : ''
       // 私聊一样能带图：字节和群聊共用 images\ 目录（同一张图两边只存一份）。
-      const rawImage = payload?.image
       let image = null
-      if (rawImage && typeof rawImage === 'object') {
-        const file = imagePathOf(rawImage.id, rawImage.ext)
-        if (file === null) {
-          sendJson(res, 400, { error: 'unknown-image', detail: '先调 /group/api/image 上传，再带 id/ext 发消息' })
-          return
-        }
-        image = {
-          id: String(rawImage.id),
-          ext: String(rawImage.ext).toLowerCase(),
-          bytes: statSync(file).size,
-          month: String(rawImage.month || file.split(/[\\/]/).slice(-2)[0] || ''),
-        }
+      try {
+        image = imageFieldOf(payload?.image)
+      } catch (error) {
+        sendJson(res, 400, { error: 'unknown-image', detail: String(error?.message ?? error) })
+        return
       }
       if (!text && image === null) {
         sendJson(res, 400, { error: 'empty-message', detail: '至少要有文字或一张图片' })

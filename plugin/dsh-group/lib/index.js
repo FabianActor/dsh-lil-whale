@@ -690,7 +690,8 @@ function storeImage(buffer, extRaw) {
   mkdirSync(dir, { recursive: true })
   const file = join(dir, `${id}.${ext}`)
   if (!existsSync(file)) writeFileSync(file, buffer)
-  return { id, ext, bytes: buffer.length, month }
+  // path 是相对 group\ 的定位（'images/202611/<id>.png'）。写进记录里，读取端就不用再猜拼法。
+  return { id, ext, bytes: buffer.length, month, path: `images/${month}/${id}.${ext}` }
 }
 
 /** 从本地文件读一张图（工具参数给的是路径）。 */
@@ -707,11 +708,20 @@ function storeImageFromPath(pathValue) {
   return storeImage(readFileSync(file), ext)
 }
 
-/** 按 id + ext 找到图片的真实路径（服务端发图用）。 */
+/** 按 id + ext（可选 path）找到图片的真实路径（服务端发图用）。 */
 function imagePathOf(image) {
   const id = String(image?.id || '')
   const ext = String(image?.ext || '').toLowerCase()
   if (!/^[0-9a-f]{16}$/.test(id) || !IMAGE_EXT[ext]) return null
+  // 记录里有 path 就以它为准；但只信"images/... 且文件名与 id/ext 对得上"的写法。
+  const hint = String(image?.path || '').replace(/\\/g, '/').replace(/^\.\//, '')
+  if (hint !== '') {
+    const expected = `${id}.${ext}`
+    if (hint.startsWith('images/') && !hint.includes('..') && hint.endsWith('/' + expected)) {
+      const file = join(GROUP_DIR, hint)
+      if (existsSync(file)) return file
+    }
+  }
   const month = String(image?.month || '').replace(/[^0-9]/g, '')
   const candidates = []
   if (month.length === 6) candidates.push(join(IMAGES_DIR, month, `${id}.${ext}`))
