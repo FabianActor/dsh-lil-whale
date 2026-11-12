@@ -1708,11 +1708,13 @@ function Bubble({ config, message, onMention, animate = false }) {
       }, [text, to, sending, refresh, tab, pendingImage])
 
       // 两档忙：正在回这一段 / 在别处忙。群聊与私聊同一套文案。
-      const groupBusy = ['lee', 'whale'].filter((id) => {
+      // 名单从配置（名册）来 —— 写死 lee/whale 时，新鱼的"正在忙"永远不会显示（A.32 同一个病）。
+      const fishIds = Object.keys(config?.names ?? NAMES).filter((id) => id !== 'fabian')
+      const groupBusy = fishIds.filter((id) => {
         const state = presenceOf(presence, id)
         return state.status === 'working' && state.reason === 'group'
       })
-      const otherBusy = ['lee', 'whale'].filter((id) => {
+      const otherBusy = fishIds.filter((id) => {
         const state = presenceOf(presence, id)
         return state.status === 'working' && state.reason !== 'group'
       })
@@ -2427,7 +2429,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[lil-whale-group-ui] client build v17 · members-from-roster:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[lil-whale-group-ui] client build v18 · roster-everywhere:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('lil-whale-group-keyframes')) {
           const style = document.createElement('style')
