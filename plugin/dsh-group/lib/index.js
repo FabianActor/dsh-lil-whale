@@ -2,8 +2,8 @@
 //
 // 设计（PRD §8）：发言**入队即返回**，谁在听谁自己去看。
 //   - `group_say(to, text)`：往 group\messages.jsonl 追加一行，顺手把可读版追加进 群.md，立刻返回
-//   - 后台 tailer：每 5 秒看一眼有没有写给自己（或 all）的新行；有，且自己闲着，才唤醒自己这一个 turn
-//   - 唤醒的话只有一句「群里有 N 条新的，去看看」—— 不塞原文，回不回由被叫醒的那一方自己定
+//   - 后台 tick：每 1 秒扫一眼有没有写给自己（或 all）的新行；有，且自己闲着，才唤醒自己这一个 turn
+//   - 唤醒带最近 3 条预览（超长截断并写明"已截断，全文在群文件里"）；回不回由被叫醒的那一方自己定
 //
 // 身份优先按**钉住的 sessionId** 认（2026-11-09 起）：同一目录下可能有两段会话，
 // 按 cwd 会叫错人。cwd 只作退路，并在 plugin.log 留一行痕迹。
@@ -537,13 +537,13 @@ const MEMBERS_FALLBACK = {
     label: '大肥鱼',
     kind: 'fish',
     cwd: CFG.leeCwd,
-    sessionId: 'session-ae4daabd-a9f9-4541-ba03-9ff7cea21a88',
+    sessionId: '', // 2026-11-12 22:20：兜底名册不许钉本机会话 id（会叫醒别人的会话）
   },
   whale: {
     label: '小肥鱼',
     kind: 'fish',
     cwd: CFG.whaleCwd,
-    sessionId: 'session-75fe8e27-66e3-4466-b65b-2fc021f3b01f',
+    sessionId: '',
   },
   fabian: { label: 'Fabian', kind: 'human', cwd: null, sessionId: null },
 }
@@ -578,10 +578,9 @@ const MEMBERS = buildMembers()
 
 // 她的两段对话，按对端区分（Fabian 2026-11-09 命名）。
 // 唤醒时把会话名写进提示，她才分得清这段是跟谁说的。
-const CONVERSATIONS = {
-  'session-75fe8e27-66e3-4466-b65b-2fc021f3b01f': 'Leea 与小鲸鱼',
-  'session-def8be64-09fd-4a63-a785-e9b47119267c': 'Fabian 与小鲸鱼',
-}
+// 2026-11-12 22:20：这张表原来钉着本机两段会话 id，新机器上会写出别人的会话名。
+// 现在留空 —— 会话名由 pins/名册决定，不在这里写死（安装流程详解 §11-g）。
+const CONVERSATIONS = {}
 
 const WAKE = {
   intervalMs: 1000,      // 扫得勤一点，debounce 才有分辨率

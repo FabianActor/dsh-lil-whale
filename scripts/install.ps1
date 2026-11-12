@@ -1,4 +1,4 @@
-# install.ps1 -- 给别人装一条小鲸鱼。ASCII 文件名 + UTF-8 BOM。
+﻿# install.ps1 -- 给别人装一条小鲸鱼。ASCII 文件名 + UTF-8 BOM。
 #
 #   pwsh -File install.ps1                                 装到仓库旁边的 lil-whale/
 #   pwsh -File install.ps1 -Workspace D:\fish               装到指定目录
@@ -32,7 +32,6 @@ param(
 $ErrorActionPreference = 'Stop'
 $RepoRoot = Split-Path $PSScriptRoot -Parent
 $TemplateRoot = Join-Path $RepoRoot 'templates'
-$PoolRoot = if ($PoolDir -ne '') { $PoolDir } else { Join-Path (Split-Path $Workspace -Parent) 'lil-whale-pool' }
 
 function Say([string]$text) { Write-Host $text }
 function Step([string]$text) { Write-Host ""; Write-Host ("== " + $text) -ForegroundColor Cyan }
@@ -78,6 +77,10 @@ function Render-Template([string]$templatePath, [hashtable]$values) {
 if (-not $Workspace) { $Workspace = Join-Path (Split-Path $RepoRoot -Parent) 'lil-whale' }
 if (-not $DshHome) { $DshHome = Join-Path $Workspace 'dsh-home' }
 $Workspace = [System.IO.Path]::GetFullPath($Workspace)
+# 共享区（群/账本/私聊）在鱼的家旁边。必须在 $Workspace 补完默认值之后再算：
+# 2026-11-12 22:20 修 —— 原来这行在上面，$Workspace 为空时 Split-Path '' 直接抛错。
+$PoolRoot = if ($PoolDir -ne '') { $PoolDir } else { Join-Path (Split-Path $Workspace -Parent) 'lil-whale-pool' }
+$PoolRoot = [System.IO.Path]::GetFullPath($PoolRoot)
 $DshHome = [System.IO.Path]::GetFullPath($DshHome)
 
 $portWanted = if ($ChildPort -gt 0) { $ChildPort } else { 3082 }
@@ -302,7 +305,7 @@ if (-not (Test-Path $envPath) -or $Force) {
   # （2026-11-12 20:10 Fabian 提："有些描述放在小鱼的目录内"）。
   $envScript = Join-Path $RepoRoot 'scripts\render-env.mjs'
   if (Test-Path $envScript) {
-    & node $envScript --workspace $Workspace --profile $ChildProfile --pool-dir $PoolRoot --her-port $ChildPort --deploy-date $deployDate --child-name $ChildName --child-id $ChildMemberId 2>&1 | ForEach-Object { Write-Host ('    ' + $_) }
+    & node $envScript --workspace $Workspace --profile $ChildProfile --pool-dir $PoolRoot --her-port $port --deploy-date $deployDate --child-name $ChildName --child-id $ChildMemberId 2>&1 | ForEach-Object { Write-Host ('    ' + $_) }
     if ($LASTEXITCODE -ne 0) {
       Warn 'render-env.mjs 失败，环境.md 没写。装完手动跑一次：node scripts\render-env.mjs --workspace <家> --profile <profile>'
     } else {
@@ -333,6 +336,7 @@ if ($sharedGroup) {
   # 这里是唯一的创建机会；但已有内容一个字都不能动（A.29 那次把整份名册抹掉就是"初始化"干的）。
   $poolMsg = Join-Path $poolGroup 'messages.jsonl'
   $poolPins = Join-Path $poolGroup 'pins.json'
+  $pinsPath = $poolPins
   if (-not (Test-Path $poolMsg)) { Write-Utf8NoBom $poolMsg ''; Ok 'group\messages.jsonl（共享区，新建）' }
   if (-not (Test-Path $poolPins)) {
     $parentIds = @(); $childIds = @()
@@ -370,15 +374,20 @@ $membersPath = Join-Path $PoolRoot 'members.json'
 if (-not (Test-Path $membersPath)) {
   $nowIso = (Get-Date).ToString('o')
   $members = [ordered]@{}
+  # 父辈（lee）的端口/家/配置：配置里有就用配置，没有就用约定默认。
+  # 2026-11-12 22:20 修：原来这里取 $Cfg.LeePort / LeeHome / LeeProfile —— $Cfg 不存在（变量叫 $cfg），
+  # 而且 $cfg 里根本没有这三个键 ⇒ 新装机器上 lee 的 port/home/dshHome/profile 全是 null。
+  $leeHome = if ($cfg.Contains('leeHome')) { [string]$cfg['leeHome'] } else { Join-Path $env:USERPROFILE '.dsh' }
+  $leePort = if ($cfg.Contains('leePort')) { [int]$cfg['leePort'] } else { 3080 }
   $members[$ParentMemberId] = [ordered]@{
     name = '大肥鱼'; kind = 'fish'; role = 'watcher'; parent = $null
-    port = $Cfg.LeePort; home = $Cfg.LeeHome; dshHome = $Cfg.LeeHome
-    profile = $Cfg.LeeProfile; status = 'resident'; bornAt = $null
+    port = $leePort; home = $leeHome; dshHome = $leeHome
+    profile = $ParentProfile; status = 'resident'; bornAt = $null
   }
   $members[$HumanMemberId] = [ordered]@{ name = 'Fabian'; kind = 'human'; role = 'human'; parent = $null }
   $members[$childMember] = [ordered]@{
     name = $ChildName; kind = 'fish'; role = 'member'; parent = $ParentMemberId
-    port = $ChildPort; home = $Workspace; dshHome = $DshHome
+    port = $port; home = $Workspace; dshHome = $DshHome
     profile = $ChildProfile; status = 'experiment'; bornAt = $nowIso
   }
   $rawMembers = [ordered]@{ version = 1; updatedAt = $nowIso; members = $members }

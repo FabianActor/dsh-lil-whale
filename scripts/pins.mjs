@@ -27,8 +27,13 @@ function readConfig() {
 
 function defaultPinsFile() {
   const cfg = readConfig();
-  const groupDir = cfg && cfg.groupDir;
-  if (!groupDir) die('找不到配置里的 groupDir；请用 --file 指到 pins.json，或设 LIL_WHALE_CONFIG');
+  if (!cfg) die('读不到配置（lil-whale.config.json 或 LIL_WHALE_CONFIG）；请用 --file 指到 pins.json');
+  // 2026-11-12 22:20 修：install.ps1 只写 poolDir，不写 groupDir —— 这里必须能自己派生，
+  // 否则新机器按 README 第 5 步敲 pins.mjs 会直接 NEXT 退出（安装流程详解 §11-e）。
+  const groupDir = cfg.groupDir
+    || (cfg.poolDir ? path.join(cfg.poolDir, 'group') : null)
+    || (cfg.herHome ? path.join(cfg.herHome, 'group') : null);
+  if (!groupDir) die('配置里没有 groupDir / poolDir / herHome；请用 --file 指到 pins.json');
   return path.join(groupDir, 'pins.json');
 }
 
