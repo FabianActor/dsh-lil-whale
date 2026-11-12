@@ -196,7 +196,7 @@ function Start-Fish($member) {
       $cfgPath = if ([System.IO.Path]::IsPathRooted($member.ConfigFile)) { $member.ConfigFile } else { Join-Path (Split-Path $PSScriptRoot -Parent) $member.ConfigFile }
       $cfgLine = "`$env:LIL_WHALE_CONFIG='$cfgPath'; "
     }
-    "${cfgLine}$env:DSH_HOME='$($member.DshHome)'; dsh --profile $($member.Profile) --port $port --no-open"
+    "${cfgLine}`$env:DSH_HOME='$($member.DshHome)'; dsh --profile $($member.Profile) --port $port --no-open"
   }
   Start-Hidden -Command $command -WorkingDirectory $cwd -OutLog $out -ErrLog $err
   if (-not (Wait-Port $port)) {
