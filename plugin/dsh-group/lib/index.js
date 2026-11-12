@@ -287,6 +287,32 @@ function metricLog(line) {
 }
 const WAKE_MARKS_FILE = join(HER_HOME, 'state', `wake-marks-${isMainProcess() ? 'lee' : 'whale'}.json`)
 
+/**
+ * 投递尝试也记账。
+ *
+ * 源起（她 2026-11-12 数出来的）：同一条唤醒在会话里出现两次，而 `state\cursors\lee.json`
+ * 只推进了一次 —— 重复在**投递层**（follow-up 在那一轮被中断后由宿主重投），不是计数层。
+ * 原来我们只在"叫醒成功"之后记一行，看不到"递了几次、递的是哪一条"。
+ *
+ * 现在每递一次都写一行（`logs\wake-deliver.log`，工程侧，跟她会读的 `watchman.log` 分开）：
+ * `id=` 是构造出来的那条 user message 的 id —— 会话里若出现同 id 两次，就是宿主重投，
+ * 出现两个不同 id 的同样内容，就是我们自己叫了两次。
+ * 这份日志的用途是**对账**，不是催她：放在她自己家目录之外的 `logs\` 下。
+ */
+const WAKE_DELIVER_LOG = join(dirname(WAKE_METRICS), 'wake-deliver.log')
+
+function wakeDeliverLog(result, why) {
+  try {
+    mkdirSync(dirname(WAKE_DELIVER_LOG), { recursive: true })
+    const d = new Date()
+    const pad = (n) => String(n).padStart(2, '0')
+    const ts = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+    appendFileSync(WAKE_DELIVER_LOG, `${ts} | ${result} | ${why}\n`, 'utf8')
+  } catch {
+    // 记账写不进去不能把 tick 打死（同 metricLog 的理由）
+  }
+}
+
 function readMarks() {
   const raw = readJson(WAKE_MARKS_FILE, [])
   return Array.isArray(raw) ? raw.filter((m) => m && typeof m.at === 'number') : []
@@ -1296,7 +1322,17 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
     })
     return false // 游标不动：这批消息还在，下个 tick 再试
   }
-  agent.followup(built)
+  // 记账：递之前先记下"这一条要递给谁、递的是哪一条、递到第几行"。
+  // `id` 是构造出来的 user message id，用来跟会话日志对账（见 wakeDeliverLog 的注释）。
+  const deliveryNote = `id=${built.id} member=${member} channel=${channel.key} seat=${seat === '' ? '-' : seat} pending=${incoming.length} cursor=${lines.length} last-ts=${lastTs || 0}`
+  try {
+    agent.followup(built)
+  } catch (error) {
+    // 递不进去就不能当递过了：游标不动，下个 tick 再试。
+    wakeDeliverLog('failed', `${deliveryNote} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)}`)
+    return false
+  }
+  wakeDeliverLog('delivered', deliveryNote)
   markGroupWake(member)
   markWake(member, channel.kind)
 
@@ -1489,12 +1525,16 @@ async function watchmanTick() {
           // s='watch'：机器发的话必须说明自己不是人亲口说的。
           // 她 2026-11-12 指出：这三条现在长得就像大肥鱼说了三遍。
           say('lee', 'whale', text, 'group', 'watch')
-        } catch {}
-        watchmanLog('deliver', `why=plan ${job.tag}（窗开着，改递话）`)
-        // 递话也是一种叫醒（她的群 tailer 会因为这条新消息把她叫起来），所以同样记一笔。
-        // 不记的话，A7 的"15 分钟后回看"永远不会为早上这一条落数——
-        // 而那正是我们最想看的那一条。
-        markWake('whale', 'plan')
+          watchmanLog('deliver', `why=plan ${job.tag}（窗开着，改递话）`)
+          // 递话也是一种叫醒（她的群 tailer 会因为这条新消息把她叫起来），所以同样记一笔。
+          // 不记的话，A7 的"15 分钟后回看"永远不会为早上这一条落数——
+          // 而那正是我们最想看的那一条。
+          markWake('whale', 'plan')
+        } catch (error) {
+          // 递不进去就别说"递了"：原来这里 catch 空着，日志照样写 deliver，
+          // 于是"投递失败"和"投递成功"长得一模一样。
+          watchmanLog('error', `why=plan-deliver-failed detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)} ${job.tag}`)
+        }
         continue
       }
       noteSkip('why=already-awake')

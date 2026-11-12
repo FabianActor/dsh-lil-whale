@@ -4,6 +4,20 @@
   "private": true,
   "type": "module",
   "description": "群聊页面：侧边栏一个图标，点开是三条鱼的群（读写 lil-whale\\group\\messages.jsonl）",
+  "author": "Fabian",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "group-chat",
+    "web-ui"
+  ],
+  "engines": {
+    "dsh": ">=0.2.2-rc.1"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "exports": {
     ".": "./lib/index.js",
     "./client": "./lib/client.js"
