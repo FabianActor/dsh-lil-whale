@@ -5,6 +5,12 @@
   "type": "module",
   "description": "群聊页面：侧边栏一个图标，点开是三条鱼的群（读写 lil-whale\\group\\messages.jsonl）",
   "author": "Fabian",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FabianActor/dsh-lil-whale.git",
+    "directory": "plugin/dsh-group-ui"
+  },
   "keywords": [
     "dsh",
     "dsh-plugin",

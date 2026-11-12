@@ -6,6 +6,12 @@
   "type": "module",
   "main": "lib/index.js",
   "author": "Fabian",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FabianActor/dsh-lil-whale.git",
+    "directory": "plugin/dsh-group"
+  },
   "keywords": [
     "dsh",
     "dsh-plugin",
