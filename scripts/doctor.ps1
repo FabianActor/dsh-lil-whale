@@ -1,0 +1,206 @@
+﻿# doctor.ps1 -- 一条鱼还活着吗？
+#
+# 用法：
+#   pwsh -File scripts\doctor.ps1                只看她
+#   pwsh -File scripts\doctor.ps1 -IncludeLee    连他的窗一起看
+#
+# 为什么要有这个脚本：装完先验那四件（README / docs\出生流程.md）是手工敲的，
+# 而"守夜死了没人告诉你""工具没注册但进程活着"这两类失败**长得跟正常一样**——
+# 只能靠一条一条去问，还得每次都问同样的话。
+#
+# 规矩：
+#   - 每条检查都给**证据**（文件里的那一行、端口通不通、心跳多久没动），不给"正常/异常"四个字。
+#   - FAIL 才算坏；WARN 是"能跑但不对劲"。
+#   - 不改任何东西，只读。要修，看它打印的 NEXT: 行。
+#
+# 退出码：全过 0；有 FAIL 1。
+
+param(
+  [switch]$IncludeLee
+)
+
+$ErrorActionPreference = 'Continue'
+. (Join-Path $PSScriptRoot 'common.ps1')
+
+$rows = @()
+$fails = 0
+$warns = 0
+
+function Add-Row([string]$name, [string]$state, [string]$evidence, [string]$next = '') {
+  $script:rows += [pscustomobject]@{ Check = $name; State = $state; Evidence = $evidence }
+  if ($state -eq 'FAIL') { $script:fails++; if ($next) { $script:nexts += $next } }
+  elseif ($state -eq 'WARN') { $script:warns++ }
+}
+$script:nexts = @()
+
+function Test-Port([int]$p) {
+  $c = New-Object System.Net.Sockets.TcpClient
+  try { $c.Connect('127.0.0.1', $p); return $true } catch { return $false } finally { $c.Dispose() }
+}
+
+function Age-OfFile([string]$path) {
+  if (-not (Test-Path -LiteralPath $path)) { return $null }
+  return ((Get-Date) - (Get-Item -LiteralPath $path).LastWriteTime)
+}
+
+function Format-Age($span) {
+  if ($null -eq $span) { return '不存在' }
+  if ($span.TotalMinutes -lt 1) { return ('{0:N0} 秒前' -f $span.TotalSeconds) }
+  if ($span.TotalHours -lt 1) { return ('{0:N0} 分钟前' -f $span.TotalMinutes) }
+  return ('{0:N1} 小时前' -f $span.TotalHours)
+}
+
+function Tail-Line([string]$path, [int]$n = 1) {
+  if (-not (Test-Path -LiteralPath $path)) { return $null }
+  $tail = Get-Content -LiteralPath $path -Tail $n -ErrorAction SilentlyContinue
+  if (-not $tail) { return $null }
+  return ($tail | Select-Object -Last 1)
+}
+
+# 0. 配置：读不到也能按标准布局猜，但那说明"打包出去"这件事没做成
+if ($Cfg.ConfigFound) {
+  Add-Row '配置' 'OK' $Cfg.ConfigPath
+} else {
+  Add-Row '配置' 'WARN' '没读到 lil-whale.config.json，按标准布局猜的' 'NEXT: 检查仓库根目录的 lil-whale.config.json（或用 LIL_WHALE_CONFIG 指到别处）'
+}
+
+# 1. 她的窗：进程在不在
+if (Test-Port $Cfg.HerPort) {
+  Add-Row '她的端口' 'OK' ("127.0.0.1:{0} 通" -f $Cfg.HerPort)
+} else {
+  Add-Row '她的端口' 'FAIL' ("127.0.0.1:{0} 不通" -f $Cfg.HerPort) ("NEXT: 起她的窗：pwsh -File scripts\launch.ps1 -Target whale（然后看 dsh-home\logs\web-latest.err.log）")
+}
+
+if ($IncludeLee) {
+  if (Test-Port $Cfg.LeePort) { Add-Row '他的端口' 'OK' ("127.0.0.1:{0} 通" -f $Cfg.LeePort) }
+  else { Add-Row '他的端口' 'FAIL' ("127.0.0.1:{0} 不通" -f $Cfg.LeePort) 'NEXT: 起他自己的窗（dsh web）' }
+}
+
+# 2. 心跳：进程活着 ≠ 她会醒（11-09 踩过：进程起来但会话没被打开）
+$presenceFile = Join-Path $Cfg.HerHome 'state\presence\whale.json'
+if (Test-Path -LiteralPath $presenceFile) {
+  try {
+    $p = Get-Content -LiteralPath $presenceFile -Raw -Encoding UTF8 | ConvertFrom-Json
+    $at = [DateTimeOffset]::FromUnixTimeMilliseconds([int64]$p.at)
+    $age = (Get-Date) - $at.LocalDateTime
+    $state = if ($age.TotalHours -gt 24) { 'WARN' } else { 'OK' }
+    Add-Row '她的心跳' $state ("status={0}，最后心跳 {1}" -f $p.status, (Format-Age $age))
+    if ($state -eq 'WARN') { Add-Row '她的心跳（说明）' 'WARN' '心跳超过 24 小时没动：可能只是没人叫她（她不是常驻的），也可能是会话没被打开' }
+  } catch {
+    Add-Row '她的心跳' 'FAIL' ("state\presence\whale.json 读不了：{0}" -f $_.Exception.Message) 'NEXT: 看 state\presence\ 下的文件是不是坏 JSON'
+  }
+} else {
+  Add-Row '她的心跳' 'FAIL' 'state\presence\whale.json 不存在' 'NEXT: 她的会话从没被打开过——开窗后要在网页里进那段会话'
+}
+
+# 3. 工具注册：哑 8 小时那次的判据（有 host-resolve 却没有 group_say-registered）
+$pluginLog = Join-Path $Cfg.GroupDir 'plugin.log'
+$lastBoot = Tail-Line (Join-Path $Cfg.Root 'logs\plugin-boot.log')
+if (Test-Path -LiteralPath $pluginLog) {
+  $hit = Select-String -LiteralPath $pluginLog -Pattern 'group_say-registered' -SimpleMatch | Select-Object -Last 1
+  if ($hit) {
+    Add-Row '工具注册' 'OK' ('plugin.log 里有：' + $hit.Line.Trim())
+  } else {
+    Add-Row '工具注册' 'FAIL' 'plugin.log 里没有 group_say-registered' 'NEXT: 重启她的窗；若还不行，看 plugin.log 有没有 host-resolve（有 host-resolve 没注册 = 又回到异步注册那个坑）'
+  }
+} else {
+  Add-Row '工具注册' 'WARN' 'group\plugin.log 不存在（可能还没发过言）'
+}
+
+# 4. 名册：群认会话不认名字；登记错了 = 叫错人
+$pinsFile = Join-Path $Cfg.GroupDir 'pins.json'
+if (Test-Path -LiteralPath $pinsFile) {
+  try {
+    $pins = Get-Content -LiteralPath $pinsFile -Raw -Encoding UTF8 | ConvertFrom-Json
+    $whaleIds = @($pins.whale)
+    if ($whaleIds.Count -eq 0) {
+      Add-Row '名册' 'FAIL' 'pins.json 里 whale 是空的' 'NEXT: 开她的窗 → 侧边栏复制 Session ID → node scripts\pins.mjs --member whale --id <id>'
+    } else {
+      $sessionsDir = Join-Path $Cfg.HerDshHome 'sessions'
+      $missing = @()
+      foreach ($id in $whaleIds) {
+        $found = Get-ChildItem -LiteralPath $sessionsDir -Directory -ErrorAction SilentlyContinue |
+          ForEach-Object { Join-Path $_.FullName $id } |
+          Where-Object { Test-Path -LiteralPath $_ }
+        if (-not $found) { $missing += $id }
+      }
+      if ($missing.Count -eq 0) {
+        Add-Row '名册' 'OK' ("whale = " + ($whaleIds -join ', ') + "（会话目录都在）")
+      } else {
+        Add-Row '名册' 'FAIL' ("whale 里有会话找不到：" + ($missing -join ', ')) 'NEXT: 那段会话可能已被删/换段——用 node scripts\pins.mjs --member whale --id <新id> 换掉'
+      }
+      if ($whaleIds.Count -gt 1) {
+        Add-Row '名册（说明）' 'WARN' '同一时刻只该有一段会话在群里：两条 id = 可能两段都算她' 'NEXT: 搬段完成后只留一条'
+      }
+    }
+  } catch {
+    Add-Row '名册' 'FAIL' ("pins.json 读不了：{0}" -f $_.Exception.Message) 'NEXT: 它必须是合法 JSON；别手改到一半'
+  }
+} else {
+  Add-Row '名册' 'FAIL' 'group\pins.json 不存在' 'NEXT: 群不认人：她说的每句话都会被守门拒掉'
+}
+
+# 5. 启动痕迹：版本号与家，能分辨"哪个进程、哪份代码"
+if ($lastBoot) {
+  try {
+    $b = $lastBoot | ConvertFrom-Json
+    $age = (Get-Date).ToUniversalTime() - [datetime]::Parse($b.at, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AdjustToUniversal -bor [System.Globalization.DateTimeStyles]::AssumeUniversal)
+    Add-Row '启动痕迹' 'OK' ("pkg={0} pid={1} home={2}（{3}）" -f $b.pkg, $b.pid, $b.home, (Format-Age $age))
+  } catch {
+    Add-Row '启动痕迹' 'WARN' ('logs\plugin-boot.log 最后一行不是 JSON：' + $lastBoot)
+  }
+} else {
+  Add-Row '启动痕迹' 'WARN' 'logs\plugin-boot.log 不存在或为空' 'NEXT: 这个文件是"按代码位置写"的那条日志——配置坏了它还在；没有它说明插件根本没被加载'
+}
+
+# 6. 投递账本：同一条递两次 vs 叫了两次
+$deliverLog = Join-Path $Cfg.Root 'logs\wake-deliver.log'
+$lastDeliver = Tail-Line $deliverLog
+if ($lastDeliver) {
+  Add-Row '投递账本' 'OK' ('最近一次：' + $lastDeliver)
+} else {
+  Add-Row '投递账本' 'WARN' 'logs\wake-deliver.log 还不存在（今天没递过唤醒，或那版代码没生效）'
+}
+
+# 7. 群投影：群.md 落后于 messages.jsonl = 她读到的不是最新的
+$msgFile = Join-Path $Cfg.GroupDir 'messages.jsonl'
+$mdFile = Join-Path $Cfg.GroupDir '群.md'
+$msgAge = Age-OfFile $msgFile
+$mdAge = Age-OfFile $mdFile
+if ($null -ne $msgAge -and $null -ne $mdAge) {
+  $lagMin = ($mdAge.TotalSeconds - $msgAge.TotalSeconds) / 60
+  if ($lagMin -gt 5) {
+    Add-Row '群投影' 'WARN' ("群.md 比 messages.jsonl 旧 {0:N0} 分钟（投影可能没写）" -f $lagMin)
+  } else {
+    Add-Row '群投影' 'OK' ("群.md 与 messages.jsonl 同步（差 {0:N1} 分钟）" -f $lagMin)
+  }
+} else {
+  Add-Row '群投影' 'WARN' 'messages.jsonl 或 群.md 不存在（群还没开张）'
+}
+
+# 8. 窗口留痕：开门/关门都记（B2）
+$closeLog = Join-Path $Cfg.HerHome 'logs\close.log'
+if (Test-Path -LiteralPath $closeLog) {
+  $last = Tail-Line $closeLog
+  Add-Row '窗口留痕' 'OK' ('close.log 最近：' + $last)
+} else {
+  Add-Row '窗口留痕' 'WARN' 'logs\close.log 不存在（开门/关门的账还没记过：launch.ps1 只在真开了浏览器时记 open）'
+}
+
+# ---- 输出 ----
+Write-Host ''
+Write-Host '小肥鱼体检' -ForegroundColor Cyan
+Write-Host ('配置：{0}' -f $Cfg.ConfigPath)
+Write-Host ''
+$rows | Format-Table -AutoSize -Wrap | Out-String -Width 200 | Write-Host
+
+if ($fails -eq 0 -and $warns -eq 0) {
+  Write-Host '全过。' -ForegroundColor Green
+} elseif ($fails -eq 0) {
+  Write-Host ("没有 FAIL，但有 {0} 条 WARN（能跑，不对劲）。" -f $warns) -ForegroundColor Yellow
+} else {
+  Write-Host ("{0} 条 FAIL、{1} 条 WARN。" -f $fails, $warns) -ForegroundColor Red
+}
+foreach ($n in $script:nexts) { Write-Host $n -ForegroundColor Yellow }
+
+exit $(if ($fails -gt 0) { 1 } else { 0 })
