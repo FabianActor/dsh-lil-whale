@@ -37,6 +37,13 @@ if (!dshHome) {
   process.exit(1);
 }
 
+// 面板上显示的名字和说明。官方四档走 locale 词典，自定义档只能用自带的 name/description
+// （见 dsh-agent-preset-registry/lib/types/display.js：`preset.name ?? preset.id`）。
+// 不写这两个字段，新建会话里就是「neutral / 暂无描述」，等于让选的人自己猜。
+const NEUTRAL_NAME = '中立';
+const NEUTRAL_DESCRIPTION =
+  '不预设"你是谁"，只陈述"你能做什么"：读写文件、跑命令、调 API。人设从行为里长出来，不从预设里写进去。';
+
 // 能力陈述，不是身份断言：不出现"你是 X"，只出现"你能做 X"。
 // 判据（小肥鱼定的）：第一句里出现的是 `are` 还是 `can`——以 `You can` 开头，一个词就能判。
 const NEUTRAL_PREFIX = [
@@ -82,7 +89,11 @@ function transform(block, { fromId, toId }) {
   for (const line of block) {
     if (!replacedId && line === '  config:' ) { /* no-op, keep order */ }
     if (!replacedId && line.trim() === `id: ${fromId}`) {
+      const indent = line.match(/^\s+/)[0];
       out.push(line.replace(`id: ${fromId}`, `id: ${toId}`));
+      // name/description 紧跟在 config.id 后面，面板才不是「neutral / 暂无描述」。
+      out.push(`${indent}name: ${NEUTRAL_NAME}`);
+      out.push(`${indent}description: '${NEUTRAL_DESCRIPTION.replace(/'/g, "''")}'`);
       replacedId = true;
       continue;
     }

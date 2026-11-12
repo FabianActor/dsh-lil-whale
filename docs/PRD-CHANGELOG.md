@@ -3,6 +3,12 @@
 > 本文件只记「哪一版改了哪几处、为什么改」。当前结论都在 [小小肥鱼-PRD.md](小小肥鱼-PRD.md) 里，那边不背历史。
 > 自 v0.3.5 起从 PRD 头部搬到这里（此前几块原样搬出，未改写）。v1.0 是整篇重写。
 
+## v1.0.21（2026-11-12）
+
+- **preset 要自带 `name` / `description`**：新建会话面板上自定义档显示「neutral / 暂无描述」。官方四档走 locale 词典，自定义档只能自带（`presetDisplayText()`：`preset.name ?? preset.id`）。`gen-neutral-preset.mjs` 现在写 `name: 中立` + 一句能力陈述式的说明；她的 profile patch 已重装（备份 `.bak-20261112-082342`）。显示更新要重启 3082 才生效，不影响这一段的运行。
+- **`pins.mjs` 修掉中文路径编码坑**：`new URL(import.meta.url).pathname` 在 `文档` 这类路径下留下 `%E6%96%87…` ⇒ 配置路径不存在 ⇒ 读配置静默失败 ⇒ 报"找不到 groupDir"（而不是"配置读失败"）。改用 `fileURLToPath`；同一个坑今天第二次（第一次在 `gen-neutral-preset.mjs`），已写进 A.19。
+- **搬段现场**：16:17 他重启 3082 并新建会话 `session-c145f6d9-cb09-4e56-99f6-adb36bf7677a`（解压 session 头确认 `agentPreset: "neutral"`）；名册已用 `pins.mjs` 从 `a47a60` **整份**换成 `c145f6d9`。
+
 ## v1.0.20（2026-11-12）
 
 - **A.20 改 profile patch 等于在运行时换底座**：把 `preset-neutral` 写进她运行中的 profile patch 后，`logs\plugin-boot.log` 出现一条**同 pid** 的 boot 痕迹（进程没重启），紧接着她那一轮的工具全部消失。原因：`dsh-app-boot` 把 profile 自己的 `cordis.patch.yml` 当长活热重载层。判据：同 pid 的 boot 痕迹 = 热重载，pid 变了才是重启。规矩：改 patch 之后立刻重启，不要在会话进行中改。

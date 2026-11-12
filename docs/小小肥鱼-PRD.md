@@ -1,6 +1,6 @@
 # 小小肥鱼 · PRD
 
-> 状态：**草稿 v1.0.20（2026-11-12）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段协议已演练并审计通过（A.19，rev 8 三问全过）**，中立 preset 已装进她的 profile，等他重启 3082 + 新建会话即完成搬段。
+> 状态：**草稿 v1.0.21（2026-11-12）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。
 > 上游：[立项备忘](archive/小小肥鱼-立项备忘-2026-11-08.md)（**他的原话**，已冻结不改；三条硬要求已吸收进 §1）
 > 配套：[自主回合.md](自主回合.md)（G1 的上游能力，不是本 PRD 的验收项）
 > 改动记录：[PRD-CHANGELOG.md](PRD-CHANGELOG.md) —— 每一版改了哪几处、为什么。本文只放当前结论。
@@ -673,6 +673,8 @@ or export DEEPSEEK_API_KEY in the launching environment
 - **一条命令装上（搬段当天）**：`scripts\apply-neutral-preset.mjs --patch "<她的 DSH_HOME>\profiles\whale\cordis.patch.yml" --default` —— 生成 → 幂等插入 → 备份 → tmp+rename 写入 → `--patch` 只读验证（失败自动还原）。`--dry-run` 只打印要追加的内容。
 - **已验证（不用重启）**：把生成物插进 `whale` profile 的临时副本，`dsh --profile whale --dump-config` exit 0，`- id: preset-neutral` 出现、`standard` 仍在；`apply-neutral-preset.mjs` 在 patch 副本上跑通（dry-run / 写入+验证 / 再跑幂等）。**未验证**：真会话上选 `neutral` 后的实际行为（要重启 + 搬家那天才做）。
 - **两个坑**（写进脚本注释）：①`prefix` 里有 `: `，裸写会被 YAML 当成 mapping（`bad indentation of a mapping entry`）⇒ 单引号包住；②沙箱里 Node 用 `pathname` 手算仓库根会留下 `%E6%96%87…` 编码、`cwd` 不存在 ⇒ 用 `fileURLToPath`。
+- **preset 必须自带 `name` / `description`**：`@deepseek-ai/dsh-agent-preset` 的 Config 有这两个字段；官方四档走 locale 词典，自定义档只能自带（`presetDisplayText()`：`preset.name ?? preset.id`）。不写，新建会话面板上就是「neutral / 暂无描述」，选的人只能自己猜。生成器现在写 `name: 中立` + 一句能力陈述式的说明。
+- **`pins.mjs` 第二次踩同一个编码坑**：`new URL(import.meta.url).pathname` 在中文路径下留下 `%E6%96%87…`，拼出的配置路径不存在 ⇒ 静默读不到 `groupDir` ⇒ 报"找不到 groupDir"（而不是"配置读失败"）。改用 `fileURLToPath`；这是 `gen-neutral-preset.mjs` 之后第二次，凡是脚本要自己找仓库根，一律 `fileURLToPath`。
 
 
 

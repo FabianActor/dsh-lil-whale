@@ -5,8 +5,12 @@
 // 或者一段都不算。先写临时文件再 rename，读者要么看见旧名册、要么看见新名册。
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..');
+// 不能用 new URL(...).pathname：仓库路径里有中文（文档），会被百分号编码成 %E6%96%87…，
+// 拼出来的路径不存在 ⇒ 读配置静默失败 ⇒ 报"找不到 groupDir"。这个坑 11-12 在
+// gen-neutral-preset.mjs 里踩过一次，这里是第二次。
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 function readConfig() {
   const explicit = process.env.LIL_WHALE_CONFIG;
