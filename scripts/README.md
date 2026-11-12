@@ -4,18 +4,19 @@
 
 双击 `bin\` 里的 `.cmd` 就行。文件名一律英文（中文名进 cmd 会被 GBK 读错），内容也一律纯 ASCII；中文只出现在 `.ps1` 里，`.ps1` 一律 UTF-8 **带 BOM**。
 
-## 九个入口
+## 五个入口（2026-11-13 从九个收成五个）
 
-| 启动 | 检修版（窗口不关） | 停 |
-| --- | --- | --- |
-| `Run DSH.cmd` | `Run DSH-Check.cmd` | `Stop DSH.cmd` |
-| `Run lil whale.cmd` | `Run lil whale-Check.cmd` | `Stop lil whale.cmd` |
-| `Run All Whales.cmd` | `Run All Whales-Check.cmd` | `Stop All Whales.cmd` |
+| 启动 | 停 |
+| --- | --- |
+| `Run DSH.cmd` —— 起主 dsh；已经在跑就直接打开它的 WebUI | `Stop DSH.cmd` —— 关主 dsh；**还有鱼在跑时会拒绝**并点名 |
+| `Run All Whales.cmd` —— 起所有鱼（不含主 dsh，不开浏览器窗） | `Stop All Whales.cmd` —— 关所有鱼（主 dsh 不动） |
+| `Run lil whale.cmd` —— 起第一条鱼；可以把成员键当参数传进去（`Run lil whale.cmd fishball`） | —— |
 
-- **普通版**：成功（端口真连上）就静悄悄关窗；失败把 `.err.log` 尾巴打出来再停住。
-- **`-Check` 版**：一样做事，但窗口**永远留着**，排障用。
-- **停止脚本只有普通版**：本来就短，出结果就停在那儿。
-- `Stop DSH` / `Stop All Whales` 会先问一句 `Y/N` —— 大肥鱼就是你在用的 3080，停掉会中断正在跑的那一轮。`Stop lil whale` 不问。
+**为什么删了四个**（`Run DSH-Check` / `Run All Whales-Check` / `Run lil whale-Check` / `Stop lil whale`）：
+
+- `-Check` 版当年存在的理由是"窗口留着看报错"。现在这件事有两个更好的去处：鱼塘里的**「检修」**按钮（先跑 `doctor.ps1` 再起，输出留在页面上）、以及 `fish.ps1` 本身会把失败原因和 `NEXT:` 打出来。同一个动作留两个入口，最后一定会有一个先过期。
+- 单条鱼的停止交给**鱼塘**（点「休眠」）或 `pwsh -File scripts\fish.ps1 down <键>`；`Stop lil whale` 只是这两者的旧包装。
+- 判据很简单：**一个动作只留一个入口**。加鱼不要加 `.cmd` —— 往名册里加，鱼塘和 `fish.ps1` 就都有了。
 
 **`bin\` 里的 .cmd 可以复制到任何地方**（桌面、任务栏、快捷方式）。它按三步找 `.ps1`：
 
@@ -23,33 +24,40 @@
 2. `%~dp0<script>.ps1` —— 如果哪天把 `.ps1` 和 `.cmd` 放在同一层
 3. `%USERPROFILE%\dsh-lil-whale\scripts\<script>.ps1` —— 被复制到别处时走这个（`%USERPROFILE%\dsh-lil-whale` 是指向项目的 Junction，见下）
 
-所以桌面那份只是"信封"，逻辑永远读项目里的 `launch.ps1` / `stop.ps1`：改逻辑不用重新拖。
+所以桌面那份只是"信封"，逻辑永远读项目里的 `fish.ps1`：改逻辑不用重新拖。
 
-命名约定（后期加子代照这个来）：`Run lil whale-2.cmd`、`Run lil whale-2-Check.cmd`、`Stop lil whale-2.cmd`。编号只加到"哪条鱼"上，`Run All Whales` 的含义就是"所有编号"。
+> 桌面那四个是**副本**（2026-11-13 核对过 sha256 与 `bin\` 里的一致），不是快捷方式。改了 `bin\` 里的文件，桌面副本不会自己更新——要么重新复制，要么以后改成快捷方式。
 
 ## 底层
 
-启动入口共用 `scripts\launch.ps1`，停止共用 `scripts\stop.ps1`：
+所有入口最后都走 `scripts\fish.ps1`（2026-11-12 统一，见 PRD A.26）：
 
 ```
-pwsh -File launch.ps1 -Target all|lee|whale [-NoBrowser] [-Port n] [-WithWatchman]
-pwsh -File stop.ps1   -Target all|lee|whale [-Yes]
+pwsh -File scripts\fish.ps1 list                 # 名册 + 端口 + 心跳
+pwsh -File scripts\fish.ps1 up   <鱼|all>        # 起；all 有锁，防重复启动
+pwsh -File scripts\fish.ps1 down <鱼|all> [-Yes] [-Force]
+pwsh -File scripts\fish.ps1 up-main / down-main  # 主 dsh（down-main 有鱼在跑会拒绝）
+pwsh -File scripts\fish.ps1 doctor | refresh <鱼|all>
 ```
+
+`launch.ps1` / `stop.ps1` 是它的薄壳（参数翻译后转调），留着是为了老命令行和文档不失效；新东西请直接写 `fish.ps1`。
 
 - 已经在跑的端口不会重复起（用 TCP 连一下判断，不用 `Get-NetTCPConnection` —— 它在某些沙箱里静默返回空）。
 - 子进程用 `Start-Process -WindowStyle Hidden` + 输出重定向离开，所以**父窗口退出、孩子继续跑**。
-- 浏览器统一由 `launch.ps1` 开，所以两个 dsh 都带 `--no-open` 启动 —— 否则 dsh 自己开一次、脚本再开一次，就是两个标签页（这个是 2026-11-11 修的 bug）。
-- 她的网页要 token，token 只出现在启动日志里；`launch.ps1` 从日志里捞最后一个带 token 的地址再开。
+- 浏览器统一由 `fish.ps1` 开，所以两条 dsh 都带 `--no-open` 启动 —— 否则 dsh 自己开一次、脚本再开一次，就是两个标签页（2026-11-11 修的 bug）。
+- 她的网页要 token，token 只出现在启动日志里；`fish.ps1` 从日志里捞最后一个带 token 的地址再开。
 
 ## 机器用的（别双击）
 
 | 文件 | 谁调它 |
 | --- | --- |
+| `fish.ps1` | 人 + 鱼塘（`/pond/api/action`）+ 巡守自启动（`up all -NoBrowser`） |
 | `start-whale.ps1` | `watchman.ps1`。输出约定：`already-awake` / `awake` / `failed` |
 | `wake-whale.ps1` | `dsh-group` 插件的巡守定时器（`HER_WAKER`）：每 60 秒看一次，到点且她关着窗就跑它 |
 | `watchman.ps1` | **手工兜底的老巡守，日常不必跑**。现在门由 `dsh-group` 插件推（见上一行）。主 dsh 不常开时才需要它：`pwsh -File scripts\watchman.ps1`（旧的双击入口在 `legacy\watchman-run.cmd`） |
-| `stop.ps1` | `bin\Stop*.cmd`。退出码 0 = 停了/本来没跑，1 = 没停干净 |
-| `launch.ps1` | `bin\Run*.cmd` |
+| `stop.ps1` / `launch.ps1` | `fish.ps1` 的薄壳；直接调也认老参数 |
+| `doctor.ps1` | `fish.ps1 doctor`、鱼塘「检修」、`release-check.ps1` |
+| `install.ps1` / `release-check.ps1` / `pack.ps1` | 装、验、打包 |
 
 ## 日志在哪
 
@@ -57,7 +65,8 @@ pwsh -File stop.ps1   -Target all|lee|whale [-Yes]
 | --- | --- |
 | 大肥鱼 | `<你的 dsh 家>\logs\web-latest.log` / `.err.log` |
 | 小肥鱼 | `<小肥鱼的家>\dsh-home\logs\web-latest.log` / `.err.log` |
-| 巡守（脚本版） | `<小肥鱼的家>\logs\watchman.log`；控制台输出在 `dsh-lil-whale\logs\watchman-console.log` |
+| 每条鱼的起停账 | `pool\state\runs\<成员>.log` |
+| 巡守（插件版） | `pool\state\watchman.log`；脚本版兜底在 `dsh-lil-whale\logs\watchman-console.log` |
 
 ## legacy\
 
