@@ -1,4 +1,4 @@
-﻿# fish.ps1 -- 鱼群唯一的入口。ASCII 文件名 + UTF-8 BOM。
+# fish.ps1 -- 鱼群唯一的入口。ASCII 文件名 + UTF-8 BOM。
 #
 # 为什么要有它：鱼一多，"开/停/体检"三件事各有各的脚本，每加一条鱼就多一套参数。
 # 这个脚本只做一件事：把命令套到 pool\members.json 里那条鱼身上。
@@ -174,8 +174,9 @@ function Show-List {
 function Start-Fish($member) {
   $port = Get-PortOf $member
   if (Test-Port $port) {
-    Write-Host ("{0}：已经在跑（{1}）。" -f $member.Label, $port)
-    if (-not $NoBrowser) { Start-Process (Get-Url $member) | Out-Null }
+    # 已经在跑就不再开一次浏览器：重复 `up` 会开出第二个一模一样的窗口，
+    # 看着像"一条鱼开了两个 webui"，其实是一条鱼、两扇窗（2026-11-12 他报的）。
+    Write-Host ("{0}：已经在跑（{1}）：{2}" -f $member.Label, $port, (Get-Url $member))
     return $true
   }
   if (-not $member.DshHome -or -not (Test-Path -LiteralPath $member.DshHome)) {

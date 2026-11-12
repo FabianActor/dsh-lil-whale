@@ -8,6 +8,8 @@
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, rmSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
+import { spawn } from 'node:child_process'
+import { Socket } from 'node:net'
 import { config } from './config.js'
 
 export const name = 'lil-whale-group-ui'
@@ -355,6 +357,214 @@ function readBody(req, limit = 256 * 1024) {
 function stamp(date) {
   const p = (n) => String(n).padStart(2, '0')
   return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())} ${p(date.getHours())}:${p(date.getMinutes())}`
+}
+
+// ---------- 鱼塘：从网页里开关鱼（2026-11-12 晚） ----------
+//
+// 为什么要它：鱼一多，`fish.ps1 up/down` 就得记名字、记端口、记谁先谁后。
+// 这里把"谁醒着、谁没开、怎么开"放进面板，端口状态每 4 秒自己刷一次。
+//
+// 三条边界（都是有理由的，不是省事）：
+//   1. 巡守那条（`role: watcher`，就是你现在看的这个 3080）**不能从这里开关**：
+//      关掉它等于把正在看的这扇窗自己拔了，页面会先白屏、再没人应答。
+//   2. 动作全部走 `scripts\fish.ps1`，不在这里重写一遍起停逻辑 ——
+//      两处实现迟早会分叉（今天刚因为"投影有两个写者"踩过一次）。
+//   3. 端口状态用 TCP 连一下判断，不看 `Get-NetTCPConnection` ——
+//      本机沙箱里它会安静地返回空，看着像"全都没开"。
+const POND_SCRIPTS = join(config().repoRoot, 'scripts')
+const FISH_PS1 = join(POND_SCRIPTS, 'fish.ps1')
+const DOCTOR_PS1 = join(POND_SCRIPTS, 'doctor.ps1')
+const RUNS_DIR = join(POOL_STATE, 'runs')
+const POND_TCP_TIMEOUT_MS = 700
+const POND_ACTION_TIMEOUT_MS = 150_000
+
+function pondMembers() {
+  const file = config().membersFile
+  try {
+    const raw = JSON.parse(readFileSync(file, 'utf8'))
+    if (raw?.members && typeof raw.members === 'object' && Object.keys(raw.members).length) return raw.members
+  } catch {
+    // 读不到就走内置三条（没有端口字段，页面会显示"没有端口"，不会假装能开）
+  }
+  return Object.fromEntries(
+    Object.entries(MEMBERS).map(([key, m]) => [key, { name: m.name, kind: m.kind, role: m.kind === 'human' ? 'human' : 'member' }]),
+  )
+}
+
+/** 端口开没开：连得上就是开着。连不上不代表"进程死了"，只代表这扇门没开。 */
+function tcpOpen(port, timeoutMs = POND_TCP_TIMEOUT_MS) {
+  return new Promise((resolve) => {
+    const portNumber = Number(port)
+    if (!Number.isInteger(portNumber) || portNumber <= 0) {
+      resolve(false)
+      return
+    }
+    const socket = new Socket()
+    let settled = false
+    const finish = (ok) => {
+      if (settled) return
+      settled = true
+      socket.destroy()
+      resolve(ok)
+    }
+    socket.setTimeout(timeoutMs)
+    socket.once('connect', () => finish(true))
+    socket.once('timeout', () => finish(false))
+    socket.once('error', () => finish(false))
+    try {
+      socket.connect(portNumber, '127.0.0.1')
+    } catch {
+      finish(false)
+    }
+  })
+}
+
+function pidAlive(pid) {
+  const number = Number(pid)
+  if (!Number.isInteger(number) || number <= 0) return false
+  try {
+    process.kill(number, 0)
+    return true
+  } catch (error) {
+    // EPERM = 进程在，只是不归我们管；ESRCH = 真没了。
+    return error?.code === 'EPERM'
+  }
+}
+
+/** 每个进程自己的起停账：`pool\state\runs\<鱼>.log` 的最后一行。 */
+function lastRunOf(key) {
+  const file = join(RUNS_DIR, `${key}.log`)
+  if (!existsSync(file)) return null
+  try {
+    const lines = readFileSync(file, 'utf8').trim().split(/\r?\n/).filter(Boolean)
+    const line = lines[lines.length - 1]
+    if (!line) return null
+    const parts = line.split('|').map((part) => part.trim())
+    const pidMatch = /pid=(\d+)/.exec(line)
+    return { ts: parts[0] ?? '', event: parts[1] ?? '', pid: pidMatch ? Number(pidMatch[1]) : null, raw: line }
+  } catch {
+    return null
+  }
+}
+
+function presenceOf(key) {
+  const file = join(PRESENCE_DIR, `${key}.json`)
+  if (!existsSync(file)) return null
+  try {
+    const raw = JSON.parse(readFileSync(file, 'utf8'))
+    const at = Number(raw?.at)
+    return {
+      status: typeof raw?.status === 'string' ? raw.status : 'unknown',
+      at: Number.isFinite(at) ? at : null,
+      ageMs: Number.isFinite(at) ? Date.now() - at : null,
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 鱼的页面地址。token 只印在启动日志里（不是配置），所以每次现读日志尾巴 ——
+ * 这也是 `fish.ps1` 的做法，两边保持同一条路。
+ */
+function pondUrlOf(member) {
+  const port = Number(member?.port)
+  if (!Number.isInteger(port) || port <= 0) return null
+  let token = ''
+  const logFile = member?.dshHome ? join(member.dshHome, 'logs', 'web-latest.log') : ''
+  if (logFile && existsSync(logFile)) {
+    try {
+      const text = readFileSync(logFile, 'utf8')
+      const matches = [...text.matchAll(/[?&]token=([A-Za-z0-9._~-]+)/g)]
+      if (matches.length) token = matches[matches.length - 1][1]
+    } catch {
+      // 没有 token 就只给地址：页面会要求重新登录，这比编一个假 token 好
+    }
+  }
+  return `http://127.0.0.1:${port}/${token ? `?token=${token}` : ''}`
+}
+
+async function pondStatus() {
+  const members = pondMembers()
+  const fish = []
+  for (const [key, member] of Object.entries(members)) {
+    if (member?.kind !== 'fish') continue
+    const port = Number(member?.port)
+    const [portOpen] = await Promise.all([tcpOpen(port)])
+    const run = lastRunOf(key)
+    const presence = presenceOf(key)
+    fish.push({
+      key,
+      name: typeof member?.name === 'string' ? member.name : key,
+      role: member?.role === 'watcher' ? 'watcher' : 'member',
+      status: member?.status ?? 'resident',
+      parent: member?.parent ?? null,
+      port: Number.isInteger(port) && port > 0 ? port : null,
+      portOpen,
+      pid: run?.pid ?? null,
+      pidAlive: run?.pid ? pidAlive(run.pid) : false,
+      lastRun: run,
+      heartbeat: presence,
+      heartbeatAgeMs: presence?.ageMs ?? null,
+      canManage: member?.role !== 'watcher',
+      url: portOpen ? pondUrlOf(member) : null,
+    })
+  }
+  fish.sort((a, b) => (a.role === b.role ? String(a.key).localeCompare(String(b.key)) : a.role === 'watcher' ? -1 : 1))
+  return { fish, summary: { total: fish.length, running: fish.filter((item) => item.portOpen).length } }
+}
+
+/** 跑一个 PowerShell 脚本，把输出原样带回去（页面显示最近一次动作的结果）。 */
+function runPwshScript(scriptFile, args, timeoutMs = POND_ACTION_TIMEOUT_MS) {
+  return new Promise((resolve) => {
+    const exe = config().pwshExe || 'pwsh'
+    const startedAt = Date.now()
+    let out = ''
+    let err = ''
+    let settled = false
+    const finish = (code, timedOut) => {
+      if (settled) return
+      settled = true
+      resolve({
+        code,
+        timedOut,
+        seconds: Math.round((Date.now() - startedAt) / 100) / 10,
+        output: `${out}${err ? `\n${err}` : ''}`.trim().slice(-6000),
+      })
+    }
+    let child
+    try {
+      child = spawn(exe, ['-NoLogo', '-NoProfile', '-File', scriptFile, ...args], {
+        cwd: config().repoRoot,
+        windowsHide: true,
+      })
+    } catch (error) {
+      finish(-1, false)
+      return
+    }
+    child.stdout?.on('data', (chunk) => {
+      out += chunk.toString()
+    })
+    child.stderr?.on('data', (chunk) => {
+      err += chunk.toString()
+    })
+    const timer = setTimeout(() => {
+      try {
+        child.kill()
+      } catch {
+        // 杀不掉也照样返回：页面会显示 timedOut，别卡住整条路由
+      }
+      finish(-1, true)
+    }, timeoutMs)
+    child.once('error', () => {
+      clearTimeout(timer)
+      finish(-1, false)
+    })
+    child.once('close', (code) => {
+      clearTimeout(timer)
+      finish(code ?? -1, false)
+    })
+  })
 }
 
 export function apply(ctx) {
@@ -863,6 +1073,127 @@ export function apply(ctx) {
       }
       writeUiRead(state)
       sendJson(res, 200, { ok: true, state })
+    },
+  }))
+
+  // ---------- 鱼塘路由：状态 / 打开 / 开关 ----------
+  disposers.push(ctx.webServer.register({
+    kind: 'exact',
+    path: '/pond/api/status',
+    async handler(req, res) {
+      if (req.method !== 'GET') {
+        sendJson(res, 405, { error: 'method-not-allowed' })
+        return
+      }
+      try {
+        const status = await pondStatus()
+        sendJson(res, 200, { ok: true, ...status, polledAt: new Date().toISOString() })
+      } catch (error) {
+        sendJson(res, 500, { ok: false, error: 'status-failed', detail: String(error?.message ?? error) })
+      }
+    },
+  }))
+
+  disposers.push(ctx.webServer.register({
+    kind: 'exact',
+    path: '/pond/api/url',
+    async handler(req, res) {
+      if (req.method !== 'GET') {
+        sendJson(res, 405, { error: 'method-not-allowed' })
+        return
+      }
+      const url = new URL(req.url ?? '/', 'http://127.0.0.1')
+      const key = url.searchParams.get('key') ?? ''
+      const member = pondMembers()[key]
+      if (!member || member.kind !== 'fish') {
+        sendJson(res, 400, { error: 'unknown-fish', key })
+        return
+      }
+      const target = pondUrlOf(member)
+      if (!target) {
+        sendJson(res, 400, { error: 'no-port', key })
+        return
+      }
+      sendJson(res, 200, { ok: true, url: target })
+    },
+  }))
+
+  disposers.push(ctx.webServer.register({
+    kind: 'exact',
+    path: '/pond/api/action',
+    async handler(req, res) {
+      if (req.method !== 'POST') {
+        sendJson(res, 405, { error: 'method-not-allowed' })
+        return
+      }
+      let payload
+      try {
+        payload = JSON.parse(await readBody(req))
+      } catch {
+        sendJson(res, 400, { error: 'bad-json' })
+        return
+      }
+      const action = String(payload?.action ?? '')
+      const key = String(payload?.key ?? '')
+      const members = pondMembers()
+      const fishKeys = Object.keys(members).filter(
+        (id) => members[id]?.kind === 'fish' && members[id]?.role !== 'watcher',
+      )
+
+      const runOne = async (target, act) => {
+        if (act === 'up') return runPwshScript(FISH_PS1, ['up', target, '-NoBrowser'])
+        if (act === 'down') return runPwshScript(FISH_PS1, ['down', target, '-Yes'])
+        if (act === 'maintain') {
+          // 检修 = 先体检、再启动，把体检结果和启动输出一起贴回页面。
+          // 不另开"可见控制台"：启动日志要 redirect 到 `web-latest.log`（token 只印在那里），
+          // 一个 redirect 的控制台窗口是空白的，看着像卡住了 —— 不如把输出贴到页面上。
+          const doctor = await runPwshScript(DOCTOR_PS1, [], 90_000)
+          const up = await runPwshScript(FISH_PS1, ['up', target, '-NoBrowser'])
+          return {
+            ...up,
+            code: up.code,
+            seconds: Math.round((doctor.seconds + up.seconds) * 10) / 10,
+            output: `--- 体检 ---\n${doctor.output}\n\n--- 启动 ---\n${up.output}`.slice(-6000),
+          }
+        }
+        return { code: -1, timedOut: false, seconds: 0, output: `unknown-action ${act}` }
+      }
+
+      if (action === 'up-all' || action === 'down-all') {
+        const act = action === 'up-all' ? 'up' : 'down'
+        const parts = []
+        let code = 0
+        let seconds = 0
+        for (const target of fishKeys) {
+          const result = await runOne(target, act)
+          seconds += result.seconds
+          if (result.code !== 0) code = result.code
+          parts.push(`[${members[target]?.name ?? target}]\n${result.output}`)
+        }
+        sendJson(res, 200, {
+          ok: code === 0,
+          action,
+          code,
+          seconds: Math.round(seconds * 10) / 10,
+          output: parts.join('\n\n').slice(-6000),
+        })
+        return
+      }
+
+      if (!['up', 'down', 'maintain'].includes(action)) {
+        sendJson(res, 400, { error: 'unknown-action', action })
+        return
+      }
+      if (!key || !members[key] || members[key].kind !== 'fish') {
+        sendJson(res, 400, { error: 'unknown-fish', key })
+        return
+      }
+      if (members[key].role === 'watcher') {
+        sendJson(res, 400, { error: 'self', hint: '巡守那条就是你现在看的这个窗口，不能从这里关' })
+        return
+      }
+      const result = await runOne(key, action)
+      sendJson(res, 200, { ok: result.code === 0, action, key, ...result })
     },
   }))
 

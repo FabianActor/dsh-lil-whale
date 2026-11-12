@@ -2426,11 +2426,388 @@ function Bubble({ config, message, onMention, animate = false }) {
       )
     }
 
+    // ---------- 鱼塘：开关鱼的一页（2026-11-12 晚） ----------
+    //
+    // 只做四件事：看谁醒着（端口开没开）、全部唤醒、全部休眠、逐条鱼开关。
+    // "检修后唤醒" = 先跑一遍 doctor 再起，体检结果贴在页面底部 ——
+    // 鱼死了的时候，最需要的往往不是再点一次启动，而是先知道她哪儿不对。
+    //
+    // 巡守那条（role=watcher，就是你现在看的这个 3080）不给按钮：关掉它等于把
+    // 正在看的这扇窗自己拔了。页面里会写清楚为什么。
+    const POND_ID = 'pond'
+    const POND_POLL_MS = 4000
+
+    const POND = {
+      title: '鱼塘',
+      subtitle: '看谁醒着，也在这里开关。',
+      polling: '每 4 秒看一次',
+      allUp: '全部唤醒',
+      allDown: '全部休眠',
+      up: '唤醒',
+      maintain: '检修后唤醒',
+      down: '休眠',
+      open: '打开',
+      running: '在跑',
+      stopped: '没开',
+      port: '端口',
+      heartbeat: '心跳',
+      heartbeatAgo: (minutes) => (minutes < 1 ? '刚刚' : `${minutes} 分钟前`),
+      noHeartbeat: '没有记录',
+      lastRun: '起停账',
+      selfHint: '这是你自己所在的窗口，不能从这里关',
+      confirmAllDown: '让所有鱼休眠？巡守那条（这个窗口）不会动。',
+      busy: '正在动作…',
+      result: '最近一次动作',
+      empty: '名册里还没有鱼。',
+      roleWatcher: '巡守',
+      roleMember: '成员',
+    }
+
+    function PondIcon() {
+      return h(
+        'svg',
+        { width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': 'true' },
+        h('path', {
+          d: 'M1.5 6.1c1.6 0 1.6-1 3.2-1s1.6 1 3.2 1 1.6-1 3.2-1 1.6 1 3.2 1',
+          stroke: 'currentColor',
+          strokeWidth: 1.2,
+          strokeLinecap: 'round',
+        }),
+        h('path', {
+          d: 'M1.5 9.3c1.6 0 1.6-1 3.2-1s1.6 1 3.2 1 1.6-1 3.2-1 1.6 1 3.2 1',
+          stroke: 'currentColor',
+          strokeWidth: 1.2,
+          strokeLinecap: 'round',
+          opacity: 0.5,
+        }),
+        h('circle', { cx: 11.2, cy: 4.3, r: 1.1, fill: 'currentColor' }),
+      )
+    }
+
+    function pondChip(text) {
+      return h(
+        'span',
+        {
+          style: {
+            fontSize: 12,
+            padding: '3px 8px',
+            border: '1px solid var(--dsw-alias-border-l1, #e5e6e8)',
+            color: 'var(--dsw-alias-label-secondary, #6b7076)',
+          },
+        },
+        text,
+      )
+    }
+
+    function pondButtonStyle(primary) {
+      return {
+        height: 28,
+        padding: '0 10px',
+        fontSize: 12,
+        cursor: 'pointer',
+        border: `1px solid ${primary ? 'var(--dsw-alias-brand-primary, #4d6bfe)' : 'var(--dsw-alias-border-l1, #d7d9dd)'}`,
+        background: primary ? 'var(--dsw-alias-brand-primary, #4d6bfe)' : 'transparent',
+        color: primary ? '#fff' : 'inherit',
+      }
+    }
+
+    function PondPage() {
+      const [status, setStatus] = useState(null)
+      const [error, setError] = useState(null)
+      const [busy, setBusy] = useState(null)
+      const [openBusy, setOpenBusy] = useState(null)
+      const [result, setResult] = useState(null)
+
+      const load = useCallback(async () => {
+        try {
+          const response = await fetch('/pond/api/status', { headers: { accept: 'application/json' } })
+          const data = await response.json()
+          if (!response.ok || data?.ok === false) throw new Error(data?.detail || data?.error || `HTTP ${response.status}`)
+          setStatus(data)
+          setError(null)
+        } catch (e) {
+          setError(String(e?.message ?? e))
+        }
+      }, [])
+
+      useEffect(() => {
+        void load()
+        const timer = setInterval(() => {
+          void load()
+        }, POND_POLL_MS)
+        return () => clearInterval(timer)
+      }, [load])
+
+      const act = useCallback(
+        async (action, key) => {
+          const label = key ? `${action}:${key}` : action
+          setBusy(label)
+          setError(null)
+          try {
+            const response = await fetch('/pond/api/action', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ action, key }),
+            })
+            const data = await response.json()
+            setResult({
+              action,
+              key,
+              ok: response.ok && data?.ok !== false,
+              output: data?.output || data?.hint || data?.error || '',
+              at: Date.now(),
+            })
+            if (!response.ok) throw new Error(data?.hint || data?.error || `HTTP ${response.status}`)
+            await load()
+          } catch (e) {
+            setError(String(e?.message ?? e))
+          } finally {
+            setBusy(null)
+          }
+        },
+        [load],
+      )
+
+      const openFish = useCallback(async (key) => {
+        setOpenBusy(key)
+        try {
+          const response = await fetch(`/pond/api/url?key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } })
+          const data = await response.json()
+          if (!response.ok || !data?.url) throw new Error(data?.error || `HTTP ${response.status}`)
+          window.open(data.url, '_blank', 'noopener')
+        } catch (e) {
+          setError(String(e?.message ?? e))
+        } finally {
+          setOpenBusy(null)
+        }
+      }, [])
+
+      const fish = status?.fish ?? []
+      const running = status?.summary?.running ?? 0
+      const total = status?.summary?.total ?? 0
+      const busyAny = busy !== null
+
+      const card = (item) => {
+        const self = !item.canManage
+        const hb = item.heartbeatAgeMs
+        const hbText = hb === null || hb === undefined ? POND.noHeartbeat : POND.heartbeatAgo(Math.floor(hb / 60000))
+        const hint = self ? POND.selfHint : ''
+        return h(
+          'div',
+          {
+            key: item.key,
+            style: {
+              border: '1px solid var(--dsw-alias-border-l1, #e5e6e8)',
+              padding: '10px 12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+              background: 'var(--dsw-alias-bg-base, #fff)',
+              opacity: self ? 0.86 : 1,
+            },
+          },
+          h(
+            'div',
+            { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+            h('span', {
+              style: {
+                width: 8,
+                height: 8,
+                borderRadius: 9999,
+                background: item.portOpen ? '#4a9d6a' : '#b8bcc4',
+                display: 'inline-block',
+                flex: 'none',
+              },
+            }),
+            h('span', { style: { fontSize: 14, fontWeight: 600 } }, item.name),
+            h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-secondary, #8a8f98)' } }, item.key),
+            h(
+              'span',
+              {
+                style: {
+                  marginLeft: 'auto',
+                  fontSize: 11,
+                  padding: '1px 6px',
+                  border: '1px solid var(--dsw-alias-border-l1, #e5e6e8)',
+                  color: 'var(--dsw-alias-label-secondary, #8a8f98)',
+                },
+              },
+              item.role === 'watcher' ? POND.roleWatcher : POND.roleMember,
+            ),
+          ),
+          h(
+            'div',
+            {
+              style: {
+                fontSize: 12,
+                color: 'var(--dsw-alias-label-secondary, #6b7076)',
+                display: 'flex',
+                gap: 12,
+                flexWrap: 'wrap',
+              },
+            },
+            h('span', null, `${POND.port} ${item.port ?? '—'}`),
+            h('span', null, item.portOpen ? POND.running : POND.stopped),
+            h('span', null, `${POND.heartbeat} ${hbText}`),
+          ),
+          item.lastRun
+            ? h(
+                'div',
+                {
+                  style: {
+                    fontSize: 11,
+                    color: 'var(--dsw-alias-label-secondary, #8a8f98)',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  },
+                  title: item.lastRun.raw,
+                },
+                `${POND.lastRun}：${item.lastRun.ts} ${item.lastRun.event}`,
+              )
+            : null,
+          h(
+            'div',
+            { style: { display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 2 } },
+            h(
+              'button',
+              { onClick: () => act('up', item.key), disabled: busyAny || self, title: hint, style: pondButtonStyle(true) },
+              busy === `up:${item.key}` ? '…' : POND.up,
+            ),
+            h(
+              'button',
+              { onClick: () => act('maintain', item.key), disabled: busyAny || self, title: hint, style: pondButtonStyle(false) },
+              busy === `maintain:${item.key}` ? '…' : POND.maintain,
+            ),
+            h(
+              'button',
+              { onClick: () => act('down', item.key), disabled: busyAny || self, title: hint, style: pondButtonStyle(false) },
+              busy === `down:${item.key}` ? '…' : POND.down,
+            ),
+            item.portOpen
+              ? h(
+                  'button',
+                  { onClick: () => openFish(item.key), disabled: openBusy === item.key, style: pondButtonStyle(false) },
+                  POND.open,
+                )
+              : null,
+          ),
+          self ? h('div', { style: { fontSize: 11, color: 'var(--dsw-alias-label-secondary, #8a8f98)' } }, POND.selfHint) : null,
+        )
+      }
+
+      return h(
+        'div',
+        { style: { display: 'flex', flexDirection: 'column', gap: 14, padding: '4px 0 24px', minHeight: 0 } },
+        h(
+          'div',
+          { style: { display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' } },
+          h('div', { style: { fontSize: 16, fontWeight: 600 } }, POND.title),
+          h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #8a8f98)' } }, POND.subtitle),
+          h(
+            'div',
+            {
+              style: {
+                marginLeft: 'auto',
+                fontSize: 12,
+                color: 'var(--dsw-alias-label-secondary, #8a8f98)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              },
+            },
+            h('span', {
+              style: { width: 6, height: 6, background: error ? '#e5484d' : '#4a9d6a', display: 'inline-block' },
+            }),
+            error ? '连不上本机服务' : POND.polling,
+          ),
+        ),
+        h(
+          'div',
+          { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
+          pondChip(`${running} / ${total} 在跑`),
+          h(
+            'button',
+            { onClick: () => act('up-all'), disabled: busyAny, style: pondButtonStyle(true) },
+            busy === 'up-all' ? POND.busy : POND.allUp,
+          ),
+          h(
+            'button',
+            {
+              onClick: () => {
+                if (window.confirm(POND.confirmAllDown)) void act('down-all')
+              },
+              disabled: busyAny,
+              style: pondButtonStyle(false),
+            },
+            busy === 'down-all' ? POND.busy : POND.allDown,
+          ),
+        ),
+        error
+          ? h(
+              'div',
+              {
+                style: {
+                  fontSize: 12,
+                  padding: '6px 8px',
+                  border: '1px solid #e5484d',
+                  color: '#c93c40',
+                },
+              },
+              error,
+            )
+          : null,
+        fish.length === 0
+          ? h('div', { style: { fontSize: 13, color: 'var(--dsw-alias-label-secondary, #8a8f98)' } }, POND.empty)
+          : null,
+        h(
+          'div',
+          { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 } },
+          fish.map(card),
+        ),
+        result
+          ? h(
+              'div',
+              {
+                style: {
+                  border: '1px solid var(--dsw-alias-border-l1, #e5e6e8)',
+                  padding: '8px 10px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 6,
+                },
+              },
+              h(
+                'div',
+                { style: { fontSize: 12, fontWeight: 600 } },
+                `${POND.result} · ${result.action}${result.key ? ` · ${result.key}` : ''} · ${result.ok ? '成功' : '没成功'}`,
+              ),
+              h(
+                'pre',
+                {
+                  style: {
+                    margin: 0,
+                    fontSize: 11,
+                    lineHeight: 1.5,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-all',
+                    maxHeight: 220,
+                    overflow: 'auto',
+                    color: 'var(--dsw-alias-label-secondary, #6b7076)',
+                  },
+                },
+                result.output || '（没有输出）',
+              ),
+            )
+          : null,
+      )
+    }
+
     return {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[lil-whale-group-ui] client build v19 · human-from-roster:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[lil-whale-group-ui] client build v20 · fish-pond:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('lil-whale-group-keyframes')) {
           const style = document.createElement('style')
@@ -2459,6 +2836,19 @@ function Bubble({ config, message, onMention, animate = false }) {
           order: 50,
           label: () => t.settingsTitle,
         }, SettingsPage))
+
+        // 「鱼塘」：管理开关的一页。order 放在鱼群后面 —— 聊天是常用的，开关是偶尔的。
+        ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
+          name: 'sidebar.panellist',
+          id: POND_ID,
+          order: 6,
+          label: () => POND.title,
+        }, PondIcon))
+
+        ctx.slots.inject('main', () => ctx.slots.register({
+          name: 'main',
+          key: POND_ID,
+        }, PondPage))
       },
     }
   },
