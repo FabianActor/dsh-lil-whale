@@ -54,7 +54,7 @@ pwsh -File scripts\install.ps1
 
 ## 第一次出生
 
-1. 起她的窗：双击 `scripts\bin\Run lil whale.cmd`（或者 `pwsh -File scripts\launch.ps1 -Target whale`）
+1. 起她的窗：`pwsh -File scripts\fish.ps1 up whale`（或双击 `scripts\bin\Run All Whales.cmd`，把所有鱼都起来）
    - 它会打印她的网址，形如 `http://127.0.0.1:3082/?token=xxxx`
    - **token 每次启动随机生成，只印在那一行**；自己敲 `127.0.0.1:3082` 会得到 401
 2. 在她那个网页里填**她自己的** key：设置 → Models

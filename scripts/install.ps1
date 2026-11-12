@@ -417,7 +417,7 @@ Say ""
 Say "  装好了。接下来的四件事脚本替不了：" -ForegroundColor Green
 Say ""
 Say "  1) 重启你的 dsh（装进你 profile 的两个插件要重启才生效）。"
-Say "  2) 起她的窗：双击 scripts\bin\Run lil whale.cmd"
+Say "  2) 起她的窗：pwsh -File scripts\fish.ps1 up whale（或双击 scripts\bin\Run All Whales.cmd）"
 Say "     -- 它会打印她的网址，形如  http://127.0.0.1:$port/?token=xxxx"
 Say "     -- token 是每次启动随机生成的，只印在那一行；自己敲 127.0.0.1:$port 会 401。"
 Say "  3) 在她的网页里填她自己的 API key（设置 -> Models），别和你共用一把。"

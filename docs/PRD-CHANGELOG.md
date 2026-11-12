@@ -3,6 +3,11 @@
 > 本文件只记「哪一版改了哪几处、为什么改」。当前结论都在 [小小肥鱼-PRD.md](小小肥鱼-PRD.md) 里，那边不背历史。
 > 自 v0.3.5 起从 PRD 头部搬到这里（此前几块原样搬出，未改写）。v1.0 是整篇重写。
 
+## v1.0.41（2026-11-13）
+
+- **`scripts\bin\` 从九个入口收成四个**（他 2026-11-13 00:21："Run lil whale.cmd 感觉也没必要了"）：删 `Run DSH-Check` / `Run All Whales-Check` / `Run lil whale-Check` / `Stop lil whale` / `Run lil whale`。留下的四个 = 起/停主 dsh、起/停所有鱼；**单条鱼的起停归 `fish.ps1 up|down <键>` 与鱼塘**，不再进 .cmd。
+- `scripts\README.md` 按当前架构重写（fish.ps1 唯一底层、launch/stop 是薄壳、每条鱼的起停账在 `pool\state\runs\<鱼>.log`、桌面副本不是快捷方式）；`README` 装机步骤与 `install.ps1` 收尾提示、`docs\安装流程详解.md` 五处同步。
+
 ## v1.0.40（2026-11-13）
 
 - **鱼塘卡片宽度**：成员卡片改 `width: fit-content`，只包住内部文字，不再拉满整行。
