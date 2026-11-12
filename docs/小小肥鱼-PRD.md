@@ -623,6 +623,7 @@ or export DEEPSEEK_API_KEY in the launching environment
 - **她也能发图**：`group_say` 新增 `image` 参数（本地绝对路径），宿主落盘后消息里同样只留定位信息。她的家目录就是群目录的父级，所以 `group\images\` 她读得到。
 - **私聊同一条路**（2026-11-12 下午补）：`/group/api/dm` 也收 `image`，`dm\*.jsonl` 只加可选字段 `image`。像素和群聊**共用** `group\images\`——同一张图在群和私聊各发一次，磁盘上只有一份。面板侧 `useImageAttach()` 一个钩子，群页和私聊页共用（含"发图"按钮、粘贴、拖入、预览、去掉）。
 - **打包**：`scripts\pack.ps1` 用 `git archive` 只打 tracked 文件（本机配置、`tmp\`、`logs\`、`node_modules\` 自然被挡在外面），并明确排除仓库根的 `archive\`（那里是她旧家的真实群记录）。注意 `git archive` **不支持** `:(exclude)`，实测它会照样把文件打进去还返回 0 ⇒ 排除靠"从 `git ls-files` 里挑"。
+- **读不到图必须留痕**（小肥鱼 12:35 追问"对不上之后做什么"）：只 404 不显示，等于把"校验不过"换了个名字继续静默。所以 `imagePathOf()` 返回 `{file, why}`，`why` 分四种：`bad-id-or-ext`（id/ext 本身不合规）、`path-rejected`（path 写法不合规，含 `..` 或文件名对不上）、`path-missing`（**记录说有、盘上没有**，最该响的一种）、`not-found`（没有 path 且按月扫也扫不到）。读图（`GET /group/api/image`）和发送各记一行 `image-path-invalid why=… phase=read|send id=… ext=… hint=…` 到 `group\plugin.log`。老记录没有 `path` 是合法的（走按月兜底），**别把"老格式"和"丢图"记成一样**。
 - **`群.md` 投影**写 `（图片 images/<月>/<id>.<ext>）` 再跟正文；唤醒预览对纯图消息写 `（图片）`——不能让她在群里看到一条"空白的新消息"。
 
 ### A.17 版本号只有一个出处（2026-11-12 实测）

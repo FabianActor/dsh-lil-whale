@@ -44,24 +44,49 @@ const IMAGES_DIR = join(GROUP_DIR, 'images')
 const IMAGE_MAX_BYTES = 8 * 1024 * 1024
 const IMAGE_EXT = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' }
 
-/** 按 id + ext 找到图片路径；月份不知道就扫目录（一个群不会有很多月份）。 */
+/**
+ * 读不到的图片必须留痕，否则"没有图"和"图丢了"看起来一样（小肥鱼的原话：
+ * 校验的价值不在拦住坏路径，在让坏路径有痕迹）。
+ */
+function logImageIssue(why, detail) {
+  try {
+    const line = JSON.stringify({ at: new Date().toISOString(), note: 'image-path-invalid', why, ...detail }) + '\n'
+    appendFileSync(join(GROUP_DIR, 'plugin.log'), line, 'utf8')
+  } catch {
+    // 日志写不进去不该让看图的请求挂掉；这条的痕迹就只剩下面的 404 了。
+  }
+}
+
+/**
+ * 按 id + ext（可选 path）找图片；月份不知道就扫目录（一个群不会有很多月份）。
+ * 返回 { file, why }：file 为 null 时 why 说清卡在哪一步，调用方负责写日志。
+ */
 function imagePathOf(id, ext, pathHint) {
   const safeId = String(id || '')
   const safeExt = String(ext || '').toLowerCase()
-  if (!/^[0-9a-f]{16}$/.test(safeId) || !IMAGE_EXT[safeExt]) return null
-  // 记录里有 path 就以它为准（只信 images/ + 文件名对得上的写法）。
+  if (!/^[0-9a-f]{16}$/.test(safeId) || !IMAGE_EXT[safeExt]) return { file: null, why: 'bad-id-or-ext' }
+
+  // 记录里有 path 就以它为准；但只信"images/ 开头、不含 ..、文件名对得上"的写法。
   const hint = String(pathHint || '').replace(/\\/g, '/').replace(/^\.\//, '')
-  if (hint !== '' && hint.startsWith('images/') && !hint.includes('..') && hint.endsWith('/' + safeId + '.' + safeExt)) {
-    const hinted = join(GROUP_DIR, hint)
-    if (existsSync(hinted)) return hinted
+  let hintWhy = null
+  if (hint !== '') {
+    if (!hint.startsWith('images/') || hint.includes('..') || !hint.endsWith('/' + safeId + '.' + safeExt)) {
+      hintWhy = 'path-rejected'
+    } else {
+      const hinted = join(GROUP_DIR, hint)
+      if (existsSync(hinted)) return { file: hinted, why: null }
+      hintWhy = 'path-missing' // 记录说有、盘上没有
+    }
   }
+
+  // 没有 path 的老记录（或 path 校验没过）：按月份扫一遍，能救就救。
   try {
     for (const month of readdirSync(IMAGES_DIR)) {
       const candidate = join(IMAGES_DIR, month, `${safeId}.${safeExt}`)
-      if (existsSync(candidate)) return candidate
+      if (existsSync(candidate)) return { file: candidate, why: hintWhy }
     }
   } catch { /* 目录还不存在：当作没找到 */ }
-  return null
+  return { file: null, why: hintWhy ?? 'not-found' }
 }
 
 /** 把前端传来的 data URL 落盘，返回消息里要记的字段。 */
@@ -89,8 +114,12 @@ function storeImageDataUrl(dataUrl) {
  */
 function imageFieldOf(rawImage) {
   if (!rawImage || typeof rawImage !== 'object') return null
-  const file = imagePathOf(rawImage.id, rawImage.ext, rawImage.path)
-  if (file === null) throw new Error('先调 /group/api/image 上传，再带 id/ext 发消息')
+  const found = imagePathOf(rawImage.id, rawImage.ext, rawImage.path)
+  if (found.file === null) {
+    logImageIssue(found.why, { phase: 'send', id: rawImage.id, ext: rawImage.ext, hint: rawImage.path })
+    throw new Error('先调 /group/api/image 上传，再带 id/ext 发消息')
+  }
+  const file = found.file
   const id = String(rawImage.id)
   const ext = String(rawImage.ext).toLowerCase()
   const month = String(rawImage.month || file.split(/[\\/]/).slice(-2)[0] || '')
@@ -537,11 +566,13 @@ export function apply(ctx) {
     async handler(req, res) {
       const url = new URL(req.url ?? '/', 'http://127.0.0.1')
       if (req.method === 'GET') {
-        const file = imagePathOf(url.searchParams.get('id'), url.searchParams.get('ext'))
-        if (file === null) {
+        const found = imagePathOf(url.searchParams.get('id'), url.searchParams.get('ext'))
+        if (found.file === null) {
+          logImageIssue(found.why, { phase: 'read', id: url.searchParams.get('id'), ext: url.searchParams.get('ext') })
           sendJson(res, 404, { error: 'no-image' })
           return
         }
+        const file = found.file
         const bytes = readFileSync(file)
         res.statusCode = 200
         res.setHeader('content-type', IMAGE_EXT[url.searchParams.get('ext').toLowerCase()] ?? 'application/octet-stream')
