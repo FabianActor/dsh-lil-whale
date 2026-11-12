@@ -760,10 +760,10 @@ window.__ModuleLoader__.load({
     }
 
     /** 一条淡灰细线 + 一行小字：上次看到这里，新的在下面。不抢眼，只做分界。 */
-    function HistoryDivider() {
+    function HistoryDivider({ nodeRef }) {
       // 0.5px 在 1x 屏上会碎成一排看不见的点。这条线是"从哪儿开始看"的唯一线索，用 1px。
       const line = { flex: 1, height: 1, background: 'var(--dsw-alias-border-l3, rgba(0,0,0,0.16))' }
-      return h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, margin: '14px 24px' } },
+      return h('div', { ref: nodeRef, style: { display: 'flex', alignItems: 'center', gap: 12, margin: '14px 24px' } },
         h('div', { style: line }),
         h('span', {
           style: {
@@ -778,13 +778,13 @@ window.__ModuleLoader__.load({
      * 把分割线插在"第一条比 seenTs 新的消息"前面。
      * 第一次打开（seenTs 为空）不画；没有更新的消息也不画 —— 一条永远出现在最后面的线不是信息。
      */
-    function withDivider(messages, seenTs, renderBubble) {
+    function withDivider(messages, seenTs, renderBubble, dividerRef) {
       const nodes = []
       let placed = false
       for (let index = 0; index < messages.length; index += 1) {
         const message = messages[index]
         if (!placed && seenTs !== '' && String(message?.ts ?? '') > seenTs) {
-          nodes.push(h(HistoryDivider, { key: 'history-divider' }))
+          nodes.push(h(HistoryDivider, { key: 'history-divider', nodeRef: dividerRef }))
           placed = true
         }
         nodes.push(renderBubble(message, index))
@@ -868,6 +868,45 @@ window.__ModuleLoader__.load({
         h('svg', { width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', style: { position: 'relative' } },
           h('path', {
             d: 'M4 6.5L8 10.5L12 6.5',
+            stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round',
+          }))))
+    }
+
+    /**
+     * 回到上次看到的位置 —— 和 `JumpToBottom` 是一对，只是朝上。
+     *
+     * 进来时视角在底部（新的在眼前），可"上次看到哪儿"在头顶上面；
+     * 没有这个按钮，人只能自己往上滚去找那条线。线在视口上方才出现，滚到它跟前就消失。
+     */
+    function JumpToHistory({ onClick, rightInset }) {
+      return h('div', {
+        style: {
+          position: 'absolute', left: 0, right: 0, top: 10, height: 0,
+          display: 'flex', justifyContent: 'flex-end', pointerEvents: 'none', zIndex: 8,
+        },
+      }, h('button', {
+        type: 'button',
+        onClick,
+        title: '回到上次看到的位置',
+        'aria-label': '回到上次看到的位置',
+        style: {
+          position: 'relative', width: 34, height: 34, padding: 0,
+          boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          border: 0, background: 'transparent', cursor: 'pointer', pointerEvents: 'auto',
+          color: 'var(--dsw-alias-label-primary, rgba(0,0,0,0.8))',
+          marginRight: rightInset,
+        },
+      },
+        h('svg', {
+          width: 34, height: 34, viewBox: '0 0 34 34',
+          style: {
+            position: 'absolute', inset: 0,
+            filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.10)) drop-shadow(0 4px 12px rgba(0,0,0,0.10))',
+          },
+        }, h('circle', { cx: 17, cy: 17, r: 17, fill: 'var(--dsw-alias-button-floating-fill, #ffffff)' })),
+        h('svg', { width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', style: { position: 'relative' } },
+          h('path', {
+            d: 'M4 9.5L8 5.5L12 9.5',
             stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round',
           }))))
     }
@@ -1321,6 +1360,29 @@ window.__ModuleLoader__.load({
       const bottom = useRef(null)
       const scrollRef = useRef(null)
       const inputRef = useRef(null)
+      // "回到上次看到的位置"：群页刚打开时视角在底部，历史线在头顶上面。
+      const dividerRef = useRef(null)
+      const historyAboveRef = useRef(false)
+      const [historyAbove, setHistoryAbove] = useState(false)
+      // 线是不是在视口上方 —— 只回答这一件事，不回答"该不该显示"。
+      const measureHistory = useCallback(() => {
+        const el = scrollRef.current
+        const line = dividerRef.current
+        const next = Boolean(el && line && line.getBoundingClientRect().top < el.getBoundingClientRect().top + 4)
+        if (next !== historyAboveRef.current) {
+          historyAboveRef.current = next
+          setHistoryAbove(next)
+        }
+      }, [])
+      const jumpToHistory = useCallback(() => {
+        const el = scrollRef.current
+        if (!el) return
+        const line = dividerRef.current
+        // 没有线（没有新消息）就跳到最早的一条：两种情况下这个按钮都得做事。
+        if (!line) { el.scrollTo({ top: 0, behavior: 'smooth' }); return }
+        const top = line.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - 8
+        el.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
+      }, [])
 
       const refresh = useCallback(async () => {
         try {
@@ -1397,6 +1459,8 @@ window.__ModuleLoader__.load({
 
       // 贴底 / 翻历史 / 回到底部：跟私聊页共用一套（见 useFollowTail）。
       const { atBottom, measureBottom, jumpToBottom } = useFollowTail(scrollRef, [messages.length, tab, splash])
+      // 线一旦挂上来就要立刻量：只靠 scroll 事件的话，进页面时的第一帧量不到。
+      useEffect(() => { measureHistory() })
 
       const persistWidth = useCallback(() => {
         setWidthPct((current) => {
@@ -1529,7 +1593,7 @@ window.__ModuleLoader__.load({
         },
         h('div', {
           ref: scrollRef,
-          onScroll: measureBottom,
+          onScroll: () => { measureBottom(); measureHistory() },
           style: { flex: 1, overflowY: 'auto', padding: '8px 0 58px', minHeight: 0, position: 'relative', WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)', maskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)' },
         },
           messages.length === 0
@@ -1568,7 +1632,7 @@ window.__ModuleLoader__.load({
                 message,
                 animate: animateRef.current,
                 onMention: (id) => setTo(id),
-              })),
+              }), dividerRef),
               h('div', { ref: bottom }),
               h(WidthHandle, {
                 side: 'left', width: widthPct, containerRef: scrollRef,
@@ -1582,7 +1646,12 @@ window.__ModuleLoader__.load({
         ),
           // 过场页：盖住"从空到有"的那一下
           splash ? h(LoadingSplash, { label: '正在打开群聊…' }) : null,
-          // 回到底部：浮在消息区底部（不是输入框上），翻历史时才出现
+          // 回到上次看到的位置：线在视口上方时才出现（刚进来、或往下翻过头了）
+          historyAbove ? h(JumpToHistory, {
+            onClick: jumpToHistory,
+            rightInset: `calc(${(100 - widthPct) / 2}% + 10px)`,
+          }) : null,
+          // 回到底部：翻历史时才出现；和上面那个向上的按钮是一对
           atBottom ? null : h(JumpToBottom, {
             onClick: jumpToBottom,
             rightInset: `calc(${(100 - widthPct) / 2}% + 10px)`,
@@ -2096,7 +2165,7 @@ window.__ModuleLoader__.load({
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[lil-whale-group-ui] client build v7 · splash:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[lil-whale-group-ui] client build v8 · jump-to-history:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('lil-whale-group-keyframes')) {
           const style = document.createElement('style')
