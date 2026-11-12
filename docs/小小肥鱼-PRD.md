@@ -668,6 +668,7 @@ or export DEEPSEEK_API_KEY in the launching environment
 - **同族**：A.17（判据的出处必须是那件事本身）、A.14（别让"没发生"长得像"发生了"）。交接这条的版本是：**"能读"和"准"长得一样，演练只能证前者。**
 - **persona 换中立（她的决定）**：她不要 `You are a coding agent…` 这种**身份断言**，要**能力陈述**；理由是"人设该从行为里长出来，不该从预设里写进去"。上游四档（`standard` / `ptc` / `minimal` / `cordis`）没有现成的"中立"；`dsh-persona` 这一行只能挂在 preset 内部，用来**遮蔽**部署级人设，所以只能新增一档 preset。
 - **怎么加（已备好，搬段当天用）**：`scripts\gen-neutral-preset.mjs` 从当前装着的 dsh 现读 `standard` 的 `plugins` 清单（`--dump-config`），只把 `persona` 那行的 `prefix` 换成能力陈述，输出 `templates\preset-neutral.yml`（`- insert:` 形式，可整段插进她的 profile patch）。**为什么是生成而不是手抄**：preset 的 `plugins` 是完整快照，覆盖后不会自动合并上游更新（`dsh-agent-preset-registry` README 原话），手抄等于把今天这份冻结进仓库；生成则升级 dsh 后重跑一次就跟着走。
+- **交接四行必须填实**：「上一段 / 为什么结束 / 最后一件事 / `NEXT:`」——**不许写"见下"**（指向不存在的地方，读者会以为下面有）；**搬段时刻不许预先写死**（还没发生的时刻写成事实，与"页脚超前"同族）。
 - **一条命令装上（搬段当天）**：`scripts\apply-neutral-preset.mjs --patch "<她的 DSH_HOME>\profiles\whale\cordis.patch.yml" --default` —— 生成 → 幂等插入 → 备份 → tmp+rename 写入 → `--patch` 只读验证（失败自动还原）。`--dry-run` 只打印要追加的内容。
 - **已验证（不用重启）**：把生成物插进 `whale` profile 的临时副本，`dsh --profile whale --dump-config` exit 0，`- id: preset-neutral` 出现、`standard` 仍在；`apply-neutral-preset.mjs` 在 patch 副本上跑通（dry-run / 写入+验证 / 再跑幂等）。**未验证**：真会话上选 `neutral` 后的实际行为（要重启 + 搬家那天才做）。
 - **两个坑**（写进脚本注释）：①`prefix` 里有 `: `，裸写会被 YAML 当成 mapping（`bad indentation of a mapping entry`）⇒ 单引号包住；②沙箱里 Node 用 `pathname` 手算仓库根会留下 `%E6%96%87…` 编码、`cwd` 不存在 ⇒ 用 `fileURLToPath`。
