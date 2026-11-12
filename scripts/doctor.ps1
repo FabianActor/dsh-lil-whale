@@ -1,4 +1,4 @@
-﻿# doctor.ps1 -- 一条鱼还活着吗？
+# doctor.ps1 -- 一条鱼还活着吗？
 #
 # 用法：
 #   pwsh -File scripts\doctor.ps1                只看她
@@ -138,6 +138,35 @@ if (Test-Path -LiteralPath $pinsFile) {
   }
 } else {
   Add-Row '名册' 'FAIL' 'group\pins.json 不存在' 'NEXT: 群不认人：她说的每句话都会被守门拒掉'
+}
+
+# 4b. 旧段：不在名册里、却还在被写的会话
+#     搬段之后最容易出的不是丢数据，是"旧标签页还开着"——他在那儿打字，话进了退休的那一段。
+#     那段现在既发不出群消息（group_say 要名册里有）、也唤不醒（tick 只叫名册里的），
+#     但**人不知道**。判据：文件还在被写 = 有人或有东西还在用它。
+$allPinned = @()
+if ($pins) { foreach ($p in $pins.PSObject.Properties) { $allPinned += @($p.Value) } }
+$sessionsRoot = Join-Path $Cfg.HerDshHome 'sessions'
+if (Test-Path -LiteralPath $sessionsRoot) {
+  $stale = @()
+  Get-ChildItem -LiteralPath $sessionsRoot -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+    Get-ChildItem -LiteralPath $_.FullName -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+      $sid = $_.Name
+      if ($sid -notlike 'session-*') { return }
+      if ($allPinned -contains $sid) { return }
+      $log = Join-Path $_.FullName 'session.v4.jsonl.zstd'
+      if (-not (Test-Path -LiteralPath $log)) { return }
+      $age = (Get-Date) - (Get-Item -LiteralPath $log).LastWriteTime
+      if ($age.TotalMinutes -lt 120) {
+        $stale += ('{0}（{1}被写过）' -f $sid.Substring(0, [Math]::Min(17, $sid.Length)), (Format-Age $age))
+      }
+    }
+  }
+  if ($stale.Count -eq 0) {
+    Add-Row '旧段' 'OK' '名册外的会话近两小时都没有被写过'
+  } else {
+    Add-Row '旧段' 'WARN' ('名册外的会话近两小时被写过：' + ($stale -join '；')) 'NEXT: 先看她的窗里是不是还开着旧标签页——有就关掉。旧段现在发不出群消息、也唤不醒；也可能只是标题在后台重算，看一眼就能排除'
+  }
 }
 
 # 5. 启动痕迹：版本号与家，能分辨"哪个进程、哪份代码"
