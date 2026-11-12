@@ -29,7 +29,7 @@ try {
   # 排除清单靠"从 ls-files 里挑"而不是 pathspec magic：
   # git archive 不支持 `:(exclude)`（实测 fatal: pathspec magic not supported），
   # 而它会照样把 archive\ 打进去、还返回 0 —— 一个静默的错误包。
-  $files = @(git -c core.quotepath=false ls-files | Where-Object { $_ -notlike 'archive/*' })
+  $files = @(git -c core.quotepath=false ls-files | Where-Object { $_ -notlike 'archive/*' -and $_ -notlike 'scripts/legacy/*' })
   if ($files.Count -eq 0) { throw 'ls-files 一个文件都没列出来，不对' }
 
   # --prefix：解压出来是一个 lil-whale\ 目录，而不是一堆文件撒在面前。
@@ -40,7 +40,7 @@ try {
   $count = $files.Count
   Write-Host ("打包完成：{0}" -f $zip)
   Write-Host ("  文件 {0} 个，{1:N1} KB" -f $count, ($size / 1KB))
-  Write-Host ("  不含：archive\（她旧家的真实记录）、本机配置、tmp\、logs\、node_modules\")
+  Write-Host ("  不含：archive\（她旧家的真实记录）、scripts\legacy\（本机快捷方式）、本机配置、tmp\、logs\、node_modules\")
 
   if ($Npm) {
     foreach ($pkg in @('plugin\dsh-group', 'plugin\dsh-group-ui')) {

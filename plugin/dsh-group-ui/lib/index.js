@@ -22,10 +22,10 @@ const DM_DIR = config().dmDir || join(GROUP_DIR, 'dm')
 // 一个人和一条鱼的那段对话：两个方向都写在同一个文件里（他 2026-11-10 定）
 // 文件名 = 两个 id 按字母序拼：`fabian__whale.jsonl`
 function dmFileOf(peer) {
-  return join(DM_DIR, ['fabian', peer].sort().join('__') + '.jsonl')
+  return join(DM_DIR, [HUMAN_ID, peer].sort().join('__') + '.jsonl')
 }
 // 列表里只放"鱼"：fabian 是他自己，lee 是大肥鱼（他就在 3080 里跟 Leea 说话，不用再开一页）
-const DM_HIDDEN = new Set(['fabian', 'lee'])
+const DM_HIDDEN = new Set(['lee'])
 const UI_CONFIG = join(GROUP_DIR, 'ui-config.json')
 // 「看到哪儿了」的游标：只在面板里看，不影响她那边读群的游标
 const UI_READ = join(GROUP_DIR, 'ui-read.json')
@@ -170,6 +170,8 @@ const MEMBERS = loadUiMembers()
 const LABEL = Object.fromEntries(Object.entries(MEMBERS).map(([key, m]) => [key, m.name]))
 /** 能私聊的对象：鱼，不含人类自己，也不含明确隐藏的。 */
 const KNOWN_PEERS = Object.keys(MEMBERS).filter((id) => MEMBERS[id].kind === 'fish' && !DM_HIDDEN.has(id))
+/** 人类成员的 id（名册里 kind: human 的那个）：UI 写消息、私聊文件名、未读口径都用它。 */
+const HUMAN_ID = Object.keys(MEMBERS).find((id) => MEMBERS[id].kind === 'human') ?? 'fabian'
 
 /** 新成员没有配头像时的兜底：名字首字 + 一组固定底色（按成员 id 稳定分配）。 */
 const AVATAR_TINTS = ['#4a7dbd', '#c2705a', '#5c8a6a', '#8a6ab8', '#b8863c', '#3f8f8f']
@@ -292,9 +294,9 @@ function writeUiRead(next) {
 
 function countUnread(file, since, scope = 'all') {
   return readMessages(file).filter((message) => {
-    if (message.from === 'fabian') return false
+    if (message.from === HUMAN_ID) return false
     if (String(message.ts ?? '') <= since) return false
-    if (scope === 'mentions' && message.to !== 'all' && message.to !== 'fabian') return false
+    if (scope === 'mentions' && message.to !== 'all' && message.to !== HUMAN_ID) return false
     return true
   }).length
 }
@@ -710,7 +712,7 @@ export function apply(ctx) {
       const toSeat = /^[0-9a-f]{6}$/.test(rawSeat) ? rawSeat : ''
       // s = 谁发的：'ui' 表示从面板发的（他没有会话 id）。跟 group_say 写的 s=<会话前6位> 是同一个字段。
       const record = {
-        ts: now.toISOString(), from: 'fabian', to, text, kind: 'say', s: 'ui',
+        ts: now.toISOString(), from: HUMAN_ID, to, text, kind: 'say', s: 'ui',
         ...(toSeat === '' ? {} : { toSeat }),
         ...(image === null ? {} : { image }),
       }
@@ -776,7 +778,7 @@ export function apply(ctx) {
       const peer = dmPeerOf(payload?.peer)
       const now = new Date()
       const record = {
-        ts: now.toISOString(), from: 'fabian', to: peer, text, kind: 'dm', channel: 'dm',
+        ts: now.toISOString(), from: HUMAN_ID, to: peer, text, kind: 'dm', channel: 'dm',
         ...(image === null ? {} : { image }),
       }
       try {

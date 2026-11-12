@@ -357,7 +357,7 @@ if (Test-Path -LiteralPath $Cfg.MembersFile) {
 
       $bootText = '没有启动痕迹'
       if ($m.home) {
-        # 他的进程不设 DSH_HOME，启动痕迹写成 "(unset; 默认 C:\Users\Fabian\.dsh)" —— 先把真实路径抠出来再比。
+        # 他的进程不设 DSH_HOME，启动痕迹写成 "(unset; 默认 <用户目录>\.dsh)" —— 先把真实路径抠出来再比。
         $wantHome = ([string]$m.home).TrimEnd('\')
         $hit = $bootLines | Where-Object {
           # 两个字段都可能写着她/他的家：`home`（进程自己的 DSH_HOME，可能带 "(unset; 默认 …)" 包装）

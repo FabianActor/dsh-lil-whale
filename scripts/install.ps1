@@ -1,4 +1,4 @@
-﻿# install.ps1 -- 给别人装一条小鲸鱼。ASCII 文件名 + UTF-8 BOM。
+# install.ps1 -- 给别人装一条小鲸鱼。ASCII 文件名 + UTF-8 BOM。
 #
 #   pwsh -File install.ps1                                 装到仓库旁边的 lil-whale/
 #   pwsh -File install.ps1 -Workspace D:\fish               装到指定目录
@@ -17,6 +17,8 @@ param(
   [string]$ChildProfile = 'whale',
   [string]$ChildName = '小鲸鱼',      # 她的名字：只写进 AGENTS.md 的一行，不写进性格
   [string]$ChildMemberId = '',    # 名册里的键；空 = 跟 profile 同名
+  [string]$ParentMemberId = 'lee', # 父辈的成员键（递归装第二代时改它）
+  [string]$HumanMemberId = 'fabian', # 人类的成员键
   [string]$ParentProfile = 'web',
   [int]$ChildPort = 0,                 # 0 = 从 3082 起找第一个空口
   [string]$ParentSessionId = '',
@@ -245,11 +247,14 @@ $values = @{
   TOKEN_PER_TURN = '180-200'
   CHILD_NAME = $ChildName
   DEPLOY_DATE = $deployDate
-  PARENT_ID = 'lee'
+  PARENT_ID = $ParentMemberId
   CHILD_ID = $(if ($ChildMemberId) { $ChildMemberId } else { $ChildProfile })
-  HUMAN_ID = 'fabian'
+  HUMAN_ID = $HumanMemberId
   TOOLS = '- （工具清单没能自动生成，见下面那行提示）'
 }
+
+# 名册里这条鱼用哪个键：给了 -ChildMemberId 就用它，否则跟 profile 同名。
+$childMember = if ($ChildMemberId) { $ChildMemberId } else { $ChildProfile }
 
 # 「你能做什么」必须从实际挂载的工具算出来，不能手写：
 # 手写的目录一定会过期，而且过期时看起来跟没过期一样（2026-11-12 前的教训）。
@@ -322,8 +327,25 @@ if (-not (Test-Path $agentsPath)) {
 $groupPath = Join-Path $Workspace 'group'
 $sharedGroup = $false
 try { $gi = Get-Item -LiteralPath $groupPath -ErrorAction Stop; if ($gi.LinkType) { $sharedGroup = $true } } catch { }
+$poolGroup = Join-Path $PoolRoot 'group'
 if ($sharedGroup) {
-  Ok 'group 是共享区（Junction）：messages/pins 归共享区管，跳过初始化'
+  # 共享区：只补缺、绝不覆盖。新池子第一次装的时候 messages/pins 谁都没建过 ——
+  # 这里是唯一的创建机会；但已有内容一个字都不能动（A.29 那次把整份名册抹掉就是"初始化"干的）。
+  $poolMsg = Join-Path $poolGroup 'messages.jsonl'
+  $poolPins = Join-Path $poolGroup 'pins.json'
+  if (-not (Test-Path $poolMsg)) { Write-Utf8NoBom $poolMsg ''; Ok 'group\messages.jsonl（共享区，新建）' }
+  if (-not (Test-Path $poolPins)) {
+    $parentIds = @(); $childIds = @()
+    if ($ParentSessionId) { $parentIds += $ParentSessionId }
+    if ($ChildSessionId) { $childIds += $ChildSessionId }
+    $pins = [ordered]@{}
+    $pins[$ParentMemberId] = $parentIds
+    $pins[$childMember] = $childIds
+    Write-Utf8NoBom $poolPins (($pins | ConvertTo-Json -Depth 5) + "`n")
+    Ok 'group\pins.json（共享区，新建；只有父辈和你两条）'
+  } else {
+    Ok 'group 是共享区（Junction）：messages/pins 归共享区管，已有就不动'
+  }
 } else {
   $msgPath = Join-Path $Workspace 'group\messages.jsonl'
   if (-not (Test-Path $msgPath)) { Write-Utf8NoBom $msgPath ''; Ok 'group\messages.jsonl' }
@@ -333,11 +355,37 @@ if ($sharedGroup) {
     $parentIds = @(); $childIds = @()
     if ($ParentSessionId) { $parentIds += $ParentSessionId }
     if ($ChildSessionId) { $childIds += $ChildSessionId }
-    $pins = [ordered]@{ lee = $parentIds; whale = $childIds }
+    $pins = [ordered]@{}
+    $pins[$ParentMemberId] = $parentIds
+    $pins[$childMember] = $childIds
     Write-Utf8NoBom $pinsPath (($pins | ConvertTo-Json -Depth 5) + "`n")
     if ($ChildSessionId -or $ParentSessionId) { Ok 'group\pins.json（已带会话 id）' }
     else { Ok 'group\pins.json（空的，出生后填）' }
   }
+}
+
+# 名册（pool\members.json）：干净安装时谁都没建过，这里补一份最小名册 ——
+# 不生成它的话，面板/群会退回"内置三条"，新装的鱼在设置页和 @ 面板里看不见（A.32 那个病）。
+$membersPath = Join-Path $PoolRoot 'members.json'
+if (-not (Test-Path $membersPath)) {
+  $nowIso = (Get-Date).ToString('o')
+  $members = [ordered]@{}
+  $members[$ParentMemberId] = [ordered]@{
+    name = '大肥鱼'; kind = 'fish'; role = 'watcher'; parent = $null
+    port = $Cfg.LeePort; home = $Cfg.LeeHome; dshHome = $Cfg.LeeHome
+    profile = $Cfg.LeeProfile; status = 'resident'; bornAt = $null
+  }
+  $members[$HumanMemberId] = [ordered]@{ name = 'Fabian'; kind = 'human'; role = 'human'; parent = $null }
+  $members[$childMember] = [ordered]@{
+    name = $ChildName; kind = 'fish'; role = 'member'; parent = $ParentMemberId
+    port = $ChildPort; home = $Workspace; dshHome = $DshHome
+    profile = $ChildProfile; status = 'experiment'; bornAt = $nowIso
+  }
+  $rawMembers = [ordered]@{ version = 1; updatedAt = $nowIso; members = $members }
+  Write-Utf8NoBom $membersPath (($rawMembers | ConvertTo-Json -Depth 8) + "`n")
+  Ok 'members.json（共享区，新建：父辈 + 人 + 这条鱼）'
+} else {
+  Ok 'members.json 已存在，保留（加鱼用 scripts\members-add.mjs）'
 }
 
 $planPath = Join-Path $Workspace 'plan\wake-plan.json'
@@ -368,7 +416,7 @@ Say "  4) 添加工作区 $Workspace ，在里面新建一段对话，然后由�
 Say ""
 Say "  出生之后，还要两段会话 id 群才认人（脚本可以在装的时候用 -ParentSessionId / -ChildSessionId 直接写）："
 Say "     侧边栏选中那段对话 -> 点 ··· -> 复制 Session ID"
-Say "     她的那段写进 $pinsPath 的 whale，你的那段写进 lee"
+Say "     她的那段写进 $pinsPath 的 $childMember，你的那段写进 $ParentMemberId"
 Say ""
 Say "  她不会有预设的性格：第一次醒来是什么样，取决于你写了什么、没写什么。" -ForegroundColor Gray
 Say ""

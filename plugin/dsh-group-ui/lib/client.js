@@ -547,7 +547,8 @@ function Bubble({ config, message, onMention, animate = false }) {
       // 点图片打开官方看图器（大图、点外面关）。
       const [preview, setPreview] = useState(false)
       const imageSrc = message.image ? imageUrlOf(message.image) : null
-      const mine = message.from === 'fabian'
+      const humanId = config?.humanId ?? 'fabian'
+  const mine = message.from === humanId
       const who = nameOf(config, message.from, message.s)
       // 指名到座位的消息，显示"→ 大肥鱼 · 日常"，只写给这个人的显示"→ 大肥鱼"。
       const targetTo = message.toSeat ? `${message.to}@${message.toSeat}` : message.to
@@ -721,7 +722,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       // （2026-11-12 他报的"@ 按钮后面有椅子后缀"：以前名册里每人一段也会列一行
       //   `小肥鱼 · c145f6`，看着像两条鱼。一段就是常态，不列。）
       const rows = [{ id: 'all', label: t.toAll, plain: true }]
-      const memberIds = Object.keys(config?.names ?? NAMES).filter((id) => id !== 'fabian')
+      const memberIds = Object.keys(config?.names ?? NAMES).filter((id) => id !== (config?.humanId ?? 'fabian'))
       for (const member of memberIds) {
         rows.push({ id: member, label: nameOf(config, member) })
         const mine = (seats ?? []).filter((item) => item.member === member)
@@ -1709,7 +1710,7 @@ function Bubble({ config, message, onMention, animate = false }) {
 
       // 两档忙：正在回这一段 / 在别处忙。群聊与私聊同一套文案。
       // 名单从配置（名册）来 —— 写死 lee/whale 时，新鱼的"正在忙"永远不会显示（A.32 同一个病）。
-      const fishIds = Object.keys(config?.names ?? NAMES).filter((id) => id !== 'fabian')
+      const fishIds = Object.keys(config?.names ?? NAMES).filter((id) => id !== (config?.humanId ?? 'fabian'))
       const groupBusy = fishIds.filter((id) => {
         const state = presenceOf(presence, id)
         return state.status === 'working' && state.reason === 'group'
@@ -2429,7 +2430,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[lil-whale-group-ui] client build v18 · roster-everywhere:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[lil-whale-group-ui] client build v19 · human-from-roster:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('lil-whale-group-keyframes')) {
           const style = document.createElement('style')

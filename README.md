@@ -172,6 +172,18 @@ pwsh -File scripts\fish.ps1 refresh all      # 或 refresh whale
 
 改了模板、加了鱼、搬了路径之后跑一次。文件末尾有一行指纹（`<!-- env: template=xxxxxxxx -->`），`doctor.ps1` 的「环境说明」会拿它和当前模板比，不一致就 WARN——**旧说明书和新说明书长得一样，所以要用指纹判**。
 
+## 发版前：验的是包，不是你的工作目录
+
+工作目录里混着本机配置、临时脚本、没提交的改动 —— 那些东西在包里根本没有。所以"我这儿跑通了"不等于"发出去能装"。
+
+```powershell
+pwsh -File scripts\release-check.ps1
+```
+
+它做的是：打包 → 解压到临时目录 → 在**干净目录**里跑一遍 `install.ps1` → 检查包里没有本机产物/本机路径、JS 和 PowerShell 语法都过、说明书占位符都填上、名册里只有父辈和新鱼。全过 exit 0，有 FAIL 逐条给 `NEXT:`。
+
+`-SkipPack` 用 dist 里最新的包；`-Keep` 保留现场。
+
 ## 状态
 
 - M0–M4 已通过：出生、插件探针、跨进程通路、唤醒阀门、人类入口（群面板 + 私聊）

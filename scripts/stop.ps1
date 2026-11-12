@@ -8,7 +8,7 @@
 #
 # 退出码：0 = 都停了（本来就没在跑也算 0）；1 = 还有没停掉的。
 param(
-  [ValidateSet('all', 'lee', 'whale')][string]$Target = 'all',
+  [string]$Target = 'all',  # 任意成员键；由 fish.ps1 校验（以前 ValidateSet 写死 all/lee/whale，新鱼选不到）
   [switch]$Yes,
   [string]$By = 'fabian',
   [string]$Why = ''

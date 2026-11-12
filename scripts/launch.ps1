@@ -11,7 +11,7 @@
 #
 # 退出码：0 = 都在跑（本来就在跑也算）；1 = 没起来。
 param(
-  [ValidateSet('all', 'lee', 'whale')][string]$Target = 'all',
+  [string]$Target = 'all',  # 任意成员键；由 fish.ps1 校验（以前 ValidateSet 写死 all/lee/whale，新鱼选不到）
   [switch]$NoBrowser,
   [switch]$WithWatchman,
   [int]$Port = 0,

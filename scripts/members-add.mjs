@@ -5,8 +5,8 @@
 //
 // 用法：
 //   node scripts\members-add.mjs --key fishball --name 小鱼丸 --parent lee \
-//        --port 3083 --home D:\文档\WorkSpace\lil-whale-2 \
-//        --dshHome D:\文档\WorkSpace\lil-whale-2\dsh-home \
+//        --port 3083 --home <她的家> \
+//        --dshHome <她的家>\dsh-home \
 //        --profile fishball --configFile lil-whale.config.fishball.json \
 //        --status experiment [--dry-run]
 //
