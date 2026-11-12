@@ -2076,25 +2076,38 @@ function Bubble({ config, message, onMention, animate = false }) {
     }
 
     /** 设置页：侧边栏名称 / 三个头像 / 三个显示名。 */
+    // 设置分组卡片：必须住在模块作用域。
+    // 写在 SettingsPage 里面的话，每次 setConfig 重渲染都会造出一个新的函数引用，
+    // React 把它当成「换了一个组件」⇒ 整棵子树卸载重挂，输入框每敲一个字就失焦。
+    // （2026-11-12 他报的 bug：设置里所有输入框输入一个字符就丢焦点。）
+    function SettingsSection({ title, hint, children }) {
+      return h('div', {
+        style: {
+          marginTop: 16,
+          border: '0.5px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12))',
+          borderRadius: 'var(--dsw-radius-lg, 12px)',
+          background: 'var(--dsw-alias-bg-layer-1, #fff)',
+          overflow: 'hidden',
+        },
+      },
+        h('div', { style: { padding: '12px 16px 0' } },
+          h('div', { style: { fontSize: 13, fontWeight: 600, color: 'var(--dsw-alias-label-primary)' } }, title),
+          hint
+            ? h('div', { style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)', marginTop: 2 } }, hint)
+            : null,
+        ),
+        h('div', { style: { padding: '4px 16px 12px' } }, children),
+      )
+    }
+
     function SettingsPage() {
       const [config, setConfig] = useState(DEFAULT_CONFIG)
       const [status, setStatus] = useState('')
       const [dirty, setDirty] = useState(false)
-      const [seats, setSeats] = useState([])
       const timerRef = useRef(null)
 
       useEffect(() => {
         void loadConfig(true).then(setConfig)
-      }, [])
-
-      // 座位：名册里有几段被钉住的会话，就列几行（不硬编码，加会话不用改代码）。
-      useEffect(() => {
-        let alive = true
-        fetch('/group/api/seats')
-          .then((response) => (response.ok ? response.json() : null))
-          .then((data) => { if (alive && Array.isArray(data?.seats)) setSeats(data.seats) })
-          .catch(() => {})
-        return () => { alive = false }
       }, [])
 
       // 改一个字段就存一次（400ms 防抖）。没有「保存」按钮：
@@ -2206,30 +2219,12 @@ function Bubble({ config, message, onMention, animate = false }) {
       }
 
 
-      // 一个设置分组 = 一层描边卡片。照 dsh 的 token 画，不自造颜色。
-      const Section = ({ title, hint, children }) => h('div', {
-        style: {
-          marginTop: 16,
-          border: '0.5px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12))',
-          borderRadius: 'var(--dsw-radius-lg, 12px)',
-          background: 'var(--dsw-alias-bg-layer-1, #fff)',
-          overflow: 'hidden',
-        },
-      },
-        h('div', { style: { padding: '12px 16px 0' } },
-          h('div', { style: { fontSize: 13, fontWeight: 600, color: 'var(--dsw-alias-label-primary)' } }, title),
-          hint
-            ? h('div', { style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)', marginTop: 2 } }, hint)
-            : null,
-        ),
-        h('div', { style: { padding: '4px 16px 12px' } }, children),
-      )
-
+      // 一个设置分组用模块级的 SettingsSection 画（不能写在这里，见上面那段注释）。
       return h('div', { style: { ...baseStyle, padding: '22px 24px 24px' } },
         h('div', { style: { fontSize: 16, fontWeight: 500, lineHeight: '24px' } }, t.settingsTitle),
         h('div', { style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)', marginTop: 4 } }, t.settingsHint),
 
-        h(Section, { title: '侧边栏标题' },
+        h(SettingsSection, { title: '侧边栏标题' },
           h('div', { style: rowStyle },
             h('input', {
               value: config.panelLabel ?? '',
@@ -2240,13 +2235,11 @@ function Bubble({ config, message, onMention, animate = false }) {
           ),
         ),
 
-        // 名字 / 头像 / 座位名讲的是同一件事：这一位在群里长什么样。
-        // 所以放同一张卡里，一人一组，座位跟在它所属的那个人下面
-        // （座位本来就是"同一个人另一段会话"，不是另一种东西）。
-        h(Section, { title: '成员', hint: '此处修改名称仅修改显示效果，无法修改 ta 的自我认知。若想让 ta 改名请试着直接和 ta 聊聊？' },
+        // 名字 / 头像讲的是同一件事：这一位在群里长什么样。
+        // （座位名那一组 2026-11-12 拿掉了：椅子已撤，界面不该再留一个空的入口。）
+        h(SettingsSection, { title: '成员', hint: '此处修改名称仅修改显示效果，无法修改 ta 的自我认知。若想让 ta 改名请试着直接和 ta 聊聊？' },
           ['lee', 'whale', 'fabian'].map((member, index) => {
             const avatar = avatarOf(config, member)
-            const seatsOfMember = seats.filter((seat) => seat.member === member)
             return h('div', {
               key: `member-${member}`,
               style: {
@@ -2312,30 +2305,11 @@ function Bubble({ config, message, onMention, animate = false }) {
                   ? h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } }, '照片优先于文字')
                   : null,
               ),
-
-              seatsOfMember.map((seat) => h('div', { key: `seat-${seat.prefix}`, style: { ...rowStyle, marginTop: 8, paddingLeft: 42 } },
-                h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', flex: '0 0 auto' } }, seat.prefix),
-                h('input', {
-                  value: config.seats?.[seat.prefix] ?? '',
-                  maxLength: 16,
-                  placeholder: `座位名（留空就用「${nameOf(config, member)}」）`,
-                  onChange: (event) => patch((next) => {
-                    next.seats = { ...(next.seats ?? {}) }
-                    const text = event.target.value
-                    if (text.trim() === '') delete next.seats[seat.prefix]
-                    else next.seats[seat.prefix] = text
-                  }),
-                  style: inputStyle,
-                }),
-              )),
             )
           }),
-          seats.length === 0
-            ? h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', marginTop: 8 } }, '名册里还没有登记的会话，所以没有座位名可填。')
-            : null,
         ),
 
-        h(Section, { title: '红点', hint: '侧边栏和标签上的未读数算哪些话。私聊永远算（那里的话本来就是给你的）。' },
+        h(SettingsSection, { title: '红点', hint: '侧边栏和标签上的未读数算哪些话。私聊永远算（那里的话本来就是给你的）。' },
           h('div', { style: { display: 'flex', gap: 8, marginTop: 8 } },
             [
               { key: 'all', label: '全部未读' },
@@ -2408,7 +2382,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[lil-whale-group-ui] client build v11 · image-fingerprint:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[lil-whale-group-ui] client build v12 · settings-focus:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('lil-whale-group-keyframes')) {
           const style = document.createElement('style')
