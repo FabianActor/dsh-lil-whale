@@ -51,12 +51,8 @@ window.__ModuleLoader__.load({
       groupOnly: '在群里说（谁会醒由阀门决定）',
       toOne: (name) => `只有 ${name} 会被叫醒`,
       typing: (names) => `${names} 正在回复…`,
-      // 两种"忙"分开说：一种是回群里，一种是别处忙（可能就在跟你私聊）。
+      // 两档"忙"，群聊私聊同一套：在回这一段（typing）/ 在别处忙（busy，可能就在另一个窗口）。
       // 宿主只给得出 reason，给不出"这句话回谁"——所以文案也只承诺到这一层。
-      typingGroup: (names) => `${names} 正在回复群里的消息…`,
-      typingElsewhere: (names) => `${names} 在忙别的（不是群里的消息）`,
-      // 私聊页用这个：在私聊窗口里说"正在回复群里的消息"是答非所问。
-      // 只承诺"她很忙"，不承诺她在回谁。
       busy: (names) => `${names} 正在忙…`,
       mention: '右键 @',
       settingsTitle: '小小肥鱼',
@@ -1693,7 +1689,7 @@ function Bubble({ config, message, onMention, animate = false }) {
         }
       }, [text, to, sending, refresh, tab, pendingImage])
 
-      // 两种忙分开报：群里被叫起来的 / 在别处忙的。宿主只给得出这一层。
+      // 两档忙：正在回这一段 / 在别处忙。群聊与私聊同一套文案。
       const groupBusy = ['lee', 'whale'].filter((id) => {
         const state = presenceOf(presence, id)
         return state.status === 'working' && state.reason === 'group'
@@ -1703,9 +1699,9 @@ function Bubble({ config, message, onMention, animate = false }) {
         return state.status === 'working' && state.reason !== 'group'
       })
       const typingLine = groupBusy.length
-        ? t.typingGroup(groupBusy.map((id) => nameOf(config, id)).join('、'))
+        ? t.typing(groupBusy.map((id) => nameOf(config, id)).join('、'))
         : otherBusy.length
-          ? t.typingElsewhere(otherBusy.map((id) => nameOf(config, id)).join('、'))
+          ? t.busy(otherBusy.map((id) => nameOf(config, id)).join('、'))
           : null
 
       return h('div', {
@@ -2413,7 +2409,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[lil-whale-group-ui] client build v14 · drafts-and-image-history:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[lil-whale-group-ui] client build v15 · busy-labels:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('lil-whale-group-keyframes')) {
           const style = document.createElement('style')
