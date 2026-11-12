@@ -265,6 +265,21 @@ function Stop-Fish($member) {
   return $true
 }
 
+# ---------- refresh ----------
+# 重新生成 环境.md：模板 + 名册 + 真实工具清单。
+# 为什么要有：家目录是**数据**，说明书是**生成的**；代码改了、名册加鱼了、路径搬家了，
+# 纸不会自己跟着变（Fabian 2026-11-12 20:10 提："有些描述放在小鱼的目录内"）。
+function Invoke-RefreshEnv($member) {
+  $script = Join-Path $PSScriptRoot 'render-env.mjs'
+  if (-not (Test-Path -LiteralPath $script)) { Write-Host 'render-env.mjs 不见了。'; return $false }
+  $fishHome = $member.Home
+  if (-not $fishHome) { Write-Host ("{0} 没有家目录，跳过。" -f $member.Label); return $false }
+  & node $script --workspace $fishHome --profile $member.Profile --pool-dir $Cfg.PoolDir --her-port $member.Port
+  if ($LASTEXITCODE -ne 0) { return $false }
+  Write-Host ("{0}：环境.md 已刷新。" -f $member.Label)
+  return $true
+}
+
 # ---------- doctor ----------
 function Invoke-Doctor {
   $script = Join-Path $PSScriptRoot 'doctor.ps1'
@@ -284,6 +299,7 @@ fish.ps1 -- 鱼群唯一的入口
   pwsh -File fish.ps1 down whale       停一条
   pwsh -File fish.ps1 down all         全停
   pwsh -File fish.ps1 doctor           体检
+  pwsh -File fish.ps1 refresh whale    重新生成环境.md（模板/名册/工具变了以后）
   pwsh -File fish.ps1 help
 
 选项：-NoBrowser -Yes -By <谁> -Why <为什么> -Port <n>
@@ -300,6 +316,7 @@ try {
     'start'  { foreach ($m in (Resolve-Targets $Name)) { if (-not (Start-Fish $m)) { $ok = $false } } }
     'down'   { foreach ($m in (Resolve-Targets $Name)) { if (-not (Stop-Fish $m)) { $ok = $false } } }
     'stop'   { foreach ($m in (Resolve-Targets $Name)) { if (-not (Stop-Fish $m)) { $ok = $false } } }
+    'refresh' { foreach ($m in (Resolve-Targets $Name)) { if (-not (Invoke-RefreshEnv $m)) { $ok = $false } } }
     'doctor' { $ok = Invoke-Doctor }
     'help'   { Show-Help }
     default  { Write-Host "不认识的命令：$Command"; Show-Help; $ok = $false }

@@ -959,7 +959,12 @@ function say(from, to, text, channel = 'group', s = '', toSeat = '', image = nul
   const body = typeof text === 'string' ? text.trim() : ''
   // 一条消息至少要有一件东西：一段话或一张图。两个都空，仍然是"空消息"。
   if (body === '' && image === null) throw new Error('群消息不能没有内容（text 和 image 都是空的，拒绝写入）')
-  const isDm = channel === 'dm' || to === 'fabian'
+  // 2026-11-12 20:20 改：以前 `to === 'fabian'` 也算私聊，于是"在群里对 Fabian 说"这条路不存在了
+  // （Fabian 当场指出）。现在两个维度分开：
+  //   to      = 这句话在**哪间屋**里（群里公开 / 只有两个人看见）
+  //   channel = 屋里还有没有别人（group 默认 / dm 只有对象一个人）
+  // 所以 `to:"fabian"` + 默认 group = 群里公开对他说；私聊要显式 `channel:"dm"`。
+  const isDm = channel === 'dm'
   if (isDm) return { ...sayPrivate(from, to, body, image), channel: 'dm' }
   const record = {
     ts: new Date().toISOString(), from, to, text: body, kind: 'say', channel: 'group',
@@ -1104,13 +1109,13 @@ function apply(ctx) {
     const buildTool = hostOk && defineTool !== null ? defineTool : (options) => options
     ctx.tools.register(buildTool({
     name: 'group_say',
-    description: '说一句话。默认在群里说（三个人都看得见）；channel 给 dm 就是私下只对一个人说（不进群记录，其他人看不到这个窗口）。发出即返回，不等对方回复。',
+    description: '说一句话。默认在群里说（群里的人都看得见，醒着的都会被叫醒）；channel 给 dm 才是私下只对一个人说（不进群记录，别人看不到这个窗口）。to 是"说给谁"，channel 是"还有没有别人在场"。发出即返回，不等对方回复。',
     parameters: {
       to: {
         type: 'string',
         required: true,
-        enum: ['all', 'lee', 'whale', 'fabian'],
-        description: '说给谁：all = 群里所有人（只能在群里用）；lee = 大肥鱼；whale = 小肥鱼；fabian = 人类。给具体的人配 channel dm 就是私下说。',
+        enum: ['all', ...Object.keys(MEMBERS)],
+        description: '说给谁：all = 群里所有人（只能在群里用）；写某个成员的 id 就是指名对他/她说（群里仍然看得见，只有那个人会被叫醒）。给具体的人配 channel dm 就是私下说。',
       },
       channel: {
         type: 'string',
@@ -1157,10 +1162,14 @@ function apply(ctx) {
           const label = m?.label
           if (label && text.includes(`@${label}`)) mentioned.push(label)
         }
+        const target = value.to && value.to !== 'all' ? MEMBERS[value.to] : null
         const base = value.channel === 'dm'
           ? `已写进私聊（${value.ts}）：只有 ${labelOf(value.to)} 看得见，群里不会出现这句。`
           : value.to && value.to !== 'all'
-            ? `已入群（${value.ts}）：写进群记录，**只有 ${labelOf(value.to)} 会被叫醒**（别人翻记录看得见）。`
+            ? (target?.kind === 'human'
+                // 人类不是"被叫醒"的对象：他不跑轮，只会在面板上看到未读。
+                ? `已入群（${value.ts}）：写进群记录，**这条是对 ${labelOf(value.to)} 说的**（他在面板上能看到，不会叫醒任何鱼）。`
+                : `已入群（${value.ts}）：写进群记录，**只有 ${labelOf(value.to)} 会被叫醒**（别人翻记录看得见）。`)
             : `已入群（${value.ts}）：群里的人都看得见，**醒着的都会被叫醒**。`
         const hint = value.channel !== 'dm' && value.to === 'all' && mentioned.length > 0
           ? `\n\n提示：正文里 @ 了 ${mentioned.join('、')}，但 to=all —— 这条会叫醒所有醒着的鱼。只想叫其中一个，就把 to 写成他的 id（例如 to:"lee"），话照样进群、别人看得见。`

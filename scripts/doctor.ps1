@@ -164,6 +164,41 @@ try {
 } catch {
   Add-Row '名册（全鱼）' 'WARN' ("读不了名册或 pins：{0}" -f $_.Exception.Message) 'NEXT: 看 pool\members.json 与 pool\group\pins.json 是不是合法 JSON'
 }
+# 4d. 环境说明：每条鱼的 环境.md 是不是当前模板生成的
+#     家目录是数据、说明书是生成的：模板改了、名册加鱼了、路径搬家了，纸不会自己变。
+#     判据用文件末尾那行机器指纹 `<!-- env: template=<sha8> -->`，不用"看起来像新的"。
+$envTemplate = Join-Path (Split-Path $PSScriptRoot -Parent) 'templates\环境.md.tpl'
+if (Test-Path -LiteralPath $envTemplate) {
+  try {
+    $tplSha = (Get-FileHash -LiteralPath $envTemplate -Algorithm SHA256).Hash.Substring(0, 8).ToLowerInvariant()
+    $mjEnv = if ($Cfg.MembersFile -and (Test-Path -LiteralPath $Cfg.MembersFile)) { Get-Content -LiteralPath $Cfg.MembersFile -Raw -Encoding utf8 | ConvertFrom-Json } else { $null }
+    $stale = @(); $missingEnv = @(); $envOk = 0
+    if ($mjEnv) {
+      foreach ($p in $mjEnv.members.PSObject.Properties) {
+        $m = $p.Value
+        # 守夜那条鱼（lee）不是 install.ps1 装出来的，没有 环境.md —— 它不在这个检查的范围里。
+        if ($m.kind -ne 'fish' -or -not $m.home -or $m.role -eq 'watcher') { continue }
+        $envFile = Join-Path ([string]$m.home) '环境.md'
+        if (-not (Test-Path -LiteralPath $envFile)) { $missingEnv += $p.Name; continue }
+        $txt = Get-Content -LiteralPath $envFile -Raw -Encoding utf8
+        $hit = [regex]::Match($txt, '<!-- env: template=([0-9a-f]{8})')
+        if (-not $hit.Success) { $stale += ($p.Name + '(没有指纹)'); continue }
+        if ($hit.Groups[1].Value -ne $tplSha) { $stale += ($p.Name + '(' + $hit.Groups[1].Value + ')'); continue }
+        $envOk++
+      }
+    }
+    if ($stale.Count) {
+      Add-Row '环境说明' 'WARN' ('环境.md 是旧模板生成的：' + ($stale -join '、') + '（当前模板 ' + $tplSha + '）') 'NEXT: pwsh -File scripts\fish.ps1 refresh all（或点名某条鱼）'
+    } elseif ($missingEnv.Count) {
+      Add-Row '环境说明' 'WARN' ('没有 环境.md：' + ($missingEnv -join '、')) 'NEXT: pwsh -File scripts\fish.ps1 refresh <鱼>'
+    } else {
+      Add-Row '环境说明' 'OK' ('每条鱼的 环境.md 都是当前模板（' + $tplSha + '），共 ' + $envOk + ' 条')
+    }
+  } catch {
+    Add-Row '环境说明' 'WARN' ('核不了：' + $_.Exception.Message)
+  }
+}
+
 # 4b. 旧段：不在名册里、却还在被写的会话
 #     搬段之后最容易出的不是丢数据，是"旧标签页还开着"——他在那儿打字，话进了退休的那一段。
 #     那段现在既发不出群消息（group_say 要名册里有）、也唤不醒（tick 只叫名册里的），

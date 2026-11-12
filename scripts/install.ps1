@@ -292,10 +292,22 @@ if (-not (Test-Path $startPath) -or $Force) {
 
 $envPath = Join-Path $Workspace '环境.md'
 if (-not (Test-Path $envPath) -or $Force) {
-  Write-Utf8NoBom $envPath (Render-Template (Join-Path $TemplateRoot '环境.md.tpl') $values)
-  Ok '环境.md（工具清单：写了什么在哪、事情会怎么发生，没写她是谁）'
+  # 环境.md 由 scripts/render-env.mjs 生成：模板 + 现场数据（名册 / 真实工具清单 / 叫醒参数）。
+  # 为什么不在 PowerShell 里拼：同一份文件必须有"重新生成"的入口，否则代码一改，纸就旧了
+  # （2026-11-12 20:10 Fabian 提："有些描述放在小鱼的目录内"）。
+  $envScript = Join-Path $RepoRoot 'scripts\render-env.mjs'
+  if (Test-Path $envScript) {
+    & node $envScript --workspace $Workspace --profile $ChildProfile --pool-dir $PoolRoot --her-port $ChildPort --deploy-date $deployDate --child-name $ChildName --child-id $ChildMemberId 2>&1 | ForEach-Object { Write-Host ('    ' + $_) }
+    if ($LASTEXITCODE -ne 0) {
+      Warn 'render-env.mjs 失败，环境.md 没写。装完手动跑一次：node scripts\render-env.mjs --workspace <家> --profile <profile>'
+    } else {
+      Ok '环境.md（模板 + 名册 + 真实工具清单；以后用 fish.ps1 refresh 重生成）'
+    }
+  } else {
+    Warn '找不到 scripts\render-env.mjs，环境.md 没生成。'
+  }
 } else {
-  Ok '环境.md 已存在，保留'
+  Ok '环境.md 已存在，保留（要刷新：fish.ps1 refresh <鱼>）'
 }
 
 $agentsPath = Join-Path $DshHome 'AGENTS.md'

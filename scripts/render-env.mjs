@@ -1,0 +1,236 @@
+#!/usr/bin/env node
+/**
+ * 重新生成一条鱼的 `环境.md`。
+ *
+ * 为什么要有这个脚本：`环境.md` 是"这个环境里有什么"的说明书，装在鱼的家目录里。
+ * 但家目录是**数据**，我们不该为了改一句话去动它 —— 于是这份说明书以前只能由安装脚本写一次，
+ * 之后代码改了、名册加了鱼、路径搬了家，纸还是旧的。Fabian 2026-11-12 20:10 指出来：
+ * "随着我们不断修bug，总有些文件的描述会过期，但有些描述放在小鱼的目录内"。
+ *
+ * 做法：模板（templates/环境.md.tpl）+ 现场数据（名册、配置、真实工具清单）→ 整篇重写。
+ * 不局部替换：这份文件是生成的，允许整篇覆盖；但整篇覆盖必须能回答"我覆盖的是哪一版"，
+ * 所以末尾写一行机器可读的指纹 `<!-- env: template=<sha8> generated=<时间> -->`，
+ * doctor 拿它和当前模板比，过期就报出来。
+ *
+ * 用法：
+ *   node scripts/render-env.mjs --workspace D:\...\lil-whale-2 --profile fishball --pool-dir D:\...\lil-whale-pool
+ *   node scripts/render-env.mjs ... --dry-run        # 只打印，不写
+ *
+ * 退出码：0 = 写了（或 dry-run 打印了）；1 = 失败（并给 NEXT: 一行）。
+ */
+import { createHash } from 'node:crypto'
+import { spawnSync } from 'node:child_process'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const HERE = dirname(fileURLToPath(import.meta.url))
+const REPO_ROOT = resolve(HERE, '..')
+
+function die(message) {
+  console.error(`render-env: ${message}`)
+  console.error('NEXT: 检查 --workspace / --profile / --pool-dir；配置坏了就看 pool\\members.json')
+  process.exit(1)
+}
+
+function parseArgs(argv) {
+  const out = { dryRun: false }
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i]
+    const next = () => {
+      const v = argv[i + 1]
+      if (v === undefined || v.startsWith('--')) die(`${a} 后面缺一个值`)
+      i++
+      return v
+    }
+    if (a === '--workspace') out.workspace = next()
+    else if (a === '--profile') out.profile = next()
+    else if (a === '--pool-dir') out.poolDir = next()
+    else if (a === '--her-port') out.herPort = Number(next())
+    else if (a === '--deploy-date') out.deployDate = next()
+    else if (a === '--child-name') out.childName = next()
+    else if (a === '--child-id') out.childId = next()
+    else if (a === '--parent-id') out.parentId = next()
+    else if (a === '--out') out.out = next()
+    else if (a === '--dry-run') out.dryRun = true
+    else if (a === '--help' || a === '-h') {
+      console.log('用法：node scripts/render-env.mjs --workspace <家> --profile <profile> [--pool-dir <共享区>] [--dry-run]')
+      process.exit(0)
+    } else die(`不认识的参数：${a}`)
+  }
+  if (!out.workspace) die('缺 --workspace')
+  if (!out.profile) die('缺 --profile')
+  return out
+}
+
+const args = parseArgs(process.argv.slice(2))
+const workspace = resolve(args.workspace)
+const poolDir = resolve(args.poolDir || join(workspace, '..', 'lil-whale-pool'))
+const outPath = resolve(args.out || join(workspace, '环境.md'))
+const membersFile = join(poolDir, 'members.json')
+
+let roster
+if (existsSync(membersFile)) {
+  try {
+    roster = JSON.parse(readFileSync(membersFile, 'utf8'))
+  } catch (e) {
+    die(`名册读不了（${membersFile}）：${e.message}`)
+  }
+} else {
+  // 干净机器上还没有名册（第一次安装）：用安装参数现场拼一份最小的。
+  // 为什么允许这样：环境.md 是装完就该有的东西；不能因为"共享区还没建名册"就让她的家里缺一页。
+  const childId = args.childId || args.profile
+  const childName = args.childName || childId
+  const parentId = args.parentId || 'lee'
+  roster = {
+    version: 1,
+    updatedAt: new Date().toISOString(),
+    members: {
+      [parentId]: { name: '大肥鱼', kind: 'fish', role: 'watcher', parent: null, profile: 'web' },
+      [childId]: { name: childName, kind: 'fish', role: 'member', parent: parentId, profile: args.profile, home: workspace, dshHome: join(workspace, 'dsh-home') },
+      fabian: { name: 'Fabian', kind: 'human', role: 'human', parent: null },
+    },
+  }
+  console.error(`render-env: 还没有 ${membersFile}，按安装参数拼了一份临时名册（${Object.keys(roster.members).join(' / ')}）`)
+}
+const members = roster?.members && typeof roster.members === 'object' ? roster.members : null
+if (!members) die('名册里没有 members 字段')
+
+// 哪一条是我：按 profile 认；认不出来就用 workspace 对 home 认。
+const myKey =
+  Object.keys(members).find((k) => members[k]?.profile === args.profile) ||
+  Object.keys(members).find((k) => members[k]?.home && resolve(members[k].home) === workspace)
+if (!myKey) die(`名册里没有 profile=${args.profile} 也没有 home=${workspace} 的成员`)
+const me = members[myKey]
+
+// ---- 名册表：写清"谁是谁"，而不是写死三个 id ----
+// 2026-11-12 20:10 Fabian 问"固定槽位中的变量名是否应该脱敏"：
+// 不能脱敏 —— `to` 里写的就是 id，藏起来等于让她没法叫人。该修的是"名册会变"这件事没写在纸上。
+function relationOf(key, m) {
+  if (key === myKey) return '你'
+  if (m?.kind === 'human') return '人（不跑轮，只读消息）'
+  if (m?.parent === myKey) return '你的下一代'
+  if (myKey && me?.parent && m?.parent === me.parent) return '同辈（同一个父辈）'
+  if (key === me?.parent) return '你的父辈'
+  if (m?.parent === me?.parent && m?.parent === null) return '另一个上一代'
+  return m?.kind === 'fish' ? '另一条鱼' : '成员'
+}
+const memberRows = Object.keys(members)
+  .map((key) => `| \`${key}\` | ${members[key]?.name ?? key} | ${relationOf(key, members[key])} |`)
+  .join('\n')
+const membersTable = [
+  '| id（`to` 里写这个） | 称呼 | 对你来说 |',
+  '|---|---|---|',
+  memberRows,
+].join('\n')
+
+// ---- 工具清单：必须是真实挂载的，不能手写 ----
+let toolsText = '- （工具清单没能自动生成，见下面那行提示）'
+const toolsScript = join(REPO_ROOT, 'scripts', 'tools-from-profile.mjs')
+if (existsSync(toolsScript)) {
+  const dshHome = me?.dshHome || join(workspace, 'dsh-home')
+  const r = spawnSync(process.execPath, [toolsScript, '--profile', args.profile], {
+    env: { ...process.env, DSH_HOME: dshHome },
+    encoding: 'utf8',
+  })
+  let parsed = null
+  try {
+    parsed = r.stdout ? JSON.parse(r.stdout) : null
+  } catch {
+    parsed = null
+  }
+  if (parsed?.ok && Array.isArray(parsed.tools) && parsed.tools.length > 0) {
+    const lines = parsed.tools.map((t) => `- ${t.line}`)
+    lines.push('- 在群里说话（`group_say`）')
+    toolsText = lines.join('\n')
+  } else {
+    toolsText = `- （没能从 --dump-config 算出工具清单：${parsed?.reason ?? '跑不起来'}）`
+  }
+}
+
+// ---- 叫醒参数：从代码里读，别在纸上写第二份 ----
+// 纸上写死 60/12/60，代码一改就变成"说明书和事实各说各话"。
+function wakeNumbers() {
+  const fallback = { cooldownSec: 60, perHour: 12, perDay: 60, quietFromHour: 0, quietToHour: 8 }
+  try {
+    const src = readFileSync(join(REPO_ROOT, 'plugin', 'dsh-group', 'lib', 'index.js'), 'utf8')
+    const block = src.match(/const WAKE = \{[\s\S]*?\n\}/)?.[0] ?? ''
+    const num = (name) => {
+      const m = block.match(new RegExp(`${name}\\s*:\\s*(\\d+)`))
+      return m ? Number(m[1]) : fallback[name]
+    }
+    return {
+      cooldownSec: num('cooldownSec'),
+      perHour: num('perHour'),
+      perDay: num('perDay'),
+      quietFromHour: num('quietFromHour'),
+      quietToHour: num('quietToHour'),
+    }
+  } catch {
+    return fallback
+  }
+}
+const wake = wakeNumbers()
+
+// ---- 模板与指纹 ----
+const templatePath = join(REPO_ROOT, 'templates', '环境.md.tpl')
+if (!existsSync(templatePath)) die(`找不到模板：${templatePath}`)
+const template = readFileSync(templatePath, 'utf8')
+const templateSha = createHash('sha256').update(template).digest('hex').slice(0, 8)
+
+const now = new Date()
+const pad = (n) => String(n).padStart(2, '0')
+const generatedAt = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`
+
+// 安装日期：优先沿用旧文件里那一行（那是"这个家什么时候装出来的"，重生成不该改它）
+function previousDeployDate() {
+  if (!existsSync(outPath)) return null
+  const m = readFileSync(outPath, 'utf8').match(/^- `?(\d{4}-\d{2}-\d{2})`? 安装时生成/m)
+  return m ? m[1] : null
+}
+const deployDate = args.deployDate || previousDeployDate() || me?.bornAt || generatedAt.slice(0, 10)
+
+const herHome = resolve(me?.home || workspace)
+const herDshHome = resolve(me?.dshHome || join(herHome, 'dsh-home'))
+const herPort = Number(args.herPort || me?.port || 0) || 3082
+const groupDir = join(poolDir, 'group')
+
+const values = {
+  HER_HOME: herHome,
+  HER_DSH_HOME: herDshHome,
+  HER_PORT: String(herPort),
+  GROUP_DIR: groupDir,
+  POOL_DIR: poolDir,
+  COOLDOWN: String(wake.cooldownSec),
+  PER_HOUR: String(wake.perHour),
+  PER_DAY: String(wake.perDay),
+  QUIET_FROM: `${pad(wake.quietFromHour)}:00`,
+  QUIET_TO: `${pad(wake.quietToHour)}:00`,
+  TOKEN_PER_TURN: '180-200',
+  CHILD_NAME: me?.name ?? myKey,
+  CHILD_ID: myKey,
+  PARENT_ID: me?.parent ?? 'lee',
+  HUMAN_ID: Object.keys(members).find((k) => members[k]?.kind === 'human') ?? 'fabian',
+  TOOLS: toolsText,
+  MEMBERS_TABLE: membersTable,
+  TEMPLATE_SHA: templateSha,
+  GENERATED_AT: generatedAt,
+  DEPLOY_DATE: deployDate,
+}
+
+let rendered = template
+for (const [key, value] of Object.entries(values)) {
+  rendered = rendered.split(`{{${key}}}`).join(String(value))
+}
+const leftover = rendered.match(/\{\{[A-Z_]+\}\}/g)
+if (leftover) die(`模板里有没被替换的占位符：${[...new Set(leftover)].join(', ')}`)
+
+if (args.dryRun) {
+  process.stdout.write(rendered)
+  console.error(`\n[dry-run] 本来会写：${outPath}（模板 ${templateSha}，生成于 ${generatedAt}）`)
+  process.exit(0)
+}
+
+writeFileSync(outPath, rendered, 'utf8')
+console.log(`环境.md 已重新生成：${outPath}`)
+console.log(`  名册 ${Object.keys(members).length} 人；工具 ${toolsText.split('\n').length - 1} 条；模板 ${templateSha}；生成于 ${generatedAt}`)
