@@ -44,9 +44,16 @@ export function configPath() {
 /** 派生字段（只由上面几个推出来，不许单独写死）。 */
 function derive(c) {
   const herHome = c.herHome
+  // 共享区在她家外面（2026-11-12 起）：多条鱼共用同一个群、同一份名册。
+  // 注意顺序 —— poolDir 得先算出来，后面三个都从它推。
+  const poolDir = c.poolDir || resolve(herHome, '..', 'lil-whale-pool')
   return {
     ...c,
-    groupDir: c.groupDir || join(herHome, 'group'),
+    poolDir,
+    poolStateDir: c.poolStateDir || join(poolDir, 'state'),
+    groupDir: c.groupDir || join(poolDir, 'group'),
+    dmDir: c.dmDir || join(poolDir, 'dm'),
+    membersFile: c.membersFile || join(poolDir, 'members.json'),
     herDshHome: c.herDshHome || join(herHome, 'dsh-home'),
     whaleCwd: c.whaleCwd || herHome,
     chatCwd: c.chatCwd || dirname(c.repoRoot),

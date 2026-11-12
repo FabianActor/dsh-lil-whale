@@ -717,11 +717,16 @@ function Bubble({ config, message, onMention, animate = false }) {
           document.removeEventListener('keydown', onKey)
         }
       }, [onClose])
-      // 名字下面列出座位：同一个人有几段会话，就有几行「大肥鱼 · 开发」这样可选。
+      // 名字下面列出座位：同一个人**真的有几段会话**时才列。
+      // （2026-11-12 他报的"@ 按钮后面有椅子后缀"：以前名册里每人一段也会列一行
+      //   `小肥鱼 · c145f6`，看着像两条鱼。一段就是常态，不列。）
       const rows = [{ id: 'all', label: t.toAll, plain: true }]
-      for (const member of ['lee', 'whale']) {
+      const memberIds = Object.keys(config?.names ?? NAMES).filter((id) => id !== 'fabian')
+      for (const member of memberIds) {
         rows.push({ id: member, label: nameOf(config, member) })
-        for (const seat of (seats ?? []).filter((item) => item.member === member)) {
+        const mine = (seats ?? []).filter((item) => item.member === member)
+        if (mine.length < 2) continue
+        for (const seat of mine) {
           rows.push({
             id: `${member}@${seat.prefix}`,
             label: config?.seats?.[seat.prefix] || `${nameOf(config, member)} · ${seat.prefix}`,
@@ -2278,7 +2283,7 @@ function Bubble({ config, message, onMention, animate = false }) {
         // 名字 / 头像讲的是同一件事：这一位在群里长什么样。
         // （座位名那一组 2026-11-12 拿掉了：椅子已撤，界面不该再留一个空的入口。）
         h(SettingsSection, { title: '成员', hint: '此处修改名称仅修改显示效果，无法修改 ta 的自我认知。若想让 ta 改名请试着直接和 ta 聊聊？' },
-          ['lee', 'whale', 'fabian'].map((member, index) => {
+          Object.keys(config?.names ?? NAMES).map((member, index) => {
             const avatar = avatarOf(config, member)
             return h('div', {
               key: `member-${member}`,
@@ -2422,7 +2427,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[lil-whale-group-ui] client build v16 · official-lightbox:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[lil-whale-group-ui] client build v17 · members-from-roster:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('lil-whale-group-keyframes')) {
           const style = document.createElement('style')

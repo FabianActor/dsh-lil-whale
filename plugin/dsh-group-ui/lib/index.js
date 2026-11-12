@@ -136,12 +136,53 @@ function imageFieldOf(rawImage) {
 const AVATAR_MAX_BYTES = 1.5 * 1024 * 1024
 const AVATAR_TYPES = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp' }
 
-const LABEL = { lee: '大肥鱼', whale: '小肥鱼', fabian: 'Fabian' }
-const KNOWN_PEERS = Object.keys(LABEL).filter((id) => !DM_HIDDEN.has(id))
+/**
+ * 名册的真源是共享区的 `pool\members.json`（2026-11-12 起）。
+ *
+ * 以前这里写死三条（lee / whale / fabian），后果是：新装的鱼**不在群里、设置页里看不到、
+ * @ 面板点不到她**，而且一个错都不报 —— 又是"错的东西长得很安静"。
+ * 现在有几个人由数据说了算；读不到文件才退回内置三条。
+ */
+const UI_MEMBERS_FALLBACK = {
+  lee: { name: '大肥鱼', kind: 'fish' },
+  whale: { name: '小肥鱼', kind: 'fish' },
+  fabian: { name: 'Fabian', kind: 'human' },
+}
+
+function loadUiMembers() {
+  const file = config().membersFile || join(config().poolDir || join(GROUP_DIR, '..'), 'members.json')
+  try {
+    const raw = JSON.parse(readFileSync(file, 'utf8'))
+    const out = {}
+    for (const [key, m] of Object.entries(raw?.members ?? {})) {
+      const name = typeof m?.name === 'string' && m.name.trim() ? m.name.trim().slice(0, 16) : key
+      out[key] = { name, kind: m?.kind === 'human' ? 'human' : 'fish' }
+    }
+    if (Object.keys(out).length) return out
+  } catch {
+    // 读不到 / 读坏了：退回内置三条。不写日志 —— UI 插件没有宿主那套 logLine，
+    // 而 doctor 已经在查名册了（缺鱼会点名），这里再喊一遍只是噪音。
+  }
+  return UI_MEMBERS_FALLBACK
+}
+
+const MEMBERS = loadUiMembers()
+const LABEL = Object.fromEntries(Object.entries(MEMBERS).map(([key, m]) => [key, m.name]))
+/** 能私聊的对象：鱼，不含人类自己，也不含明确隐藏的。 */
+const KNOWN_PEERS = Object.keys(MEMBERS).filter((id) => MEMBERS[id].kind === 'fish' && !DM_HIDDEN.has(id))
+
+/** 新成员没有配头像时的兜底：名字首字 + 一组固定底色（按成员 id 稳定分配）。 */
+const AVATAR_TINTS = ['#4a7dbd', '#c2705a', '#5c8a6a', '#8a6ab8', '#b8863c', '#3f8f8f']
+function defaultAvatarOf(member) {
+  const name = LABEL[member] ?? member
+  let hash = 0
+  for (const ch of member) hash = (hash * 31 + ch.codePointAt(0)) % 997
+  return { text: [...name][0] ?? '?', tint: AVATAR_TINTS[hash % AVATAR_TINTS.length] }
+}
 
 const DEFAULT_CONFIG = {
   panelLabel: '鱼群',
-  names: { lee: '大肥鱼', whale: '小肥鱼', fabian: 'Fabian' },
+  names: { ...LABEL },
   /**
    * 座位名：同一个人可能有几段会话同时在群里（`lee` 就有两段）。
    * 键是会话 id 的前 6 位（`session-e17c3c91-…` → `e17c3c`），值是这段会话在群里显示的名字。
@@ -151,11 +192,7 @@ const DEFAULT_CONFIG = {
   seats: {},
   /** 未读口径：'all' = 所有不是自己说的话；'mentions' = 只算 @ 到我的（to 是 all 或 fabian）。 */
   notifyScope: 'all',
-  avatars: {
-    lee: { text: '大', tint: '#4a7dbd' },
-    whale: { text: '小', tint: '#c2705a' },
-    fabian: { text: 'F', tint: '#5c8a6a' },
-  },
+  avatars: Object.fromEntries(Object.keys(MEMBERS).map((key) => [key, defaultAvatarOf(key)])),
 }
 
 function sendJson(res, status, value) {
@@ -168,26 +205,27 @@ function sendJson(res, status, value) {
 }
 
 function readConfig() {
-  if (!existsSync(UI_CONFIG)) return DEFAULT_CONFIG
-  try {
-    const raw = JSON.parse(readFileSync(UI_CONFIG, 'utf8'))
-    return {
-      panelLabel: typeof raw?.panelLabel === 'string' && raw.panelLabel.trim() ? raw.panelLabel.trim() : DEFAULT_CONFIG.panelLabel,
-      notifyScope: raw?.notifyScope === 'mentions' ? 'mentions' : 'all',
-      names: {
-        lee: normalizeName(raw?.names?.lee, DEFAULT_CONFIG.names.lee),
-        whale: normalizeName(raw?.names?.whale, DEFAULT_CONFIG.names.whale),
-        fabian: normalizeName(raw?.names?.fabian, DEFAULT_CONFIG.names.fabian),
-      },
-      seats: normalizeSeats(raw?.seats),
-      avatars: {
-        lee: normalizeAvatar(raw?.avatars?.lee, DEFAULT_CONFIG.avatars.lee),
-        whale: normalizeAvatar(raw?.avatars?.whale, DEFAULT_CONFIG.avatars.whale),
-        fabian: normalizeAvatar(raw?.avatars?.fabian, DEFAULT_CONFIG.avatars.fabian),
-      },
+  const names = {}
+  const avatars = {}
+  let raw = null
+  if (existsSync(UI_CONFIG)) {
+    try {
+      raw = JSON.parse(readFileSync(UI_CONFIG, 'utf8'))
+    } catch {
+      raw = null
     }
-  } catch {
-    return DEFAULT_CONFIG
+  }
+  // 成员列表跟着名册走：名册里多一条鱼，这里就多一个名字/头像的位置。
+  for (const key of Object.keys(MEMBERS)) {
+    names[key] = normalizeName(raw?.names?.[key], LABEL[key] ?? key)
+    avatars[key] = normalizeAvatar(raw?.avatars?.[key], defaultAvatarOf(key))
+  }
+  return {
+    panelLabel: typeof raw?.panelLabel === 'string' && raw.panelLabel.trim() ? raw.panelLabel.trim() : DEFAULT_CONFIG.panelLabel,
+    notifyScope: raw?.notifyScope === 'mentions' ? 'mentions' : 'all',
+    names,
+    seats: normalizeSeats(raw?.seats),
+    avatars,
   }
 }
 
@@ -354,18 +392,16 @@ export function apply(ctx) {
       }
       const next = {
         panelLabel: normalizeLabel(payload?.panelLabel),
-    notifyScope: payload?.notifyScope === 'mentions' ? 'mentions' : 'all',
-        names: {
-          lee: normalizeName(payload?.names?.lee, DEFAULT_CONFIG.names.lee),
-          whale: normalizeName(payload?.names?.whale, DEFAULT_CONFIG.names.whale),
-          fabian: normalizeName(payload?.names?.fabian, DEFAULT_CONFIG.names.fabian),
-        },
+        notifyScope: payload?.notifyScope === 'mentions' ? 'mentions' : 'all',
+        names: {},
         seats: normalizeSeats(payload?.seats),
-        avatars: {
-          lee: normalizeAvatar(payload?.avatars?.lee, DEFAULT_CONFIG.avatars.lee),
-          whale: normalizeAvatar(payload?.avatars?.whale, DEFAULT_CONFIG.avatars.whale),
-          fabian: normalizeAvatar(payload?.avatars?.fabian, DEFAULT_CONFIG.avatars.fabian),
-        },
+        avatars: {},
+      }
+      // 同样跟着名册走：只认名册里有的成员，多传的键丢掉（免得 ui-config 里
+      // 攒出一堆已经不在群里的名字）。
+      for (const key of Object.keys(MEMBERS)) {
+        next.names[key] = normalizeName(payload?.names?.[key], LABEL[key] ?? key)
+        next.avatars[key] = normalizeAvatar(payload?.avatars?.[key], defaultAvatarOf(key))
       }
       try {
         writeConfig(next)
