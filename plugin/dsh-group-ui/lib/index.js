@@ -828,10 +828,17 @@ export function apply(ctx) {
               // reason 是"这一轮从哪来"，不是"这句话回谁"：
               // 群唤醒会留 groupWakeAt，十分钟内算群里的；其余一律算"在别处忙"，
               // 因为宿主这里根本没有更细的信息，宁可含糊也不要编。
-              const woke = Number(beat?.groupWakeAt) || 0
+              // 2026-11-13：分三档。原来只有 groupWakeAt，私聊唤醒没留痕，
+              // 于是"在回私聊"被一律显示成「正在忙」（他报的 bug）。
+              const wakeAt = Number(beat?.wakeAt) || 0
+              const kind = String(beat?.wakeKind ?? '')
+              const fresh = wakeAt > 0 && Date.now() - wakeAt <= GROUP_WAKE_TTL_MS
+              // 兼容旧心跳：只有 groupWakeAt 的那些进程。
+              const legacyAt = Number(beat?.groupWakeAt) || 0
+              const legacyFresh = legacyAt > 0 && Date.now() - legacyAt <= GROUP_WAKE_TTL_MS
               members[member] = {
                 status: beat?.status === 'idle' ? 'idle' : 'working',
-                reason: woke > 0 && Date.now() - woke <= GROUP_WAKE_TTL_MS ? 'group' : 'self',
+                reason: fresh ? (kind === 'dm' ? 'dm' : 'group') : (legacyFresh ? 'group' : 'self'),
               }
             }
           } catch {

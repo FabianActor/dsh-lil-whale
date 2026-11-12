@@ -1113,7 +1113,15 @@ function Bubble({ config, message, onMention, animate = false }) {
           const response = await fetch('/group/api/dm/contacts', { headers: { accept: 'application/json' } })
           if (!response.ok) throw new Error(`HTTP ${response.status}`)
           const data = await response.json()
-          setContacts(Array.isArray(data?.contacts) ? data.contacts : [])
+          const list = Array.isArray(data?.contacts) ? data.contacts : []
+          // 最近说过话的排最上面；没有消息的按名字排在后面（跟微信一致）。
+          const sorted = [...list].sort((a, b) => {
+            const ta = Date.parse(a?.last?.ts ?? '') || 0
+            const tb = Date.parse(b?.last?.ts ?? '') || 0
+            if (tb !== ta) return tb - ta
+            return String(a?.peer ?? '').localeCompare(String(b?.peer ?? ''))
+          })
+          setContacts(sorted)
           setError(null)
         } catch (e) {
           setError(String(e?.message ?? e))
@@ -2521,27 +2529,28 @@ function Bubble({ config, message, onMention, animate = false }) {
 
     // 谱系示例的数据。渲染走的就是下面同一套卡片与同一套排序，不是另捏一个界面。
     const POND_DEMO_FISH = [
-      { key: 'lee', name: '大肥鱼', role: 'watcher', generation: 0, port: 3080, portOpen: true, bornAt: '2026-11-08T00:00:00+08:00', heartbeatAgeMs: 8000, canManage: false, lastRun: { ts: '22:58:12', event: 'started', raw: 'started pid=9520' } },
-      { key: 'whale', name: '小肥鱼', role: 'member', generation: 1, port: 3082, portOpen: true, bornAt: '2026-11-08T23:32:00+08:00', heartbeatAgeMs: 42000, canManage: true, lastRun: { ts: '22:58:24', event: 'started', raw: 'started pid=22664' } },
-      { key: 'fishball', name: '小鱼丸', role: 'member', generation: 1, port: 3083, portOpen: true, bornAt: '2026-11-12T18:40:00+08:00', heartbeatAgeMs: 95000, canManage: true, lastRun: { ts: '22:58:31', event: 'started', raw: 'started pid=22112' } },
-      { key: 'shell', name: '小贝壳', role: 'member', generation: 1, port: 3084, portOpen: false, bornAt: '2026-11-18T09:10:00+08:00', heartbeatAgeMs: null, canManage: true },
-      { key: 'star', name: '小海星', role: 'member', generation: 1, port: 3085, portOpen: false, bornAt: '2026-11-24T20:05:00+08:00', heartbeatAgeMs: null, canManage: true },
-      { key: 'scale', name: '小鳞', role: 'member', generation: 2, port: 3086, portOpen: true, bornAt: '2026-11-29T08:30:00+08:00', heartbeatAgeMs: 130000, canManage: true, lastRun: { ts: '22:41:03', event: 'started', raw: 'started pid=31844' } },
-      { key: 'tide', name: '小汐', role: 'member', generation: 2, port: 3087, portOpen: true, bornAt: '2026-11-30T21:00:00+08:00', heartbeatAgeMs: 240000, canManage: true },
-      { key: 'algae', name: '小藻', role: 'member', generation: 2, port: 3088, portOpen: false, bornAt: '2026-12-02T11:20:00+08:00', heartbeatAgeMs: null, canManage: true },
-      { key: 'bubble', name: '小泡', role: 'member', generation: 2, port: 3089, portOpen: true, bornAt: '2026-12-04T19:45:00+08:00', heartbeatAgeMs: 60000, canManage: true },
-      { key: 'sand', name: '小砂', role: 'member', generation: 2, port: 3090, portOpen: false, bornAt: '2026-12-06T07:15:00+08:00', heartbeatAgeMs: null, canManage: true },
-      { key: 'fin', name: '小鳍', role: 'member', generation: 3, port: 3091, portOpen: true, bornAt: '2026-12-09T10:00:00+08:00', heartbeatAgeMs: 310000, canManage: true },
-      { key: 'tail', name: '小尾', role: 'member', generation: 3, port: 3092, portOpen: false, bornAt: '2026-12-11T16:40:00+08:00', heartbeatAgeMs: null, canManage: true },
-      { key: 'moss', name: '小苔', role: 'member', generation: 3, port: 3093, portOpen: true, bornAt: '2026-12-13T09:05:00+08:00', heartbeatAgeMs: 55000, canManage: true },
-      { key: 'bean', name: '小豆', role: 'member', generation: 3, port: 3094, portOpen: false, bornAt: '2026-12-15T22:30:00+08:00', heartbeatAgeMs: null, canManage: true },
-      { key: 'foam', name: '小沫', role: 'member', generation: 3, port: 3095, portOpen: true, bornAt: '2026-12-17T12:00:00+08:00', heartbeatAgeMs: 190000, canManage: true },
-      { key: 'feather', name: '小羽', role: 'member', generation: 4, port: 3096, portOpen: true, bornAt: '2026-12-20T08:20:00+08:00', heartbeatAgeMs: 72000, canManage: true },
-      { key: 'glimmer', name: '小光', role: 'member', generation: 4, port: 3097, portOpen: false, bornAt: '2026-12-22T21:10:00+08:00', heartbeatAgeMs: null, canManage: true },
-      { key: 'dew', name: '小露', role: 'member', generation: 4, port: 3098, portOpen: true, bornAt: '2026-12-25T06:45:00+08:00', heartbeatAgeMs: 260000, canManage: true },
+      { key: 'lee', name: '大肥鱼', role: 'watcher', port: 3080, portOpen: true, bornAt: '2026-11-08T00:00:00+08:00', heartbeatAgeMs: 8000, canManage: false, lastRun: { ts: '22:58:12', event: 'started', raw: 'started pid=9520' } },
+      { key: 'whale', name: '小肥鱼', role: 'member', port: 3082, portOpen: true, bornAt: '2026-11-08T23:32:00+08:00', heartbeatAgeMs: 42000, canManage: true, lastRun: { ts: '22:58:24', event: 'started', raw: 'started pid=22664' } },
+      { key: 'fishball', name: '小鱼丸', role: 'member', port: 3083, portOpen: true, bornAt: '2026-11-12T18:40:00+08:00', heartbeatAgeMs: 95000, canManage: true, lastRun: { ts: '22:58:31', event: 'started', raw: 'started pid=22112' } },
+      { key: 'shell', name: '小贝壳', role: 'member', port: 3084, portOpen: false, bornAt: '2026-11-18T09:10:00+08:00', heartbeatAgeMs: null, canManage: true },
+      { key: 'star', name: '小海星', role: 'member', port: 3085, portOpen: false, bornAt: '2026-11-24T20:05:00+08:00', heartbeatAgeMs: null, canManage: true },
+      { key: 'scale', name: '小鳞', role: 'member', port: 3086, portOpen: true, bornAt: '2026-11-29T08:30:00+08:00', heartbeatAgeMs: 130000, canManage: true, lastRun: { ts: '22:41:03', event: 'started', raw: 'started pid=31844' } },
+      { key: 'tide', name: '小汐', role: 'member', port: 3087, portOpen: true, bornAt: '2026-11-30T21:00:00+08:00', heartbeatAgeMs: 240000, canManage: true },
+      { key: 'algae', name: '小藻', role: 'member', port: 3088, portOpen: false, bornAt: '2026-12-02T11:20:00+08:00', heartbeatAgeMs: null, canManage: true },
+      { key: 'bubble', name: '小泡', role: 'member', port: 3089, portOpen: true, bornAt: '2026-12-04T19:45:00+08:00', heartbeatAgeMs: 60000, canManage: true },
+      { key: 'sand', name: '小砂', role: 'member', port: 3090, portOpen: false, bornAt: '2026-12-06T07:15:00+08:00', heartbeatAgeMs: null, canManage: true },
+      { key: 'fin', name: '小鳍', role: 'member', port: 3091, portOpen: true, bornAt: '2026-12-09T10:00:00+08:00', heartbeatAgeMs: 310000, canManage: true },
+      { key: 'tail', name: '小尾', role: 'member', port: 3092, portOpen: false, bornAt: '2026-12-11T16:40:00+08:00', heartbeatAgeMs: null, canManage: true },
+      { key: 'moss', name: '小苔', role: 'member', port: 3093, portOpen: true, bornAt: '2026-12-13T09:05:00+08:00', heartbeatAgeMs: 55000, canManage: true },
+      { key: 'bean', name: '小豆', role: 'member', port: 3094, portOpen: false, bornAt: '2026-12-15T22:30:00+08:00', heartbeatAgeMs: null, canManage: true },
+      { key: 'foam', name: '小沫', role: 'member', port: 3095, portOpen: true, bornAt: '2026-12-17T12:00:00+08:00', heartbeatAgeMs: 190000, canManage: true },
+      { key: 'feather', name: '小羽', role: 'member', port: 3096, portOpen: true, bornAt: '2026-12-20T08:20:00+08:00', heartbeatAgeMs: 72000, canManage: true },
+      { key: 'glimmer', name: '小光', role: 'member', port: 3097, portOpen: false, bornAt: '2026-12-22T21:10:00+08:00', heartbeatAgeMs: null, canManage: true },
+      { key: 'dew', name: '小露', role: 'member', port: 3098, portOpen: true, bornAt: '2026-12-25T06:45:00+08:00', heartbeatAgeMs: 260000, canManage: true },
     ]
 
-    // 谱系示例里"谁是谁的子代"：树是按 parent 画的，generation 只是标签。
+    // 谱系示例里"谁是谁的子代"：树只按 parent 画，代数由树的深度算——
+    // 不再存第二份 generation（示例里小豆写错过一次：父代第 1 代、标签却写第 3 代）。
     const POND_DEMO_PARENT = {
       lee: null,
       whale: 'lee', fishball: 'lee', shell: 'lee', star: 'lee',
@@ -2778,7 +2787,7 @@ function Bubble({ config, message, onMention, animate = false }) {
                 }),
               )
               : null,
-            h('div', { style: { flex: 1, minWidth: 0 } }, card(item, parentItem)),
+            h('div', { style: { flex: '0 1 auto', minWidth: 0, maxWidth: '100%' } }, card(item, parentItem, depth)),
           ),
           kids.length
             ? h(
@@ -2796,7 +2805,7 @@ function Bubble({ config, message, onMention, animate = false }) {
         )
       }
 
-      const card = (item, parentItem) => {
+      const card = (item, parentItem, depth) => {
         const self = item.canManage === false
         const hb = item.heartbeatAgeMs
         const hbText = hb === null || hb === undefined ? POND.noHeartbeat : POND.heartbeatAgo(Math.floor(hb / 60000))
@@ -2813,6 +2822,9 @@ function Bubble({ config, message, onMention, animate = false }) {
               gap: 8,
               background: 'var(--dsw-alias-bg-layer-1, #fff)',
               opacity: self ? 0.9 : 1,
+              // 2026-11-13 他要求：卡片只包住内部文字，不占满整行。
+              width: 'fit-content',
+              maxWidth: '100%',
             },
           },
           h(
@@ -2827,7 +2839,7 @@ function Bubble({ config, message, onMention, animate = false }) {
               },
             }, item.name),
             h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary, #8a8f98)' } }, item.key),
-            Number.isInteger(item.generation) && item.generation > 0
+            Number.isInteger(depth) && depth > 0
               ? h('span', {
                 style: {
                   fontSize: 11, lineHeight: '16px', padding: '0 6px', borderRadius: 999,
@@ -2835,7 +2847,7 @@ function Bubble({ config, message, onMention, animate = false }) {
                   background: 'var(--dsw-alias-bg-layer-2, rgba(0,0,0,0.04))',
                   whiteSpace: 'nowrap',
                 },
-              }, POND.generation(item.generation))
+              }, POND.generation(depth))
               : null,
             h(
               'span',
@@ -3024,7 +3036,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[lil-whale-group-ui] client build v25 · auto-start:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[lil-whale-group-ui] client build v26 · pond-fit:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('lil-whale-group-keyframes')) {
           const style = document.createElement('style')
