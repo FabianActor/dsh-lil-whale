@@ -3,6 +3,14 @@
 > 本文件只记「哪一版改了哪几处、为什么改」。当前结论都在 [小小肥鱼-PRD.md](小小肥鱼-PRD.md) 里，那边不背历史。
 > 自 v0.3.5 起从 PRD 头部搬到这里（此前几块原样搬出，未改写）。v1.0 是整篇重写。
 
+## v1.0.20（2026-11-12）
+
+- **A.20 改 profile patch 等于在运行时换底座**：把 `preset-neutral` 写进她运行中的 profile patch 后，`logs\plugin-boot.log` 出现一条**同 pid** 的 boot 痕迹（进程没重启），紧接着她那一轮的工具全部消失。原因：`dsh-app-boot` 把 profile 自己的 `cordis.patch.yml` 当长活热重载层。判据：同 pid 的 boot 痕迹 = 热重载，pid 变了才是重启。规矩：改 patch 之后立刻重启，不要在会话进行中改。
+- **A.21 预览截断必须自己说出来**：唤醒预览原来把消息截到 60 字且无省略号，她只看到 `> You`，于是"不能核，只能说收到"。改成 `PREVIEW_MAX = 120` + `…（已截断，全文在群文件里）`。判据：截断的引文和完整的引文在"看起来"上没有区别。
+- **中立 persona 收成可一词判定**：按她定的判据（第一句出现的是 `are` 还是 `can`），prefix 改成以 `You can` 开头的能力陈述（237 字符）；`apply-neutral-preset.mjs` 支持重跑更新（切掉上次追加段重写，一致就跳过）。
+- 状态行 → v1.0.20；搬段状态改成"中立 preset 已装，等他重启 3082 + 新建会话"。
+
+---
 ## v1.0.19（2026-11-12）
 
 - **A.19 的"怎么加"落成一条命令**：新增 `scripts\apply-neutral-preset.mjs`——现读当前 dsh 的 `standard` 生成中立 preset（复用 `gen-neutral-preset.mjs`）→ **幂等**插进 profile patch（已有 `preset-neutral` 就跳过）→ 写前备份 `.bak-<stamp>`、`tmp-<pid>` + rename 写入 → 用 `dsh --profile <p> --patch <新文件> --dump-config` 只读验证（失败自动还原备份）。`--default` 把默认 preset 也改成 `neutral`；`--dry-run` 只打印要追加的内容。
