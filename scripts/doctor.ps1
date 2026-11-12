@@ -140,6 +140,30 @@ if (Test-Path -LiteralPath $pinsFile) {
   Add-Row '名册' 'FAIL' 'group\pins.json 不存在' 'NEXT: 群不认人：她说的每句话都会被守门拒掉'
 }
 
+# 4c. 名册（全鱼）：members.json 里每条鱼都该在 pins.json 里有会话
+#     只查 whale 不够 —— 装第二条鱼时 install.ps1 曾把 pins 整份抹成空数组，
+#     两个老成员同时"不在群里"；只查一条的检查也会红，但看不出是"谁少了"。
+try {
+  $membersFile = $Cfg.MembersFile
+  if ($membersFile -and (Test-Path -LiteralPath $membersFile)) {
+    $mj = Get-Content -LiteralPath $membersFile -Raw -Encoding utf8 | ConvertFrom-Json
+    $pinsObj = Get-Content -LiteralPath (Join-Path $Cfg.GroupDir 'pins.json') -Raw -Encoding utf8 | ConvertFrom-Json
+    $fishKeys = @($mj.members.PSObject.Properties | Where-Object { $_.Value.kind -eq 'fish' } | ForEach-Object { $_.Name })
+    $missing = @()
+    foreach ($k in $fishKeys) {
+      $ids = @()
+      if ($pinsObj.PSObject.Properties.Name -contains $k) { $ids = @($pinsObj.$k) }
+      if ($ids.Count -eq 0) { $missing += $k }
+    }
+    if ($missing.Count) {
+      Add-Row '名册（全鱼）' 'FAIL' ('这些鱼在 pins.json 里没有会话：' + ($missing -join '、')) ('NEXT: node scripts\pins.mjs --member <键> --id <会话id>（鱼有 ' + ($fishKeys -join '/') + '）')
+    } else {
+      Add-Row '名册（全鱼）' 'OK' ('每条鱼都有会话：' + ($fishKeys -join '、'))
+    }
+  }
+} catch {
+  Add-Row '名册（全鱼）' 'WARN' ("读不了名册或 pins：{0}" -f $_.Exception.Message) 'NEXT: 看 pool\members.json 与 pool\group\pins.json 是不是合法 JSON'
+}
 # 4b. 旧段：不在名册里、却还在被写的会话
 #     搬段之后最容易出的不是丢数据，是"旧标签页还开着"——他在那儿打字，话进了退休的那一段。
 #     那段现在既发不出群消息（group_say 要名册里有）、也唤不醒（tick 只叫名册里的），

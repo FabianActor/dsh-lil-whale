@@ -3,7 +3,14 @@
 > 本文件只记「哪一版改了哪几处、为什么改」。当前结论都在 [小小肥鱼-PRD.md](小小肥鱼-PRD.md) 里，那边不背历史。
 > 自 v0.3.5 起从 PRD 头部搬到这里（此前几块原样搬出，未改写）。v1.0 是整篇重写。
 
+## v1.0.26（2026-11-12）
+
+- **A.29 安装器不许往共享区写初始化文件**：装第二条鱼时 `install.ps1` 把新家的 `group`（Junction 到共享区）当成新目录，写了一份空 `pins.json`，把大肥鱼/小肥鱼的名册整份抹掉、且不报错。修：Junction 时跳过初始化；`doctor.ps1` 增加「名册（全鱼）」检查（每条鱼都要有会话，缺了点名）。
+- **A.30 新家第一次提权是 ACL**：新文件夹缺 `WRITE_DAC`/`WRITE_OWNER`，沙箱 provision 不了 workspace grant。写进用户说明：允许一次即可，报告与回滚文件在 `logs\acl-reports\`。
+- **A.31 沙箱只挡写不挡读**：两条鱼同一 Windows 账户，读没有路径限制。D4-1 的"沙箱隔离"那条目前不成立；能说的是"各自有家、共享区在中间、读的边界靠规矩"。
+
 ## v1.0.25（2026-11-12）
+
 
 - **谱系**：`pool\family.json`（真源：爹/出生/状态/改名史）+ `scripts\gen-family.mjs` → `docs\谱系.md`（Mermaid + 树 + 名册 + 改名史，生成前校验单根/无环）。新增 A.27。
 - **一鱼一配置**：每鱼一份 `lil-whale.config.<键>.json`，名册记 `configFile`，`fish.ps1` 启动时导出 `LIL_WHALE_CONFIG`；`install.ps1` 加 `-ChildName`/`-ChildMemberId`，`AGENTS.md.tpl` 改用 `{{CHILD_NAME}}`。新增 A.28。

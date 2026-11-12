@@ -304,18 +304,28 @@ if (-not (Test-Path $agentsPath)) {
   Ok 'AGENTS.md'
 }
 
-$msgPath = Join-Path $Workspace 'group\messages.jsonl'
-if (-not (Test-Path $msgPath)) { Write-Utf8NoBom $msgPath ''; Ok 'group\messages.jsonl' }
+# group 是共享区（Junction）时，messages/pins 属于整个鱼群，不属于这个新家。
+# 这里曾经把 pins.json 初始化成 "lee: [] / whale: []" —— 正好写进共享区，把老鱼的名册整份抹掉
+# （2026-11-12 装第二条鱼时真踩过：大肥鱼和小肥鱼同时"不在群里"，而且没有任何报错）。
+$groupPath = Join-Path $Workspace 'group'
+$sharedGroup = $false
+try { $gi = Get-Item -LiteralPath $groupPath -ErrorAction Stop; if ($gi.LinkType) { $sharedGroup = $true } } catch { }
+if ($sharedGroup) {
+  Ok 'group 是共享区（Junction）：messages/pins 归共享区管，跳过初始化'
+} else {
+  $msgPath = Join-Path $Workspace 'group\messages.jsonl'
+  if (-not (Test-Path $msgPath)) { Write-Utf8NoBom $msgPath ''; Ok 'group\messages.jsonl' }
 
-$pinsPath = Join-Path $Workspace 'group\pins.json'
-if (-not (Test-Path $pinsPath) -or $Force) {
-  $parentIds = @(); $childIds = @()
-  if ($ParentSessionId) { $parentIds += $ParentSessionId }
-  if ($ChildSessionId) { $childIds += $ChildSessionId }
-  $pins = [ordered]@{ lee = $parentIds; whale = $childIds }
-  Write-Utf8NoBom $pinsPath (($pins | ConvertTo-Json -Depth 5) + "`n")
-  if ($ChildSessionId -or $ParentSessionId) { Ok 'group\pins.json（已带会话 id）' }
-  else { Ok 'group\pins.json（空的，出生后填）' }
+  $pinsPath = Join-Path $Workspace 'group\pins.json'
+  if (-not (Test-Path $pinsPath) -or $Force) {
+    $parentIds = @(); $childIds = @()
+    if ($ParentSessionId) { $parentIds += $ParentSessionId }
+    if ($ChildSessionId) { $childIds += $ChildSessionId }
+    $pins = [ordered]@{ lee = $parentIds; whale = $childIds }
+    Write-Utf8NoBom $pinsPath (($pins | ConvertTo-Json -Depth 5) + "`n")
+    if ($ChildSessionId -or $ParentSessionId) { Ok 'group\pins.json（已带会话 id）' }
+    else { Ok 'group\pins.json（空的，出生后填）' }
+  }
 }
 
 $planPath = Join-Path $Workspace 'plan\wake-plan.json'
