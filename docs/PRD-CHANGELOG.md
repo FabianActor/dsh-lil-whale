@@ -3,6 +3,13 @@
 > 本文件只记「哪一版改了哪几处、为什么改」。当前结论都在 [小小肥鱼-PRD.md](小小肥鱼-PRD.md) 里，那边不背历史。
 > 自 v0.3.5 起从 PRD 头部搬到这里（此前几块原样搬出，未改写）。v1.0 是整篇重写。
 
+## v1.0.19（2026-11-12）
+
+- **A.19 的"怎么加"落成一条命令**：新增 `scripts\apply-neutral-preset.mjs`——现读当前 dsh 的 `standard` 生成中立 preset（复用 `gen-neutral-preset.mjs`）→ **幂等**插进 profile patch（已有 `preset-neutral` 就跳过）→ 写前备份 `.bak-<stamp>`、`tmp-<pid>` + rename 写入 → 用 `dsh --profile <p> --patch <新文件> --dump-config` 只读验证（失败自动还原备份）。`--default` 把默认 preset 也改成 `neutral`；`--dry-run` 只打印要追加的内容。
+- **为什么还要一层脚本**：YAML 的缩进、`- insert:` 层级、末尾换行、"跑第二遍插两份"都是手改容易错的地方；而这四件事脚本都能幂等做完，并且**写之前就知道会写什么**（dry-run）。
+- **已验证（不用重启）**：在她真实 patch 的副本上跑通三遍——dry-run 只打印；写入后 `--dump-config` exit 0、`preset-neutral` 与 `default: neutral` 都在；再跑一次输出"已经装过了"、文件未变。
+- 同步：`docs\出生流程.md`「以后换段怎么办」第 5 步改成一条命令；`docs\待办-2026-11-12.md` D5 行补 `apply` 脚本。
+
 ## v1.0.18（2026-11-12）
 
 - **A.19 的"遗留"落成做法（备好，未启用）**：中立 persona 只能靠新增一档 preset——`dsh-persona` 那行只在 preset 内部挂载，用来遮蔽部署级人设，改部署级 `system-prompt.personaPrefix` 会被 `standard` 的 persona 行盖掉。
