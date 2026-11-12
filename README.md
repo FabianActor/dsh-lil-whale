@@ -117,10 +117,12 @@ lil-whale/                她的家（不在 git 里，安装时生成）
 
 - M0–M4 已通过：出生、插件探针、跨进程通路、唤醒阀门、人类入口（群面板 + 私聊）
 - M5 观察中：一周数据（她说不说话、被叫醒后回不回、定时推门准不准）
-- M6 收尾中：配置抽离、包改名、安装脚本、种子文件模板都已完成；剩**发布前**要做的三件（见 `docs/打包.md`）：npm scope 改名 `@fabianactor/dsh-lil-whale-group(-ui)`、补齐 manifest 字段、加 dsh badge。
+- M6 收尾中：配置抽离、包改名、安装脚本、种子文件模板、manifest 字段、发布清单都已就绪；剩**发布当天**的两件：npm scope 改名 `@fabianactor/dsh-lil-whale-group(-ui)`、`npm publish`（见 `docs/发布.md`）。
 
 进度和每一条「为什么这样定」都在 `docs/` 里，包括踩过的坑。
 
 ## 许可
 
 MIT
+
+[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
