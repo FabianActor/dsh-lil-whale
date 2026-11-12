@@ -43,7 +43,7 @@ const base = {
   lee: {
     name: '大肥鱼',
     kind: 'fish',
-    role: 'watcher', // 守夜住在"一直开着的那个进程"里
+    role: 'watcher', // 巡守住在"一直开着的那个进程"里
     parent: null,
     bornAt: '2026-11-08',
     home: cfg.leeHome ?? null,

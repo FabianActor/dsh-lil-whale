@@ -105,7 +105,7 @@ function label(key) {
   const m = members[key] || {}
   const bits = [f.name || key]
   if (m.kind === 'human') bits.push('人类')
-  else if (m.role === 'watcher') bits.push('守夜')
+  else if (m.role === 'watcher') bits.push('巡守')
   if (f.status === 'experiment') bits.push('实验')
   if (f.status === 'archived') bits.push('已归档')
   if (m.port) bits.push(String(m.port))
@@ -132,7 +132,7 @@ function draw(key, prefix, isLast, isRoot) {
   const m = members[key] || {}
   const tags = []
   if (m.kind === 'human') tags.push('人类')
-  else if (m.role === 'watcher') tags.push('守夜')
+  else if (m.role === 'watcher') tags.push('巡守')
   if (f.status === 'experiment') tags.push('实验')
   if (f.status === 'archived') tags.push('已归档')
   if (m.port) tags.push(`:${m.port}`)

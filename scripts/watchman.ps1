@@ -1,6 +1,6 @@
 ﻿# 【已搬进插件，2026-11-09 19:15】同一套规则现在住在 dsh-group 插件的定时器里（主进程每 60 秒看一次）。
 # 这个文件保留作手工兜底 / 排障用：逻辑会有两处，改规则时记得两边都对。
-# watchman.ps1 —— 守夜
+# watchman.ps1 —— 巡守
 #
 # 只做一件事：到点了发现她还关着窗，就把门推开（起她的进程），然后闭嘴。
 #   不替她决定做什么、不发消息、不在她没设过的时间出现。
@@ -92,8 +92,8 @@ $fails = 0
 
 Log 'started' "interval=${IntervalSec}s port=$Port cap=${MaxWakesPerDay}/day dryrun=$($DryRun.IsPresent)"
 
-# 把自己的 PID 写出来：launch.ps1 靠这个判断「守夜在不在」。
-# 不靠命令行字符串匹配 —— 任何一个正在读这段文字的 pwsh 都会被误认成守夜。
+# 把自己的 PID 写出来：launch.ps1 靠这个判断「巡守在不在」。
+# 不靠命令行字符串匹配 —— 任何一个正在读这段文字的 pwsh 都会被误认成巡守。
 $pidFile = Join-Path $herHome 'logs\watchman.pid'
 Set-Content -LiteralPath $pidFile -Value $PID -Encoding ascii
 

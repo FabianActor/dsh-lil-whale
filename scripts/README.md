@@ -46,8 +46,8 @@ pwsh -File stop.ps1   -Target all|lee|whale [-Yes]
 | 文件 | 谁调它 |
 | --- | --- |
 | `start-whale.ps1` | `watchman.ps1`。输出约定：`already-awake` / `awake` / `failed` |
-| `wake-whale.ps1` | `dsh-group` 插件的守夜定时器（`HER_WAKER`）：每 60 秒看一次，到点且她关着窗就跑它 |
-| `watchman.ps1` | **手工兜底的老守夜，日常不必跑**。现在门由 `dsh-group` 插件推（见上一行）。主 dsh 不常开时才需要它：`pwsh -File scripts\watchman.ps1`（旧的双击入口在 `legacy\watchman-run.cmd`） |
+| `wake-whale.ps1` | `dsh-group` 插件的巡守定时器（`HER_WAKER`）：每 60 秒看一次，到点且她关着窗就跑它 |
+| `watchman.ps1` | **手工兜底的老巡守，日常不必跑**。现在门由 `dsh-group` 插件推（见上一行）。主 dsh 不常开时才需要它：`pwsh -File scripts\watchman.ps1`（旧的双击入口在 `legacy\watchman-run.cmd`） |
 | `stop.ps1` | `bin\Stop*.cmd`。退出码 0 = 停了/本来没跑，1 = 没停干净 |
 | `launch.ps1` | `bin\Run*.cmd` |
 
@@ -57,11 +57,11 @@ pwsh -File stop.ps1   -Target all|lee|whale [-Yes]
 | --- | --- |
 | 大肥鱼 | `<你的 dsh 家>\logs\web-latest.log` / `.err.log` |
 | 小肥鱼 | `<小肥鱼的家>\dsh-home\logs\web-latest.log` / `.err.log` |
-| 守夜（脚本版） | `<小肥鱼的家>\logs\watchman.log`；控制台输出在 `dsh-lil-whale\logs\watchman-console.log` |
+| 巡守（脚本版） | `<小肥鱼的家>\logs\watchman.log`；控制台输出在 `dsh-lil-whale\logs\watchman-console.log` |
 
 ## legacy\
 
-旧的入口：`tab-lee.ps1`、`tab-whale.ps1`、`RUN-双鱼.cmd`（Windows Terminal 双标签页那套）、`启动小肥鱼.ps1`、`唤醒小肥鱼.cmd`、`stop-whale.ps1`、`watchman-run.cmd`（老守夜的双击入口，改成手敲 `pwsh -File scripts\watchman.ps1` 了）。没删，只是挪开。
+旧的入口：`tab-lee.ps1`、`tab-whale.ps1`、`RUN-双鱼.cmd`（Windows Terminal 双标签页那套）、`启动小肥鱼.ps1`、`唤醒小肥鱼.cmd`、`stop-whale.ps1`、`watchman-run.cmd`（老巡守的双击入口，改成手敲 `pwsh -File scripts\watchman.ps1` 了）。没删，只是挪开。
 
 ## 项目的 ASCII 入口
 
@@ -73,6 +73,6 @@ pwsh -File stop.ps1   -Target all|lee|whale [-Yes]
 
 ## 三个真踩过的坑
 
-1. **别用命令行里出现的字符串判断"某进程在不在"**：搜 `watchman.ps1` 会把任何一个正在读这段文字的 pwsh（包括你排障时敲的那条命令）都算成守夜。现在守夜自己往 `logs\watchman.pid` 写 PID，只认这个文件。
+1. **别用命令行里出现的字符串判断"某进程在不在"**：搜 `watchman.ps1` 会把任何一个正在读这段文字的 pwsh（包括你排障时敲的那条命令）都算成巡守。现在巡守自己往 `logs\watchman.pid` 写 PID，只认这个文件。
 2. **别套两层 pwsh**：`Start-Process pwsh -Command "pwsh -File x.ps1"` 会多出一个没人管的父进程。要跑脚本就用 `-Command "& 'x.ps1'"`。
 3. **杀进程要反过来收紧**：`stop.ps1` 只认「`node.exe` 的**第一个参数**就是 `bin.js`」的进程，再看参数里有没有 `--profile whale`。只搜「命令行里出现过这两个词」的话，会把正在读这两个词的 shell 当成鱼杀掉 —— 测试时真撞上了。

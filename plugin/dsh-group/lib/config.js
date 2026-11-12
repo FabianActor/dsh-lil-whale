@@ -33,7 +33,7 @@ const DEFAULTS = {
   leeCwd: REPO_ROOT,
   leeProfile: 'web',
   whaleProfile: 'whale',
-  // 她那个进程开的端口。守夜要推门时敲的就是它；改端口必须同时改这里，否则守夜会去敲一扇没人的门。
+  // 她那个进程开的端口。巡守要推门时敲的就是它；改端口必须同时改这里，否则巡守会去敲一扇没人的门。
   herPort: 3082,
 }
 

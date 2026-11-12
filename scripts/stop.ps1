@@ -4,7 +4,7 @@
 #
 #   pwsh -File stop.ps1 -Target lee     停大肥鱼（3080，会中断他正在看的那一轮，会先问）
 #   pwsh -File stop.ps1 -Target whale   停小肥鱼（3082）
-#   pwsh -File stop.ps1 -Target all     两条都停，顺带停脚本版守夜
+#   pwsh -File stop.ps1 -Target all     两条都停，顺带停脚本版巡守
 #
 # 退出码：0 = 都停了（本来就没在跑也算 0）；1 = 还有没停掉的。
 param(
@@ -30,7 +30,7 @@ if ($Why) { $fargs += @('-Why', $Why) }
 & pwsh -NoLogo -NoProfile -File $fish @fargs
 $rc = $LASTEXITCODE
 
-# 脚本版守夜（只有 -WithWatchman 起过才会有 pid 文件）。它不在名册里，单独收。
+# 脚本版巡守（只有 -WithWatchman 起过才会有 pid 文件）。它不在名册里，单独收。
 if ($Target -eq 'all') {
   $pidFile = Join-Path $PSScriptRoot '..\logs\watchman.pid'
   if (Test-Path -LiteralPath $pidFile) {
@@ -39,7 +39,7 @@ if ($Target -eq 'all') {
       $p = Get-Process -Id $wpid -ErrorAction Stop
       if ($p.ProcessName -eq 'pwsh') {
         Stop-Process -Id $wpid -Force -ErrorAction Stop
-        Write-Host ("脚本版守夜也停了（pid {0}）。" -f $wpid)
+        Write-Host ("脚本版巡守也停了（pid {0}）。" -f $wpid)
       }
       Remove-Item -LiteralPath $pidFile -Force -ErrorAction SilentlyContinue
     } catch {

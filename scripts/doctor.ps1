@@ -5,7 +5,7 @@
 #   pwsh -File scripts\doctor.ps1 -IncludeLee    连他的窗一起看
 #
 # 为什么要有这个脚本：装完先验那四件（README / docs\出生流程.md）是手工敲的，
-# 而"守夜死了没人告诉你""工具没注册但进程活着"这两类失败**长得跟正常一样**——
+# 而"巡守死了没人告诉你""工具没注册但进程活着"这两类失败**长得跟正常一样**——
 # 只能靠一条一条去问，还得每次都问同样的话。
 #
 # 规矩：
@@ -176,7 +176,7 @@ if (Test-Path -LiteralPath $envTemplate) {
     if ($mjEnv) {
       foreach ($p in $mjEnv.members.PSObject.Properties) {
         $m = $p.Value
-        # 守夜那条鱼（lee）不是 install.ps1 装出来的，没有 环境.md —— 它不在这个检查的范围里。
+        # 巡守那条鱼（lee）不是 install.ps1 装出来的，没有 环境.md —— 它不在这个检查的范围里。
         if ($m.kind -ne 'fish' -or -not $m.home -or $m.role -eq 'watcher') { continue }
         $envFile = Join-Path ([string]$m.home) '环境.md'
         if (-not (Test-Path -LiteralPath $envFile)) { $missingEnv += $p.Name; continue }

@@ -6,7 +6,7 @@
 #   pwsh -File fish.ps1                    看所有鱼（默认 list）
 #   pwsh -File fish.ps1 list
 #   pwsh -File fish.ps1 up whale           开一条（开完自动开浏览器）
-#   pwsh -File fish.ps1 up all             全开（守夜那条 + 所有鱼）
+#   pwsh -File fish.ps1 up all             全开（巡守那条 + 所有鱼）
 #   pwsh -File fish.ps1 down whale         停一条
 #   pwsh -File fish.ps1 down all           全停
 #   pwsh -File fish.ps1 doctor             体检（现在只对配置里那条鱼）
@@ -186,8 +186,8 @@ function Start-Fish($member) {
   $err = Join-Path $member.DshHome 'logs\web-latest.err.log'
   $cwd = if ($member.Cwd) { $member.Cwd } else { $member.Home }
   Write-Host ("{0}：开机中（{1}）……" -f $member.Label, $port)
-  # 守夜那条（role=watcher）保持老命令 `dsh web`；其余鱼按 profile + 端口起。
-  # 守夜那条（role=watcher）保持老命令 `dsh web`；其余鱼按 profile + 端口起，并指到它自己的配置。
+  # 巡守那条（role=watcher）保持老命令 `dsh web`；其余鱼按 profile + 端口起。
+  # 巡守那条（role=watcher）保持老命令 `dsh web`；其余鱼按 profile + 端口起，并指到它自己的配置。
   $command = if ($member.Role -eq 'watcher') {
     "dsh web --no-open"
   } else {

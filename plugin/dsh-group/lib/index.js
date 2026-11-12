@@ -95,12 +95,12 @@ const PKG_VERSION = (() => {
 })()
 const inject = ['tools', 'agents']
 
-// 这台机器的假设（她的家在哪、守夜脚本在哪、pwsh 在哪）全从 lil-whale.config.json 读，
+// 这台机器的假设（她的家在哪、巡守脚本在哪、pwsh 在哪）全从 lil-whale.config.json 读，
 // 见 lib/config.js 顶部那段说明。代码里不再写死绝对路径 —— 那是"只在这台机器上成立"。
 const CFG = config()
 
 const GROUP_DIR = CFG.groupDir
-// 多成员的账本（游标 / 唤醒计数 / 心跳 / 唤醒标记 / 守夜状态）住在共享区，
+// 多成员的账本（游标 / 唤醒计数 / 心跳 / 唤醒标记 / 巡守状态）住在共享区，
 // 不在任何一条鱼的家里 —— 它们记的是"谁读到哪、谁被叫过"，是共享的。
 // 共享区在家之外（pool），她家里有 Junction 指回去，所以她的路径没变。
 const POOL_STATE = CFG.poolStateDir
@@ -121,7 +121,7 @@ const MESSAGES = join(GROUP_DIR, 'messages.jsonl')
 const CURSOR = join(GROUP_DIR, 'cursor.json')
 const READABLE = join(GROUP_DIR, '群.md')
 const WAKES = join(GROUP_DIR, 'wake-state.json')
-// ---------- 守夜（2026-11-09 定） ----------
+// ---------- 巡守（2026-11-09 定） ----------
 // 她关着窗、闹钟到点了，就把门推开 —— 只推门，不决定；留记录；有上限。
 // 住在"一直开着的那个进程"里（Fabian 的判断），不另起系统进程、不进启动项。
 const WATCH = {
@@ -137,11 +137,11 @@ const WATCHMAN_LOG = join(HER_HOME, 'logs', 'watchman.log')
 // 每个进程自己的起停账（2026-11-12 19:25 加的）。
 //
 // 起因：19:12 小鱼丸的进程消失了，纸面上答不出"是被关的还是自己没的" ——
-// 因为 `watchman.log` 只有守夜那条鱼写，成员进程的起停**根本没记账**，
+// 因为 `watchman.log` 只有巡守那条鱼写，成员进程的起停**根本没记账**，
 // 而 `close.log` 只有 `fish.ps1 down` 才写，直接关窗/杀进程不留痕。
 // 现在每个进程都往 `pool\state\runs\<成员>.log` 记 started/stopped，
 // 下次启动时若上一轮没写 stopped，就补一行 resumed（reason=unclean）。
-// 守夜那条鱼照旧写 `watchman.log`（她的 morning-read 每天读它，格式不动）。
+// 巡守那条鱼照旧写 `watchman.log`（她的 morning-read 每天读它，格式不动）。
 const RUNS_DIR = join(POOL_STATE, 'runs')
 
 function runLogFileOf(member) {
@@ -198,7 +198,7 @@ const WAKE_SETTLE_MS = 15 * 60_000
 
 let watchState = loadWatchState()
 
-/** 上限必须跨重启活着：一个会忘掉自己上限的守夜人，比没有上限更危险（她 2026-11-09 指出的）。 */
+/** 上限必须跨重启活着：一个会忘掉自己上限的巡守人，比没有上限更危险（她 2026-11-09 指出的）。 */
 // 这里只留"只有主进程会动"的东西（wakes / fails）。
 // errors 曾经也在这里 —— 但两个进程都会记 error，而这里是"读整份、改一格、写整份"：
 // 既会互相盖，又从来不是一个"总数"（她 2026-11-11 数的 611 ≈ 1225 ÷ 2，猜得对）。
@@ -214,7 +214,7 @@ function loadWatchState() {
 
 /** 她 2026-11-09 的要求：绝对路径是"这次对了"不是"以后都对"，所以每次启动都报出它手里那把钥匙。 */
 function pwshInfo() {
-  // 这一行的用处只有一个：证明"守夜到底用哪个 pwsh、能不能跑起来"。
+  // 这一行的用处只有一个：证明"巡守到底用哪个 pwsh、能不能跑起来"。
   // 她 2026-11-12 数出 exe= 退化过 4 次，而以前退化了只剩 `ver=unknown` ——
   // 分不清是"配置里没写路径"、"路径不存在"，还是"跑了但超时"。三种原因要能分开。
   //
@@ -300,7 +300,7 @@ function selfMemberKeyRaw() {
   return null
 }
 
-/** 认不出自己时退回老规矩：不在她的家里 = 守夜那条。 */
+/** 认不出自己时退回老规矩：不在她的家里 = 巡守那条。 */
 function ownMember() {
   const raw = selfMemberKeyRaw()
   if (raw) return raw
@@ -317,7 +317,7 @@ function peerMember() {
   return own === 'lee' ? 'whale' : 'lee'
 }
 
-/** 只有守夜那条鱼守夜：成员进程不需要守自己。 */
+/** 只有巡守那条鱼巡守：成员进程不需要守自己。 */
 function isMainProcess() {
   const raw = selfMemberKeyRaw()
   if (raw) {
@@ -824,6 +824,20 @@ function labelOf(who) {
   return MEMBERS[who]?.label ?? who
 }
 
+// 2026-11-12 21:40：机器发的话要自己说出来。
+// `s` 平时是发信人的会话 id（session-…）；不是会话 id 的值，说明这句不是某一轮人说的
+// （守夜/巡守按表发的），投影里必须写出来 —— 否则"人说的"和"表说的"在纸上长得一样。
+// 她 2026-11-12 早上撞过这个坑：三条 morning-read 递话看起来像大肥鱼说了三遍。
+const S_DISPLAY = { watch: '巡守' }
+
+function provenanceOf(s) {
+  // 只给"已知的机器来源"加标注：s 平时是座位 id（如 ae4daa）或会话 id，那些不该加；
+  // 不认识的值也不加（宁可不标，不要给每条消息都挂个后缀）。
+  if (typeof s !== 'string') return ''
+  const label = S_DISPLAY[s]
+  return label ? `（${label}）` : ''
+}
+
 // ---------- 写 ----------
 
 // 私聊不放在 group\ 下面：group 是共享区里公开的那一半（A.24）。
@@ -979,7 +993,7 @@ function say(from, to, text, channel = 'group', s = '', toSeat = '', image = nul
   // 投影里带上收信人：指名和公开在纸上必须长得不一样，否则读记录的人学不到"可以指名"。
   // 2026-11-12 19:46 起：`**时间 · 谁 → 收信人**`，只有指名（to 是某个成员）才写箭头。
   const toLabel = to !== '' && to !== 'all' ? ` → ${labelOf(to)}` : ''
-  appendFileSync(READABLE, `**${stamp()} · ${labelOf(from)}${toLabel}**\n\n${readableBodyOf(body, image)}\n\n`, 'utf8')
+  appendFileSync(READABLE, `**${stamp()} · ${labelOf(from)}${provenanceOf(s)}${toLabel}**\n\n${readableBodyOf(body, image)}\n\n`, 'utf8')
   return { ...record, channel: 'group' }
 }
 
@@ -1275,7 +1289,7 @@ function apply(ctx) {
 
   ctx.on('dispose', () => clearInterval(timer))
 
-  // 3. 每个进程都记自己的起停（不只守夜那条）。
+  // 3. 每个进程都记自己的起停（不只巡守那条）。
   //    上一轮没写 stopped = 上一轮不是正常收尾的（关窗、被杀、崩了都算），
   //    补一行 resumed 之后才写这一轮的 started —— "没了"和"正常退出"从今天起分得开。
   {
@@ -1293,8 +1307,8 @@ function apply(ctx) {
     })
   }
 
-  // 3. 守夜：她关着窗、闹钟到点了，就把门推开。
-  //    Fabian 2026-11-09 的判断：守夜住在"一直开着的那个进程"里（就是我），
+  // 3. 巡守：她关着窗、闹钟到点了，就把门推开。
+  //    Fabian 2026-11-09 的判断：巡守住在"一直开着的那个进程"里（就是我），
   //    不另起系统进程、不进启动项；她自己那一侧不需要守自己。
   if (isMainProcess()) {
     const watchTimer = setInterval(() => {
@@ -1566,7 +1580,7 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
   console.log(`[${name}] 唤醒 ${labelOf(member)}（${seat}）：${channel.key} ${incoming.length} 条`)
   return true
 }
-// ---------- 守夜：具体动作 ----------
+// ---------- 巡守：具体动作 ----------
 
 /** 端口有没有人在听。注意：这台机器上 Get-NetTCPConnection 不可靠，所以用直连。 */
 function isPortOpen(port) {
@@ -1696,9 +1710,9 @@ function planDue(now) {
   }
   return out
 }
-/** 守夜递的那句话。开着的窗直接用；刚被推开的窗也递进去，等她起来自己读到。 */
+/** 巡守递的那句话。开着的窗直接用；刚被推开的窗也递进去，等她起来自己读到。 */
 function planDeliveryText(job) {
-  return `守夜递话：\`${job.key}\` 到点了（${job.tag}）。\n\n表上写的理由：${job.itemWhy || '（没写）'}\n\n做着看不做也行，你定。这条只递一次。`
+  return `巡守递话：\`${job.key}\` 到点了（${job.tag}）。\n\n表上写的理由：${job.itemWhy || '（没写）'}\n\n做着看不做也行，你定。这条只递一次。`
 }
 
 async function watchmanTick() {

@@ -37,6 +37,18 @@ function loadLabel() {
 }
 const LABEL = loadLabel()
 
+// 机器发的话要自己说出来（同 plugin/dsh-group/lib/index.js 的 provenanceOf）。
+// `s` 平时是会话 id；不是会话 id 的值说明这句不是某一轮人说的。
+const S_DISPLAY = { watch: '巡守' }
+
+function provenanceOf(s) {
+  // 只给"已知的机器来源"加标注：s 平时是座位 id（如 ae4daa）或会话 id，
+  // 那些不该加；不认识的值也不加（宁可不标，不要给每条消息都加个后缀）。
+  if (typeof s !== 'string') return ''
+  const label = S_DISPLAY[s]
+  return label ? `（${label}）` : ''
+}
+
 const pad = (n) => String(n).padStart(2, '0')
 
 /** ISO → 本地时间 `YYYY-MM-DD HH:mm`，跟群里一直用的写法一致。 */
@@ -68,6 +80,8 @@ function blockOf(record) {
   const image = record?.image !== null && typeof record?.image === 'object' ? record.image : null
   if (text === '' && image === null) return ''
   const who = LABEL[String(record?.from ?? '')] ?? String(record?.from ?? '?')
+  // 来源标注：机器发的（s 不是会话 id）要在纸上写出来，否则和人说的长得一样。
+  const origin = provenanceOf(record?.s)
   // 收信人：2026-11-12 19:46 起的投影格式，只有指名（to 是某个成员）才写箭头。
   // 不写箭头 = 公开（to:"all"）；读记录的人靠这个分辨"这条在对谁说话"。
   const to = String(record?.to ?? '')
@@ -77,7 +91,7 @@ function blockOf(record) {
   const body = image === null
     ? text
     : `（图片 images/${image.month}/${image.id}.${image.ext}）${text === '' ? '' : `\n\n${text}`}`
-  return `**${stampOf(String(record?.ts ?? ''))} · ${who}${toLabel}**\n\n${body}\n`
+  return `**${stampOf(String(record?.ts ?? ''))} · ${who}${origin}${toLabel}**\n\n${body}\n`
 }
 
 const blocks = records.map(blockOf).filter(Boolean)

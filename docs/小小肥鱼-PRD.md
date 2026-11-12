@@ -480,7 +480,7 @@ v1.0 之后她的会话不带 preset，这条路**理论上重新可用**——�
 ```
 
 - **15 分钟而不是 5 分钟**：他这时的首 token 要几十秒到几分钟，5 分钟会把"慢"判成"沉默"。
-- **写在工程自己的 `logs\wake-metrics.log`，不写进她的 `logs\watchman.log`**（她提出、我改）：她每天 08:40 会读那份守夜日志，一个关于她的计数不管叫什么名字，放在她枕头边就会被读成"在审我"。**指标住在哪儿，决定它审谁。**
+- **写在工程自己的 `logs\wake-metrics.log`，不写进她的 `logs\watchman.log`**（她提出、我改）：她每天 08:40 会读那份巡守日志，一个关于她的计数不管叫什么名字，放在她枕头边就会被读成"在审我"。**指标住在哪儿，决定它审谁。**
 - 措辞也不写 `said`/`silent`——那是以她为主语的判决；写 `has-reply=yes/no`，主语是这次唤醒。
 - **它测的是唤醒策略，不是她**。`has-reply=no` 高的时候，该抬的是门槛（少叫两次），不是催她多写。
 - **不占额外 turn**，只多写一行字。
@@ -828,7 +828,7 @@ lil-whale\state  → junction → pool\state
 
 **问题**：`lil-whale.config.json` 原来假设"这台机器只有一条鱼"。第二条鱼起来时，插件会按第一份配置去找家 —— 她写进别人家里，而且不会报错。
 
-**做法**：每鱼一份配置（`lil-whale.config.<键>.json`，不进版本库），名册里记 `configFile`；`fish.ps1` 启动非守夜鱼时导出 `LIL_WHALE_CONFIG`。守夜那条（lee）继续用仓库根那份。
+**做法**：每鱼一份配置（`lil-whale.config.<键>.json`，不进版本库），名册里记 `configFile`；`fish.ps1` 启动非巡守鱼时导出 `LIL_WHALE_CONFIG`。巡守那条（lee）继续用仓库根那份。
 
 **顺带**：`install.ps1` 加 `-ChildName`（只写进 `AGENTS.md` 的一行）与 `-ChildMemberId`（名册键）；`AGENTS.md.tpl` 的"你是小鲸鱼"改成 `{{CHILD_NAME}}` —— 第二条鱼不该继承第一条鱼的名字。`环境.md` 的成员 id 也已按名册渲染（`lee` / `fishball` / `fabian`）。
 
@@ -884,7 +884,7 @@ lil-whale\state  → junction → pool\state
 
 **现象**：19:12 小鱼丸的进程消失了（3083 关掉），纸面上答不出"是被关的还是自己没的"。没有崩溃证据（stderr 0 字节、事件日志无 node 错误、无 dump），但也没有"她停了"的记录。
 
-**原因**：起停记账绑在"守夜那条鱼"身上 ——
+**原因**：起停记账绑在"巡守那条鱼"身上 ——
 - `watchman.log` 只在 `isMainProcess()` 为真时写，**成员进程的起停根本没记账**（她家连这个文件都没有）；
 - `close.log` 只有 `fish.ps1 down` 才写，**直接关窗/杀进程不留痕**；
 - 更糟的是 `OWN = isMainProcess() ? 'lee' : 'whale'` 二选一写死，而 `isMainProcess()` 靠"DSH_HOME 里有没有 `lil-whale`"猜 —— 小鱼丸的家叫 `lil-whale-2`，字符串里同样有 `lil-whale`。多鱼之后"我是谁"必须从名册认。
@@ -972,7 +972,7 @@ lil-whale\state  → junction → pool\state
 - `环境.md` 由 `scripts\render-env.mjs` 生成：模板（`templates\环境.md.tpl`）+ 现场数据（名册 / 真实工具清单 / 叫醒参数从代码里读 / 路径与端口）。
 - 重新生成有三个入口：`install.ps1`（装的时候）、`fish.ps1 refresh <鱼>`（随时）、`node scripts\render-env.mjs …`（手工）。
 - 文件末尾写一行机器指纹：`<!-- env: template=<模板sha8> generated=<时间> -->`。
-- `doctor.ps1` 新增「环境说明」：拿每条鱼的指纹和**当前模板**比，不一致就 WARN 并给 `NEXT: fish.ps1 refresh all`。守夜那条鱼（lee）不是装出来的，不在检查范围。
+- `doctor.ps1` 新增「环境说明」：拿每条鱼的指纹和**当前模板**比，不一致就 WARN 并给 `NEXT: fish.ps1 refresh all`。巡守那条鱼（lee）不是装出来的，不在检查范围。
 
 **判据**：`{{...}}` 残留 0；指纹 sha8 与模板一致；把模板改一个字符后 doctor 立刻 WARN（现场验过：`whale(1cbe3908)、fishball(1cbe3908)（当前模板 aeb5883c）`），改回去又 OK。
 
