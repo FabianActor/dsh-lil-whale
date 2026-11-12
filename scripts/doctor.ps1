@@ -153,6 +153,29 @@ if ($lastBoot) {
   Add-Row '启动痕迹' 'WARN' 'logs\plugin-boot.log 不存在或为空' 'NEXT: 这个文件是"按代码位置写"的那条日志——配置坏了它还在；没有它说明插件根本没被加载'
 }
 
+# 5b. 版本一致：启动痕迹说的版本，必须和磁盘上那份 package.json 一样
+#     （11-12 踩过：PKG_VERSION 写死 '1.0.0'，而代码已是 1.1.0。我当时正拿这行判断"新代码有没有生效"——
+#      它说了假话，而假话跟真话长得一样。A.17 之后版本号只有 package.json 一个出处，这里就核这一条。）
+if ($lastBoot) {
+  try {
+    $bootObj = $lastBoot | ConvertFrom-Json
+    $pkgPath = Join-Path $Cfg.Root 'plugin\dsh-group\package.json'
+    if ($bootObj.pkg -and (Test-Path -LiteralPath $pkgPath)) {
+      $diskVer = (Get-Content -LiteralPath $pkgPath -Raw -Encoding UTF8 | ConvertFrom-Json).version
+      $bootVer = ([string]$bootObj.pkg -replace '^.*@', '')
+      if ($bootVer -eq $diskVer) {
+        Add-Row '版本一致' 'OK' ("启动痕迹 {0} = package.json {1}" -f $bootVer, $diskVer)
+      } else {
+        Add-Row '版本一致' 'WARN' ("启动痕迹 {0} ≠ 磁盘 {1}（进程里跑的是旧代码）" -f $bootVer, $diskVer) 'NEXT: 重启她的窗（以及你的），让进程加载新版本'
+      }
+    } else {
+      Add-Row '版本一致' 'WARN' '启动痕迹里没有 pkg，或找不到 plugin\dsh-group\package.json'
+    }
+  } catch {
+    Add-Row '版本一致' 'WARN' ('核不了：' + $_.Exception.Message)
+  }
+}
+
 # 6. 投递账本：同一条递两次 vs 叫了两次
 $deliverLog = Join-Path $Cfg.Root 'logs\wake-deliver.log'
 $lastDeliver = Tail-Line $deliverLog
@@ -176,6 +199,29 @@ if ($null -ne $msgAge -and $null -ne $mdAge) {
   }
 } else {
   Add-Row '群投影' 'WARN' 'messages.jsonl 或 群.md 不存在（群还没开张）'
+}
+
+# 7b. 私聊可读版：dm\*.jsonl 比 私聊-*.md 新 = 可读版没跟上（她 11-12 提的：只有 jsonl 一层，人读不了）
+$dmDir = Join-Path $Cfg.GroupDir 'dm'
+if (Test-Path -LiteralPath $dmDir) {
+  $staleDm = @()
+  Get-ChildItem -LiteralPath $dmDir -Filter '*.jsonl' -File -ErrorAction SilentlyContinue | ForEach-Object {
+    $pair = $_.BaseName
+    $mdPath = Join-Path $dmDir ("私聊-{0}.md" -f $pair)
+    if (-not (Test-Path -LiteralPath $mdPath)) {
+      $staleDm += ("{0}（没有 .md）" -f $pair)
+    } else {
+      $lagMin = ((Get-Item -LiteralPath $mdPath).LastWriteTime - $_.LastWriteTime).TotalMinutes
+      if ($lagMin -lt -5) { $staleDm += ("{0}（.md 旧 {1:N0} 分钟）" -f $pair, -$lagMin) }
+    }
+  }
+  if ($staleDm.Count -eq 0) {
+    Add-Row '私聊可读版' 'OK' '每个 dm\*.jsonl 都有跟得上的 私聊-*.md'
+  } else {
+    Add-Row '私聊可读版' 'WARN' ($staleDm -join '；') 'NEXT: 重启她的窗让新消息自动追加；历史缺口用 node scripts\rebuild-group-md.mjs 重建'
+  }
+} else {
+  Add-Row '私聊可读版' 'WARN' 'group\dm 不存在（还没私聊过）'
 }
 
 # 8. 窗口留痕：开门/关门都记（B2）

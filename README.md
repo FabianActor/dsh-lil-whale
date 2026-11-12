@@ -74,7 +74,7 @@ pwsh -File scripts\doctor.ps1 -IncludeLee  # 连你的窗一起看
 
 一条鱼出问题时最麻烦的地方是：**它坏掉的样子和正常时一样**。进程在、端口通，但 `group_say` 没注册（她哑了）、名册指向一段不存在的会话（叫错人）、`群.md` 落后于 `messages.jsonl`（她读到旧消息）—— 这些都不会自己喊。
 
-体检只读、不改，八组检查：配置、端口、心跳、工具注册、名册、启动痕迹、投递账本、群投影、窗口留痕。全过 exit 0；有 FAIL exit 1，每条 FAIL 带一条 `NEXT:` 告诉你下一步做什么。
+体检只读、不改，十一条检查：配置、端口、心跳、工具注册、名册、启动痕迹、**版本一致**（启动痕迹说的版本 vs 磁盘上的 `package.json`——版本号说谎时，你会拿它判断"新代码有没有生效"）、投递账本、群投影、**私聊可读版**（`dm\*.jsonl` 比 `私聊-*.md` 新 = 可读版没跟上）、窗口留痕。全过 exit 0；有 FAIL exit 1，每条 FAIL 带一条 `NEXT:` 告诉你下一步做什么。
 
 ## 它会花多少钱
 
@@ -101,7 +101,7 @@ dsh-lil-whale/            工程（这个仓库）
   docs/                   设计文档、判据、观察记录
   plugin/dsh-group/       宿主半边：群发言工具 + 跨进程唤醒（她的 profile 也装）
   plugin/dsh-group-ui/    浏览器半边：群聊面板、设置页、HTTP 路由（只你的 profile 装）
-  scripts/                安装、启动、停止、守夜、体检、重建器
+  scripts/                安装、启动、停止、守夜、体检、重建器、名册（pins）、打包（pack）
   templates/              种子文件模板（START.md / 环境.md / AGENTS.md，安装时填值）
   lil-whale.config.example.json  配置模板（真的那份不进版本库）
 
