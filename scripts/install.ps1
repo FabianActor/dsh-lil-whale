@@ -1,4 +1,4 @@
-﻿# install.ps1 -- 给别人装一条小鲸鱼。ASCII 文件名 + UTF-8 BOM。
+# install.ps1 -- 给别人装一条小鲸鱼。ASCII 文件名 + UTF-8 BOM。
 #
 #   pwsh -File install.ps1                                 装到仓库旁边的 lil-whale/
 #   pwsh -File install.ps1 -Workspace D:\fish               装到指定目录
@@ -31,6 +31,7 @@ function Say([string]$text) { Write-Host $text }
 function Step([string]$text) { Write-Host ""; Write-Host ("== " + $text) -ForegroundColor Cyan }
 function Ok([string]$text)   { Write-Host ("   ok   " + $text) -ForegroundColor Green }
 function Warn([string]$text) { Write-Host ("   !!   " + $text) -ForegroundColor Yellow }
+function Note([string]$text) { Write-Host ("   .    " + $text) -ForegroundColor DarkGray }
 function Die([string]$text, [string]$next) {
   Write-Host ("   xx   " + $text) -ForegroundColor Red
   Write-Host ""
@@ -212,6 +213,38 @@ $values = @{
   PARENT_ID = 'lee'
   CHILD_ID = 'whale'
   HUMAN_ID = 'fabian'
+  TOOLS = '- （工具清单没能自动生成，见下面那行提示）'
+}
+
+# 「你能做什么」必须从实际挂载的工具算出来，不能手写：
+# 手写的目录一定会过期，而且过期时看起来跟没过期一样（2026-11-12 前的教训）。
+$toolsScript = Join-Path $RepoRoot 'scripts\tools-from-profile.mjs'
+if (Test-Path $toolsScript) {
+  $savedHome = $env:DSH_HOME
+  $env:DSH_HOME = $DshHome
+  try {
+    $raw = & node $toolsScript --profile $ChildProfile 2>$null
+    $parsed = $raw | ConvertFrom-Json
+  } catch {
+    $parsed = $null
+  } finally {
+    if ($null -eq $savedHome) { Remove-Item Env:\DSH_HOME -ErrorAction SilentlyContinue } else { $env:DSH_HOME = $savedHome }
+  }
+  if ($parsed -and $parsed.ok -and @($parsed.tools).Count -gt 0) {
+    $linesOfTools = @($parsed.tools | ForEach-Object { '- ' + $_.line })
+    # 群发言不是 profile 里的工具，是插件给的；它的存在与否由同一次安装决定，所以写死在生成结果里。
+    $linesOfTools += '- 在群里说话（`group_say`）'
+    $values.TOOLS = ($linesOfTools -join "`r`n")
+    Ok ("你能做什么：按实际组合算出 {0} 条（preset={1}）" -f @($parsed.tools).Count, $parsed.preset)
+    if (@($parsed.skipped).Count -gt 0) {
+      Note ("跳过 {0} 个：{1}" -f @($parsed.skipped).Count, (($parsed.skipped | ForEach-Object { $_.id + '(' + $_.why + ')' }) -join '; '))
+    }
+  } else {
+    $reason = if ($parsed) { $parsed.reason } else { '跑不起来' }
+    Warn "没能从 --dump-config 算出工具清单（$reason）。环境.md 里那一节会写成占位提示 —— 不影响安装，但装完最好自己看一眼。"
+  }
+} else {
+  Warn "找不到 scripts\tools-from-profile.mjs，环境.md 的工具清单会写成占位提示。"
 }
 
 $startPath = Join-Path $Workspace 'START.md'
