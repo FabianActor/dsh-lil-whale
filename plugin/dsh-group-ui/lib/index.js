@@ -698,7 +698,9 @@ export function apply(ctx) {
         sendJson(res, 400, { error: 'empty-message', detail: '至少要有文字或一张图片' })
         return
       }
-      if (to !== 'all' && to !== 'lee' && to !== 'whale') {
+      // 收信人从名册校验，不再写死三条 —— 2026-11-12 19:59 现场：fishball 被这里挡住，
+      // 面板回 bad-target，看着像"她不在群里"，其实是名单又抄了一份（A.32 同一个病）。
+      if (to !== 'all' && !Object.prototype.hasOwnProperty.call(MEMBERS, to)) {
         sendJson(res, 400, { error: 'bad-target' })
         return
       }
