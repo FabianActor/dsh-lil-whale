@@ -108,11 +108,14 @@ dsh-lil-whale/            工程（这个仓库）
 lil-whale/                她的家（不在 git 里，安装时生成）
   START.md                她自己的第一页
   环境.md                 安装时写的工具清单（写了什么在哪、事情会怎么发生）
-  logs/ notes/            她写的东西
-  group/                  群：messages.jsonl、pins.json、ui-config.json、avatars/
-  plan/                   她自己定的日程（wake-plan.json）
-  state/                  游标、唤醒配额、心跳
+  logs/ notes/ plan/      她写的东西（私有）
+  group/ → pool/group     群：Junction，真身在共享区
+  state/ → pool/state     游标、唤醒配额、心跳：Junction
   dsh-home/               她的 DSH_HOME：AGENTS.md、profiles/whale、sessions/
+
+lil-whale-pool/           共享区（不在任何一条鱼的家里面）
+  group/                  messages.jsonl、群.md、pins.json、images/、dm/、avatars/
+  state/                  cursors/、wakes/、presence/、wake-marks-*.json、watchman-*.json
 ```
 
 ## 端口

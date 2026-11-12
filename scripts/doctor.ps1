@@ -77,7 +77,7 @@ if ($IncludeLee) {
 }
 
 # 2. 心跳：进程活着 ≠ 她会醒（11-09 踩过：进程起来但会话没被打开）
-$presenceFile = Join-Path $Cfg.HerHome 'state\presence\whale.json'
+$presenceFile = Join-Path $Cfg.PoolState 'presence\whale.json'
 if (Test-Path -LiteralPath $presenceFile) {
   try {
     $p = Get-Content -LiteralPath $presenceFile -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -87,10 +87,10 @@ if (Test-Path -LiteralPath $presenceFile) {
     Add-Row '她的心跳' $state ("status={0}，最后心跳 {1}" -f $p.status, (Format-Age $age))
     if ($state -eq 'WARN') { Add-Row '她的心跳（说明）' 'WARN' '心跳超过 24 小时没动：可能只是没人叫她（她不是常驻的），也可能是会话没被打开' }
   } catch {
-    Add-Row '她的心跳' 'FAIL' ("state\presence\whale.json 读不了：{0}" -f $_.Exception.Message) 'NEXT: 看 state\presence\ 下的文件是不是坏 JSON'
+    Add-Row '她的心跳' 'FAIL' ("pool\state\presence\whale.json 读不了：{0}" -f $_.Exception.Message) 'NEXT: 看 state\presence\ 下的文件是不是坏 JSON'
   }
 } else {
-  Add-Row '她的心跳' 'FAIL' 'state\presence\whale.json 不存在' 'NEXT: 她的会话从没被打开过——开窗后要在网页里进那段会话'
+  Add-Row '她的心跳' 'FAIL' 'pool\state\presence\whale.json 不存在' 'NEXT: 她的会话从没被打开过——开窗后要在网页里进那段会话'
 }
 
 # 3. 工具注册：哑 8 小时那次的判据（有 host-resolve 却没有 group_say-registered）

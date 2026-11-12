@@ -31,7 +31,8 @@ const UI_READ = join(GROUP_DIR, 'ui-read.json')
 const PINS = join(GROUP_DIR, 'pins.json')
 // 跨进程心跳：dsh-group 插件在各自那个进程里每 5 秒写一份 `state\presence\<成员>.json`。
 // 面板要显示"小肥鱼 正在回复"，只能读这个 —— 这个进程里的 ctx.agents 只有大肥鱼自己的会话。
-const PRESENCE_DIR = join(GROUP_DIR, '..', 'state', 'presence')
+const POOL_STATE = config().poolStateDir || join(GROUP_DIR, '..', 'state')
+const PRESENCE_DIR = join(POOL_STATE, 'presence')
 const PRESENCE_FRESH_MS = 20_000
 // 群唤醒之后多久之内还算「在回群里」。要比一次长回合宽：首 token 几十秒到几分钟。
 const GROUP_WAKE_TTL_MS = 10 * 60_000
@@ -676,11 +677,13 @@ export function apply(ctx) {
       }
       try {
         appendFileSync(MESSAGES, JSON.stringify(record) + '\n', 'utf8')
-        const who = to === 'all' ? '群里' : LABEL[to] ?? to
+        // 投影格式必须和宿主 say() 逐字一致（只写「时间 · 谁」）——
+        // 2026-11-12 16:07 这条写成了「Fabian → 小肥鱼」，重建器复现不出来，
+        // 成了"说不清的差异"。收信人是记录里的 to 字段，不写进投影：面板自己会画。
         const body = image === null
           ? text
           : `（图片 images/${image.month}/${image.id}.${image.ext}）${text === '' ? '' : `\n\n${text}`}`
-        appendFileSync(READABLE, `**${stamp(now)} · Fabian → ${who}**\n\n${body}\n\n`, 'utf8')
+        appendFileSync(READABLE, `**${stamp(now)} · Fabian**\n\n${body}\n\n`, 'utf8')
       } catch (error) {
         sendJson(res, 500, { error: 'write-failed', detail: String(error?.message ?? error) })
         return

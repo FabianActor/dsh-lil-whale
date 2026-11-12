@@ -3,6 +3,11 @@
 > 本文件只记「哪一版改了哪几处、为什么改」。当前结论都在 [小小肥鱼-PRD.md](小小肥鱼-PRD.md) 里，那边不背历史。
 > 自 v0.3.5 起从 PRD 头部搬到这里（此前几块原样搬出，未改写）。v1.0 是整篇重写。
 
+## v1.0.22（2026-11-12）
+
+- **共享区搬出她的家**：`group\` 与多成员账本（`state\`）搬到 `lil-whale-pool\`，她家里留 Junction，路径不变。配置新增 `poolDir` / `poolStateDir`；宿主 7 处、UI 1 处路径改走 pool；`common.ps1` / `doctor.ps1` 适配；迁移脚本 `scripts\migrate-pool.mjs`（复制→sha256→留底→建链→探针→失败回滚）。
+- **投影渲染器统一**：UI 发消息的投影多写了"→ 收信人"，重建器复现不出，成了"未归类差异"。改为只写「时间 · 谁」（收信人在 jsonl 的 `to` 里），历史那一行按源头对齐；重建差异回到 0。新增 A.22 / A.23。
+
 ## v1.0.21（2026-11-12）
 
 - **preset 要自带 `name` / `description`**：新建会话面板上自定义档显示「neutral / 暂无描述」。官方四档走 locale 词典，自定义档只能自带（`presetDisplayText()`：`preset.name ?? preset.id`）。`gen-neutral-preset.mjs` 现在写 `name: 中立` + 一句能力陈述式的说明；她的 profile patch 已重装（备份 `.bak-20261112-082342`）。显示更新要重启 3082 才生效，不影响这一段的运行。

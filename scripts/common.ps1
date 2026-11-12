@@ -40,7 +40,9 @@ function Get-WhaleConfig {
     Root        = $script:WhaleRoot
     HerHome     = $herHome
     HerDshHome  = & $pick 'herDshHome' (Join-Path $herHome 'dsh-home')
-    GroupDir    = & $pick 'groupDir' (Join-Path $herHome 'group')
+    PoolDir     = & $pick 'poolDir' (Join-Path (Split-Path $herHome -Parent) 'lil-whale-pool')
+  PoolState   = & $pick 'poolStateDir' (Join-Path (& $pick 'poolDir' (Join-Path (Split-Path $herHome -Parent) 'lil-whale-pool')) 'state')
+  GroupDir    = & $pick 'groupDir' (Join-Path (& $pick 'poolDir' (Join-Path (Split-Path $herHome -Parent) 'lil-whale-pool')) 'group')
     HerWaker    = & $pick 'herWaker' (Join-Path $script:WhaleRoot 'scripts\wake-whale.ps1')
     PwshExe     = & $pick 'pwshExe' 'pwsh.exe'
     WakeMetrics = & $pick 'wakeMetrics' (Join-Path $script:WhaleRoot 'logs\wake-metrics.log')
@@ -63,7 +65,7 @@ $Cfg = Get-WhaleConfig
 # 放在她的 logs\close.log：这是"事件"不是"状态"，logs\ 她读不写，正好。
 # 判据来自她：只记关门，醒来就不知道睡了多久；人填的"在忙"明天会被当事实读。
 function Get-PresenceSnapshot {
-  $dir = Join-Path $Cfg.HerHome 'state\presence'
+  $dir = Join-Path $Cfg.PoolState 'presence'
   $items = @()
   if (Test-Path -LiteralPath $dir) {
     foreach ($file in (Get-ChildItem -LiteralPath $dir -Filter *.json -ErrorAction SilentlyContinue)) {

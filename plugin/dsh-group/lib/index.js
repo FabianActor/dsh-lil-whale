@@ -100,6 +100,10 @@ const inject = ['tools', 'agents']
 const CFG = config()
 
 const GROUP_DIR = CFG.groupDir
+// 多成员的账本（游标 / 唤醒计数 / 心跳 / 唤醒标记 / 守夜状态）住在共享区，
+// 不在任何一条鱼的家里 —— 它们记的是"谁读到哪、谁被叫过"，是共享的。
+// 共享区在家之外（pool），她家里有 Junction 指回去，所以她的路径没变。
+const POOL_STATE = CFG.poolStateDir
 // 图片：字节进 images\<yyyymm>\<id>.<ext>，消息里只记 id/ext/bytes。
 // 用内容哈希当 id —— 同一张图发两次只落一份，而且天然不可变（可以永久缓存）。
 const IMAGES_DIR = join(GROUP_DIR, 'images')
@@ -129,7 +133,7 @@ const WATCH = {
 const HER_HOME = CFG.herHome
 const SCHEDULE_FILE = join(HER_HOME, 'dsh-home', 'storages', 'schedule.json')
 const WATCHMAN_LOG = join(HER_HOME, 'logs', 'watchman.log')
-const WATCH_STATE_FILE = join(HER_HOME, 'state', 'watchman.json')
+const WATCH_STATE_FILE = join(POOL_STATE, 'watchman.json')
 const HER_WAKER = CFG.herWaker
 const PWSH_EXE = CFG.pwshExe
 
@@ -183,7 +187,7 @@ function pwshInfo() {
 
 function saveWatchState() {
   try {
-    mkdirSync(join(HER_HOME, 'state'), { recursive: true })
+    mkdirSync(POOL_STATE, { recursive: true })
     writeFileSync(WATCH_STATE_FILE, JSON.stringify(watchState), 'utf8')
   } catch {}
 }
@@ -200,7 +204,7 @@ function saveWatchState() {
  * 文件本身就是证据（含 pid 与时间），不用再去日志里对时间线。
  */
 function claimPlanDelivery(jobKey) {
-  const dir = join(HER_HOME, 'state', 'plans')
+  const dir = join(HER_HOME, 'plan', 'claims')
   try {
     mkdirSync(dir, { recursive: true })
   } catch {}
@@ -227,7 +231,7 @@ function isMainProcess() {
 // error 计数：每个进程各存一份。两个进程都可能撞上群 tick 的异常，
 // 共用一份文件必然互相盖 —— 而且"总数"这个说法本身就是错的。
 function errorCountFile(owner) {
-  return join(HER_HOME, 'state', `watchman-errors-${owner}.json`)
+  return join(POOL_STATE, `watchman-errors-${owner}.json`)
 }
 const OWN = isMainProcess() ? 'lee' : 'whale'
 const PEER = OWN === 'lee' ? 'whale' : 'lee'
@@ -242,7 +246,7 @@ function readErrorCount(owner) {
 
 function bumpOwnError() {
   try {
-    mkdirSync(join(HER_HOME, 'state'), { recursive: true })
+    mkdirSync(POOL_STATE, { recursive: true })
     writeFileSync(errorCountFile(OWN), JSON.stringify({ day: new Date().toDateString(), count: readErrorCount(OWN) + 1 }), 'utf8')
   } catch {}
 }
@@ -285,7 +289,7 @@ function metricLog(line) {
     // 指标写不进去不能把 tick 打死
   }
 }
-const WAKE_MARKS_FILE = join(HER_HOME, 'state', `wake-marks-${isMainProcess() ? 'lee' : 'whale'}.json`)
+const WAKE_MARKS_FILE = join(POOL_STATE, `wake-marks-${isMainProcess() ? 'lee' : 'whale'}.json`)
 
 /**
  * 投递尝试也记账。
@@ -571,11 +575,11 @@ const LEGACY_CURSOR = CURSOR
 const LEGACY_WAKES = WAKES
 
 function cursorFileOf(member) {
-  return join(HER_HOME, 'state', 'cursors', `${member}.json`)
+  return join(POOL_STATE, 'cursors', `${member}.json`)
 }
 
 function wakesFileOf(member) {
-  return join(HER_HOME, 'state', 'wakes', `${member}.json`)
+  return join(POOL_STATE, 'wakes', `${member}.json`)
 }
 
 function ensureParent(file) {
@@ -631,7 +635,7 @@ function writeWakes(member, wakes) {
   writeJson(wakesFileOf(member), { [member]: wakes?.[member] ?? undefined })
 }
 
-const PRESENCE_DIR = join(HER_HOME, 'state', 'presence')
+const PRESENCE_DIR = join(POOL_STATE, 'presence')
 
 /**
  * 心跳：把"这个成员此刻忙不忙"写进文件（2026-11-11 17:05 加）。

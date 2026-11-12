@@ -46,10 +46,17 @@ export function configPath() {
 /** 派生字段（只由上面几个推出来，不许单独写死）。 */
 function derive(c) {
   const herHome = c.herHome
+  // 共享区（pool）在她家之外：群、多成员账本都放这儿。
+  // 为什么不在她家里：群是共享空间，不是她的私人物品；第二条鱼出现后，
+  // 第二条的群文件写进第一条的家就是越界（Fabian 2026-11-12 拍板）。
+  // 她家里留 Junction 指回 pool，所以她的路径一个字都不用改。
+  const poolDir = c.poolDir || resolve(herHome, '..', 'lil-whale-pool')
   return {
     ...c,
+    poolDir,
+    poolStateDir: c.poolStateDir || join(poolDir, 'state'),
     herPort: Number(c.herPort) || 3082,
-    groupDir: c.groupDir || join(herHome, 'group'),
+    groupDir: c.groupDir || join(poolDir, 'group'),
     herDshHome: c.herDshHome || join(herHome, 'dsh-home'),
     whaleCwd: c.whaleCwd || herHome,
     chatCwd: c.chatCwd || dirname(c.repoRoot),

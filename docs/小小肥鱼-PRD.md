@@ -1,6 +1,6 @@
 # 小小肥鱼 · PRD
 
-> 状态：**草稿 v1.0.21（2026-11-12）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。
+> 状态：**草稿 v1.0.22（2026-11-12）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。
 > 上游：[立项备忘](archive/小小肥鱼-立项备忘-2026-11-08.md)（**他的原话**，已冻结不改；三条硬要求已吸收进 §1）
 > 配套：[自主回合.md](自主回合.md)（G1 的上游能力，不是本 PRD 的验收项）
 > 改动记录：[PRD-CHANGELOG.md](PRD-CHANGELOG.md) —— 每一版改了哪几处、为什么。本文只放当前结论。
@@ -752,3 +752,32 @@ or export DEEPSEEK_API_KEY in the launching environment
 | 空转 | 群里只有寒暄、没有新信息（A6 反例） |
 | 五行探针 | 一个只写一行字的本地包，用来证明"插件能不能真的 apply 并落盘" |
 
+
+### A.22 共享区必须在家之外（2026-11-12 落地）
+
+**问题**：`group\` 一开始住在她的家里。第一条鱼的时候没毛病；第二条鱼出现时，"第二条的群文件写进第一条的家"就是越界——而且第一条鱼的家不再等于"她的私有空间"。
+
+**做法**：共享区搬到 `lil-whale-pool\`（家之外），她的家里留两个 Junction：
+
+```
+lil-whale-pool\group\     messages.jsonl / 群.md / pins.json / images\ / dm\ / avatars\ / ui-*.json
+lil-whale-pool\state\     cursors\ / wakes\ / presence\ / wake-marks-*.json / watchman-*.json
+lil-whale\group  → junction → pool\group
+lil-whale\state  → junction → pool\state
+```
+
+**为什么用 Junction 而不是直接改路径**：她的 cwd 是家，工具沙箱按路径前缀判可读；junction 落在她家内，她读 `group\群.md` 一个字都不用改。插件的 `config` 指向真身（pool），不依赖"这个链接通向哪儿"。
+
+**迁移判据**（`scripts\migrate-pool.mjs`）：复制 → 逐文件比 sha256 → 原件改名留底 → 建链接 → 读得出 / 写得进 / 真身落在 pool 三条探针 → 失败全部回滚。她的家路径不变；pool 是唯一真身。
+
+**还没做**：`install.ps1` 目前仍建真目录（新鱼要改成建链接）；`members.json`（名册/改名/端口）与 `family.json`（谱系）还没建。
+
+### A.23 投影渲染器只能有一个（2026-11-12 现场）
+
+**现象**：重建器报"未归类差异"——`群.md` 里一行是 `**2026-11-12 16:07 · Fabian → 小肥鱼**`，重建结果是 `**… · Fabian**`。
+
+**原因**：投影（`群.md`）有两个写者——宿主 `say()` 与 UI 的 `/group/api/send`，UI 那一版多写了"→ 收信人"。重建器只能按一个规则复现，于是"说不清的差异"。
+
+**修法**：投影只写「时间 · 谁」；收信人是 jsonl 的 `to` 字段，面板自己画。UI 侧已改，历史那一行按源头（jsonl 是真相）对齐，重建差异回到 0。
+
+**规矩**：以后任何新增写投影的地方，必须复用同一个渲染函数；两个写者两种格式 = 又一处 lost update 的面孔。
