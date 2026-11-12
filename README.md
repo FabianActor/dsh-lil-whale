@@ -101,7 +101,7 @@ dsh-lil-whale/            工程（这个仓库）
   docs/                   设计文档、判据、观察记录
   plugin/dsh-group/       宿主半边：群发言工具 + 跨进程唤醒（她的 profile 也装）
   plugin/dsh-group-ui/    浏览器半边：群聊面板、设置页、HTTP 路由（只你的 profile 装）
-  scripts/                安装、启动器（fish）、停止、巡守、体检、重建器、名册（pins/members）、谱系（gen-family）、打包（pack）
+  scripts/                安装、启动器（fish）、停止、巡守（原守夜）、体检、重建器、名册（pins/members）、谱系（gen-family）、打包（pack）
   templates/              种子文件模板（START.md / 环境.md / AGENTS.md，安装时填值）
   lil-whale.config.example.json  配置模板（真的那份不进版本库；第二条鱼各有一份 lil-whale.config.<键>.json）
   docs/谱系.md            生成的谱系图（真源是 pool\family.json + members.json）
