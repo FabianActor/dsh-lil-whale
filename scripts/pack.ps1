@@ -53,4 +53,11 @@ try {
       } finally { Pop-Location }
     }
   }
+
+  # 只留最近 2 个 zip：产物堆起来会把 dist 变成垃圾场（而且以前还被 git add -A 误提交过一次）
+  $zips = @(Get-ChildItem $OutDir -Filter 'lil-whale-*.zip' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
+  foreach ($old in ($zips | Select-Object -Skip 2)) {
+    Remove-Item -LiteralPath $old.FullName -Force
+    Write-Host ("  删除旧包：{0}" -f $old.Name)
+  }
 } finally { Pop-Location }
