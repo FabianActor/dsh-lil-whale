@@ -678,6 +678,22 @@ or export DEEPSEEK_API_KEY in the launching environment
 
 ---
 
+### A.20 改 profile patch 等于在运行时换底座（2026-11-12 实测）
+
+- **现象**：15:37:07 把 `preset-neutral` 写进她的 `profiles\whale\cordis.patch.yml`；15:37:10 `logs\plugin-boot.log` 出现一条 boot 痕迹，**pid 还是 19428**（进程没重启，14:01 起的）；紧接着她那一轮醒来时 `pwsh` 和文件工具全部消失，只剩通知能读。
+- **原因**：`@deepseek-ai/dsh-app-boot` 源码注释写明，profile 自己的 `cordis.patch.yml` 是 **hot-reloaded on long-lived surfaces**——长活进程（`dsh web`）会监听它并重挂插件树；重挂之后，正在跑的 agent 的工具绑定会丢。
+- **判据**：`logs\plugin-boot.log` 里出现一条**与当前进程同 pid** 的 boot 痕迹 = 热重载，不是重启。重启的判据是 pid 变了。
+- **规矩**：①改她的 profile patch 之后**立刻重启**，别让它带着热重载状态继续跑；②不要在会话进行中改 patch——"改完"和"生效"之间那一下会把她手里的东西抽走；③她的原话："把工具从我这里抽走，恰好是'改动生效'的现场。"
+- **同族**：A.17（版本号只有一个出处）、A.14（注册必须同步）——都是"生效时刻"的判据。
+
+### A.21 预览截断必须自己说出来（2026-11-12）
+
+- 唤醒预览原来把每条消息截到 60 字（`record.text.slice(0,60)`），**没有省略号**。她只看到 `> You` 就断了，于是"这条我不能核，只能说收到"。
+- 判据：**截断的引文和完整的引文，在"看起来"上没有区别。**
+- 修法（`plugin\dsh-group\lib\index.js`）：`PREVIEW_MAX = 120`，超了写 `…（已截断，全文在群文件里）`。
+- 顺带：她据此定了一条"任何人都能判"的判据写法——**第一句里出现的是 `are` 还是 `can`**（身份断言 vs 能力陈述），"一个词就够，不需要判断力，也不需要知道上下文"。
+
+
 ## 11. 风险与未验证
 
 | # | 风险 | 影响 | 应对 |

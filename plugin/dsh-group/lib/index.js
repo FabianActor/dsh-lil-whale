@@ -1310,9 +1310,16 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
   if (blocked !== null) return false // 被闸挡住：不告警、不补发、游标不动
 
   const who = incoming.map((record) => labelOf(record.from)).join('、')
+  // 预览截断必须自己说出来（2026-11-12，小肥鱼）：她只看到 `> You` 就断了，
+  // 而"截断的引文"和"完整的引文"看起来一样 —— 被截的那条她没法核，只能说"收到"。
+  const PREVIEW_MAX = 120
+  const previewOf = (record) => {
+    const body = `${record.image ? '（图片）' : ''}${record.text}`
+    return body.length > PREVIEW_MAX ? `${body.slice(0, PREVIEW_MAX)}…（已截断，全文在群文件里）` : body
+  }
   const preview = incoming
     .slice(-3)
-    .map((record) => `${labelOf(record.from)}：${record.image ? '（图片）' : ''}${record.text.slice(0, 60)}`)
+    .map((record) => `${labelOf(record.from)}：${previewOf(record)}`)
     .join('\n')
 
   const conversation = CONVERSATIONS[sessionIdOf(agent) ?? ''] ?? ''
