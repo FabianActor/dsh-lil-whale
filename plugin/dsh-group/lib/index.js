@@ -698,6 +698,23 @@ function logLine(record) {
   } catch {}
 }
 
+/**
+ * 启动的"最小证据"必须写在**由代码位置推出来的路径**上，不能写在由配置推出来的路径上。
+ *
+ * 2026-11-12 现场：`lil-whale.config.json` 被烟雾测试留成了 `%TEMP%\llw-a1-smoke`，
+ * 于是 `watchman.log` / `state\` / `cursors\` 全部写进了那个临时目录 ——
+ * **日志跟着 bug 一起消失了**，我们花了大半小时在"为什么没有 started 行"上打转。
+ * 配置能决定日志去哪儿，就等于 bug 能决定证据去哪儿。
+ * repoRoot 来自 `import.meta.url`（这一行代码自己站在哪），配置写错也改不动它。
+ */
+const BOOT_LOG = join(CFG.repoRoot, 'logs', 'plugin-boot.log')
+function bootLog(record) {
+  try {
+    mkdirSync(dirname(BOOT_LOG), { recursive: true })
+    appendFileSync(BOOT_LOG, JSON.stringify({ at: new Date().toISOString(), ...record }) + '\n', 'utf8')
+  } catch {}
+}
+
 // ---------- 唤醒闸 ----------
 
 function withinQuietHours(now = new Date()) {
@@ -750,15 +767,25 @@ function apply(ctx) {
   // 一行启动痕迹：确认"这个进程真的加载了我"，出问题时先看它。
   // 这里**不写** defineTool 的状态 —— apply 的时候宿主包还没解析完，写进去永远会是
   // "unresolved"，看起来像坏了。解析结果由后面那行 host-resolve 记，那里才是真相。
+  // 启动痕迹写两处：
+  //   ① group\plugin.log —— 业务日志，路径由配置推出来
+  //   ② <repoRoot>\logs\plugin-boot.log —— 兜底证据，路径由**代码位置**推出来
+  // 2026-11-12 教训：配置被污染成临时目录时，①整个消失、连"我没加载"都看不出来；
+  // 所以"这个进程加载了什么"这件事必须记在配置改不到的地方，并把可疑的配置值一起写下来。
+  const homeLooksRight = existsSync(join(CFG.herHome, 'dsh-home')) || existsSync(join(CFG.herHome, 'START.md'))
+  const bootRecord = {
+    pkg: `${name}@${PKG_VERSION}`,
+    pid: process.pid,
+    home: process.env.DSH_HOME ?? '(unset)',
+    cwd: process.cwd(),
+    herHome: CFG.herHome,
+    herPort: CFG.herPort,
+    profile: process.env.DSH_PROFILE ?? '(unset)',
+    suspect: homeLooksRight ? undefined : `herHome 里既没有 START.md 也没有 dsh-home；配置可能指错了地方`,
+  }
+  bootLog({ note: 'boot', ...bootRecord })
   try {
-    appendFileSync(join(GROUP_DIR, "plugin.log"), JSON.stringify({
-      at: new Date().toISOString(),
-      // 带上包名与版本：改完名重启以后，这一行就是"到底加载的是哪一份"的证据。
-      pkg: `${name}@${PKG_VERSION}`,
-      pid: process.pid,
-      home: process.env.DSH_HOME ?? "(unset)",
-      cwd: process.cwd(),
-    }) + "\n", "utf8")
+    appendFileSync(join(GROUP_DIR, 'plugin.log'), JSON.stringify({ at: new Date().toISOString(), ...bootRecord }) + '\n', 'utf8')
   } catch {}
 
   // 1. 发言：入队即返回，绝不等对方

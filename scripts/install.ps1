@@ -1,4 +1,4 @@
-# install.ps1 -- 给别人装一条小鲸鱼。ASCII 文件名 + UTF-8 BOM。
+﻿# install.ps1 -- 给别人装一条小鲸鱼。ASCII 文件名 + UTF-8 BOM。
 #
 #   pwsh -File install.ps1                                 装到仓库旁边的 lil-whale/
 #   pwsh -File install.ps1 -Workspace D:\fish               装到指定目录
@@ -20,7 +20,8 @@ param(
   [string]$ParentSessionId = '',
   [string]$ChildSessionId = '',
   [switch]$SkipParent,
-  [switch]$Force
+  [switch]$Force,
+  [string]$ConfigPath = ''   # 配置写到哪；空 = <仓库根>\lil-whale.config.json。试装必须指到临时目录
 )
 
 $ErrorActionPreference = 'Stop'
@@ -161,7 +162,16 @@ if (-not $SkipParent) {
 Step '5. 写配置'
 # 合并写，不是覆盖写：已有的字段（repoRoot / herWaker / pwshExe …）原样留着，
 # 否则在装好的机器上重跑一次 install，会把这份配置里手写的东西全丢掉。
-$cfgPath = Join-Path $RepoRoot 'lil-whale.config.json'
+$cfgPath = if ($ConfigPath -ne '') { $ConfigPath } else { Join-Path $RepoRoot 'lil-whale.config.json' }
+if ((Test-Path $cfgPath) -and -not $Force) {
+  try {
+    $existing = [System.IO.File]::ReadAllText($cfgPath) | ConvertFrom-Json -AsHashtable
+    $liveHome = [string]$existing['herHome']
+    if ($liveHome -ne '' -and $liveHome -ne $Workspace) {
+      Die "这份配置已经指向一个真实的家（$liveHome），而这次要写成 $Workspace" "确认要覆盖就加 -Force；只是想试装就加 -ConfigPath <临时文件>"
+    }
+  } catch { }
+}
 $cfg = [ordered]@{}
 if (Test-Path $cfgPath) {
   try {
@@ -182,6 +192,7 @@ $cfg['leeProfile'] = $ParentProfile
 $cfg['herPort'] = $port
 Write-Utf8NoBom $cfgPath ($cfg | ConvertTo-Json -Depth 5)
 Ok $cfgPath
+Note "这份配置是这台机器的真源；装完别删。要装到别的目录，用 -ConfigPath 指到别处"
 
 Step '6. 种子文件（不写性格、不写期望）'
 $deployDate = Get-Date -Format 'yyyy-MM-dd'
