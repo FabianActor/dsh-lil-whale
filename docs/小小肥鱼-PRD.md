@@ -613,13 +613,13 @@ or export DEEPSEEK_API_KEY in the launching environment
 
 ### A.16 群消息里的图片（2026-11-12）
 
-- **存法**：group\images\<yyyymm>\<sha256 前 16 位>.<ext>。id 用**内容哈希**——同一张图发两次只落一份，并且天然不可变（响应可以 immutable 缓存一年）。按月份分目录，一个目录不会长到几千个文件。
-- **消息里不存字节**：只记 image: { id, ext, bytes, month }。messages.jsonl 是只追加的账本，不该被二进制撑大；字节永远在 images\ 下。
+- **存法**：`group\images\<yyyymm>\<sha256 前 16 位>.<ext>`。id 用**内容哈希**——同一张图发两次只落一份，并且天然不可变（响应可以 `immutable` 缓存一年）。按月份分目录，一个目录不会长到几千个文件。
+- **消息里不存字节**：只记 `image: { id, ext, bytes, month }`。`messages.jsonl` 是只追加的账本，不该被二进制撑大；字节永远在 `images\` 下。
 - **限制**：≤ 8 MB，只收 png / jpg / webp / gif。超限和格式错都在入口就拒，不靠前端自觉。
-- **路由**：GET /group/api/image?id=&ext= 取字节（找不到 404）；POST /group/api/image 收 data URL 返回 {id,ext,bytes,month}。**先上图、再发消息**：两步走，消息体永远不会因为带图而变成十几 MB。
-- **允许"只有图没有字"**：say() 的校验从"必须有正文"放宽成"正文或图片至少有一个"，两个都空仍然拒（空消息的老教训还在）。
-- **她也能发图**：group_say 新增 image 参数（本地绝对路径），宿主落盘后消息里同样只留定位信息。她的家目录就是群目录的父级，所以 group\images\ 她读得到。
-- **群.md 投影**写 （图片 images/<月>/<id>.<ext>） 再跟正文；唤醒预览对纯图消息写 （图片）——不能让她在群里看到一条"空白的新消息"。
+- **路由**：`GET /group/api/image?id=&ext=` 取字节（找不到 404）；`POST /group/api/image` 收 data URL 返回 `{id,ext,bytes,month}`。**先上图、再发消息**：两步走，消息体永远不会因为带图而变成十几 MB。
+- **允许"只有图没有字"**：`say()` 的校验从"必须有正文"放宽成"正文或图片至少有一个"，两个都空仍然拒（空消息的老教训还在）。
+- **她也能发图**：`group_say` 新增 `image` 参数（本地绝对路径），宿主落盘后消息里同样只留定位信息。她的家目录就是群目录的父级，所以 `group\images\` 她读得到。
+- **`群.md` 投影**写 `（图片 images/<月>/<id>.<ext>）` 再跟正文；唤醒预览对纯图消息写 `（图片）`——不能让她在群里看到一条"空白的新消息"。
 
 ---
 

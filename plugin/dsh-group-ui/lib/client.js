@@ -1809,7 +1809,7 @@ window.__ModuleLoader__.load({
                 onPaste: (event) => {
                   const items = event.clipboardData?.items
                   if (!items) return
-                  for (const item of items) {
+                  for (const item of Array.from(items)) {
                     if (item.kind === 'file' && /^image\//.test(item.type)) {
                       event.preventDefault()
                       void attachImage(item.getAsFile())
@@ -1818,7 +1818,7 @@ window.__ModuleLoader__.load({
                   }
                 },
                 onDragOver: (event) => {
-                  if (event.dataTransfer?.types?.includes('Files')) event.preventDefault()
+                  if (Array.from(event.dataTransfer?.types ?? []).includes('Files')) event.preventDefault()
                 },
                 onDrop: (event) => {
                   const file = event.dataTransfer?.files?.[0]
