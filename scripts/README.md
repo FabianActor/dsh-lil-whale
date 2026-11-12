@@ -55,9 +55,9 @@ pwsh -File stop.ps1   -Target all|lee|whale [-Yes]
 
 | 谁 | 文件 |
 | --- | --- |
-| 大肥鱼 | `C:\Users\Fabian\.dsh\logs\web-latest.log` / `.err.log` |
-| 小肥鱼 | `D:\文档\WorkSpace\lil-whale\dsh-home\logs\web-latest.log` / `.err.log` |
-| 守夜（脚本版） | `D:\文档\WorkSpace\lil-whale\logs\watchman.log`；控制台输出在 `dsh-lil-whale\logs\watchman-console.log` |
+| 大肥鱼 | `<你的 dsh 家>\logs\web-latest.log` / `.err.log` |
+| 小肥鱼 | `<小肥鱼的家>\dsh-home\logs\web-latest.log` / `.err.log` |
+| 守夜（脚本版） | `<小肥鱼的家>\logs\watchman.log`；控制台输出在 `dsh-lil-whale\logs\watchman-console.log` |
 
 ## legacy\
 
@@ -65,7 +65,7 @@ pwsh -File stop.ps1   -Target all|lee|whale [-Yes]
 
 ## 项目的 ASCII 入口
 
-`C:\Users\Fabian\dsh-lil-whale` 是一个 Junction，指向 `D:\文档\WorkSpace\dsh-lil-whale`。
+`<用户目录>\dsh-lil-whale` 是一个 Junction，指向 `<仓库>`。
 
 存在的理由：项目真实路径里有中文（`文档`），而 `.cmd` 里的中文会被 GBK 读错，脚本没法把一个含中文的绝对路径写死在 .cmd 里。有了这个纯 ASCII 的别名，`.cmd` 就能在任何位置（桌面副本、快捷方式）找到项目。
 

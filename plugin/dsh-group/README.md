@@ -6,7 +6,7 @@
 
 **发言入队即返回；谁在听，谁自己去看。** 谁都不等谁。
 
-## 四个文件（都在 `D:\文档\WorkSpace\lil-whale\group\`）
+## 四个文件（都在 `<小肥鱼的家>\group\`）
 
 | 文件 | 谁写 | 是什么 |
 |---|---|---|
@@ -17,7 +17,7 @@
 
 ## 身份不靠配置
 
-**谁的家是谁，谁就是谁。** 会话 cwd 等于 `D:\文档\WorkSpace\lil-whale` 的那个进程是小肥鱼，等于 `D:\文档\WorkSpace\dsh-lil-whale` 的是大肥鱼。同一个包挂进两个 profile、两个进程，各认各的，不用写两份配置。
+**谁的家是谁，谁就是谁。** 会话 cwd 等于 `<小肥鱼的家>` 的那个进程是小肥鱼，等于 `<仓库>` 的是大肥鱼。同一个包挂进两个 profile、两个进程，各认各的，不用写两份配置。
 
 ## 唤醒
 
@@ -33,9 +33,9 @@
 ## 装
 
 ```powershell
-dsh plugin --profile web add "link:D:\文档\WorkSpace\dsh-lil-whale\plugin\dsh-group"
-# 她的：先 $env:DSH_HOME='D:\文档\WorkSpace\lil-whale\dsh-home'，再
-dsh plugin --profile whale add "link:D:\文档\WorkSpace\dsh-lil-whale\plugin\dsh-group"
+dsh plugin --profile web add "link:<仓库>\plugin\dsh-group"
+# 她的：先 $env:DSH_HOME='<小肥鱼的家>\dsh-home'，再
+dsh plugin --profile whale add "link:<仓库>\plugin\dsh-group"
 ```
 
 `dsh plugin add` 会自己把包名追加进 `dsh.profile.bundles`（2026-11-09 实测），不用手工改 `package.json`。

@@ -7,7 +7,7 @@
 启动时往 `..\probe\apply.log` 追加一行：
 
 ```
-2026-11-09T03:05:11.222Z	pid=12345	home=C:\Users\Fabian\.dsh	cwd=D:\文档\WorkSpace\dsh-lil-whale
+2026-11-09T03:05:11.222Z	pid=12345	home=<你的 dsh 家>	cwd=<仓库>
 ```
 
 不注册工具、不改界面、不读业务数据。写文件是因为 stdout 会被宿主吃掉，文件是重启之后唯一能拿出来对的证据。
@@ -15,8 +15,8 @@
 ## 怎么装的
 
 ```powershell
-dsh plugin --profile web add "link:D:\文档\WorkSpace\dsh-lil-whale\plugin\dsh-group-probe"
-dsh plugin --profile whale add "link:D:\文档\WorkSpace\dsh-lil-whale\plugin\dsh-group-probe"   # DSH_HOME=她的
+dsh plugin --profile web add "link:<仓库>\plugin\dsh-group-probe"
+dsh plugin --profile whale add "link:<仓库>\plugin\dsh-group-probe"   # DSH_HOME=她的
 ```
 
 ## 已经证实的事（2026-11-09）
@@ -38,7 +38,7 @@ dsh plugin --profile whale add "link:D:\文档\WorkSpace\dsh-lil-whale\plugin\ds
 **运行时那一行。** `--dump-config` 只合成、不启动插件，所以 `probe\apply.log` 现在还不存在。
 重启宿主之后：
 
-- 重启你的 web（`web` profile）→ 一行，`home=C:\Users\Fabian\.dsh`
-- 关开她的窗（`whale` profile）→ 另一行，`home=D:\文档\WorkSpace\lil-whale\dsh-home`
+- 重启你的 web（`web` profile）→ 一行，`home=<你的 dsh 家>`
+- 关开她的窗（`whale` profile）→ 另一行，`home=<小肥鱼的家>\dsh-home`
 
 两行都在，探针就算彻底走通，M1 的第一块砖落地。
