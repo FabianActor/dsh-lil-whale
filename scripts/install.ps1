@@ -15,6 +15,8 @@ param(
   [string]$Workspace = '',
   [string]$DshHome = '',
   [string]$ChildProfile = 'whale',
+  [string]$ChildName = '小鲸鱼',      # 她的名字：只写进 AGENTS.md 的一行，不写进性格
+  [string]$ChildMemberId = '',    # 名册里的键；空 = 跟 profile 同名
   [string]$ParentProfile = 'web',
   [int]$ChildPort = 0,                 # 0 = 从 3082 起找第一个空口
   [string]$ParentSessionId = '',
@@ -241,9 +243,10 @@ $values = @{
   QUIET_FROM = ('{0:00}:00' -f $quietFrom)
   QUIET_TO = ('{0:00}:00' -f $quietTo)
   TOKEN_PER_TURN = '180-200'
+  CHILD_NAME = $ChildName
   DEPLOY_DATE = $deployDate
   PARENT_ID = 'lee'
-  CHILD_ID = 'whale'
+  CHILD_ID = $(if ($ChildMemberId) { $ChildMemberId } else { $ChildProfile })
   HUMAN_ID = 'fabian'
   TOOLS = '- （工具清单没能自动生成，见下面那行提示）'
 }

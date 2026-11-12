@@ -50,6 +50,7 @@ function Get-Members {
           Profile = if ($m.profile) { [string]$m.profile } else { $null }
           Port    = if ($m.port) { [int]$m.port } else { 0 }
           Cwd     = if ($m.cwd) { [string]$m.cwd } else { $null }
+          ConfigFile = if ($m.configFile) { [string]$m.configFile } else { $null }
         }
       }
     } catch {
@@ -186,10 +187,16 @@ function Start-Fish($member) {
   $cwd = if ($member.Cwd) { $member.Cwd } else { $member.Home }
   Write-Host ("{0}：开机中（{1}）……" -f $member.Label, $port)
   # 守夜那条（role=watcher）保持老命令 `dsh web`；其余鱼按 profile + 端口起。
+  # 守夜那条（role=watcher）保持老命令 `dsh web`；其余鱼按 profile + 端口起，并指到它自己的配置。
   $command = if ($member.Role -eq 'watcher') {
     "dsh web --no-open"
   } else {
-    "`$env:DSH_HOME='$($member.DshHome)'; dsh --profile $($member.Profile) --port $port --no-open"
+    $cfgLine = ''
+    if ($member.ConfigFile) {
+      $cfgPath = if ([System.IO.Path]::IsPathRooted($member.ConfigFile)) { $member.ConfigFile } else { Join-Path (Split-Path $PSScriptRoot -Parent) $member.ConfigFile }
+      $cfgLine = "`$env:LIL_WHALE_CONFIG='$cfgPath'; "
+    }
+    "${cfgLine}$env:DSH_HOME='$($member.DshHome)'; dsh --profile $($member.Profile) --port $port --no-open"
   }
   Start-Hidden -Command $command -WorkingDirectory $cwd -OutLog $out -ErrLog $err
   if (-not (Wait-Port $port)) {

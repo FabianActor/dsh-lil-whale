@@ -3,6 +3,12 @@
 > 本文件只记「哪一版改了哪几处、为什么改」。当前结论都在 [小小肥鱼-PRD.md](小小肥鱼-PRD.md) 里，那边不背历史。
 > 自 v0.3.5 起从 PRD 头部搬到这里（此前几块原样搬出，未改写）。v1.0 是整篇重写。
 
+## v1.0.25（2026-11-12）
+
+- **谱系**：`pool\family.json`（真源：爹/出生/状态/改名史）+ `scripts\gen-family.mjs` → `docs\谱系.md`（Mermaid + 树 + 名册 + 改名史，生成前校验单根/无环）。新增 A.27。
+- **一鱼一配置**：每鱼一份 `lil-whale.config.<键>.json`，名册记 `configFile`，`fish.ps1` 启动时导出 `LIL_WHALE_CONFIG`；`install.ps1` 加 `-ChildName`/`-ChildMemberId`，`AGENTS.md.tpl` 改用 `{{CHILD_NAME}}`。新增 A.28。
+- **第二条鱼入册**：`fishball`（小鱼丸），爹 `lee`，端口 3083，状态 experiment；`scripts\members-add.mjs` 往名册里加鱼（保留手改的 name）。
+
 ## v1.0.24（2026-11-12）
 
 - **启动器 `scripts\fish.ps1`**：名册驱动，`list / up / down / doctor / help`；`launch.ps1` / `stop.ps1` 改成薄壳，桌面 `.cmd` 与守夜脚本不用改。新增 A.26（含 PowerShell `$port`/`$Port` 同名踩坑）。

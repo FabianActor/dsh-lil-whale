@@ -20,6 +20,8 @@ plugin/*/pnpm-lock.yaml
 
 # 本机配置（含绝对路径），模板是 lil-whale.config.example.json
 lil-whale.config.json
+lil-whale.config.*.json
+!lil-whale.config.example.json
 
 # 打包产物（能重新生成，别进版本库）
 dist/
