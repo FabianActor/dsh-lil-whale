@@ -148,6 +148,37 @@ function saveWatchState() {
   } catch {}
 }
 
+/**
+ * "只递一次"必须是一次**原子声明**，不能是"读整份、改一格、写整份"。
+ *
+ * 源起（她 2026-11-12 08:43 数的）：08:40:40 / 08:40:43 / 08:40:56 三条 `deliver` 递了同一件事，
+ * 而 `state\watchman.json` 里 `planFired` 只有一格 —— 三个写者各有一份内存快照，谁都看不见谁刚写的。
+ * 这是 lost update 的第 N 个面孔（cursor.json、errors_total、new-day 都是它）。
+ *
+ * 所以改用 `writeFileSync(..., { flag: 'wx' })`：文件已存在就 EEXIST，等于"已经有人声明过了"。
+ * 判据：`state\plans\<日期>-<条目>.claim` 唯一存在 ⇒ 这件事今天最多被递一次。
+ * 文件本身就是证据（含 pid 与时间），不用再去日志里对时间线。
+ */
+function claimPlanDelivery(jobKey) {
+  const dir = join(HER_HOME, 'state', 'plans')
+  try {
+    mkdirSync(dir, { recursive: true })
+  } catch {}
+  const file = join(dir, `${todayKey(new Date())}-${jobKey}.claim`)
+  try {
+    writeFileSync(file, JSON.stringify({ at: new Date().toISOString(), pid: process.pid, job: jobKey }), {
+      encoding: 'utf8',
+      flag: 'wx',
+    })
+    return true
+  } catch (error) {
+    if (error?.code === 'EEXIST') return false
+    // 写不进去（目录权限之类）不能当成"已递"：宁可重复递一次，也不能让她整天空等。
+    watchmanLog('note', `why=claim-failed detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 100)} plan=${jobKey}`)
+    return true
+  }
+}
+
 /** 只有主进程守夜：她自己的进程不需要守自己。 */
 function isMainProcess() {
   return !(process.env.DSH_HOME ?? '').toLowerCase().includes('lil-whale')
@@ -733,21 +764,26 @@ function apply(ctx) {
       rawInput: args,
     }),
     }))
+    // 留痕：注册成功也要写一行。没有这行时，"工具没注册"和"注册了但没生效"
+    // 在日志里长得一模一样 —— 2026-11-12 就是靠"最后一条注册记录停在 00:00:53"才排错的。
+    logLine({ note: 'group_say-registered', via: hostOk && defineTool !== null ? 'host' : 'raw' })
   }
 
   // 宿主包是异步装进来的：解析完了再注册（通常几十毫秒，远早于第一个 turn）。
   // 失败也要注册一次裸对象，否则这个进程里就永远没有 group_say。
-  resolveHost()
-    .then((ok) => {
-      try {
-        registerGroupSay(ok)
-      } catch (error) {
-        logLine({ note: 'group_say-register-failed', error: String(error?.message ?? error) })
-      }
-    })
-    .catch((error) => {
-      logLine({ note: 'group_say-register-failed', error: String(error?.message ?? error) })
-    })
+  // 2026-11-12：注册必须**同步**。小鲸鱼报了 `unknown tool "group_say"`，
+  // 根因是上一版把注册放进了 resolveHost().then —— 异步补注册不会出现在会话的工具列表里：
+  // 不报错、不报失败、只是没有。这条和"静默降级"是同一个形状，只是这次静默的是整个工具。
+  // 所以先同步注册（宿主包还没解析到就用裸对象，实测宿主认），
+  // 解析交给 resolveHost() 继续做 —— 唤醒消息要用的 createUserMessage 在那儿补。
+  try {
+    registerGroupSay(defineTool !== null)
+  } catch (error) {
+    logLine({ note: 'group_say-register-failed', error: String(error?.message ?? error) })
+  }
+  void resolveHost().catch((error) => {
+    logLine({ note: 'host-resolve-failed', error: String(error?.message ?? error) })
+  })
 
   // 2. 听：只在新消息到达时唤醒，不做心跳
   const timer = setInterval(() => {
@@ -1175,17 +1211,18 @@ async function watchmanTick() {
       // 她 2026-11-10 说过：「plan 不是叫醒，是提醒一个活着的人去做事」——
       // 推了没人接，比没人推还难查。所以醒着的时候改成"递一句话"，走群那条线让她自己看到。
       if (job.from === 'plan') {
-        if (watchState.planFired?.[job.key] === todayKey(new Date())) {
+        // "只递一次"走原子声明（见 claimPlanDelivery）。这里不再读 planFired ——
+        // 那份内存快照谁都看不见谁，正是三条 deliver 的来源。
+        if (!claimPlanDelivery(job.key)) {
           noteSkip('why=already-delivered')
           continue
         }
         const text = planDeliveryText(job)
         try {
-          say('lee', 'whale', text)
+          // s='watch'：机器发的话必须说明自己不是人亲口说的。
+          // 她 2026-11-12 指出：这三条现在长得就像大肥鱼说了三遍。
+          say('lee', 'whale', text, 'group', 'watch')
         } catch {}
-        watchState.planFired ??= {}
-        watchState.planFired[job.key] = todayKey(new Date())
-        saveWatchState()
         watchmanLog('deliver', `why=plan ${job.tag}（窗开着，改递话）`)
         // 递话也是一种叫醒（她的群 tailer 会因为这条新消息把她叫起来），所以同样记一笔。
         // 不记的话，A7 的"15 分钟后回看"永远不会为早上这一条落数——
@@ -1211,10 +1248,6 @@ async function watchmanTick() {
     if (res.ok) {
       watchState.wakes += 1
       watchState.fails = 0
-      if (job.from === 'plan') {
-        watchState.planFired ??= {}
-        watchState.planFired[job.key] = todayKey(new Date())
-      }
       saveWatchState()
       watchmanLog('woke', `ok wakes-today=${watchState.wakes} why=${res.detail} night=${night} ${job.tag}`)
       // 推门也算叫醒过一次：15 分钟后回看她有没有开口（A7 判据）。
