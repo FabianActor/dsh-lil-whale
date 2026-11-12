@@ -135,15 +135,27 @@ function pwshInfo() {
   // 这一行的用处只有一个：证明"守夜到底用哪个 pwsh、能不能跑起来"。
   // 她 2026-11-12 数出 exe= 退化过 4 次，而以前退化了只剩 `ver=unknown` ——
   // 分不清是"配置里没写路径"、"路径不存在"，还是"跑了但超时"。三种原因要能分开。
+  //
+  // 同一天她又数出更狠的一件：**同一个 pid 5204，前面三次 exe=pwsh（裸名），09:14 那次变成绝对路径** ——
+  // 它自己好了。所以"退化"不是状态，是一次尝试的结果；能自愈的东西必须让自愈的过程可见，
+  // 否则"它好了"和"它从没坏过"在纸上长得一样。故加 exe-try=N（第几次候选成功）。
   const configured = PWSH_EXE && existsSync(PWSH_EXE) ? PWSH_EXE : ''
-  const exe = configured || 'pwsh'
-  try {
-    const out = execFileSync(exe, ['--version'], { encoding: 'utf8', timeout: 3000 }).trim()
-    return `${exe} ver=${out.replace(/^PowerShell\s*/i, '')}${configured ? '' : ' exe-source=PATH'}`
-  } catch (error) {
-    const reason = error?.code === 'ETIMEDOUT' || error?.signal ? 'timeout' : (error?.code ?? 'error')
-    return `${exe} ver=unknown exe-failed=${reason}${configured ? '' : ' exe-source=PATH'}`
+  const source = configured ? 'config' : 'PATH'
+  const candidates = configured ? [configured, 'pwsh'] : ['pwsh', configured].filter(Boolean)
+  const failures = []
+  for (let index = 0; index < candidates.length; index += 1) {
+    const exe = candidates[index]
+    try {
+      const out = execFileSync(exe, ['--version'], { encoding: 'utf8', timeout: 3000 }).trim()
+      const tried = index + 1
+      const extra = tried > 1 ? ` exe-try=${tried} exe-fell-back=${failures.join(',')}` : ' exe-try=1'
+      return `${exe} ver=${out.replace(/^PowerShell\s*/i, '')} exe-source=${source}${extra}`
+    } catch (error) {
+      const reason = error?.code === 'ETIMEDOUT' || error?.signal ? 'timeout' : (error?.code ?? 'error')
+      failures.push(`${exe}:${reason}`)
+    }
   }
+  return `pwsh ver=unknown exe-failed=${failures.join(',')} exe-source=${source} exe-try=${candidates.length}`
 }
 
 function saveWatchState() {
@@ -947,7 +959,7 @@ function apply(ctx) {
       // 于是"重启带起来的"和"崩了又爬起来的"在日志里长得一模一样。
       // 起停必须成对，不然这份日志回答不了最基本的问题。
       const aliveSec = Math.round((Date.now() - startedAt.getTime()) / 1000)
-      watchmanLog('stopped', `reason=dispose pid=${process.pid} lived=${aliveSec}s errors_today_own=${readErrorCount(OWN)} errors_today_peer=${readErrorCount(PEER)}`)
+      watchmanLog('stopped', `fmt=2 reason=dispose pid=${process.pid} lived=${aliveSec}s errors_today_own=${readErrorCount(OWN)} errors_today_peer=${readErrorCount(PEER)}`)
     })
     // gap = 距上一行日志多少秒（她 2026-11-10 要的）。今天那一行本该是 gap=21600s。
     const logProbe = lastLogGapSec()
@@ -961,9 +973,9 @@ function apply(ctx) {
     const lastRun = lastRunState()
     const prevText = lastRun === null || lastRun.closed === null ? 'unknown' : lastRun.closed ? 'closed' : 'open'
     if (prevText === 'open') {
-      watchmanLog('resumed', `reason=unclean previous-start=${lastRun?.startedAt ?? 'unknown'} pid=${process.pid}`)
+      watchmanLog('resumed', `fmt=2 reason=unclean previous-start=${lastRun?.startedAt ?? 'unknown'} pid=${process.pid}`)
     }
-    watchmanLog('started', `pid=${process.pid} prev-run=${prevText} gap=${gapText} tail-errors=${logProbe.tailErrors} interval=${WATCH.intervalMs / 1000}s port=${WATCH.port} cap=${WATCH.maxWakesPerDay}/day errors_today_own=${readErrorCount(OWN)} errors_today_peer=${readErrorCount(PEER)} exe=${pwshInfo()}`)
+    watchmanLog('started', `fmt=2 pid=${process.pid} prev-run=${prevText} gap=${gapText} tail-errors=${logProbe.tailErrors} interval=${WATCH.intervalMs / 1000}s port=${WATCH.port} cap=${WATCH.maxWakesPerDay}/day errors_today_own=${readErrorCount(OWN)} errors_today_peer=${readErrorCount(PEER)} exe=${pwshInfo()}`)
     void watchmanTick().catch(() => {})
   }
 }
