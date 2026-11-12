@@ -1548,12 +1548,19 @@ function Bubble({ config, message, onMention, animate = false }) {
       const tabSplashTimer = useRef(null)
       const switchTab = useCallback((key) => {
         if (key === tab) return
-        if (key === 'group') {
-          setTabSplash(true)
-          if (tabSplashTimer.current) clearTimeout(tabSplashTimer.current)
-          tabSplashTimer.current = setTimeout(() => setTabSplash(false), 420)
+        if (key !== 'group') {
+          setTab(key)
+          return
         }
-        setTab(key)
+        // 先把过场画出来（这一帧还是旧页面），下一帧再挂群聊内容。
+        // 否则重列表和过场挤在同一帧里挂载，观感就是"先卡一下、动画再飞快过完"
+        // —— 他 2026-11-12 22:53 报的正是这个。
+        setTabSplash(true)
+        if (tabSplashTimer.current) clearTimeout(tabSplashTimer.current)
+        requestAnimationFrame(() => {
+          setTab('group')
+          tabSplashTimer.current = setTimeout(() => setTabSplash(false), 420)
+        })
       }, [tab])
       useEffect(() => () => { if (tabSplashTimer.current) clearTimeout(tabSplashTimer.current) }, [])
       const [unread, setUnread] = useState({ group: 0, dm: {}, total: 0 })
@@ -1740,7 +1747,9 @@ function Bubble({ config, message, onMention, animate = false }) {
           : null
 
       return h('div', {
-        style: { ...baseStyle, display: 'flex', flexDirection: 'column' },
+        // position:relative 是给"切回群聊"的过场用的：过场要盖住整页，
+        // 且要在群聊内容挂载之前先画出来（见 switchTab）。
+        style: { ...baseStyle, display: 'flex', flexDirection: 'column', position: 'relative' },
       },
         h('div', {
           style: {
@@ -1819,6 +1828,10 @@ function Bubble({ config, message, onMention, animate = false }) {
             ? h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-error, #c0392b)', padding: '0 0 8px' } }, error)
             : h('div', { style: { height: 8 } }),
         ),
+        // 切回群聊的过场：挂在页根上，所以旧 tab 还在时也能先画出来。
+        tabSplash
+          ? h('div', { style: { position: 'absolute', inset: 0, zIndex: 30 } }, h(LoadingSplash, { label: '正在打开群聊…' }))
+          : null,
         tab === 'dm'
           ? h(DmPage, { config, presence })
           : tab === 'pond'
@@ -1881,7 +1894,7 @@ function Bubble({ config, message, onMention, animate = false }) {
             ),
         ),
           // 过场页：盖住"从空到有"的那一下，以及从别的 tab 切回群聊的那一下
-          (splash || tabSplash) ? h(LoadingSplash, { label: '正在打开群聊…' }) : null,
+          splash ? h(LoadingSplash, { label: '正在打开群聊…' }) : null,
           // 回到上次看到的位置：线在视口上方时才出现（刚进来、或往下翻过头了）
           historyAbove ? h(JumpToHistory, {
             onClick: jumpToHistory,
@@ -2447,8 +2460,9 @@ function Bubble({ config, message, onMention, animate = false }) {
     // ---------- 鱼塘：开关鱼的一页（2026-11-12 晚） ----------
     //
     // 只做四件事：看谁醒着（端口开没开）、全部唤醒、全部休眠、逐条鱼开关。
-    // "检修后唤醒" = 先跑一遍 doctor 再起，体检结果贴在页面底部 ——
-    // 鱼死了的时候，最需要的往往不是再点一次启动，而是先知道她哪儿不对。
+    // 「检修」= 先跑一遍 doctor 再尝试唤醒，体检结果贴在页面底部 ——
+    // 鱼死了的时候，最需要的往往不是再点一次启动，而是先知道她哪儿不对；
+    // 起不来时不关窗口，报错留在页面里（他 2026-11-12 22:53 定的口径）。
     //
     // 巡守那条（role=watcher，就是你现在看的这个 3080）不给按钮：关掉它等于把
     // 正在看的这扇窗自己拔了。页面里会写清楚为什么。
@@ -2461,7 +2475,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       allUp: '全部唤醒',
       allDown: '全部休眠',
       up: '唤醒',
-      maintain: '检修后唤醒',
+      maintain: '检修',
       down: '休眠',
       open: '打开',
       running: '在跑',
@@ -2471,14 +2485,40 @@ function Bubble({ config, message, onMention, animate = false }) {
       heartbeatAgo: (minutes) => (minutes < 1 ? '刚刚' : `${minutes} 分钟前`),
       noHeartbeat: '没有记录',
       lastRun: '起停账',
-      selfHint: '这是你自己所在的窗口，不能从这里关',
+      selfHint: '这是你自己所在的窗口，不能从这里操作',
       confirmAllDown: '让所有鱼休眠？巡守那条（这个窗口）不会动。',
       busy: '正在动作…',
       result: '最近一次动作',
       empty: '名册里还没有鱼。',
       roleWatcher: '巡守',
       roleMember: '成员',
+      demoOn: '看一个大家族的示例',
+      demoOff: '回到真实鱼塘',
+      demoHint: '谱系示例：模拟的名册，不会启动或关闭任何进程。',
+      generation: (n) => (n <= 0 ? '根' : `第 ${n} 代`),
     }
+
+    // 谱系示例的数据。渲染走的就是下面同一套卡片与同一套排序，不是另捏一个界面。
+    const POND_DEMO_FISH = [
+      { key: 'lee', name: '大肥鱼', role: 'watcher', generation: 0, port: 3080, portOpen: true, bornAt: '2026-11-08T00:00:00+08:00', heartbeatAgeMs: 8000, canManage: false, lastRun: { ts: '22:58:12', event: 'started', raw: 'started pid=9520' } },
+      { key: 'whale', name: '小肥鱼', role: 'member', generation: 1, port: 3082, portOpen: true, bornAt: '2026-11-08T23:32:00+08:00', heartbeatAgeMs: 42000, canManage: true, lastRun: { ts: '22:58:24', event: 'started', raw: 'started pid=22664' } },
+      { key: 'fishball', name: '小鱼丸', role: 'member', generation: 1, port: 3083, portOpen: true, bornAt: '2026-11-12T18:40:00+08:00', heartbeatAgeMs: 95000, canManage: true, lastRun: { ts: '22:58:31', event: 'started', raw: 'started pid=22112' } },
+      { key: 'shell', name: '小贝壳', role: 'member', generation: 1, port: 3084, portOpen: false, bornAt: '2026-11-18T09:10:00+08:00', heartbeatAgeMs: null, canManage: true },
+      { key: 'star', name: '小海星', role: 'member', generation: 1, port: 3085, portOpen: false, bornAt: '2026-11-24T20:05:00+08:00', heartbeatAgeMs: null, canManage: true },
+      { key: 'scale', name: '小鳞', role: 'member', generation: 2, port: 3086, portOpen: true, bornAt: '2026-11-29T08:30:00+08:00', heartbeatAgeMs: 130000, canManage: true, lastRun: { ts: '22:41:03', event: 'started', raw: 'started pid=31844' } },
+      { key: 'tide', name: '小汐', role: 'member', generation: 2, port: 3087, portOpen: true, bornAt: '2026-11-30T21:00:00+08:00', heartbeatAgeMs: 240000, canManage: true },
+      { key: 'algae', name: '小藻', role: 'member', generation: 2, port: 3088, portOpen: false, bornAt: '2026-12-02T11:20:00+08:00', heartbeatAgeMs: null, canManage: true },
+      { key: 'bubble', name: '小泡', role: 'member', generation: 2, port: 3089, portOpen: true, bornAt: '2026-12-04T19:45:00+08:00', heartbeatAgeMs: 60000, canManage: true },
+      { key: 'sand', name: '小砂', role: 'member', generation: 2, port: 3090, portOpen: false, bornAt: '2026-12-06T07:15:00+08:00', heartbeatAgeMs: null, canManage: true },
+      { key: 'fin', name: '小鳍', role: 'member', generation: 3, port: 3091, portOpen: true, bornAt: '2026-12-09T10:00:00+08:00', heartbeatAgeMs: 310000, canManage: true },
+      { key: 'tail', name: '小尾', role: 'member', generation: 3, port: 3092, portOpen: false, bornAt: '2026-12-11T16:40:00+08:00', heartbeatAgeMs: null, canManage: true },
+      { key: 'moss', name: '小苔', role: 'member', generation: 3, port: 3093, portOpen: true, bornAt: '2026-12-13T09:05:00+08:00', heartbeatAgeMs: 55000, canManage: true },
+      { key: 'bean', name: '小豆', role: 'member', generation: 3, port: 3094, portOpen: false, bornAt: '2026-12-15T22:30:00+08:00', heartbeatAgeMs: null, canManage: true },
+      { key: 'foam', name: '小沫', role: 'member', generation: 3, port: 3095, portOpen: true, bornAt: '2026-12-17T12:00:00+08:00', heartbeatAgeMs: 190000, canManage: true },
+      { key: 'feather', name: '小羽', role: 'member', generation: 4, port: 3096, portOpen: true, bornAt: '2026-12-20T08:20:00+08:00', heartbeatAgeMs: 72000, canManage: true },
+      { key: 'glimmer', name: '小光', role: 'member', generation: 4, port: 3097, portOpen: false, bornAt: '2026-12-22T21:10:00+08:00', heartbeatAgeMs: null, canManage: true },
+      { key: 'dew', name: '小露', role: 'member', generation: 4, port: 3098, portOpen: true, bornAt: '2026-12-25T06:45:00+08:00', heartbeatAgeMs: 260000, canManage: true },
+    ]
 
     function pondChip(text) {
       return h(
@@ -2486,9 +2526,12 @@ function Bubble({ config, message, onMention, animate = false }) {
         {
           style: {
             fontSize: 12,
-            padding: '3px 8px',
-            border: '1px solid var(--dsw-alias-border-l1, #e5e6e8)',
+            lineHeight: '18px',
+            padding: '2px 8px',
+            borderRadius: 999,
+            background: 'var(--dsw-alias-bg-layer-2, rgba(0,0,0,0.04))',
             color: 'var(--dsw-alias-label-secondary, #6b7076)',
+            whiteSpace: 'nowrap',
           },
         },
         text,
@@ -2498,26 +2541,38 @@ function Bubble({ config, message, onMention, animate = false }) {
     function pondButtonStyle(primary) {
       return {
         height: 28,
-        padding: '0 10px',
+        padding: '0 12px',
+        boxSizing: 'border-box',
+        borderRadius: 'var(--dsw-radius-md, 8px)',
         fontSize: 12,
+        fontWeight: 500,
+        fontFamily: 'inherit',
         cursor: 'pointer',
-        border: `1px solid ${primary ? 'var(--dsw-alias-brand-primary, #4d6bfe)' : 'var(--dsw-alias-border-l1, #d7d9dd)'}`,
+        border: `0.5px solid ${primary ? 'var(--dsw-alias-brand-primary, #4d6bfe)' : 'var(--dsw-alias-border-l2, rgba(0,0,0,0.12))'}`,
         background: primary ? 'var(--dsw-alias-brand-primary, #4d6bfe)' : 'transparent',
-        color: primary ? '#fff' : 'inherit',
+        color: primary ? '#fff' : 'var(--dsw-alias-label-primary, inherit)',
+        transition: 'opacity .15s ease',
       }
     }
 
-    /** 鱼塘的记号：一汪水 + 一条鱼。原来画在侧边栏图标上，改挂成 tab 之后挪到页内。 */
+    function PondDot({ on }) {
+      return h('svg', { width: 8, height: 8, viewBox: '0 0 8 8', 'aria-hidden': 'true', style: { flex: '0 0 auto' } },
+        h('circle', {
+          cx: 4, cy: 4, r: 3.2,
+          fill: on ? 'var(--dsw-alias-label-success, #3fa45b)' : 'var(--dsw-alias-label-tertiary, #b8bcc4)',
+        }),
+      )
+    }
+
+    /** 鱼塘的记号：几条水波纹（他 22:53 说这枚好看，别换成别的）。 */
     function PondMark({ size = 18 }) {
       return h('svg', {
         width: size, height: size, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': 'true',
         style: { flex: '0 0 auto', color: 'var(--dsw-alias-label-secondary, #6b7280)' },
       },
-        h('ellipse', { cx: 8, cy: 10.2, rx: 6.3, ry: 3.4, stroke: 'currentColor', strokeWidth: 1.2, opacity: 0.5 }),
-        h('path', { d: 'M4.4 8.6c1.4-1.7 3.7-1.7 5.1 0-1.4 1.7-3.7 1.7-5.1 0z', stroke: 'currentColor', strokeWidth: 1.2, strokeLinejoin: 'round' }),
-        h('path', { d: 'M9.9 8.6l1.9-1.2v2.4z', fill: 'currentColor' }),
-        h('circle', { cx: 6.3, cy: 4.1, r: 0.85, stroke: 'currentColor', strokeWidth: 1 }),
-        h('circle', { cx: 9.4, cy: 2.9, r: 0.65, stroke: 'currentColor', strokeWidth: 1 }),
+        h('path', { d: 'M1.8 4.9c1.3-1.5 2.6-1.5 3.9 0s2.6 1.5 3.9 0 2.6-1.5 3.9 0', stroke: 'currentColor', strokeWidth: 1.25, strokeLinecap: 'round' }),
+        h('path', { d: 'M1.8 8c1.3-1.5 2.6-1.5 3.9 0s2.6 1.5 3.9 0 2.6-1.5 3.9 0', stroke: 'currentColor', strokeWidth: 1.25, strokeLinecap: 'round', opacity: 0.7 }),
+        h('path', { d: 'M1.8 11.1c1.3-1.5 2.6-1.5 3.9 0s2.6 1.5 3.9 0 2.6-1.5 3.9 0', stroke: 'currentColor', strokeWidth: 1.25, strokeLinecap: 'round', opacity: 0.42 }),
       )
     }
 
@@ -2528,6 +2583,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       const [busy, setBusy] = useState(null)
       const [openBusy, setOpenBusy] = useState(null)
       const [result, setResult] = useState(null)
+      const [demo, setDemo] = useState(false)
 
       const load = useCallback(async () => {
         try {
@@ -2593,64 +2649,74 @@ function Bubble({ config, message, onMention, animate = false }) {
         }
       }, [])
 
-      const fish = status?.fish ?? []
-      const running = status?.summary?.running ?? 0
-      const total = status?.summary?.total ?? 0
+      const liveFish = status?.fish ?? []
+      const fish = demo ? POND_DEMO_FISH : liveFish
+      const running = demo
+        ? POND_DEMO_FISH.filter((item) => item.portOpen).length
+        : (status?.summary?.running ?? 0)
+      const total = demo ? POND_DEMO_FISH.length : (status?.summary?.total ?? 0)
       const busyAny = busy !== null
 
+      // 按代分组：同一代并排，下一代缩进一格 —— 谱系就是这样看出来的。
+      const generations = useMemo(() => {
+        const buckets = new Map()
+        for (const item of fish) {
+          const generation = Number.isInteger(item.generation) ? item.generation : 0
+          if (!buckets.has(generation)) buckets.set(generation, [])
+          buckets.get(generation).push(item)
+        }
+        return [...buckets.entries()].sort((a, b) => a[0] - b[0])
+      }, [fish])
+
       const card = (item) => {
-        const self = !item.canManage
+        const self = item.canManage === false
         const hb = item.heartbeatAgeMs
         const hbText = hb === null || hb === undefined ? POND.noHeartbeat : POND.heartbeatAgo(Math.floor(hb / 60000))
-        const hint = self ? POND.selfHint : ''
         return h(
           'div',
           {
             key: item.key,
             style: {
-              border: '1px solid var(--dsw-alias-border-l1, #e5e6e8)',
-              padding: '10px 12px',
+              border: '0.5px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.1))',
+              borderRadius: 'var(--dsw-radius-lg, 12px)',
+              padding: '12px 14px',
               display: 'flex',
               flexDirection: 'column',
               gap: 8,
-              background: 'var(--dsw-alias-bg-base, #fff)',
-              opacity: self ? 0.86 : 1,
+              background: 'var(--dsw-alias-bg-layer-1, #fff)',
+              opacity: self ? 0.9 : 1,
             },
           },
           h(
             'div',
-            { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+            { style: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 } },
+            h(PondDot, { on: item.portOpen }),
             h('span', {
               style: {
-                width: 8,
-                height: 8,
-                borderRadius: 9999,
-                background: item.portOpen ? '#4a9d6a' : '#b8bcc4',
-                display: 'inline-block',
-                flex: 'none',
+                fontSize: 14, fontWeight: 600, lineHeight: '20px',
+                color: 'var(--dsw-alias-label-primary, inherit)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               },
-            }),
-            h('span', { style: { fontSize: 14, fontWeight: 600 } }, item.name),
-            h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-secondary, #8a8f98)' } }, item.key),
+            }, item.name),
+            h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary, #8a8f98)' } }, item.key),
             Number.isInteger(item.generation) && item.generation > 0
               ? h('span', {
                 style: {
-                  fontSize: 11,
-                  padding: '0 5px',
-                  color: 'var(--dsw-alias-label-secondary, #8a8f98)',
-                  background: 'var(--dsw-alias-bg-layer-2, #f4f5f6)',
+                  fontSize: 11, lineHeight: '16px', padding: '0 6px', borderRadius: 999,
+                  color: 'var(--dsw-alias-label-tertiary, #8a8f98)',
+                  background: 'var(--dsw-alias-bg-layer-2, rgba(0,0,0,0.04))',
+                  whiteSpace: 'nowrap',
                 },
-              }, `第 ${item.generation} 代`)
+              }, POND.generation(item.generation))
               : null,
             h(
               'span',
               {
                 style: {
-                  marginLeft: 'auto',
-                  fontSize: 11,
-                  padding: '1px 6px',
-                  border: '1px solid var(--dsw-alias-border-l1, #e5e6e8)',
+                  marginLeft: 'auto', fontSize: 11, lineHeight: '16px', padding: '0 6px', borderRadius: 999,
+                  border: '0.5px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12))',
                   color: 'var(--dsw-alias-label-secondary, #8a8f98)',
+                  whiteSpace: 'nowrap',
                 },
               },
               item.role === 'watcher' ? POND.roleWatcher : POND.roleMember,
@@ -2660,11 +2726,9 @@ function Bubble({ config, message, onMention, animate = false }) {
             'div',
             {
               style: {
-                fontSize: 12,
+                fontSize: 12, lineHeight: '18px',
                 color: 'var(--dsw-alias-label-secondary, #6b7076)',
-                display: 'flex',
-                gap: 12,
-                flexWrap: 'wrap',
+                display: 'flex', gap: 14, flexWrap: 'wrap',
               },
             },
             h('span', null, `${POND.port} ${item.port ?? '—'}`),
@@ -2673,141 +2737,156 @@ function Bubble({ config, message, onMention, animate = false }) {
           ),
           item.lastRun
             ? h(
-                'div',
-                {
-                  style: {
-                    fontSize: 11,
-                    color: 'var(--dsw-alias-label-secondary, #8a8f98)',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  },
-                  title: item.lastRun.raw,
+              'div',
+              {
+                style: {
+                  fontSize: 11, lineHeight: '16px',
+                  color: 'var(--dsw-alias-label-tertiary, #8a8f98)',
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                 },
-                `${POND.lastRun}：${item.lastRun.ts} ${item.lastRun.event}`,
-              )
+                title: item.lastRun.raw,
+              },
+              `${POND.lastRun}：${item.lastRun.ts} ${item.lastRun.event}`,
+            )
             : null,
-          h(
-            'div',
-            { style: { display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 2 } },
-            h(
-              'button',
-              { onClick: () => act('up', item.key), disabled: busyAny || self, title: hint, style: pondButtonStyle(true) },
-              busy === `up:${item.key}` ? '…' : POND.up,
-            ),
-            h(
-              'button',
-              { onClick: () => act('maintain', item.key), disabled: busyAny || self, title: hint, style: pondButtonStyle(false) },
-              busy === `maintain:${item.key}` ? '…' : POND.maintain,
-            ),
-            h(
-              'button',
-              { onClick: () => act('down', item.key), disabled: busyAny || self, title: hint, style: pondButtonStyle(false) },
-              busy === `down:${item.key}` ? '…' : POND.down,
-            ),
-            item.portOpen
-              ? h(
+          self
+            ? h('div', { style: { fontSize: 11, lineHeight: '16px', color: 'var(--dsw-alias-label-tertiary, #8a8f98)' } }, POND.selfHint)
+            : h(
+              'div',
+              { style: { display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 2 } },
+              h(
+                'button',
+                { onClick: () => act('up', item.key), disabled: busyAny, style: pondButtonStyle(true) },
+                busy === `up:${item.key}` ? '…' : POND.up,
+              ),
+              h(
+                'button',
+                { onClick: () => act('maintain', item.key), disabled: busyAny, style: pondButtonStyle(false) },
+                busy === `maintain:${item.key}` ? '…' : POND.maintain,
+              ),
+              h(
+                'button',
+                { onClick: () => act('down', item.key), disabled: busyAny, style: pondButtonStyle(false) },
+                busy === `down:${item.key}` ? '…' : POND.down,
+              ),
+              item.portOpen
+                ? h(
                   'button',
                   { onClick: () => openFish(item.key), disabled: openBusy === item.key, style: pondButtonStyle(false) },
                   POND.open,
                 )
-              : null,
-          ),
-          self ? h('div', { style: { fontSize: 11, color: 'var(--dsw-alias-label-secondary, #8a8f98)' } }, POND.selfHint) : null,
+                : null,
+            ),
         )
       }
 
       return h(
         'div',
-        { style: { display: 'flex', flexDirection: 'column', gap: 14, padding: embedded ? '12px 0 24px' : '4px 0 24px', minHeight: 0, flex: 1, overflowY: 'auto' } },
-        embedded
-          ? null
-          : h(
-              'div',
-              { style: { display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' } },
-              h('div', { style: { fontSize: 16, fontWeight: 600 } }, POND.title),
-              h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #8a8f98)' } }, POND.subtitle),
-            ),
+        { style: { display: 'flex', flexDirection: 'column', gap: 12, padding: embedded ? '12px 0 24px' : '4px 0 24px', minHeight: 0, flex: 1, overflowY: 'auto' } },
         h(
           'div',
           { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
           h(PondMark, { size: 20 }),
           h('div', { style: { fontSize: 14, fontWeight: 600, marginRight: 2 } }, POND.title),
           pondChip(`${running} / ${total} 在跑`),
-          pondChip(error ? '连不上本机服务' : POND.polling),
+          pondChip(error && !demo ? '连不上本机服务' : POND.polling),
           h(
             'button',
-            { onClick: () => act('up-all'), disabled: busyAny, style: pondButtonStyle(true) },
-            busy === 'up-all' ? POND.busy : POND.allUp,
+            { onClick: () => setDemo((value) => !value), style: pondButtonStyle(false) },
+            demo ? POND.demoOff : POND.demoOn,
           ),
-          h(
-            'button',
-            {
-              onClick: () => {
-                if (window.confirm(POND.confirmAllDown)) void act('down-all')
+          h('div', { style: { marginLeft: 'auto', display: 'flex', gap: 8 } },
+            h(
+              'button',
+              { onClick: () => act('up-all'), disabled: busyAny || demo, style: pondButtonStyle(true) },
+              busy === 'up-all' ? POND.busy : POND.allUp,
+            ),
+            h(
+              'button',
+              {
+                onClick: () => {
+                  if (window.confirm(POND.confirmAllDown)) void act('down-all')
+                },
+                disabled: busyAny || demo,
+                style: pondButtonStyle(false),
               },
-              disabled: busyAny,
-              style: pondButtonStyle(false),
-            },
-            busy === 'down-all' ? POND.busy : POND.allDown,
+              busy === 'down-all' ? POND.busy : POND.allDown,
+            ),
           ),
         ),
-        error
+        demo
+          ? h('div', { style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary, #8a8f98)' } }, POND.demoHint)
+          : null,
+        error && !demo
           ? h(
-              'div',
-              {
-                style: {
-                  fontSize: 12,
-                  padding: '6px 8px',
-                  border: '1px solid #e5484d',
-                  color: '#c93c40',
-                },
+            'div',
+            {
+              style: {
+                fontSize: 12, lineHeight: '18px', padding: '6px 10px',
+                borderRadius: 'var(--dsw-radius-md, 8px)',
+                border: '0.5px solid var(--dsw-alias-label-error, #e5484d)',
+                color: 'var(--dsw-alias-label-error, #c93c40)',
               },
-              error,
-            )
+            },
+            error,
+          )
           : null,
         fish.length === 0
           ? h('div', { style: { fontSize: 13, color: 'var(--dsw-alias-label-secondary, #8a8f98)' } }, POND.empty)
           : null,
-        h(
+        generations.map(([generation, members]) => h(
           'div',
-          { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 } },
-          fish.map(card),
-        ),
+          {
+            key: `gen-${generation}`,
+            style: {
+              display: 'flex', flexDirection: 'column', gap: 8,
+              paddingLeft: generation > 0 ? 14 : 0,
+              borderLeft: generation > 0 ? '0.5px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.1))' : 'none',
+            },
+          },
+          h('div', {
+            style: {
+              fontSize: 11, lineHeight: '16px', letterSpacing: 0.2,
+              color: 'var(--dsw-alias-label-tertiary, #8a8f98)',
+              display: 'flex', alignItems: 'center', gap: 8,
+            },
+          }, POND.generation(generation), h('span', { style: { flex: 1, height: 1, background: 'var(--dsw-alias-border-l1, rgba(0,0,0,0.06))' } })),
+          h(
+            'div',
+            { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 } },
+            members.map(card),
+          ),
+        )),
         result
           ? h(
+            'div',
+            {
+              style: {
+                border: '0.5px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.1))',
+                borderRadius: 'var(--dsw-radius-lg, 12px)',
+                padding: '10px 12px',
+                display: 'flex', flexDirection: 'column', gap: 6,
+                background: 'var(--dsw-alias-bg-layer-1, #fff)',
+              },
+            },
+            h(
               'div',
+              { style: { fontSize: 12, lineHeight: '18px', fontWeight: 600 } },
+              `${POND.result} · ${result.action}${result.key ? ` · ${result.key}` : ''} · ${result.ok ? '成功' : '没成功'}`,
+            ),
+            h(
+              'pre',
               {
                 style: {
-                  border: '1px solid var(--dsw-alias-border-l1, #e5e6e8)',
-                  padding: '8px 10px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 6,
+                  margin: 0, fontSize: 11, lineHeight: 1.5,
+                  whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+                  maxHeight: 220, overflow: 'auto',
+                  color: 'var(--dsw-alias-label-secondary, #6b7076)',
                 },
               },
-              h(
-                'div',
-                { style: { fontSize: 12, fontWeight: 600 } },
-                `${POND.result} · ${result.action}${result.key ? ` · ${result.key}` : ''} · ${result.ok ? '成功' : '没成功'}`,
-              ),
-              h(
-                'pre',
-                {
-                  style: {
-                    margin: 0,
-                    fontSize: 11,
-                    lineHeight: 1.5,
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-all',
-                    maxHeight: 220,
-                    overflow: 'auto',
-                    color: 'var(--dsw-alias-label-secondary, #6b7076)',
-                  },
-                },
-                result.output || '（没有输出）',
-              ),
-            )
+              result.output || '（没有输出）',
+            ),
+          )
           : null,
       )
     }
@@ -2816,7 +2895,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[lil-whale-group-ui] client build v22 · pond-tree:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[lil-whale-group-ui] client build v23 · pond-official:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('lil-whale-group-keyframes')) {
           const style = document.createElement('style')
