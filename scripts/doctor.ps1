@@ -286,6 +286,81 @@ if (Test-Path -LiteralPath $closeLog) {
   Add-Row '窗口留痕' 'WARN' 'logs\close.log 不存在（开门/关门的账还没记过：launch.ps1 只在真开了浏览器时记 open）'
 }
 
+# 9. 全鱼：每条鱼一行（端口 / 心跳 / 启动痕迹 / 名册）
+#    为什么单独一段：上面那些检查只盯"她"（whale）。鱼多了以后，
+#    "第二条鱼没起""她的日志写成了第一条鱼的"这类错，单独看她那张表是看不出来的。
+if (Test-Path -LiteralPath $Cfg.MembersFile) {
+  try {
+    $roster = (Get-Content -LiteralPath $Cfg.MembersFile -Raw -Encoding utf8 | ConvertFrom-Json).members
+    $bootLines = @()
+    $bootPath = Join-Path $PSScriptRoot '..\logs\plugin-boot.log'
+    if (Test-Path -LiteralPath $bootPath) {
+      $bootLines = @(Get-Content -LiteralPath $bootPath -Encoding utf8 | ForEach-Object {
+        try { $_ | ConvertFrom-Json } catch { $null }
+      } | Where-Object { $_ })
+    }
+    $pinsFile = Join-Path $Cfg.GroupDir 'pins.json'
+    $pins = $null
+    if (Test-Path -LiteralPath $pinsFile) { try { $pins = Get-Content -LiteralPath $pinsFile -Raw -Encoding utf8 | ConvertFrom-Json } catch { $pins = $null } }
+
+    foreach ($prop in $roster.PSObject.Properties) {
+      $key = $prop.Name
+      $m = $prop.Value
+      if ($m.kind -ne 'fish') { continue }
+      $name = if ($m.name) { [string]$m.name } else { $key }
+      $portOk = if ($m.port) { Test-Port ([int]$m.port) } else { $false }
+      $portText = if ($m.port) { ('{0} {1}' -f $m.port, $(if ($portOk) { '通' } else { '不通' })) } else { '没配端口' }
+
+      $presenceText = '没有心跳文件'
+      if ($m.key -or $key) {
+        $presenceFile = Join-Path $Cfg.PoolState ('presence\{0}.json' -f $key)
+        $age = Age-OfFile $presenceFile
+        if ($null -ne $age) {
+          $presenceText = ('心跳 {0}' -f (Format-Age $age))
+        }
+      }
+
+      $bootText = '没有启动痕迹'
+      if ($m.home) {
+        # 他的进程不设 DSH_HOME，启动痕迹写成 "(unset; 默认 C:\Users\Fabian\.dsh)" —— 先把真实路径抠出来再比。
+        $wantHome = ([string]$m.home).TrimEnd('\')
+        $hit = $bootLines | Where-Object {
+          # 两个字段都可能写着她/他的家：`home`（进程自己的 DSH_HOME，可能带 "(unset; 默认 …)" 包装）
+          # 和 `herHome`（配置里的她的家）。两个都拿来比，谁的路径对上就算谁。
+          $candidates = @()
+          if ($_.home) {
+            $candidates += [string]$_.home
+            if ([string]$_.home -match '默认\s+([^)]+)') { $candidates += $Matches[1] }
+          }
+          if ($_.herHome) { $candidates += [string]$_.herHome }
+          foreach ($c in $candidates) { if (([string]$c).TrimEnd('\') -ieq $wantHome) { return $true } }
+          return $false
+        } | Select-Object -Last 1
+        if ($hit) { $bootText = ('pid={0} pkg={1}' -f $hit.pid, $hit.pkg) }
+      }
+
+      $pinText = '名册里没有会话'
+      if ($pins -and $pins.PSObject.Properties.Name -contains $key) {
+        $ids = @($pins.$key | Where-Object { $_ })
+        if ($ids.Count -gt 0) { $pinText = ('会话 {0} 段' -f $ids.Count) }
+      }
+
+      # 常驻鱼应该开着；实验鱼允许关着（这正是"不承诺一直醒着"）。
+      $state = 'OK'
+      $why = @()
+      if (-not $portOk) { if ([string]$m.status -eq 'experiment') { $state = 'WARN' } else { $state = 'FAIL' }; $why += '端口不通' }
+      if ($pinText -eq '名册里没有会话') { $state = 'FAIL'; $why += '名册缺会话' }
+      $evidence = ('{0}（{1}）｜端口 {2}｜{3}｜{4}｜{5}' -f $name, $key, $portText, $presenceText, $bootText, $pinText)
+      $next = if ($state -eq 'OK') { '' } else { ('NEXT: pwsh -File scripts\fish.ps1 up {0}（看 logs\plugin-boot.log 里 home={1} 的那条）' -f $key, $m.home) }
+      Add-Row '全鱼' $state $evidence $next
+    }
+  } catch {
+    Add-Row '全鱼' 'WARN' ('名册读不了：{0}' -f $_.Exception.Message) 'NEXT: 看 pool\members.json 是不是合法 JSON'
+  }
+} else {
+  Add-Row '全鱼' 'WARN' '名册不存在（还是"一条鱼"的时代）' 'NEXT: node scripts\migrate-members.mjs 生成 pool\members.json'
+}
+
 # ---- 输出 ----
 Write-Host ''
 Write-Host '小肥鱼体检' -ForegroundColor Cyan
