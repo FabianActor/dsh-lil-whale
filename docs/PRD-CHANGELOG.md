@@ -12,6 +12,11 @@
 ---
 
 
+## v1.0.14（2026-11-12）
+
+- **A.16 补两段**：私聊也能发图（`/group/api/dm` 收 `image`，像素与群聊共用 `group\images\`，面板侧一个 `useImageAttach()` 两页共用）；`scripts\pack.ps1` 的打包口径（`git archive` + 从 `git ls-files` 里挑，排除根的 `archive\`；`git archive` 不支持 `:(exclude)` 且失败时仍返回 0）。
+- 三个包版本 1.0.0 → **1.1.0**（图片是新增功能，不是修 bug）。
+- 状态行 → v1.0.14。
 ## v1.0.13（2026-11-12）
 
 - **群消息支持图片**（他 2026-11-12 要求：鱼群里能发图片）。新增附录 **A.16** 记存法：`group\images\<yyyymm>\<sha256前16>.<ext>` 内容寻址（同图只存一份、永久缓存）、消息只记 `image:{id,ext,bytes,month}`、≤ 8 MB、png/jpg/webp/gif、先上传再发消息、允许"只有图没有字"、`group_say` 收本地路径、`群.md` 与唤醒预览都要能在没字时显示"（图片）"。

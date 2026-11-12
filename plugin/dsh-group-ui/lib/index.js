@@ -646,13 +646,32 @@ export function apply(ctx) {
         return
       }
       const text = typeof payload?.text === 'string' ? payload.text.trim() : ''
-      if (!text) {
-        sendJson(res, 400, { error: 'empty-text' })
+      // 私聊一样能带图：字节和群聊共用 images\ 目录（同一张图两边只存一份）。
+      const rawImage = payload?.image
+      let image = null
+      if (rawImage && typeof rawImage === 'object') {
+        const file = imagePathOf(rawImage.id, rawImage.ext)
+        if (file === null) {
+          sendJson(res, 400, { error: 'unknown-image', detail: '先调 /group/api/image 上传，再带 id/ext 发消息' })
+          return
+        }
+        image = {
+          id: String(rawImage.id),
+          ext: String(rawImage.ext).toLowerCase(),
+          bytes: statSync(file).size,
+          month: String(rawImage.month || file.split(/[\\/]/).slice(-2)[0] || ''),
+        }
+      }
+      if (!text && image === null) {
+        sendJson(res, 400, { error: 'empty-message', detail: '至少要有文字或一张图片' })
         return
       }
       const peer = dmPeerOf(payload?.peer)
       const now = new Date()
-      const record = { ts: now.toISOString(), from: 'fabian', to: peer, text, kind: 'dm', channel: 'dm' }
+      const record = {
+        ts: now.toISOString(), from: 'fabian', to: peer, text, kind: 'dm', channel: 'dm',
+        ...(image === null ? {} : { image }),
+      }
       try {
         mkdirSync(DM_DIR, { recursive: true })
         appendFileSync(dmFileOf(peer), JSON.stringify(record) + '\n', 'utf8')
