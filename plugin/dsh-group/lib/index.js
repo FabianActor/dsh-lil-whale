@@ -704,6 +704,23 @@ function dmKey(a, b) {
 }
 
 /**
+ * 私聊的可读投影：和 jsonl 同目录、同名，只是换成 `.md` 和中文前缀。
+ * 群有 `群.md`，私聊也得有一份人眼能直接读的 —— 不然"读得懂"这件事
+ * 只发生在打开面板的时候，文件层面私聊只有机器看得懂的 jsonl。
+ * 它同样是**派生**：能从这个 jsonl 整本重建（scripts\rebuild-group-md.mjs）。
+ */
+function dmReadableOf(a, b) {
+  const [x, y] = [a, b].sort()
+  return join(DM_DIR, `私聊-${x}__${y}.md`)
+}
+
+/** 可读投影里怎么表示"这条带图"。群和私聊同一套写法，读的人不用记两种。 */
+function readableBodyOf(text, image) {
+  if (image === null) return text
+  return `（图片 images/${image.month}/${image.id}.${image.ext}）${text === '' ? '' : `\n\n${text}`}`
+}
+
+/**
  * 私聊：不混进群记录、不打扰第三个人。
  * 他 2026-11-09 明确：**不用严格保密**（"这里又不是什么情报机构"），
  * 要紧的是说话的人分得清"这句话说给谁"。
@@ -782,6 +799,14 @@ function sayPrivate(from, to, text, image = null) {
     ...(image === null ? {} : { image }),
   }
   appendFileSync(dmFileOf(from, to), JSON.stringify(record) + '\n', 'utf8')
+  // 可读投影：先落 jsonl 再写 .md（顺序和群一样）。两份都在同一个目录里，
+  // 有 .md 是为了人；jsonl 才是源头，.md 丢了能重建。
+  const readable = dmReadableOf(from, to)
+  const [x, y] = [from, to].sort()
+  if (!existsSync(readable)) {
+    writeFileSync(readable, `# 私聊 · ${labelOf(x)} / ${labelOf(y)}\n\n`, 'utf8')
+  }
+  appendFileSync(readable, `**${stamp()} · ${labelOf(from)}**\n\n${readableBodyOf(text, image)}\n\n`, 'utf8')
   return record
 }
 
@@ -805,10 +830,7 @@ function say(from, to, text, channel = 'group', s = '', toSeat = '', image = nul
     ...(image === null ? {} : { image }),
   }
   appendFileSync(MESSAGES, JSON.stringify(record) + '\n', 'utf8')
-  const readableBody = image === null
-    ? body
-    : `（图片 images/${image.month}/${image.id}.${image.ext}）${body === '' ? '' : `\n\n${body}`}`
-  appendFileSync(READABLE, `**${stamp()} · ${labelOf(from)}**\n\n${readableBody}\n\n`, 'utf8')
+  appendFileSync(READABLE, `**${stamp()} · ${labelOf(from)}**\n\n${readableBodyOf(body, image)}\n\n`, 'utf8')
   return { ...record, channel: 'group' }
 }
 

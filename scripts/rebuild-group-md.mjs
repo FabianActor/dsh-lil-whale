@@ -7,7 +7,7 @@
 //
 // 跑法：node scripts\rebuild-group-md.mjs            只看对照（有未归类差异 → exit 1）
 //       node scripts\rebuild-group-md.mjs --write    覆盖 群.md
-import { readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
 import { config } from '../plugin/dsh-group/lib/config.js'
 
 // 路径从 lil-whale.config.json 读（真源见 plugin/dsh-group/lib/config.js）
@@ -34,14 +34,25 @@ for (const line of raw.split('\n')) {
   try { records.push(JSON.parse(trimmed)) } catch { badLines += 1 }
 }
 
-// 没有正文的记录不参与重建：写进正文就等于编一句话，那比缺一段更糟。
-const emptyText = records.filter((r) => (typeof r?.text === 'string' ? r.text.trim() : '') === '')
+// 没有正文、也没有图的记录不参与重建：写进正文就等于编一句话，那比缺一段更糟。
+const hasBody = (record) => {
+  const text = typeof record?.text === 'string' ? record.text.trim() : ''
+  const image = record?.image !== null && typeof record?.image === 'object'
+  return text !== '' || image
+}
+const emptyText = records.filter((r) => !hasBody(r))
 
 function blockOf(record) {
   const text = typeof record?.text === 'string' ? record.text.trim() : ''
-  if (text === '') return ''
+  const image = record?.image !== null && typeof record?.image === 'object' ? record.image : null
+  if (text === '' && image === null) return ''
   const who = LABEL[String(record?.from ?? '')] ?? String(record?.from ?? '?')
-  return `**${stampOf(String(record?.ts ?? ''))} · ${who}**\n\n${text}\n`
+  // 带图的记录也要重建出来 —— 2026-11-12 现场：只有图没有字的消息被这里整条跳过，
+  // 于是 群.md 里有那行、重建结果里没有，对不上就成了"说不清的差异"。
+  const body = image === null
+    ? text
+    : `（图片 images/${image.month}/${image.id}.${image.ext}）${text === '' ? '' : `\n\n${text}`}`
+  return `**${stampOf(String(record?.ts ?? ''))} · ${who}**\n\n${body}\n`
 }
 
 const blocks = records.map(blockOf).filter(Boolean)
@@ -143,7 +154,69 @@ if (!existsSync(READABLE)) {
   if (unexplained > 0) process.exitCode = 1
 }
 
+// ---------- 私聊的可读投影（dm\私聊-<a>__<b>.md） ----------
+// 和 群.md 同一条规矩：能从 jsonl 整本重建；说不清来源的差异不许静默覆盖。
+// 标题和正文格式必须与宿主 sayPrivate() 写的逐字一致，否则一写就对不上。
+const DM_DIR = `${GROUP_DIR}\\dm`
+const dmWrites = []
+let dmUnexplained = 0
+
+if (existsSync(DM_DIR)) {
+  for (const name of readdirSync(DM_DIR).filter((n) => n.endsWith('.jsonl'))) {
+    const stem = name.slice(0, -'.jsonl'.length)
+    const [x, y] = stem.split('__')
+    const source = `${DM_DIR}\\${name}`
+    const target = `${DM_DIR}\\私聊-${stem}.md`
+    const dmRecords = []
+    let dmBad = 0
+    for (const line of readFileSync(source, 'utf8').split('\n')) {
+      const trimmed = line.trim()
+      if (trimmed === '') continue
+      try { dmRecords.push(JSON.parse(trimmed)) } catch { dmBad += 1 }
+    }
+    const dmBlocks = dmRecords.map((record) => {
+      const text = typeof record?.text === 'string' ? record.text.trim() : ''
+      const image = record?.image !== null && typeof record?.image === 'object' ? record.image : null
+      if (text === '' && image === null) return ''
+      const who = LABEL[String(record?.from ?? '')] ?? String(record?.from ?? '?')
+      const body = image === null
+        ? text
+        : `（图片 images/${image.month}/${image.id}.${image.ext}）${text === '' ? '' : `\n\n${text}`}`
+      return `**${stampOf(String(record?.ts ?? ''))} · ${who}**\n\n${body}\n`
+    }).filter(Boolean)
+    const dmRebuilt = `# 私聊 · ${LABEL[x] ?? x} / ${LABEL[y] ?? y}\n\n` + dmBlocks.join('\n')
+    dmWrites.push({ target, rebuilt: dmRebuilt })
+
+    if (!existsSync(target)) {
+      console.log(`[私聊] ${stem}: 还没有可读投影（${dmRecords.length} 条，--write 会生成）`)
+      continue
+    }
+    const a = normalize(readFileSync(target, 'utf8')).split('\n')
+    const b = normalize(dmRebuilt).split('\n')
+    const hunks = hunksOf(lineDiff(a, b))
+    if (hunks.length === 0) {
+      console.log(`[私聊] ${stem}: 没有差异（${dmRecords.length} 条，坏行 ${dmBad} 条）`)
+      continue
+    }
+    console.log(`[私聊] ${stem}: 差异 ${hunks.length} 处`)
+    for (const hunk of hunks) {
+      for (const i of hunk.del.slice(0, 2)) console.log(`  现有: ${String(a[i]).slice(0, 90)}`)
+      for (const j of hunk.ins.slice(0, 2)) console.log(`  重建: ${String(b[j]).slice(0, 90)}`)
+    }
+    dmUnexplained += hunks.length
+  }
+}
+if (dmUnexplained > 0) process.exitCode = 1
+
 if (process.argv.includes('--write')) {
   writeFileSync(READABLE, rebuilt, 'utf8')
   console.log('已写入 群.md')
+  if (dmUnexplained === 0) {
+    for (const item of dmWrites) {
+      writeFileSync(item.target, item.rebuilt, 'utf8')
+      console.log(`已写入 ${item.target}`)
+    }
+  } else {
+    console.log('私聊投影有说不清的差异：一份都没写，先把差异弄清。')
+  }
 }
