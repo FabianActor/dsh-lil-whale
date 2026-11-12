@@ -43,6 +43,7 @@ function Get-WhaleConfig {
     PoolDir     = & $pick 'poolDir' (Join-Path (Split-Path $herHome -Parent) 'lil-whale-pool')
   PoolState   = & $pick 'poolStateDir' (Join-Path (& $pick 'poolDir' (Join-Path (Split-Path $herHome -Parent) 'lil-whale-pool')) 'state')
   GroupDir    = & $pick 'groupDir' (Join-Path (& $pick 'poolDir' (Join-Path (Split-Path $herHome -Parent) 'lil-whale-pool')) 'group')
+DmDir       = & $pick 'dmDir' (Join-Path (& $pick 'poolDir' (Join-Path (Split-Path $herHome -Parent) 'lil-whale-pool')) 'dm')
     HerWaker    = & $pick 'herWaker' (Join-Path $script:WhaleRoot 'scripts\wake-whale.ps1')
     PwshExe     = & $pick 'pwshExe' 'pwsh.exe'
     WakeMetrics = & $pick 'wakeMetrics' (Join-Path $script:WhaleRoot 'logs\wake-metrics.log')

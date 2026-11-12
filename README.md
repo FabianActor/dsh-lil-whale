@@ -114,7 +114,9 @@ lil-whale/                她的家（不在 git 里，安装时生成）
   dsh-home/               她的 DSH_HOME：AGENTS.md、profiles/whale、sessions/
 
 lil-whale-pool/           共享区（不在任何一条鱼的家里面）
-  group/                  messages.jsonl、群.md、pins.json、images/、dm/、avatars/
+  members.json            名册：谁是谁、叫什么、端口、爹是谁
+  dm/                     私聊（双向隐私窗口，不放进 group）
+  group/                  messages.jsonl、群.md、pins.json、images/、avatars/
   state/                  cursors/、wakes/、presence/、wake-marks-*.json、watchman-*.json
 ```
 

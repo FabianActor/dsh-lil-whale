@@ -17,7 +17,8 @@ export const inject = ['webServer', 'agents']
 const GROUP_DIR = config().groupDir
 const MESSAGES = join(GROUP_DIR, 'messages.jsonl')
 const READABLE = join(GROUP_DIR, '群.md')
-const DM_DIR = join(GROUP_DIR, 'dm')
+// 私聊是双向隐私窗口，不在 group\ 下面（A.24）。
+const DM_DIR = config().dmDir || join(GROUP_DIR, 'dm')
 // 一个人和一条鱼的那段对话：两个方向都写在同一个文件里（他 2026-11-10 定）
 // 文件名 = 两个 id 按字母序拼：`fabian__whale.jsonl`
 function dmFileOf(peer) {

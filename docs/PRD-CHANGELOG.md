@@ -3,6 +3,12 @@
 > 本文件只记「哪一版改了哪几处、为什么改」。当前结论都在 [小小肥鱼-PRD.md](小小肥鱼-PRD.md) 里，那边不背历史。
 > 自 v0.3.5 起从 PRD 头部搬到这里（此前几块原样搬出，未改写）。v1.0 是整篇重写。
 
+## v1.0.23（2026-11-12）
+
+- **私聊搬到 `pool\dm`**：`group\` 只留公开那一半；宿主、UI、重建器、doctor 的路径全改走 `dmDir`；`START.md` 模板加一行"别人的私聊不去读"。新增 A.24。
+- **名册 `pool\members.json`**：名字 / 种类 / 角色 / 端口 / 爹是谁进数据；宿主启动时读它，读不到退回内置默认值（`MEMBERS_FALLBACK`）。新增 `scripts\migrate-members.mjs`。新增 A.25。
+- **`install.ps1`**：新建家时只建 Junction（group / state 指回 pool），共享区 `pool\group`、`pool\state`、`pool\dm` 由它一起建；配置写入 `poolDir` / `poolStateDir` / `dmDir` / `membersFile`。
+
 ## v1.0.22（2026-11-12）
 
 - **共享区搬出她的家**：`group\` 与多成员账本（`state\`）搬到 `lil-whale-pool\`，她家里留 Junction，路径不变。配置新增 `poolDir` / `poolStateDir`；宿主 7 处、UI 1 处路径改走 pool；`common.ps1` / `doctor.ps1` 适配；迁移脚本 `scripts\migrate-pool.mjs`（复制→sha256→留底→建链→探针→失败回滚）。

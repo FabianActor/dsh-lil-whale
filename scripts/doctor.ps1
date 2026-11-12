@@ -1,4 +1,4 @@
-# doctor.ps1 -- 一条鱼还活着吗？
+﻿# doctor.ps1 -- 一条鱼还活着吗？
 #
 # 用法：
 #   pwsh -File scripts\doctor.ps1                只看她
@@ -231,7 +231,7 @@ if ($null -ne $msgAge -and $null -ne $mdAge) {
 }
 
 # 7b. 私聊可读版：dm\*.jsonl 比 私聊-*.md 新 = 可读版没跟上（她 11-12 提的：只有 jsonl 一层，人读不了）
-$dmDir = Join-Path $Cfg.GroupDir 'dm'
+$dmDir = if ($Cfg.PoolDir) { Join-Path $Cfg.PoolDir 'dm' } else { Join-Path $Cfg.GroupDir 'dm' }
 if (Test-Path -LiteralPath $dmDir) {
   $staleDm = @()
   Get-ChildItem -LiteralPath $dmDir -Filter '*.jsonl' -File -ErrorAction SilentlyContinue | ForEach-Object {
@@ -250,7 +250,7 @@ if (Test-Path -LiteralPath $dmDir) {
     Add-Row '私聊可读版' 'WARN' ($staleDm -join '；') 'NEXT: 重启她的窗让新消息自动追加；历史缺口用 node scripts\rebuild-group-md.mjs 重建'
   }
 } else {
-  Add-Row '私聊可读版' 'WARN' 'group\dm 不存在（还没私聊过）'
+  Add-Row '私聊可读版' 'WARN' '私聊目录不存在（还没私聊过）'
 }
 
 # 8. 窗口留痕：开门/关门都记（B2）

@@ -157,7 +157,7 @@ if (!existsSync(READABLE)) {
 // ---------- 私聊的可读投影（dm\私聊-<a>__<b>.md） ----------
 // 和 群.md 同一条规矩：能从 jsonl 整本重建；说不清来源的差异不许静默覆盖。
 // 标题和正文格式必须与宿主 sayPrivate() 写的逐字一致，否则一写就对不上。
-const DM_DIR = `${GROUP_DIR}\\dm`
+const DM_DIR = config().dmDir || `${GROUP_DIR}\\dm`
 const dmWrites = []
 let dmUnexplained = 0
 

@@ -21,12 +21,14 @@ param(
   [string]$ChildSessionId = '',
   [switch]$SkipParent,
   [switch]$Force,
-  [string]$ConfigPath = ''   # 配置写到哪；空 = <仓库根>\lil-whale.config.json。试装必须指到临时目录
+  [string]$ConfigPath = '',  # 配置写到哪；空 = <仓库根>\lil-whale.config.json。试装必须指到临时目录
+  [string]$PoolDir = ''      # 共享区（群/账本/私聊）；空 = 她家旁边同级的 lil-whale-pool
 )
 
 $ErrorActionPreference = 'Stop'
 $RepoRoot = Split-Path $PSScriptRoot -Parent
 $TemplateRoot = Join-Path $RepoRoot 'templates'
+$PoolRoot = if ($PoolDir -ne '') { $PoolDir } else { Join-Path (Split-Path $Workspace -Parent) 'lil-whale-pool' }
 
 function Say([string]$text) { Write-Host $text }
 function Step([string]$text) { Write-Host ""; Write-Host ("== " + $text) -ForegroundColor Cyan }
@@ -106,12 +108,27 @@ if (Test-Path -LiteralPath $Workspace) {
     Die "「$Workspace」已经像一条鱼的家了（有 START.md 或 dsh-home）。" "换 -Workspace 指向一个新目录；如果你确定要在这里重铺（会覆盖 START.md / 环境.md），加 -Force"
   }
 }
-foreach ($d in @($Workspace, (Join-Path $Workspace 'logs'), (Join-Path $Workspace 'group'),
-                 (Join-Path $Workspace 'plan'), (Join-Path $Workspace 'state'), (Join-Path $Workspace 'run'),
-                 $DshHome)) {
+foreach ($d in @($Workspace, (Join-Path $Workspace 'logs'), (Join-Path $Workspace 'plan'),
+                 (Join-Path $Workspace 'run'), $DshHome, $PoolRoot,
+                 (Join-Path $PoolRoot 'group'), (Join-Path $PoolRoot 'state'), (Join-Path $PoolRoot 'dm'))) {
   if (-not (Test-Path -LiteralPath $d)) { New-Item -ItemType Directory -Path $d -Force | Out-Null }
 }
-Ok "建好了 6 个目录"
+Ok "建好了她家的目录和共享区（$PoolRoot）"
+
+# 她家里只放两个 Junction：group / state 的真身在共享区（PRD A.22）。
+# 为什么不是真目录：群和账本是共享的，第二条鱼出现时，第二条的群文件写进第一条的家就是越界。
+foreach ($link in @('group', 'state')) {
+  $path = Join-Path $Workspace $link
+  $target = Join-Path $PoolRoot $link
+  if (Test-Path -LiteralPath $path) {
+    $item = Get-Item -LiteralPath $path -Force
+    if ($item.LinkType -eq 'Junction') { Ok "junction $link（已存在）" }
+    else { Warn "「$link」已存在且不是 Junction（旧安装？）；保留它，真身在 $target" }
+  } else {
+    New-Item -ItemType Junction -Path $path -Target $target | Out-Null
+    Ok "junction $link -> $target"
+  }
+}
 
 Step "2. 她的 profile（$ChildProfile）"
 $savedHome = $env:DSH_HOME
@@ -190,6 +207,10 @@ $cfg['herDshHome'] = $DshHome
 $cfg['whaleProfile'] = $ChildProfile
 $cfg['leeProfile'] = $ParentProfile
 $cfg['herPort'] = $port
+$cfg['poolDir'] = $PoolRoot
+$cfg['poolStateDir'] = (Join-Path $PoolRoot 'state')
+$cfg['dmDir'] = (Join-Path $PoolRoot 'dm')
+$cfg['membersFile'] = (Join-Path $PoolRoot 'members.json')
 Write-Utf8NoBom $cfgPath ($cfg | ConvertTo-Json -Depth 5)
 Ok $cfgPath
 Note "这份配置是这台机器的真源；装完别删。要装到别的目录，用 -ConfigPath 指到别处"
@@ -213,7 +234,7 @@ $values = @{
   HER_HOME = $Workspace
   HER_DSH_HOME = $DshHome
   HER_PORT = $port
-  GROUP_DIR = (Join-Path $Workspace 'group')
+  GROUP_DIR = (Join-Path $PoolRoot 'group')
   COOLDOWN = $cooldown
   PER_HOUR = $perHour
   PER_DAY = $perDay

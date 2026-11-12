@@ -55,6 +55,10 @@ function derive(c) {
     ...c,
     poolDir,
     poolStateDir: c.poolStateDir || join(poolDir, 'state'),
+    // 私聊是「两个人之间的窗口」，不放进群目录：群目录是共享区里公开的那一半（Fabian 2026-11-12 拍板）。
+    dmDir: c.dmDir || join(poolDir, 'dm'),
+    // 名册：谁是谁、叫什么、哪条鱼、端口、爹是谁。多鱼之后这些不许再写死在代码里。
+    membersFile: c.membersFile || join(poolDir, 'members.json'),
     herPort: Number(c.herPort) || 3082,
     groupDir: c.groupDir || join(poolDir, 'group'),
     herDshHome: c.herDshHome || join(herHome, 'dsh-home'),

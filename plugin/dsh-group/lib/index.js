@@ -426,19 +426,53 @@ const PINS = join(GROUP_DIR, 'pins.json')
 
 // 身份优先按会话钉（Fabian 2026-11-09 定）；cwd 只是退路。
 // 同一个 cwd 下开两个会话时，cwd 认不出来 —— 所以钉住具体那一段。
-const MEMBERS = {
+//
+// 名册的真源是 pool\members.json（2026-11-12 起）：多鱼之后，名字、端口、爹是谁这些
+// 不许再写死在代码里。文件不在（老安装 / 刚克隆）就退回下面这份内置默认值 ——
+// 但**只退回能跑**，不退回"名字对"：名字写错的时候，日志里能看出来。
+const MEMBERS_FALLBACK = {
   lee: {
     label: '大肥鱼',
+    kind: 'fish',
     cwd: CFG.leeCwd,
     sessionId: 'session-ae4daabd-a9f9-4541-ba03-9ff7cea21a88',
   },
   whale: {
     label: '小肥鱼',
+    kind: 'fish',
     cwd: CFG.whaleCwd,
     sessionId: 'session-75fe8e27-66e3-4466-b65b-2fc021f3b01f',
   },
-  fabian: { label: 'Fabian', cwd: null, sessionId: null },
+  fabian: { label: 'Fabian', kind: 'human', cwd: null, sessionId: null },
 }
+
+function buildMembers() {
+  const out = {}
+  for (const [key, m] of Object.entries(MEMBERS_FALLBACK)) out[key] = { ...m }
+  const file = CFG.membersFile
+  if (!file || !existsSync(file)) return out
+  try {
+    const raw = JSON.parse(readFileSync(file, 'utf8'))
+    for (const [key, m] of Object.entries(raw?.members ?? {})) {
+      const prev = out[key] ?? {}
+      out[key] = {
+        ...prev,
+        ...m,
+        label: m.name ?? prev.label ?? key,
+        cwd: m.cwd ?? prev.cwd ?? null,
+        sessionId: m.sessionId ?? prev.sessionId ?? null,
+      }
+    }
+  } catch (error) {
+    // 名册坏了不能当没看见，但也不能因此不上班：退回内置，并在启动痕迹里说一句。
+    try {
+      logLine({ note: 'members-unreadable', file, why: String(error?.message ?? error).slice(0, 120) })
+    } catch {}
+  }
+  return out
+}
+
+const MEMBERS = buildMembers()
 
 // 她的两段对话，按对端区分（Fabian 2026-11-09 命名）。
 // 唤醒时把会话名写进提示，她才分得清这段是跟谁说的。
@@ -690,7 +724,8 @@ function labelOf(who) {
 
 // ---------- 写 ----------
 
-const DM_DIR = join(GROUP_DIR, 'dm')
+// 私聊不放在 group\ 下面：group 是共享区里公开的那一半（A.24）。
+const DM_DIR = CFG.dmDir || join(GROUP_DIR, 'dm')
 
 /**
  * 私聊：一个人和一条鱼之间的一段对话，两个方向写进同一个文件。
