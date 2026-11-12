@@ -97,8 +97,14 @@ const hadBom = text.charCodeAt(0) === 0xFEFF;
 if (hadBom) text = text.slice(1);
 const original = text;
 
-const hasPreset = /^\s*-\s*id:\s*preset-neutral\s*$/m.test(text);
-const hasDefaultNeutral = /^\s*default:\s*neutral\s*$/m.test(text);
+// 上次追加的整段总是落在文件末尾：先切掉，再按当前生成器重写。
+// 这样重跑 apply 能更新 persona 文案，而不是"已经装过"就跳过。
+const MARKER = '# ---- 以下由 scripts/apply-neutral-preset.mjs 追加 ----';
+const markerAt = text.indexOf(MARKER);
+const base = markerAt >= 0 ? `${text.slice(0, markerAt).replace(/\n+$/, '')}\n` : text;
+
+const hasPreset = /^\s*-\s*id:\s*preset-neutral\s*$/m.test(base);
+const hasDefaultNeutral = /^\s*default:\s*neutral\s*$/m.test(base);
 
 const additions = [];
 if (!hasPreset) additions.push(insertBlock);
@@ -117,13 +123,18 @@ if (additions.length === 0) {
   process.exit(0);
 }
 
-let next = original.endsWith('\n') || original === '' ? original : `${original}\n`;
-next += '\n# ---- 以下由 scripts/apply-neutral-preset.mjs 追加 ----\n';
+let next = base.endsWith('\n') || base === '' ? base : `${base}\n`;
+next += `\n${MARKER}\n`;
 for (const a of additions) next += `${a}\n`;
 
+if (next === original) {
+  console.log('已经是最新的：patch 里那段和当前生成器一致，什么都没改。');
+  process.exit(0);
+}
+
 if (dryRun) {
-  console.log('--dry-run：会追加下面这些，不写盘：');
-  console.log(next.slice(original.length));
+  console.log('--dry-run：会写成下面这样（只显示追加段），不写盘：');
+  console.log(next.slice(base.length));
   process.exit(0);
 }
 

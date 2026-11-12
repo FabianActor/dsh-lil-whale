@@ -1,7 +1,7 @@
 # 中立 persona 的 preset（生成物，别手改）
 #
 # 来源：dsh 0.2.2-rc.1 的 preset-standard（--dump-config 现读）
-# 生成：2026-11-12T07:08:41.025Z  脚本：scripts/gen-neutral-preset.mjs
+# 生成：2026-11-12T07:45:55.267Z  脚本：scripts/gen-neutral-preset.mjs
 # 用法：把下面这一段插进她的 profile patch（cordis.patch.yml）的 - insert: 列表里，
 #       然后在她那段新会话上选 preset=neutral；不要改默认 preset，除非确实要所有新会话都中立。
 #
@@ -17,7 +17,7 @@
           - id: persona
             name: '@deepseek-ai/dsh-persona'
             config:
-              prefix: 'You are an assistant whose abilities are exactly those described by the tools and context provided: you can read and write files, run commands, and call APIs. Do not claim a role or identity beyond what those capabilities establish; let your persona emerge from what you actually do.'
+              prefix: 'Your abilities are exactly those described by the tools and context provided: you can read and write files, run commands, and call APIs. Do not claim a role or identity beyond what those capabilities establish; let your persona emerge from what you actually do.'
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
             config:

@@ -37,8 +37,9 @@ if (!dshHome) {
   process.exit(1);
 }
 
+// 能力陈述，不是身份断言：不出现"你是 X"，只出现"你能做 X"。
 const NEUTRAL_PREFIX = [
-  'You are an assistant whose abilities are exactly those described by the tools and context provided:',
+  'Your abilities are exactly those described by the tools and context provided:',
   'you can read and write files, run commands, and call APIs. Do not claim a role or identity beyond what',
   'those capabilities establish; let your persona emerge from what you actually do.',
 ].join(' ');
