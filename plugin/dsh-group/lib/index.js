@@ -8,7 +8,7 @@
 // 身份优先按**钉住的 sessionId** 认（2026-11-09 起）：同一目录下可能有两段会话，
 // 按 cwd 会叫错人。cwd 只作退路，并在 plugin.log 留一行痕迹。
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, statSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync, statSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
@@ -132,12 +132,17 @@ function loadWatchState() {
 
 /** 她 2026-11-09 的要求：绝对路径是"这次对了"不是"以后都对"，所以每次启动都报出它手里那把钥匙。 */
 function pwshInfo() {
-  const exe = existsSync(PWSH_EXE) ? PWSH_EXE : 'pwsh'
+  // 这一行的用处只有一个：证明"守夜到底用哪个 pwsh、能不能跑起来"。
+  // 她 2026-11-12 数出 exe= 退化过 4 次，而以前退化了只剩 `ver=unknown` ——
+  // 分不清是"配置里没写路径"、"路径不存在"，还是"跑了但超时"。三种原因要能分开。
+  const configured = PWSH_EXE && existsSync(PWSH_EXE) ? PWSH_EXE : ''
+  const exe = configured || 'pwsh'
   try {
     const out = execFileSync(exe, ['--version'], { encoding: 'utf8', timeout: 3000 }).trim()
-    return `${exe} ver=${out.replace(/^PowerShell\s*/i, '')}`
-  } catch {
-    return `${exe} ver=unknown`
+    return `${exe} ver=${out.replace(/^PowerShell\s*/i, '')}${configured ? '' : ' exe-source=PATH'}`
+  } catch (error) {
+    const reason = error?.code === 'ETIMEDOUT' || error?.signal ? 'timeout' : (error?.code ?? 'error')
+    return `${exe} ver=unknown exe-failed=${reason}${configured ? '' : ' exe-source=PATH'}`
   }
 }
 
@@ -302,6 +307,36 @@ function settleMarks() {
  * 理由：06:00 那一行和 18:00 那一行，中间空了 6 小时，日志上完全看不出来。
  * 只读最后 4KB，不加载整份文件。
  */
+/**
+ * 上一轮到底关没关干净。
+ *
+ * 她 2026-11-12 数的：68 行 started、1 行 stopped，而按规则该有 67 行 resumed —— 一条都没有。
+ * 于是"重启带起来的"和"崩了又爬起来的"在纸上长得一模一样（又是那个形状）。
+ * 这里只回答一个问题：尾巴里最后一条 started 之后有没有 stopped。
+ */
+function lastRunState() {
+  try {
+    if (!existsSync(WATCHMAN_LOG)) return null
+    const stamped = readFileSync(WATCHMAN_LOG, 'utf8').slice(-8192)
+      .split('\n')
+      .filter((line) => /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \|/.test(line))
+    if (stamped.length === 0) return null
+    let startAt = -1
+    let stopAt = -1
+    for (let i = stamped.length - 1; i >= 0; i -= 1) {
+      const m = stamped[i].match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \| (\w+) \|/)
+      if (!m) continue
+      if (m[1] === 'stopped' && stopAt < 0) stopAt = i
+      if (m[1] === 'started' && startAt < 0) startAt = i
+      if (startAt >= 0 && stopAt >= 0) break
+    }
+    if (startAt < 0) return { closed: null, startedAt: null }
+    return { closed: stopAt > startAt, startedAt: stamped[startAt].slice(0, 19) }
+  } catch {
+    return null
+  }
+}
+
 function lastLogGapSec() {
   try {
     if (!existsSync(WATCHMAN_LOG)) return { gap: null, tailErrors: 0, missing: true }
@@ -404,11 +439,63 @@ function readJson(file, fallback) {
   }
 }
 
-/** 原子写：先写临时文件再改名，避免另一个进程读到半截 JSON。 */
+const SLEEP_CELL = new Int32Array(new SharedArrayBuffer(4))
+/** 同步小睡（Node 没有 sleepSync；Atomics.wait 是唯一不阻塞事件循环之外的同步等法）。 */
+function sleepSync(ms) {
+  Atomics.wait(SLEEP_CELL, 0, 0, ms)
+}
+
+/**
+ * 原子写：先写临时文件再改名，避免另一个进程读到半截 JSON。
+ *
+ * 2026-11-12 小鲸鱼数出 1225 行 `EPERM ... rename 'cursors\lee.json.tmp-5204' -> 'lee.json'`。
+ * Windows 上目标文件正被读者打开时 rename 会失败 —— 连"写者改自己那个文件"也一样，
+ * 所以这不是两个写者打架，是**写者与读者**打架（读的是谁还不知道：可能是另一进程的轮询、
+ * 也可能是我们自己的排查命令 `Get-Content`，.NET 默认 FileShare.Read 会挡住 rename）。
+ * 读者占用的窗口通常只有几毫秒 ⇒ 退几步再试。仍失败就把 tmp 留着（内容没丢）并写明是哪一步，
+ * 不能像以前那样让异常一路冒上去、只留一行没说清原因的 error。
+ */
 function writeJson(file, value) {
+  const body = `${JSON.stringify(value, null, 2)}\n`
   const tmp = `${file}.tmp-${process.pid}`
-  writeFileSync(tmp, JSON.stringify(value, null, 2) + '\n', 'utf8')
-  renameSync(tmp, file)
+  writeFileSync(tmp, body, 'utf8')
+  let lastError = null
+  for (let attempt = 1; attempt <= 10; attempt += 1) {
+    try {
+      renameSync(tmp, file)
+      return
+    } catch (error) {
+      lastError = error
+      sleepSync(Math.min(200, 10 * attempt))
+    }
+  }
+  // 退到最后一步：直接覆盖写。
+  // 代价是失去"原子"（读者理论上能看见半截），换回"值是新的"——
+  // 而以前的做法是整次更新被丢掉，于是同一条消息被叫醒两次。
+  // 这一步会留痕：写不动没关系，别瞒着。
+  try {
+    writeFileSync(file, body, 'utf8')
+    try {
+      rmSync(tmp, { force: true })
+    } catch {}
+    logLine({
+      note: 'atomic-write-degraded',
+      file: String(file).replace(HER_HOME, '~'),
+      code: lastError?.code ?? null,
+      fellBackTo: 'in-place',
+    })
+    return
+  } catch (error) {
+    logLine({
+      note: 'atomic-write-failed',
+      file: String(file).replace(HER_HOME, '~'),
+      step: 'rename+inPlace',
+      code: error?.code ?? lastError?.code ?? null,
+      attempts: 10,
+      keptTmp: String(tmp).replace(HER_HOME, '~'),
+    })
+    throw error
+  }
 }
 
 // ---------- 每成员一份的账（2026-11-11 17:01 修） ----------
@@ -833,7 +920,7 @@ function apply(ctx) {
       // 于是"重启带起来的"和"崩了又爬起来的"在日志里长得一模一样。
       // 起停必须成对，不然这份日志回答不了最基本的问题。
       const aliveSec = Math.round((Date.now() - startedAt.getTime()) / 1000)
-      watchmanLog('stopped', `reason=dispose pid=${process.pid} lived=${aliveSec}s`)
+      watchmanLog('stopped', `reason=dispose pid=${process.pid} lived=${aliveSec}s errors_today_own=${readErrorCount(OWN)} errors_today_peer=${readErrorCount(PEER)}`)
     })
     // gap = 距上一行日志多少秒（她 2026-11-10 要的）。今天那一行本该是 gap=21600s。
     const logProbe = lastLogGapSec()
@@ -842,7 +929,14 @@ function apply(ctx) {
     //   unseen = 尾巴 4KB 里全是 error，看不见上一行正常记录 —— 她要的那个意思
     //   （以前两种情况都写成 first，"从头开始"和"我看不见前面"长得一模一样）
     const gapText = logProbe.gap !== null ? `${logProbe.gap}s` : logProbe.missing ? 'none' : 'unseen'
-    watchmanLog('started', `pid=${process.pid} gap=${gapText} tail-errors=${logProbe.tailErrors} interval=${WATCH.intervalMs / 1000}s port=${WATCH.port} cap=${WATCH.maxWakesPerDay}/day errors_own=${readErrorCount(OWN)} errors_peer=${readErrorCount(PEER)} exe=${pwshInfo()}`)
+    // 起停必须成对：上一轮没写 stopped 时，"崩了又爬起来"和"正常重启"在纸上长得一模一样。
+    // 所以这里补一行 resumed，并把结论写进 started（prev-run=closed|open|unknown）。
+    const lastRun = lastRunState()
+    const prevText = lastRun === null || lastRun.closed === null ? 'unknown' : lastRun.closed ? 'closed' : 'open'
+    if (prevText === 'open') {
+      watchmanLog('resumed', `reason=unclean previous-start=${lastRun?.startedAt ?? 'unknown'} pid=${process.pid}`)
+    }
+    watchmanLog('started', `pid=${process.pid} prev-run=${prevText} gap=${gapText} tail-errors=${logProbe.tailErrors} interval=${WATCH.intervalMs / 1000}s port=${WATCH.port} cap=${WATCH.maxWakesPerDay}/day errors_today_own=${readErrorCount(OWN)} errors_today_peer=${readErrorCount(PEER)} exe=${pwshInfo()}`)
     void watchmanTick().catch(() => {})
   }
 }
@@ -1199,7 +1293,7 @@ async function watchmanTick() {
     const prev = watchState
     watchState = { day, wakes: 0, fails: 0, planFired: {}, skipped: {} }
     saveWatchState()
-    watchmanLog('note', `why=new-day counter-reset carried-wakes=${prev.wakes ?? 0}`)
+    watchmanLog('note', `why=new-day counter-reset carried-wakes=${prev.wakes ?? 0} pid=${process.pid}`)
   }
 
   const jobs = []
