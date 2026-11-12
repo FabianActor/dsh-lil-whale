@@ -5,8 +5,9 @@
  * 而 webServer 有现成的具名路由。群里那份 messages.jsonl 本来就是接口，
  * 这里只是给它开一扇 HTTP 的门。
  */
-import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, rmSync } from 'node:fs'
+import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, rmSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { createHash } from 'node:crypto'
 import { config } from './config.js'
 
 export const name = 'lil-whale-group-ui'
@@ -38,6 +39,43 @@ const GROUP_WAKE_TTL_MS = 10 * 60_000
 // 头像照片：一个人一张，文件名固定 `<成员>.<扩展名>`，换一张就覆盖旧的。
 // 上限 1.5 MB —— 够一张头像了；再大就是有人把整张截图塞进来，不该让群目录跟着长胖。
 const AVATAR_DIR = join(GROUP_DIR, 'avatars')
+// 群图片：和宿主侧同一套布局（images\<yyyymm>\<id>.<ext>），id 是内容哈希。
+const IMAGES_DIR = join(GROUP_DIR, 'images')
+const IMAGE_MAX_BYTES = 8 * 1024 * 1024
+const IMAGE_EXT = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' }
+
+/** 按 id + ext 找到图片路径；月份不知道就扫目录（一个群不会有很多月份）。 */
+function imagePathOf(id, ext) {
+  const safeId = String(id || '')
+  const safeExt = String(ext || '').toLowerCase()
+  if (!/^[0-9a-f]{16}$/.test(safeId) || !IMAGE_EXT[safeExt]) return null
+  try {
+    for (const month of readdirSync(IMAGES_DIR)) {
+      const candidate = join(IMAGES_DIR, month, `${safeId}.${safeExt}`)
+      if (existsSync(candidate)) return candidate
+    }
+  } catch { /* 目录还不存在：当作没找到 */ }
+  return null
+}
+
+/** 把前端传来的 data URL 落盘，返回消息里要记的字段。 */
+function storeImageDataUrl(dataUrl) {
+  const match = /^data:image\/(png|jpeg|webp|gif);base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''))
+  if (!match) throw new Error('图片格式不认：只收 png / jpg / webp / gif 的 data URL')
+  const ext = match[1] === 'jpeg' ? 'jpg' : match[1]
+  const buffer = Buffer.from(match[2], 'base64')
+  if (buffer.length === 0) throw new Error('图片是空的（0 字节）')
+  if (buffer.length > IMAGE_MAX_BYTES) {
+    throw new Error(`图片太大：${(buffer.length / 1048576).toFixed(1)} MB，上限 ${IMAGE_MAX_BYTES / 1048576} MB`)
+  }
+  const id = createHash('sha256').update(buffer).digest('hex').slice(0, 16)
+  const month = new Date().toISOString().slice(0, 7).replace('-', '')
+  const dir = join(IMAGES_DIR, month)
+  mkdirSync(dir, { recursive: true })
+  const file = join(dir, `${id}.${ext}`)
+  if (!existsSync(file)) writeFileSync(file, buffer)
+  return { id, ext, bytes: buffer.length, month }
+}
 const AVATAR_MAX_BYTES = 1.5 * 1024 * 1024
 const AVATAR_TYPES = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp' }
 
@@ -469,6 +507,49 @@ export function apply(ctx) {
       sendJson(res, 200, { seats })
     },
   }))
+  // ---------- 群图片 ----------
+  // GET  ?id=<16hex>&ext=png  → 图片字节（内容哈希当 id，所以可以永久缓存）
+  // POST { dataUrl }          → { id, ext, bytes, month }，前端拿到后再调 /group/api/send 带 image
+  disposers.push(ctx.webServer.register({
+    kind: 'exact',
+    path: '/group/api/image',
+    async handler(req, res) {
+      const url = new URL(req.url ?? '/', 'http://127.0.0.1')
+      if (req.method === 'GET') {
+        const file = imagePathOf(url.searchParams.get('id'), url.searchParams.get('ext'))
+        if (file === null) {
+          sendJson(res, 404, { error: 'no-image' })
+          return
+        }
+        const bytes = readFileSync(file)
+        res.statusCode = 200
+        res.setHeader('content-type', IMAGE_EXT[url.searchParams.get('ext').toLowerCase()] ?? 'application/octet-stream')
+        res.setHeader('content-length', String(bytes.length))
+        res.setHeader('cache-control', 'public, max-age=31536000, immutable')
+        res.end(bytes)
+        return
+      }
+      if (req.method !== 'POST') {
+        sendJson(res, 405, { error: 'method-not-allowed' })
+        return
+      }
+      let payload
+      try {
+        payload = JSON.parse(await readBody(req, 12 * 1024 * 1024))
+      } catch {
+        sendJson(res, 400, { error: 'bad-json' })
+        return
+      }
+      try {
+        const image = storeImageDataUrl(payload?.dataUrl)
+        sendJson(res, 200, { ok: true, image })
+      } catch (error) {
+        const message = String(error?.message ?? error)
+        sendJson(res, message.includes('太大') ? 413 : 400, { error: 'bad-image', detail: message })
+      }
+    },
+  }))
+
   disposers.push(ctx.webServer.register({
     kind: 'exact',
     path: '/group/api/send',
@@ -486,8 +567,24 @@ export function apply(ctx) {
       }
       const text = typeof payload?.text === 'string' ? payload.text.trim() : ''
       const to = payload?.to
-      if (!text) {
-        sendJson(res, 400, { error: 'empty-text' })
+      // 图片（可选）：{ id, ext, bytes, month }，由 /group/api/image 先上传拿到。
+      const rawImage = payload?.image
+      let image = null
+      if (rawImage && typeof rawImage === 'object') {
+        const file = imagePathOf(rawImage.id, rawImage.ext)
+        if (file === null) {
+          sendJson(res, 400, { error: 'unknown-image', detail: '先调 /group/api/image 上传，再带 id/ext 发消息' })
+          return
+        }
+        image = {
+          id: String(rawImage.id),
+          ext: String(rawImage.ext).toLowerCase(),
+          bytes: statSync(file).size,
+          month: String(rawImage.month || file.split(/[\\/]/).slice(-2)[0] || ''),
+        }
+      }
+      if (!text && image === null) {
+        sendJson(res, 400, { error: 'empty-message', detail: '至少要有文字或一张图片' })
         return
       }
       if (to !== 'all' && to !== 'lee' && to !== 'whale') {
@@ -502,11 +599,15 @@ export function apply(ctx) {
       const record = {
         ts: now.toISOString(), from: 'fabian', to, text, kind: 'say', s: 'ui',
         ...(toSeat === '' ? {} : { toSeat }),
+        ...(image === null ? {} : { image }),
       }
       try {
         appendFileSync(MESSAGES, JSON.stringify(record) + '\n', 'utf8')
         const who = to === 'all' ? '群里' : LABEL[to] ?? to
-        appendFileSync(READABLE, `**${stamp(now)} · Fabian → ${who}**\n\n${text}\n\n`, 'utf8')
+        const body = image === null
+          ? text
+          : `（图片 images/${image.month}/${image.id}.${image.ext}）${text === '' ? '' : `\n\n${text}`}`
+        appendFileSync(READABLE, `**${stamp(now)} · Fabian → ${who}**\n\n${body}\n\n`, 'utf8')
       } catch (error) {
         sendJson(res, 500, { error: 'write-failed', detail: String(error?.message ?? error) })
         return

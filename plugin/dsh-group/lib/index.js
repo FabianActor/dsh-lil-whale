@@ -8,10 +8,10 @@
 // 身份优先按**钉住的 sessionId** 认（2026-11-09 起）：同一目录下可能有两段会话，
 // 按 cwd 会叫错人。cwd 只作退路，并在 plugin.log 留一行痕迹。
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync, statSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, renameSync, rmSync, statSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { randomUUID } from 'node:crypto'
+import { randomUUID, createHash } from 'node:crypto'
 import { spawn, execFileSync } from 'node:child_process'
 import { connect } from 'node:net'
 import { config } from './config.js'
@@ -90,6 +90,11 @@ const inject = ['tools', 'agents']
 const CFG = config()
 
 const GROUP_DIR = CFG.groupDir
+// 图片：字节进 images\<yyyymm>\<id>.<ext>，消息里只记 id/ext/bytes。
+// 用内容哈希当 id —— 同一张图发两次只落一份，而且天然不可变（可以永久缓存）。
+const IMAGES_DIR = join(GROUP_DIR, 'images')
+const IMAGE_MAX_BYTES = 8 * 1024 * 1024
+const IMAGE_EXT = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' }
 const MESSAGES = join(GROUP_DIR, 'messages.jsonl')
 const CURSOR = join(GROUP_DIR, 'cursor.json')
 const READABLE = join(GROUP_DIR, '群.md')
@@ -659,31 +664,88 @@ function dmKey(a, b) {
  * 他 2026-11-09 明确：**不用严格保密**（"这里又不是什么情报机构"），
  * 要紧的是说话的人分得清"这句话说给谁"。
  */
-function sayPrivate(from, to, text) {
+/**
+ * 把一张图落进群目录，返回消息里要记的那三个字段。
+ * 同一张图第二次发：文件已存在就直接复用，不重复占空间。
+ */
+function storeImage(buffer, extRaw) {
+  const ext = String(extRaw || '').toLowerCase().replace(/^jpeg$/, 'jpg')
+  if (!IMAGE_EXT[ext]) throw new Error(`不支持的图片格式：${extRaw}（只收 png / jpg / webp / gif）`)
+  if (buffer.length === 0) throw new Error('图片是空的（0 字节），拒绝写入')
+  if (buffer.length > IMAGE_MAX_BYTES) {
+    throw new Error(`图片太大：${(buffer.length / 1048576).toFixed(1)} MB，上限 ${IMAGE_MAX_BYTES / 1048576} MB`)
+  }
+  const id = createHash('sha256').update(buffer).digest('hex').slice(0, 16)
+  const month = new Date().toISOString().slice(0, 7).replace('-', '')
+  const dir = join(IMAGES_DIR, month)
+  mkdirSync(dir, { recursive: true })
+  const file = join(dir, `${id}.${ext}`)
+  if (!existsSync(file)) writeFileSync(file, buffer)
+  return { id, ext, bytes: buffer.length, month }
+}
+
+/** 从本地文件读一张图（工具参数给的是路径）。 */
+function storeImageFromPath(pathValue) {
+  const file = String(pathValue || '').trim().replace(/^"|"$/g, '')
+  if (file === '') throw new Error('image 是空的：给一个本地图片的绝对路径')
+  if (!existsSync(file)) throw new Error(`找不到这张图：${file}`)
+  const info = statSync(file)
+  if (!info.isFile()) throw new Error(`image 指向的不是文件：${file}`)
+  if (info.size > IMAGE_MAX_BYTES) {
+    throw new Error(`图片太大：${(info.size / 1048576).toFixed(1)} MB，上限 ${IMAGE_MAX_BYTES / 1048576} MB`)
+  }
+  const ext = file.includes('.') ? file.slice(file.lastIndexOf('.') + 1) : ''
+  return storeImage(readFileSync(file), ext)
+}
+
+/** 按 id + ext 找到图片的真实路径（服务端发图用）。 */
+function imagePathOf(image) {
+  const id = String(image?.id || '')
+  const ext = String(image?.ext || '').toLowerCase()
+  if (!/^[0-9a-f]{16}$/.test(id) || !IMAGE_EXT[ext]) return null
+  const month = String(image?.month || '').replace(/[^0-9]/g, '')
+  const candidates = []
+  if (month.length === 6) candidates.push(join(IMAGES_DIR, month, `${id}.${ext}`))
+  try {
+    for (const entry of readdirSync(IMAGES_DIR)) candidates.push(join(IMAGES_DIR, entry, `${id}.${ext}`))
+  } catch { /* 目录还不存在：下面统一返回 null */ }
+  return candidates.find((p) => existsSync(p)) ?? null
+}
+
+function sayPrivate(from, to, text, image = null) {
   mkdirSync(DM_DIR, { recursive: true })
-  const record = { ts: new Date().toISOString(), from, to, text, kind: 'dm', channel: 'dm' }
+  const record = {
+    ts: new Date().toISOString(), from, to, text, kind: 'dm', channel: 'dm',
+    ...(image === null ? {} : { image }),
+  }
   appendFileSync(dmFileOf(from, to), JSON.stringify(record) + '\n', 'utf8')
   return record
 }
 
-function say(from, to, text, channel = 'group', s = '', toSeat = '') {
+function say(from, to, text, channel = 'group', s = '', toSeat = '', image = null) {
   ensureDir()
   // 只追加的文件删不掉一行，所以空正文绝不能落盘。
   // 现场（2026-11-11 16:23）：一条没有 text 的记录进了 messages.jsonl，
   // 在 群.md 里显示成 undefined —— 一个空对象，读起来却像一句话。
   const body = typeof text === 'string' ? text.trim() : ''
-  if (body === '') throw new Error('群消息不能没有正文（text 是空的，拒绝写入）')
+  // 一条消息至少要有一件东西：一段话或一张图。两个都空，仍然是"空消息"。
+  if (body === '' && image === null) throw new Error('群消息不能没有内容（text 和 image 都是空的，拒绝写入）')
   const isDm = channel === 'dm' || to === 'fabian'
-  if (isDm) return { ...sayPrivate(from, to, body), channel: 'dm' }
+  if (isDm) return { ...sayPrivate(from, to, body, image), channel: 'dm' }
   const record = {
     ts: new Date().toISOString(), from, to, text: body, kind: 'say', channel: 'group',
     ...(s === '' ? {} : { s }),
     // 指名某一座位（同一个人的第二段会话）：只有那一段会被叫醒。
     // 不加这个字段 = 叫"这个人"，谁空谁应（仍然只叫一次）。
     ...(toSeat === '' ? {} : { toSeat }),
+    // 图片（可选）：只记定位信息，字节在 images\ 下。
+    ...(image === null ? {} : { image }),
   }
   appendFileSync(MESSAGES, JSON.stringify(record) + '\n', 'utf8')
-  appendFileSync(READABLE, `**${stamp()} · ${labelOf(from)}**\n\n${body}\n\n`, 'utf8')
+  const readableBody = image === null
+    ? body
+    : `（图片 images/${image.month}/${image.id}.${image.ext}）${body === '' ? '' : `\n\n${body}`}`
+  appendFileSync(READABLE, `**${stamp()} · ${labelOf(from)}**\n\n${readableBody}\n\n`, 'utf8')
   return { ...record, channel: 'group' }
 }
 
@@ -833,6 +895,10 @@ function apply(ctx) {
         type: 'string',
         description: '可选。指名某一段会话收（会话 id 前 6 位，例如 ae4daa）。不填 = 叫这个人，谁空谁应。只在 group 通道有效。',
       },
+      image: {
+        type: 'string',
+        description: '可选。要发的图片的本地**绝对路径**（png / jpg / webp / gif，<= 8 MB）。给了图就可以不写 text，也可以两个都给（图 + 一句话）。',
+      },
     },
     output: {
       // 注意：宿主不支持在 properties 里写 `required: true`
@@ -845,6 +911,7 @@ function apply(ctx) {
           queued: { type: 'boolean' },
           channel: { type: 'string' },
           to: { type: 'string' },
+          image: { type: 'string' },
         },
       },
       // 回执要让人一眼看出"这句话去了哪一间屋"。
@@ -895,13 +962,24 @@ function apply(ctx) {
           )
         }
       }
-      const record = say(member, args.to, args.text, channel, sid === null ? '' : sid.replace(/^session-/, '').slice(0, 6), toSeat)
+      // 图片：工具参数给的是路径，落盘后消息里只留 id/ext/bytes/month。
+      let image = null
+      if (typeof args.image === 'string' && args.image.trim() !== '') {
+        image = storeImageFromPath(args.image)
+        logLine({ note: 'group_say-image', id: image.id, ext: image.ext, bytes: image.bytes })
+      }
+      const record = say(
+        member, args.to, args.text, channel,
+        sid === null ? '' : sid.replace(/^session-/, '').slice(0, 6), toSeat, image,
+      )
       // channel 让发言的人一眼知道这句话去了哪：group = 大家都看得见；dm = 只有对方看得见，且不会叫醒谁。
-      return { ts: record.ts, queued: true, channel: record.channel, to: args.to }
+      return { ts: record.ts, queued: true, channel: record.channel, to: args.to, image: image === null ? '' : `${image.id}.${image.ext}` }
     },
     presentCall: (args) => ({
       card: 'generic',
-      title: `在群里说：${args.text.slice(0, 40)}`,
+      title: args.text === undefined || args.text === ''
+        ? '在群里发一张图'
+        : `在群里说：${args.text.slice(0, 40)}`,
       kind: 'other',
       rawInput: args,
     }),
@@ -1142,7 +1220,7 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
   const who = incoming.map((record) => labelOf(record.from)).join('、')
   const preview = incoming
     .slice(-3)
-    .map((record) => `${labelOf(record.from)}：${record.text.slice(0, 60)}`)
+    .map((record) => `${labelOf(record.from)}：${record.image ? '（图片）' : ''}${record.text.slice(0, 60)}`)
     .join('\n')
 
   const conversation = CONVERSATIONS[sessionIdOf(agent) ?? ''] ?? ''

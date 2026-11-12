@@ -564,7 +564,25 @@ window.__ModuleLoader__.load({
               wordBreak: 'break-word',
               animation: animateOnMount ? 'dshGroupRise 240ms cubic-bezier(.2,.8,.2,1) both' : undefined,
             },
-              }, h(SafeMarkdown, { text: message.text })),
+              },
+              message.image
+                ? h('img', {
+                  src: `/group/api/image?id=${message.image.id}&ext=${message.image.ext}`,
+                  alt: '图片',
+                  loading: 'lazy',
+                  onClick: () => {
+                    try {
+                      window.open(`/group/api/image?id=${message.image.id}&ext=${message.image.ext}`, '_blank')
+                    } catch { /* 弹窗被拦就算了，图本身已经在页面上 */ }
+                  },
+                  style: {
+                    display: 'block', maxWidth: 260, maxHeight: 260,
+                    borderRadius: 'var(--dsw-radius-md, 8px)', cursor: 'zoom-in',
+                    marginBottom: message.text ? 6 : 0,
+                  },
+                })
+                : null,
+              message.text ? h(SafeMarkdown, { text: message.text }) : null),
         ),
       )
     }
@@ -1340,6 +1358,10 @@ window.__ModuleLoader__.load({
       const [to, setTo] = useState('all')
       const [error, setError] = useState(null)
       const [sending, setSending] = useState(false)
+      // 待发送的图（data URL）。上传在 submit 里做，这里只存"用户选了哪张"。
+      const [pendingImage, setPendingImage] = useState(null)
+      const [imageBusy, setImageBusy] = useState(false)
+      const fileRef = useRef(null)
       const [presence, setPresence] = useState({})
       const [seats, setSeats] = useState([])
       const [pickerOpen, setPickerOpen] = useState(false)
@@ -1462,6 +1484,35 @@ window.__ModuleLoader__.load({
       // 线一旦挂上来就要立刻量：只靠 scroll 事件的话，进页面时的第一帧量不到。
       useEffect(() => { measureHistory() })
 
+      // 三种进图方式（点按钮 / 粘贴 / 拖进来）最后都走这里：
+      // 只收图片、限 8 MB，超了直接说清楚，不静默丢掉。
+      const attachImage = useCallback(async (file) => {
+        if (!file) return
+        if (!/^image\//.test(file.type)) {
+          setError('只能发图片（png / jpg / webp / gif）')
+          return
+        }
+        if (file.size > 8 * 1024 * 1024) {
+          setError(`图片太大：${(file.size / 1048576).toFixed(1)} MB，上限 8 MB`)
+          return
+        }
+        setImageBusy(true)
+        try {
+          const dataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = () => resolve(String(reader.result ?? ''))
+            reader.onerror = () => reject(new Error('这张图读不出来'))
+            reader.readAsDataURL(file)
+          })
+          setPendingImage(dataUrl)
+          setError(null)
+        } catch (e) {
+          setError(String(e?.message ?? e))
+        } finally {
+          setImageBusy(false)
+        }
+      }, [])
+
       const persistWidth = useCallback(() => {
         setWidthPct((current) => {
           try { window.localStorage?.setItem('dsh-group-width', String(current)) } catch {}
@@ -1470,27 +1521,45 @@ window.__ModuleLoader__.load({
       }, [])
       const submit = useCallback(async () => {
         const value = text.trim()
-        if (value === '' || sending) return
+        if ((value === '' && pendingImage === null) || sending) return
         setSending(true)
         try {
+          // 图先落盘拿到 id/x/ext，消息里只记定位信息（字节不进 jsonl）。
+          let image = null
+          if (pendingImage !== null) {
+            const uploaded = await fetch('/group/api/image', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ dataUrl: pendingImage }),
+            })
+            const result = await uploaded.json().catch(() => null)
+            if (!uploaded.ok) throw new Error(result?.detail ?? `图片上传失败 HTTP ${uploaded.status}`)
+            image = result?.image ?? null
+          }
+          const { base, seat } = splitTarget(to)
           const endpoint = tab === 'dm' ? '/group/api/dm' : '/group/api/send'
+          const body = tab === 'dm'
+            ? { text: value, ...(image === null ? {} : { image }) }
+            : {
+              to: base, text: value,
+              ...(seat === '' ? {} : { toSeat: seat }),
+              ...(image === null ? {} : { image }),
+            }
           const response = await fetch(endpoint, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify(tab === 'dm' ? { text: value } : (() => {
-              const { base, seat } = splitTarget(to)
-              return seat === '' ? { to: base, text: value } : { to: base, toSeat: seat, text: value }
-            })()),
+            body: JSON.stringify(body),
           })
           if (!response.ok) throw new Error(`HTTP ${response.status}`)
           setText('')
+          setPendingImage(null)
           await refresh()
         } catch (e) {
           setError(String(e?.message ?? e))
         } finally {
           setSending(false)
         }
-      }, [text, to, sending, refresh, tab])
+      }, [text, to, sending, refresh, tab, pendingImage])
 
       // 两种忙分开报：群里被叫起来的 / 在别处忙的。宿主只给得出这一层。
       const groupBusy = ['lee', 'whale'].filter((id) => {
@@ -1713,10 +1782,50 @@ window.__ModuleLoader__.load({
                         display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
                       },
                     }, '×'))),
+              pendingImage !== null
+                ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+                  h('img', {
+                    src: pendingImage,
+                    alt: '待发送的图片',
+                    style: { maxHeight: 72, maxWidth: 120, borderRadius: 8, display: 'block' },
+                  }),
+                  h('button', {
+                    onClick: () => setPendingImage(null),
+                    title: '去掉这张图',
+                    style: {
+                      width: 20, height: 20, borderRadius: '50%', border: 'none',
+                      background: 'var(--dsw-alias-bg-layer-3, rgba(0,0,0,0.06))',
+                      color: 'var(--dsw-alias-label-tertiary)', fontSize: 13, lineHeight: 1,
+                      padding: 0, cursor: 'pointer', display: 'grid', placeItems: 'center',
+                    },
+                  }, '×'),
+                  h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } },
+                    imageBusy ? '读取中…' : '发出去就进群，删不掉'))
+                : null,
               h('textarea', {
                 ref: inputRef,
                 value: text,
                 onChange: (event) => setText(event.target.value),
+                onPaste: (event) => {
+                  const items = event.clipboardData?.items
+                  if (!items) return
+                  for (const item of items) {
+                    if (item.kind === 'file' && /^image\//.test(item.type)) {
+                      event.preventDefault()
+                      void attachImage(item.getAsFile())
+                      return
+                    }
+                  }
+                },
+                onDragOver: (event) => {
+                  if (event.dataTransfer?.types?.includes('Files')) event.preventDefault()
+                },
+                onDrop: (event) => {
+                  const file = event.dataTransfer?.files?.[0]
+                  if (!file) return
+                  event.preventDefault()
+                  void attachImage(file)
+                },
                 onKeyDown: (event) => {
                   if (event.key === 'Enter' && !event.shiftKey) {
                     event.preventDefault()
@@ -1750,17 +1859,50 @@ window.__ModuleLoader__.load({
                       stroke: 'var(--dsw-alias-border-l2, rgba(0,0,0,0.12))', strokeWidth: 1,
                     })),
                   h('span', { style: { position: 'relative', fontSize: 15, lineHeight: 1, color: 'var(--dsw-alias-label-secondary)' } }, '@')),
+                h('button', {
+                  onClick: () => fileRef.current?.click(),
+                  title: '发一张图（也可以直接粘贴或拖进来）',
+                  style: {
+                    flex: '0 0 32px', width: 32, height: 32, padding: 0, border: 'none',
+                    background: 'transparent', position: 'relative', cursor: 'pointer',
+                    display: 'grid', placeItems: 'center', opacity: imageBusy ? 0.4 : 1,
+                  },
+                },
+                  h('svg', { width: 32, height: 32, viewBox: '0 0 32 32', style: { position: 'absolute', inset: 0 } },
+                    h('circle', {
+                      cx: 16, cy: 16, r: 15.5, fill: 'transparent',
+                      stroke: 'var(--dsw-alias-border-l2, rgba(0,0,0,0.12))', strokeWidth: 1,
+                    })),
+                  h('svg', {
+                    width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none',
+                    stroke: 'var(--dsw-alias-label-secondary)', strokeWidth: 1.4,
+                    strokeLinecap: 'round', strokeLinejoin: 'round', style: { position: 'relative' },
+                  },
+                    h('rect', { x: 2.5, y: 3.5, width: 11, height: 9, rx: 1.5 }),
+                    h('path', { d: 'M2.5 10.5l3-3 2.5 2.5 2-2 3.5 3.5' }),
+                    h('circle', { cx: 10.5, cy: 6.5, r: 1 }))),
+                h('input', {
+                  ref: fileRef,
+                  type: 'file',
+                  accept: 'image/png,image/jpeg,image/webp,image/gif',
+                  style: { display: 'none' },
+                  onChange: (event) => {
+                    const file = event.target.files?.[0]
+                    event.target.value = ''
+                    void attachImage(file)
+                  },
+                }),
                 h('div', { style: { flex: 1, fontSize: 11, color: 'var(--dsw-alias-label-caption)' } },
                   to === 'all' ? t.groupOnly : t.toOne(targetName(config, to))),
                 h('button', {
                   onClick: () => { void submit() },
-                  disabled: sending || text.trim() === '',
+                  disabled: sending || (text.trim() === '' && pendingImage === null),
                   title: t.send,
                   style: {
                     flex: '0 0 32px', width: 32, height: 32, padding: 0, border: 'none',
                     background: 'transparent', position: 'relative',
-                    cursor: sending || text.trim() === '' ? 'not-allowed' : 'pointer',
-                    opacity: sending || text.trim() === '' ? 0.4 : 1,
+                    cursor: sending || (text.trim() === '' && pendingImage === null) ? 'not-allowed' : 'pointer',
+                    opacity: sending || (text.trim() === '' && pendingImage === null) ? 0.4 : 1,
                     display: 'grid', placeItems: 'center', transition: 'opacity 120ms ease',
                   },
                 },
@@ -2165,7 +2307,7 @@ window.__ModuleLoader__.load({
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[lil-whale-group-ui] client build v8 · jump-to-history:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[lil-whale-group-ui] client build v9 · group-images:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('lil-whale-group-keyframes')) {
           const style = document.createElement('style')
