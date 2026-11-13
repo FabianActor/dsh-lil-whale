@@ -1,3 +1,7 @@
+## v1.0.63 — 2026-11-13 19:5x
+
+- **第三批（P2）**：`rebuild-group-md.mjs` 有说不清差异时不再整本写 `群.md`；`claimPlanDelivery` 缺 home 时按成员兜底；`saveWatchState` 失败留痕；`fish.ps1` 按 `role=watcher` 找主 dsh、`refresh all` 跳过巡守；`wake-whale.ps1` 跳 spawn 时等心跳、路径单引号转义；`settings.json` 写回 `crashNotify`。PRD A.58 续；状态行 v1.0.63。
+
 ## v1.0.62 — 2026-11-13 19:1x
 
 - **第二批 bug 修复（13 处）**：游标只许前进的合并写；`dmPeerOf` 不再静默回退（三处 400）；`writePondSettings` 读-改-写保住 `crashNotify`；`Stop-Fish` 不再"假成功"（端口还开着返回 false，mode 账 `unknown`）；`crashNotify` 传 `member.key`；面板群发先建目录、发送人用名册；面板私聊补可读投影；token 正则允许 `.`/`~`；重建器整本写改原子、`--migrate` 同步迁移私聊；两份 `config.js` 默认布局改鱼塘；`install.ps1` seed `family.json`、放宽 `$InPond`；`doctor.ps1` 的端口检查按名册找 watcher；四个 `scripts\*.mjs` 拒绝未知参数（`--help` 不再执行）。PRD 新增 A.58；状态行 v1.0.62。
