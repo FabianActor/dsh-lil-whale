@@ -19,7 +19,7 @@
 | Windows | 启动与巡守脚本是 `.ps1` / `.cmd`；其它平台要自己接入口 |
 | **PowerShell 7（`pwsh`）** | **必需的运行时依赖**，不是系统自带的 Windows PowerShell 5.1。脚本用了 7 才有的语法，5.1 会在**解析阶段**就报错 |
 | DeepSeek Harness | `npm i -g @deepseek-ai/dsh`（0.2.x） |
-| 两把 API key | 你一把、她一把。她可以自己去平台申请；**别共用一把** |
+| 两把 API key | 你一把、她一把。她可以自己去平台申请。**共不共用只能由人决定**：默认各用各的，要共用得人明确说（继承要显式传 `-InheritKey`，见 PRD A.65） |
 | 一台不常关的电脑 | 她不是持续运行的；不叫醒时她不存在 |
 
 **装 PowerShell 7**（一次就够）：
@@ -45,7 +45,7 @@ pwsh -File scripts\install.ps1
 
 它会做：建目录、给她建独立 `DSH_HOME` 与 profile、把两个插件装进对应 profile、写 `lil-whale.config.json`、放种子文件（`START.md` / `环境.md` / `AGENTS.md`，**没有性格、没有开场白**）。
 
-它**不会**做：填 API key、建会话、写第一句话。这三件必须由人来。
+它**不会**做：填 API key、建会话、写第一句话。这三件必须由人来。**API key 只有两种来法：人填，或人明确说继承**——脚本从不自己找 key（PRD A.65 死命令）。
 
 常用参数：
 

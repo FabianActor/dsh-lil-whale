@@ -44,7 +44,12 @@ param(
   # new 用（D4-2 养一条新鱼）：成员键 / 名字（-Name 位置参数）/ 父辈成员键 / 只查不做。
   [string]$Key = '',
   [string]$Parent = '',
-  [switch]$DryRun
+  [switch]$DryRun,
+  # 2026-11-13 他的死命令：API key 只能经过人。默认不碰凭证；只有人明确说"继承某条鱼的 key"时，
+  # 才用 -InheritKey <家长键>，并且出生行记 keyInherited=。
+  [string]$InheritKey = '',
+  # 谁想养的（留痕用）：比如 whale。
+  [string]$RequestedBy = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -724,6 +729,28 @@ function Invoke-NewFish {
     Write-Host 'NEXT: 先归档一条不用的鱼（scripts\archive-fish.ps1），或者改上限。'
     return $false
   }
+  $planInherit = ''
+  if ($InheritKey) {
+    if ($InheritKey -eq $key) {
+      Write-Host 'xx -InheritKey 不能指它自己。'
+      return $false
+    }
+    $srcMember = $MEMBERS[$InheritKey]
+    if (-not $srcMember) {
+      Write-Host ("xx 名册里没有「{0}」，没法继承它的 key。" -f $InheritKey)
+      return $false
+    }
+    if ($srcMember.Kind -ne 'fish') {
+      Write-Host ("xx 「{0}」不是鱼，没有 key 可继承。" -f $srcMember.Label)
+      return $false
+    }
+    $srcCred = Join-Path $srcMember.DshHome '.credentials.yaml'
+    if (-not (Test-Path -LiteralPath $srcCred)) {
+      Write-Host ("xx 「{0}」的家还没有凭证文件 —— 先让它自己填过 key，再继承。" -f $srcMember.Label)
+      return $false
+    }
+    $planInherit = $InheritKey
+  }
   $childHome = Join-Path (Join-Path $pondRoot 'homes') $key
   $portText = if ($Port -gt 0) { [string]$Port } else { '自动挑一个空口' }
   Write-Host ''
@@ -732,6 +759,7 @@ function Invoke-NewFish {
   Write-Host ('  她的家      {0}' -f $childHome)
   Write-Host ('  端口        {0}' -f $portText)
   Write-Host ('  现在鱼数    {0} / {1}' -f $fishCount, $maxFish)
+  if ($planInherit) { Write-Host ('  钥匙        继承自「{0}」（花它的额度）' -f $MEMBERS[$planInherit].Label) }
   if ($DryRun) {
     Write-Host ''
     Write-Host '（-DryRun：只查了规则，什么都没建。）'
@@ -755,19 +783,50 @@ function Invoke-NewFish {
     $fresh = Get-Content -LiteralPath $Cfg.MembersFile -Raw -Encoding utf8 | ConvertFrom-Json
     $realPort = [int]$fresh.members.$key.port
   } catch { }
+  # API key 是人的东西：只有上面 -InheritKey 明确给了，才在这里复制一份；脚本自己从不"顺手"找 key。
+  $keyInherited = ''
+  if ($planInherit) {
+    $srcCred = Join-Path $MEMBERS[$planInherit].DshHome '.credentials.yaml'
+    $dstCred = $null
+    try {
+      $freshHome = (Get-Content -LiteralPath $Cfg.MembersFile -Raw -Encoding utf8 | ConvertFrom-Json).members.$key.dshHome
+      if ($freshHome) { $dstCred = Join-Path ([string]$freshHome) '.credentials.yaml' }
+    } catch { }
+    if (-not $dstCred) {
+      Write-Host 'xx 名册里读不到新鱼的家，凭证没复制 —— 请人工填 key。'
+    } else {
+      try {
+        Copy-Item -LiteralPath $srcCred -Destination $dstCred -Force
+        $keyInherited = $planInherit
+        Write-Host ''
+        Write-Host ("!! 已把「{0}」的 API key 复制给「{1}」—— 花的是它的额度（人明确要求的继承）。" -f $MEMBERS[$planInherit].Label, $childName)
+        Write-Host '   回收方式：删掉新鱼家里的 .credentials.yaml，或轮换家长那把 key。'
+      } catch {
+        Write-Host ('xx 凭证复制失败（{0}）—— 请人工填 key。' -f $_.Exception.Message)
+      }
+    }
+  }
   $birthLog = Join-Path $Cfg.PoolState 'births.log'
   $parentStatus = if ($parent.Status) { $parent.Status } else { 'resident' }
-  $line = '{0} | birth | fmt=1 key={1} name={2} parent={3} by={4} port={5} status=experiment parentStatus={6}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $key, $childName, $parent.Key, $By, $realPort, $parentStatus
+  $keyPart = if ($keyInherited) { ' keyInherited=' + $keyInherited } else { '' }
+  $line = '{0} | birth | fmt=1 key={1} name={2} parent={3} by={4} port={5} status=experiment parentStatus={6} requestedBy={7}{8}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $key, $childName, $parent.Key, $By, $realPort, $parentStatus, $RequestedBy, $keyPart
   try { Add-Content -LiteralPath $birthLog -Value $line -Encoding utf8 } catch { Write-Host ('!! birth 没记上：{0}' -f $_.Exception.Message) }
   Write-Host ''
   Write-Host ('{0} 出生了：{1}（{2}），端口 {3}。' -f $parent.Label, $childName, $key, $realPort)
   Write-Host ''
-  Write-Host '还缺三步（前两步得有人做，第三步是给它第一句话）：'
-  Write-Host ('  1) 给它一把钥匙：pwsh -File scripts\fish.ps1 maintain {0}' -f $key)
-  Write-Host '     在弹出的窗里进 设置 → Models，填它自己的 API key；填完关窗。'
-  Write-Host ('  2) 回到无人值守：pwsh -File scripts\fish.ps1 restore {0}' -f $key)
-  Write-Host '  3) 在群里对它说第一句话 —— 它会从这句话开始记事。'
-  Write-Host '  4) 看它起没起来：pwsh -File scripts\fish.ps1 list'
+  if ($keyInherited) {
+    Write-Host '还缺两步（钥匙已经继承了；最后一步是给它第一句话）：'
+    Write-Host ('  1) 回无人值守：pwsh -File scripts\fish.ps1 restore {0}' -f $key)
+    Write-Host '  2) 在群里对它说第一句话 —— 它会从这句话开始记事。'
+    Write-Host ('  3) 看它起没起来：pwsh -File scripts\fish.ps1 list')
+  } else {
+    Write-Host '还缺三步（前两步得有人做，第三步是给它第一句话）：'
+    Write-Host ('  1) 给它一把钥匙：pwsh -File scripts\fish.ps1 maintain {0}' -f $key)
+    Write-Host '     在弹出的窗里进 设置 → Models，填它自己的 API key；填完关窗。'
+    Write-Host ('  2) 回到无人值守：pwsh -File scripts\fish.ps1 restore {0}' -f $key)
+    Write-Host '  3) 在群里对它说第一句话 —— 它会从这句话开始记事。'
+    Write-Host '  4) 看它起没起来：pwsh -File scripts\fish.ps1 list'
+  }
   return $true
 }
 
