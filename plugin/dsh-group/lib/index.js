@@ -691,6 +691,7 @@ const WAKE = {
   cooldownSec: 60,
   perHour: 12,
   perDay: 60,
+  totalPerDay: 120,      // 全池今天加起来的上限（每条鱼各自还有 perHour/perDay）
   backlogTier: 8,        // 积压超过这个数，唤醒词换成"先看最后三条"
 }
 
@@ -839,11 +840,34 @@ function presenceAgeOf(member) {
 
 function wakeCountsOf(member) {
   try {
+    // 2026-11-13：wakes 文件里是按成员键的对象（{\"whale\":{...}}），
+    // 原来平铺读 json.hourCount ⇒ 永远 0，日志里的 gate=pass(hour=0/12) 是假的。
     const json = JSON.parse(readFileSync(wakesFileOf(member), 'utf8'))
-    return { hour: Number(json?.hourCount) || 0, day: Number(json?.dayCount) || 0 }
+    const state = json?.[member] ?? json ?? {}
+    return { hour: Number(state?.hourCount) || 0, day: Number(state?.dayCount) || 0 }
   } catch {
     return { hour: 0, day: 0 }
   }
+}
+
+/** 全池今天一共叫醒过多少次：各鱼 `state\wakes\<键>.json` 的 dayCount 相加。 */
+function totalWakesToday() {
+  const dir = join(POOL_STATE, 'wakes')
+  const today = new Date().toDateString()
+  let sum = 0
+  try {
+    for (const name of readdirSync(dir)) {
+      if (!name.endsWith('.json')) continue
+      try {
+        const json = JSON.parse(readFileSync(join(dir, name), 'utf8'))
+        // 文件内容是按成员键的对象；一条文件里可能不止一个成员（历史原因）。
+        for (const state of Object.values(json ?? {})) {
+          if (state?.dayStart === today) sum += Number(state?.dayCount) || 0
+        }
+      } catch {}
+    }
+  } catch {}
+  return sum
 }
 
 function ensureParent(file) {
@@ -1430,6 +1454,29 @@ function apply(ctx) {
 
   ctx.on('dispose', () => clearInterval(timer))
 
+  // 2.5 自己的闹钟：读自己家的 plan，自己递自己（2026-11-13 review 的建议 B）。
+  //     巡守不在也照样响；claim 文件保证和巡守那边不会各递一次。
+  if (!isMainProcess()) {
+    const selfTimer = setInterval(() => {
+      try {
+        selfPlanTick()
+      } catch (error) {
+        watchmanLog('error', `why=self-plan-tick-failed detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)}`)
+      }
+    }, 60_000)
+    selfTimer.unref?.()
+    const selfBoot = setTimeout(() => {
+      try {
+        selfPlanTick()
+      } catch {}
+    }, 10_000)
+    selfBoot.unref?.()
+    ctx.on('dispose', () => {
+      clearInterval(selfTimer)
+      clearTimeout(selfBoot)
+    })
+  }
+
   // 3. 每个进程都记自己的起停（不只巡守那条）。
   //    上一轮没写 stopped = 上一轮不是正常收尾的（关窗、被杀、崩了都算），
   //    补一行 resumed 之后才写这一轮的 started —— "没了"和"正常退出"从今天起分得开。
@@ -1828,7 +1875,7 @@ function noteOnce(member, msg) {
 }
 
 /** 读她自己写的那份"什么时候该推我"。格式不对一律只记一行、不推。 */
-function planDue(member, st, now) {
+function planDue(member, st, now, graceMin = 1) {
   let raw
   try {
     raw = JSON.parse(readFileSync(planFileOf(member), 'utf8'))
@@ -1861,14 +1908,60 @@ function planDue(member, st, now) {
       if (!wanted.includes(dow)) continue
     }
     const delta = mins - (Number(m[1]) * 60 + Number(m[2]))
-    if (delta < 0 || delta > 1) continue
+    if (delta < 0 || delta > graceMin) continue
     out.push({ id, at: String(it.at), why: String(it.why) })
   }
   return out
 }
-/** 巡守递的那句话。开着的窗直接用；刚被推开的窗也递进去，等她起来自己读到。 */
+/** 闹钟递的那句话。开着的窗直接用；刚被推开的窗也递进去，等她起来自己读到。
+ *  `by === 'self'` 表示这条是她自己的进程按她自己的表递的（巡守关着也照样响）。 */
 function planDeliveryText(job) {
-  return `巡守递话：\`${job.key}\` 到点了（${job.tag}）。\n\n表上写的理由：${job.itemWhy || '（没写）'}\n\n做着看不做也行，你定。这条只递一次。`
+  const who = job.by === 'self' ? '自己的闹钟' : '巡守递话'
+  return `${who}：\`${job.key}\` 到点了（${job.tag}）。\n\n表上写的理由：${job.itemWhy || '（没写）'}\n\n做着看不做也行，你定。这条只递一次。`
+}
+
+/**
+ * 每条鱼执行自己家的计划表（2026-11-13，PRD review 的建议 B）。
+ *
+ * 巡守只负责"推门 + 记账"；到点该不该起，由鱼自己的进程读自己家的 plan。
+ * 这样主 dsh 关着的时候，她自己的闹钟照样响 —— 之前是主 dsh 一关，
+ * 所有鱼的早上都跟着停，纸面上还看不出来。
+ *
+ * 只处理"正好这一分钟、或刚错过不到 SELF_PLAN_GRACE_MIN 分钟"的条目：
+ * 进程刚起来能补上刚错过的那一班，但不会把三小时前的闹钟补一遍。
+ * claim 文件（一天一条）保证自执行和巡守那边不会各递一次。
+ */
+const SELF_PLAN_GRACE_MIN = 15
+
+function selfPlanTick() {
+  if (isMainProcess()) return
+  const self = ownMember()
+  const member = MEMBERS[self]
+  if (!member || member.role === 'watcher') return
+  const now = new Date()
+  let due = []
+  try {
+    due = planDue(member, { planFired: {} }, now, SELF_PLAN_GRACE_MIN)
+  } catch (error) {
+    watchmanLog('error', `why=self-plan-read-failed to=${self} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)}`)
+    return
+  }
+  for (const item of due) {
+    const total = totalWakesToday()
+    if (total >= WAKE.totalPerDay) {
+      watchmanLog('wake-skip', `to=${self} why=plan:${item.id} deny=total-cap total=${total}/${WAKE.totalPerDay}`)
+      continue
+    }
+    if (!claimPlanDelivery(member, item.id)) continue
+    const job = { key: item.id, tag: `plan=${item.id} at=${item.at}`, itemWhy: item.why, by: 'self' }
+    try {
+      say('lee', self, planDeliveryText(job), 'group', 'watch')
+      watchmanLog('woke', `trigger=self to=${self} plan=${item.id} at=${item.at}`)
+      markWake(self, 'plan')
+    } catch (error) {
+      watchmanLog('error', `why=self-plan-deliver-failed to=${self} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)} plan=${item.id}`)
+    }
+  }
 }
 
 async function watchOne(member, st) {
@@ -1934,6 +2027,13 @@ async function watchOne(member, st) {
         'wake-try',
         `wid=${wid} why=plan:${job.key} to=${member.key} gate=${gate} hb-age=${hbAge === null ? 'none' : `${hbAge}s`} deliver=${awake ? 'msg' : 'push'}`,
       )
+
+      const totalNow = totalWakesToday()
+      if (totalNow >= WAKE.totalPerDay) {
+        watchmanLog('wake-skip', `wid=${wid} deny=total-cap total=${totalNow}/${WAKE.totalPerDay}`)
+        noteSkip('why=total-cap')
+        continue
+      }
 
       if (awake) {
         // "只递一次"走原子声明（见 claimPlanDelivery）。这里不再读 planFired ——
@@ -2025,11 +2125,17 @@ async function watchOne(member, st) {
       // 她起来之后 tailer 会读到。不加这一步，睡着的那个早上只会"窗口开了、人不知道该干什么"——
       // 她 2026-11-10 的原话：plan 不是叫醒，是提醒一个活着的人去做事。
       if (job.from === 'plan') {
-        try {
-          say('lee', member.key, planDeliveryText(job))
-          watchmanLog('deliver', `why=plan-after-wake ${job.tag}（窗是推开的，话已递进去）`)
-        } catch (error) {
-          watchmanLog('error', `why=plan-deliver-failed detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)} ${job.tag}`)
+        // 2026-11-13 13:2x：推门这一支原来不写 claim ⇒ 鱼起来后自己的闹钟
+        // （selfPlanTick）会在宽限期内再递一次。声明一下，两边只留一条。
+        if (claimPlanDelivery(member, job.key)) {
+          try {
+            say('lee', member.key, planDeliveryText(job))
+            watchmanLog('deliver', `why=plan-after-wake ${job.tag}（窗是推开的，话已递进去）`)
+          } catch (error) {
+            watchmanLog('error', `why=plan-deliver-failed detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)} ${job.tag}`)
+          }
+        } else {
+          watchmanLog('note', `why=plan-claim-lost ${job.tag}（鱼自己的闹钟先递了）`)
         }
       }
     } else {
