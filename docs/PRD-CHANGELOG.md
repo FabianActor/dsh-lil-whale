@@ -4,6 +4,11 @@
 > 它与两个 npm 包的版本（各自 `package.json` 里的 semver，如 `1.2.0`）是**两条线**：包版本只在功能或破坏性变化、发布时才动。
 > 编号从 r1 开始（第一稿就是 r1）。2026-11-13 之前这些号写作 `v1.0.NN`，本次统一改名，编号不变。
 
+## r77 — 2026-11-14 02:3x
+
+- **改**：`fish.ps1` 的 `Start-Hidden` 从"直接 Start-Process 起 dsh"改成**双跳**（无重定向的启动器 → 带重定向起 dsh），修掉"up 在工具里卡住"——根因是带重定向时孙子进程继承了调用方的 stdout 管道句柄。
+- **新**：PRD 附录 A.70（症状 / 根因 / 最小复现 / 双跳修法 / 判据 / 两条歪路）。
+
 ## r76 — 2026-11-14 02:0x
 
 - **改**：配置键从单鱼时代的 `her*` / `whale*` 换成 `self*`（selfHome / selfDshHome / selfWaker / selfPort / selfProfile / selfCwd）；旧键仍能读（`LEGACY_KEYS` + `$Cfg.Her*` 别名），`install.ps1` 写新键并删旧键。

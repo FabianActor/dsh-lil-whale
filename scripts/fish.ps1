@@ -159,10 +159,20 @@ function Show-Tail([string]$path, [int]$lines = 12) {
 
 function Start-Hidden([string]$Command, [string]$WorkingDirectory, [string]$OutLog, [string]$ErrLog) {
   New-Item -ItemType Directory -Force -Path (Split-Path $OutLog) | Out-Null
-  Start-Process -FilePath 'pwsh' `
-    -ArgumentList '-NoLogo', '-NoProfile', '-Command', $Command `
-    -WorkingDirectory $WorkingDirectory -WindowStyle Hidden `
-    -RedirectStandardOutput $OutLog -RedirectStandardError $ErrLog | Out-Null
+  # 2026-11-14：这里原来是 Start-Process 直接起 dsh。坑在句柄继承：
+  # 带 -RedirectStandardOutput 时 .NET 会 bInheritHandles=TRUE，于是孙子进程
+  # （那条要一直活着的鱼）把调用方的 stdout 管道也继承了 —— 调用方要等鱼退出
+  # 才拿到 EOF，表现成 "up 卡住"（复现：嵌套起一个活 45 秒的隐藏进程，外层等 47 秒）。
+  # 解法是"双跳"：先起一个不带重定向的启动器（它的 stdout 不是调用方的管道），
+  # 再由启动器带重定向起真正的 dsh。启动器一秒内退出，鱼活多久都不影响调用方。
+  $stamp = [guid]::NewGuid().ToString('N')
+  $inner = Join-Path $env:TEMP ("llw-run-$stamp.ps1")
+  $outer = Join-Path $env:TEMP ("llw-launch-$stamp.ps1")
+  Set-Content -LiteralPath $inner -Value $Command -Encoding utf8
+  $launcher = "Start-Process -FilePath 'pwsh' -ArgumentList '-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File','$inner' -WorkingDirectory '$WorkingDirectory' -WindowStyle Hidden -RedirectStandardOutput '$OutLog' -RedirectStandardError '$ErrLog' | Out-Null"
+  Set-Content -LiteralPath $outer -Value $launcher -Encoding utf8
+  Start-Process -FilePath 'pwsh' -ArgumentList '-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $outer + '"') -WindowStyle Hidden | Out-Null
+  return @($inner, $outer)
 }
 
 
@@ -408,9 +418,11 @@ function Start-Fish($member) {
   if ($openWindow -and $Console) {
     Start-Visible -Command $command -WorkingDirectory $cwd -OutLog $out
   } else {
-    Start-Hidden -Command $command -WorkingDirectory $cwd -OutLog $out -ErrLog $err
+    $startScripts = Start-Hidden -Command $command -WorkingDirectory $cwd -OutLog $out -ErrLog $err
   }
-  if (-not (Wait-Port $fishPort)) {
+  $portOk = Wait-Port $fishPort
+  foreach ($s in @($startScripts)) { if ($s -and (Test-Path -LiteralPath $s)) { Remove-Item -LiteralPath $s -Force -ErrorAction SilentlyContinue } }
+  if (-not $portOk) {
     Write-Host ("{0}：没起来。" -f $member.Label)
     Show-Tail $err
     return $false
