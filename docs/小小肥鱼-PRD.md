@@ -1,6 +1,6 @@
 # 小小肥鱼 · PRD
 
-> 状态：**r73（2026-11-13）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。 2026-11-13：**鱼塘布局落地**（一个根四层，A.55）、**无人值守成为默认**（A.45/A.54）、**计划表归每条鱼自己**（A.50）、**四个快捷方式实测通过**（A.56）；`docs\` 只留活跃文档，历史记录移入 `docs\archive\`。
+> 状态：**r74（2026-11-14）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。 2026-11-13：**鱼塘布局落地**（一个根四层，A.55）、**无人值守成为默认**（A.45/A.54）、**计划表归每条鱼自己**（A.50）、**四个快捷方式实测通过**（A.56）；`docs\` 只留活跃文档，历史记录移入 `docs\archive\`。
 > 版本号：这是**稿次** `rNN`（改一次 +1），不是包版本——两个 npm 包各自用 semver（当前 `1.2.1`），只在发布时才动。
 > 上游：[立项备忘](archive/小小肥鱼-立项备忘-2026-11-08.md)（**他的原话**，已冻结不改；三条硬要求已吸收进 §1）
 > 配套：[自主回合.md](自主回合.md)（G1 的上游能力，不是本 PRD 的验收项）
@@ -1571,3 +1571,24 @@ window.__ModuleLoader__.load({
 **为什么鱼跑不了 `new`（实测事实）**：她的会话文件策略是 `workspace-write`，cwd = 她自己的家；Windows 的 workspace-write 用 ACL 圈住 workspaceRoot，**不支持 `additionalWritableRoots`**（`dsh-sandbox-windows-acl` 直接抛 `SandboxUnsupportedPolicyError`）。而 `new` 要写 `homes\<孩子>`、`pool\members.json`、`pool\state\births.log`——全在她家外面。所以"鱼自己跑 new"不是被规则禁止，是**当前沙箱根本做不到**；要让它做到只能给整条鱼开 danger-full-access，那等于拆掉隔离。⇒ 出生由宿主执行，这条规则和沙箱能力是一致的。
 
 **判据**：①`births.log` 里每一条 `experiment` 都有 `requestedBy=`；②鱼没有 `danger-full-access` 也能完成它那部分（请求 / 起名 / 养育）；③`key grant` / `key revoke` 只出现在人跑的脚本里，没有插件、定时器、鱼自己的回合调用它们；④D4-3 在待办里标"已证伪"，不是"待做"。
+
+---
+
+## 附录 A.67 沙箱的写权限靠继承，早于授权的目录不继承
+
+**症状**（小肥鱼 2026-11-13 23:56 报）：`homes\whale\notes\` 里 `Add-Content` 报 Access denied；同一个文件用文件工具写却成功。她顺手发现自己 `run\stamp.ps1` 撒了谎——`Set-Content` 的拒绝是非终止错误，脚本照样打印 `通过=True`、`exit=0`。
+
+**根因**：Windows 沙箱给子进程一个 write-restricted token，写权限来自 capability SID（`S-1-4-…`，由 workspaceRoot 路径的 sha256 派生）。这个 Allow ACE 由沙箱插件贴在 workspace 根上、靠 `(OI)(CI)` 继承往下传。**继承只对之后新建的对象生效**：`notes\ run\ plan\ logs\` 是搬家（`migrate-pond.mjs`）之前就存在的目录，保留的是旧 workspace（`D:\文档\WorkSpace\lil-whale`）的 SID，没有新家（`homes\whale`）的 SID ⇒ 沙箱里的 pwsh 被拒；宿主文件工具不受沙箱限制，照写不误。
+
+**判据**：同一路径、同样内容，文件工具能写而 pwsh 不能 ⇒ 是"手"的问题，不是语法问题。查法：`icacls <目录>` 看有没有该鱼的 workspace SID；SID 算法 = `sha256(workspaceRoot)` 前 8 字节取两个 uint32，各自 `% (2^30-1) + 1`。
+
+**修法**（2026-11-14 00:2x 已做）：对 `homes\<鱼>\{notes,run,plan,logs}` 递归补该鱼 workspace SID 的 Allow ACE（`Write, Delete, DeleteSubdirectoriesAndFiles`，容器带 `(OI)(CI)`；ACL 先备份到 `app\tmp\acl-*.txt`）。`dsh-home\` **不补**——凭证在里面，"沙箱写不进去"这个结果保留。
+
+**为什么之前没发现**：文件工具一直能写，她的日常写作走文件工具；只有脚本（pwsh）走沙箱那条手。与 A.58 的"假成功"同族：**能看见的失败不是失败，看起来没事的失败才是**。
+
+**文档**：`templates\环境.md.tpl` 补回 **「两双手」** 一节（2026-11-13 那版重生成时被删掉了——她原话"纸删掉了，坑还在"），并写清今天的修法与 `dsh-home` 例外。
+
+**判据**：①`icacls homes\<鱼>\notes` 有该鱼的 workspace SID；②之后新建的目录自动继承；③每份 `环境.md` 有「两双手」一节。
+
+**教训**：机制类知识被"重新生成"覆盖时，要检查新模板是不是把旧结论丢了。模板是纸，纸上的结论不会自己长回来。
+
