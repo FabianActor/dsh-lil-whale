@@ -110,6 +110,13 @@ function Get-Fish([string]$key) {
   return $m
 }
 
+function Get-MainFish {
+  # 名册换键后 'lee' 可能不存在（2026-11-13 扫描 P2#20）：按 role 找，别让主命令直接坏。
+  $m = Get-Fish 'lee'
+  if ($m) { return $m }
+  return ($MEMBERS.Values | Where-Object { $_.Kind -eq 'fish' -and $_.Role -eq 'watcher' } | Select-Object -First 1)
+}
+
 function Resolve-Targets([string]$name) {
   if ($name -eq '' -or $name -eq 'all') {
     return @($MEMBERS.Values | Where-Object { $_.Kind -eq 'fish' })
@@ -323,7 +330,7 @@ function Start-Fish($member) {
   # 主 dsh 没在跑就不开小鱼（Fabian 2026-11-13 12:24：关着主 dsh 只开闭小鱼不合逻辑）。
   # 判据用端口：巡守的窗关掉后端口就没了，跟"进程还在不在"一致。
   if ($member.Role -ne 'watcher') {
-    $main = Get-Fish 'lee'
+    $main = Get-MainFish
     if ($main -and -not (Test-Port (Get-PortOf $main))) {
       Write-Host ("主 dsh 没在跑（{0} 不通）—— 先启动主 dsh（scripts\bin\Run DSH.cmd），再开小鱼。" -f (Get-PortOf $main))
       return $false
@@ -636,12 +643,18 @@ try {
     'start'  { if (-not (Invoke-Up $Name)) { $ok = $false } }
     'down'   { if (-not (Invoke-Down $Name)) { $ok = $false } }
     'stop'   { if (-not (Invoke-Down $Name)) { $ok = $false } }
-    'refresh' { foreach ($m in (Resolve-Targets $Name)) { if (-not (Invoke-RefreshEnv $m)) { $ok = $false } } }
+    'refresh' {
+      foreach ($m in (Resolve-Targets $Name)) {
+        # 巡守不是 install 装的，它家的 环境.md 是他自己的 DSH 文档 —— 别替他写（2026-11-13 扫描 P2#27）。
+        if ($m.Role -eq 'watcher') { Write-Host ("{0}：巡守不生成 环境.md（那不是 install 装的）。" -f $m.Label); continue }
+        if (-not (Invoke-RefreshEnv $m)) { $ok = $false }
+      }
+    }
     'maintain' { if (-not (Invoke-Maintain $Name)) { $ok = $false } }
     'restore'  { if (-not (Invoke-Restore $Name)) { $ok = $false } }
     'unattended' { if (-not (Invoke-Restore $Name)) { $ok = $false } }
     'up-main' {
-      $m = Get-Fish 'lee'
+      $m = Get-MainFish
       if (-not $m) { throw '名册里没有巡守那条鱼（lee）' }
       $wasRunning = Test-Port (Get-PortOf $m)
       if (-not (Start-Fish $m)) { $ok = $false }
@@ -654,8 +667,8 @@ try {
     'down-main' {
       # 只关主 dsh，小鱼继续跑（Fabian 2026-11-13 12:24：缺的正是这个方式）。
       # 以前这里会拒绝并要求 -Force，但用户没有地方敲 -Force —— 那就等于没有这条路。
-      $m = Get-Fish 'lee'
-      if (-not $m) { throw '名册里没有巡守那条鱼（lee）' }
+      $m = Get-MainFish
+      if (-not $m) { throw '名册里没有巡守那条鱼（role=watcher）—— 检查 pool\members.json' }
       $runningFish = @($MEMBERS.Values | Where-Object {
         $_.Kind -eq 'fish' -and $_.Role -ne 'watcher' -and (Test-Port (Get-PortOf $_))
       })

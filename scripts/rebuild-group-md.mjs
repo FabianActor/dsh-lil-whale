@@ -177,6 +177,7 @@ const normalize = (s) => s
 
 console.log(`记录 ${records.length} 条（坏行 ${badLines} 条，无正文 ${emptyText.length} 条），可重建出 ${blocks.length} 段`)
 
+let unexplained = 0
 if (!existsSync(READABLE)) {
   console.log('群.md 不存在：按 --write 决定是否生成')
 } else {
@@ -185,7 +186,6 @@ if (!existsSync(READABLE)) {
   const hunks = hunksOf(lineDiff(a, b))
   console.log(`现有 ${a.length} 行 / 重建 ${b.length} 行 / 差异 ${hunks.length} 处`)
 
-  let unexplained = 0
   hunks.forEach((hunk, index) => {
     const verdict = classify(hunk, a)
     const where = hunk.aStart === null ? `重建第 ${(hunk.bStart ?? 0) + 1} 行` : `现有第 ${hunk.aStart + 1} 行`
@@ -273,8 +273,14 @@ if (process.argv.includes('--migrate')) {
 }
 
 if (process.argv.includes('--write')) {
-  writeAtomic(READABLE, rebuilt)
-  console.log('已写入 群.md')
+  // 有说不清的差异时不许整本写：2026-11-13 扫描 P2#25 —— 脚本 exit 1 却把 群.md 写掉了，
+  // 结果"成功看起来像失败"，而文件其实已经被覆盖。
+  if (unexplained > 0) {
+    console.log(`群.md 有 ${unexplained} 处说不清的差异：这次不写它，先把差异弄清。`)
+  } else {
+    writeAtomic(READABLE, rebuilt)
+    console.log('已写入 群.md')
+  }
   if (dmUnexplained === 0) {
     for (const item of dmWrites) {
       writeAtomic(item.target, item.rebuilt)

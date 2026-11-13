@@ -287,7 +287,12 @@ function saveWatchState() {
   try {
     mkdirSync(POOL_STATE, { recursive: true })
     writeFileSync(WATCH_STATE_FILE, JSON.stringify(watchState), 'utf8')
-  } catch {}
+  } catch (e) {
+    // 空 catch = 账写失败和写成功长得一模一样（2026-11-13 扫描 P2#19）。
+    try {
+      logLine({ note: 'watch-state-save-failed', detail: String(e?.message ?? e).slice(0, 160) })
+    } catch {}
+  }
 }
 
 /**
@@ -302,7 +307,9 @@ function saveWatchState() {
  * 文件本身就是证据（含 pid 与时间），不用再去日志里对时间线。
  */
 function claimPlanDelivery(member, jobKey) {
-  const dir = join(member.home ?? HER_HOME, 'plan', 'claims')
+  // 名册里缺 home 的成员（异常数据）以前共用第一条鱼的家：两条鱼同一天同名 job 会互相把对方的 claim 判成"已递"。
+  // 兜底改到 pool 下按成员分目录，至少不会串（2026-11-13 扫描 P2#16）。
+  const dir = join(member.home ?? join(POOL_STATE, 'claims', member.key), 'plan', 'claims')
   try {
     mkdirSync(dir, { recursive: true })
   } catch {}

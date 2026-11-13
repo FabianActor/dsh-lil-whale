@@ -183,13 +183,17 @@ if ($open) {
 }
 
 $existing = Get-ProfileProcesses $profile
+$spawnSkipped = $false
 if ($existing.Count -gt 0) {
+  $spawnSkipped = $true
   $pids = ($existing | ForEach-Object { [string]$_.ProcessId }) -join ','
   Log ("spawn-skip member={0} profile={1} pid={2} -- 同 profile 已有进程，等它自己挂上" -f $Member, $profile, $pids)
 } else {
   try {
-    $parts = @("`$env:DSH_HOME='$dshHome'")
-    if ($cfgFile) { $parts += "`$env:LIL_WHALE_CONFIG='$cfgFile'" }
+    # 路径里有单引号会把命令拼坏（2026-11-13 扫描 P2#22）：PowerShell 里单引号内再写一个单引号转义。
+    $safeHome = $dshHome -replace "'", "''"
+    $parts = @("`$env:DSH_HOME='$safeHome'")
+    if ($cfgFile) { $parts += ("`$env:LIL_WHALE_CONFIG='{0}'" -f ($cfgFile -replace "'", "''")) }
     $parts += ("dsh --profile {0} --port {1} --no-open" -f $profile, $port)
     $command = $parts -join '; '
     Start-Process -FilePath 'pwsh' -ArgumentList '-NoLogo', '-NoProfile', '-Command', $command `
@@ -201,6 +205,18 @@ if ($existing.Count -gt 0) {
     Write-Output ("spawn-failed: " + $_.Exception.Message)
     exit 1
   }
+}
+
+if ($spawnSkipped) {
+  # 已有进程时不能等 $port：它可能在别的端口（2026-11-13 扫描 P2#22），等的是"会话挂上"。
+  if (WaitMounted $WaitSeconds) {
+    Log ("awake member={0} why={1} hb-age={2}s mode={3} (existing process)" -f $Member, $Why, (HeartbeatAge), $mode)
+    Write-Output ("awake (member={0}, 已有进程自己挂上了, hb-age={1}s)" -f $Member, (HeartbeatAge))
+    exit 0
+  }
+  Log ("spawn-skip-timeout member={0} profile={1} -- 已有进程但心跳没挂上" -f $Member, $profile)
+  Write-Output ("failed: {0} 已经有进程（profile={1}）但会话没挂上，看 pool\group\plugin.log" -f $Member, $profile)
+  exit 1
 }
 
 for ($i = 0; $i -lt $WaitSeconds * 2; $i++) {
