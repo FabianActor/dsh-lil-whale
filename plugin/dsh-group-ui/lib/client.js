@@ -1339,6 +1339,14 @@ function Bubble({ config, message, onMention, animate = false }) {
           h(WidthHandle, { key: 'right', side: 'right', width: dmWidth, containerRef: scrollRef, onChange: setDmWidth, onCommit: persistDmWidth }),
         ]
       // 私聊的左右边界跟群聊同款：拖住两侧，列宽实时变；宽度存在这台机器上。
+      // 同群聊：打字不重排私聊历史。
+      const dmListNode = useMemo(
+        () => withDivider(messages, String(seenDm[activePeer] ?? ''), (message, index) => h(Bubble, {
+          key: `${message.ts}-${index}`, config, message, animate: animateRef.current,
+        })),
+        [messages, seenDm, activePeer, config],
+      )
+
       const messageArea = h('div', {
         style: { flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' },
       },
@@ -1347,7 +1355,7 @@ function Bubble({ config, message, onMention, animate = false }) {
             messages.length === 0
             ? h('div', { style: { padding: '28px 20px', fontSize: 13, lineHeight: '20px', color: 'var(--dsw-alias-label-tertiary)' } },
               '还没有私下说过话。这里的话只有你们两个看得见。')
-          : withDivider(messages, String(seenDm[activePeer] ?? ''), (message, index) => h(Bubble, { key: `${message.ts}-${index}`, config, message, animate: animateRef.current })),
+          : dmListNode,
             h('div', { ref: bottom }),
             widthHandles)),
         dmSplash ? h(LoadingSplash, { label: '正在打开私聊…' }) : null,
@@ -1801,6 +1809,19 @@ function Bubble({ config, message, onMention, animate = false }) {
           ? t.busy(otherBusy.map((id) => nameOf(config, id)).join('、'))
           : null
 
+      // 打字时不该重排两百多条气泡（2026-11-13 他报"连续快速输入/删除会卡"）。
+      // 列表只跟消息、分割线、宽度、配置有关；输入框里的文字不是它的输入。
+      const groupListNode = useMemo(
+        () => withDivider(messages, seenGroup, (message, index) => h(Bubble, {
+          key: `${message.ts}-${index}`,
+          config,
+          message,
+          animate: animateRef.current,
+          onMention: (id) => setTo(id),
+        }), dividerRef),
+        [messages, seenGroup, config, widthPct, setTo],
+      )
+
       return h('div', {
         // position:relative 是给"切回群聊"的过场用的：过场要盖住整页，
         // 且要在群聊内容挂载之前先画出来（见 switchTab）。
@@ -1931,13 +1952,7 @@ function Bubble({ config, message, onMention, animate = false }) {
             : h('div', {
               style: { width: `${widthPct}%`, margin: '0 auto', position: 'relative' },
             },
-              withDivider(messages, seenGroup, (message, index) => h(Bubble, {
-                key: `${message.ts}-${index}`,
-                config,
-                message,
-                animate: animateRef.current,
-                onMention: (id) => setTo(id),
-              }), dividerRef),
+              groupListNode,
               h('div', { ref: bottom }),
               h(WidthHandle, {
                 side: 'left', width: widthPct, containerRef: scrollRef,
@@ -3126,7 +3141,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[lil-whale-group-ui] client build v31 · pond-heartbeat:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[lil-whale-group-ui] client build v32 · memo-list:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('lil-whale-group-keyframes')) {
           const style = document.createElement('style')

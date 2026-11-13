@@ -1587,6 +1587,25 @@ function memberOf(agent) {
   return null
 }
 
+// ---- token 记账：只记账、不封顶（2026-11-13 他要的）----
+// dsh 没在 agent 面上给"单轮输入/输出 token"；这里记的是**叫醒那一刻的上下文大小**：
+// 它回答得了"谁吃得多"，回答不了"这一轮花了多少"。等有累计用量接口再补。
+const USAGE_DIR = join(POOL_STATE, 'usage')
+
+function recordUsage(ctx, agent, member) {
+  try {
+    mkdirSync(USAGE_DIR, { recursive: true })
+    let contextTokens = null
+    try {
+      const meter = ctx.get?.('tokenMeter')
+      const measured = meter?.measure?.(agent.session)
+      if (Number.isFinite(measured?.totalTokens)) contextTokens = measured.totalTokens
+    } catch { /* 没这个服务就记 n/a */ }
+    const line = `${stamp()} | wake | member=${member} ctx=${contextTokens ?? 'n/a'} session=${sessionIdOf(agent)}\n`
+    appendFileSync(join(USAGE_DIR, `${member}.log`), line)
+  } catch { /* 记账失败不影响叫醒 */ }
+}
+
 async function tick(ctx) {
   settleMarks() // 到期的"叫醒之后他有没有开口"先结算，再决定这一轮做什么
   if (!hostReady) void resolveHost()
@@ -1621,7 +1640,10 @@ async function tick(ctx) {
     // 一次只唤醒一件事：这条通道叫醒了，别的下个 tick 再说。
     for (const channel of channels) {
       const woke = handleChannel({ agent, member, seat: seatOfSession(sessionIdOf(agent)), channel, cursors, wakes })
-      if (woke) break
+      if (woke) {
+        recordUsage(ctx, agent, member)
+        break
+      }
     }
   }
 }
@@ -1973,12 +1995,18 @@ async function watchOne(member, st) {
   if (st.lastFresh === false && freshNow) {
     const pending = st.pendingWake
     const lastTry = st.lastTry
-    const wid = pending?.wid ?? lastTry?.wid ?? 'none'
-    const at = pending?.at ?? lastTry?.at ?? Date.now()
-    watchmanLog(
-      'woke',
-      `wid=${wid} trigger=${pending ? (pending.pushed ? 'push' : 'external') : 'external'} lag=${Math.round((Date.now() - at) / 1000)}s inserted=${pending ? 1 : 0}`,
-    )
+    if (pending || lastTry) {
+      const wid = pending?.wid ?? lastTry?.wid ?? 'none'
+      const at = pending?.at ?? lastTry?.at ?? Date.now()
+      watchmanLog(
+        'woke',
+        `wid=${wid} trigger=${pending ? (pending.pushed ? 'push' : 'external') : 'external'} lag=${Math.round((Date.now() - at) / 1000)}s inserted=${pending ? 1 : 0}`,
+      )
+    } else {
+      // 进程刚起时心跳文件还是上一轮留下的（stale），下一轮又新鲜了 ——
+      // 那不是"谁叫醒了她"，是"会话自己挂上了"。记 note，不冒充 woke（2026-11-13 他要求的）。
+      watchmanLog('note', `why=session-mounted member=${member.key} hb-age=0s`)
+    }
     delete st.pendingWake
     saveWatchState()
   }
@@ -2147,6 +2175,55 @@ async function watchOne(member, st) {
 }
 
 /** 巡守：换日一次，然后按名册逐条鱼跑。一条鱼出错不影响别的鱼。 */
+// ---- 异常退出报警（2026-11-13 他拍板）----
+// 判据只有一条：runs 账里最后一条 resumed 是 unclean —— 那就是上一轮没写 stopped。
+// 报一次就够（同一段记录不重复报），只报给家长、不开窗。
+const CRASH_NOTIFIED_FILE = join(POOL_STATE, 'crash-notified.json')
+
+function readCrashNotifyEnabled() {
+  try {
+    const raw = JSON.parse(readFileSync(SETTINGS_FILE, 'utf8'))
+    return raw?.crashNotify !== false
+  } catch { return true }
+}
+
+function lastUncleanOf(key) {
+  try {
+    const file = join(POOL_STATE, 'runs', `${key}.log`)
+    if (!existsSync(file)) return null
+    const lines = readFileSync(file, 'utf8').split(/\r?\n/).filter((line) => line.trim())
+    for (let i = lines.length - 1; i >= 0; i -= 1) {
+      if (lines[i].includes('| resumed |') && lines[i].includes('reason=unclean')) return lines[i].slice(0, 19)
+    }
+    return null
+  } catch { return null }
+}
+
+function crashNotify() {
+  if (!readCrashNotifyEnabled()) return
+  let seen = null
+  try { seen = JSON.parse(readFileSync(CRASH_NOTIFIED_FILE, 'utf8')) } catch { seen = null }
+  const firstRun = seen === null
+  seen ??= {}
+  let changed = false
+  for (const member of watchedMembers()) {
+    const at = lastUncleanOf(member.key)
+    if (at === null || seen[member.key] === at) continue
+    seen[member.key] = at
+    changed = true
+    if (firstRun) continue // 第一次上线先记账，不补报历史
+    try {
+      say('lee', 'fabian', `巡守：${labelOf(member.key)} 上次没正常退出（最后记录 ${at}，没写 stopped）。它现在起没起来，鱼塘里能看到。`, 'group', 'watch')
+      watchmanLog('note', `why=crash-notified member=${member.key} at=${at}`)
+    } catch (error) {
+      watchmanLog('error', `why=crash-notify-failed member=${member.key} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 80)}`)
+    }
+  }
+  if (changed) {
+    try { writeJson(CRASH_NOTIFIED_FILE, seen) } catch { /* 报不出去不该炸巡守 */ }
+  }
+}
+
 async function watchmanTick() {
   const day = new Date().toDateString()
   if (watchState.day !== day) {
@@ -2176,6 +2253,7 @@ async function watchmanTick() {
       watchmanLog('error', `why=watch-member-failed to=${member.key} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)}`)
     }
   }
+  try { crashNotify() } catch { /* 报警失败不该炸巡守 */ }
 }
 
 export { name, inject, apply }

@@ -85,6 +85,19 @@ function Get-Members {
 
 $MEMBERS = Get-Members
 
+# 端口登记查重（2026-11-13 他要的）：名册里的 port 必须唯一。
+# 两条鱼登记同一个口时，后起的会静默起不来，而 fish.ps1 会以为"已经在跑"。
+$portOwners = @{}
+foreach ($m in $MEMBERS.Values) {
+  $registered = [int]$m.Port
+  if ($registered -le 0) { continue }
+  if ($portOwners.ContainsKey($registered)) {
+    Write-Host ("名册里端口重复：{0} 和 {1} 都登记成 {2} —— 改 pool\members.json 里其中一个，再跑。" -f $portOwners[$registered], $m.Key, $registered) -ForegroundColor Red
+    exit 1
+  }
+  $portOwners[$registered] = $m.Key
+}
+
 # -Port 只对"点名的那一条鱼"生效；不点名（all）时一律用名册里的端口。
 # 注意：PowerShell 变量名不区分大小写，所以这里不能叫 $Port —— 它会和参数 $Port 是同一个变量。
 function Get-PortOf($m) {

@@ -3,6 +3,14 @@
 > 本文件只记「哪一版改了哪几处、为什么改」。当前结论都在 [小小肥鱼-PRD.md](小小肥鱼-PRD.md) 里，那边不背历史。
 > 自 v0.3.5 起从 PRD 头部搬到这里（此前几块原样搬出，未改写）。v1.0 是整篇重写。
 
+## v1.0.54（2026-11-13）
+
+- **输入卡顿**（他报"连续快速输入/删除会卡"）：消息列表进 `useMemo`，打字不再重排两百多条气泡（群聊 + 私聊）；附录 A.51。
+- **异常退出报警**：巡守发现 `runs` 账里新的 `reason=unclean` → 群消息告诉家长、不开窗、同一段只报一次；顺带把重启后误写的 `woke | wid=none trigger=external` 改成 `note | why=session-mounted`；附录 A.52。
+- **端口登记查重**：`fish.ps1` / `install.ps1` / `doctor.ps1` 三处守"一个端口只属于一条鱼"。
+- **token 记账**：`pool\state\usage\<鱼>.log` 记每次唤醒的上下文大小（只记账、不封顶，局限已写明）；附录 A.53。
+- **归档脚本**：`scripts\archive-fish.mjs --member <键> [--dry-run] [--mark-archived]`——只归档、不注销（`pins.json`/`members.json` 不动），产物含家 / 会话 / 群切片 / 私聊 / `manifest.json`。
+
 ## v1.0.53（2026-11-13）
 
 - **PRD review 采纳三条**（回应全文：`docs\PRD-review-2026-11-13-回应.md`）：①计划表归属定 **B**（每条鱼自己的进程执行自己家的 plan，巡守只管推门记账）+ 自执行 `selfPlanTick()` + 宽限 15 分钟 + `trigger=self` 账；②§3 加「适用鱼」（`experiment` 只判 A4/A6/A7）；③R13 措辞改成"不放**默认开启**的自启"。

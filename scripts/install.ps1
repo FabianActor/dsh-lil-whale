@@ -84,7 +84,23 @@ $PoolRoot = [System.IO.Path]::GetFullPath($PoolRoot)
 $DshHome = [System.IO.Path]::GetFullPath($DshHome)
 
 $portWanted = if ($ChildPort -gt 0) { $ChildPort } else { 3082 }
+# 端口登记查重（2026-11-13 他要的）：先读共享区已登记的口，再找空口。
+# "空着"不等于"没登记"：另一个进程还没起时口是空的，但它已经占了这个号。
+$registeredPorts = @{}
+$membersProbe = Join-Path $PoolRoot 'members.json'
+if (Test-Path -LiteralPath $membersProbe) {
+  try {
+    $probe = Get-Content -LiteralPath $membersProbe -Raw -Encoding utf8 | ConvertFrom-Json
+    foreach ($p in $probe.members.PSObject.Properties) {
+      if ($p.Value.port) { $registeredPorts[[int]$p.Value.port] = $p.Name }
+    }
+  } catch { Warn "members.json 读不了（$membersProbe）：这次不查端口登记" }
+}
 $port = Find-FreePort $portWanted
+for ($i = 0; $i -lt 50 -and $port -gt 0 -and $registeredPorts.ContainsKey($port); $i++) {
+  Warn ("端口 {0} 已被 {1} 登记，跳过" -f $port, $registeredPorts[$port])
+  $port = Find-FreePort ($port + 1)
+}
 if ($port -eq 0) { Die "从 $portWanted 往上 50 个口都被占了。" "换 -ChildPort 指定一个空口，然后重跑 install.ps1" }
 
 Say ""

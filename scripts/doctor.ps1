@@ -164,6 +164,30 @@ try {
 } catch {
   Add-Row '名册（全鱼）' 'WARN' ("读不了名册或 pins：{0}" -f $_.Exception.Message) 'NEXT: 看 pool\members.json 与 pool\group\pins.json 是不是合法 JSON'
 }
+# 4c2. 端口登记：名册里的 port 必须唯一（2026-11-13 他要的）
+try {
+  if ($Cfg.MembersFile -and (Test-Path -LiteralPath $Cfg.MembersFile)) {
+    $mjPort = Get-Content -LiteralPath $Cfg.MembersFile -Raw -Encoding utf8 | ConvertFrom-Json
+    $byPort = @{}
+    $dup = @()
+    foreach ($p in $mjPort.members.PSObject.Properties) {
+      if ($p.Value.kind -ne 'fish' -or -not $p.Value.port) { continue }
+      $portKey = [int]$p.Value.port
+      if ($byPort.ContainsKey($portKey)) { $dup += ("$portKey（" + $byPort[$portKey] + '、' + $p.Name + '）') }
+      else { $byPort[$portKey] = $p.Name }
+    }
+    if ($dup.Count) {
+      Add-Row '端口登记' 'FAIL' ('名册里端口重复：' + ($dup -join '；')) 'NEXT: 改 pool\members.json，让每条鱼的 port 不同（再跑 fish.ps1 list 看）'
+    } else {
+      Add-Row '端口登记' 'OK' ('每条鱼一个端口：' + (($byPort.GetEnumerator() | Sort-Object Value | ForEach-Object { $_.Value + '=' + $_.Key }) -join '、'))
+    }
+  } else {
+    Add-Row '端口登记' 'WARN' '没有 members.json，跳过了端口查重' 'NEXT: 先装一次（install.ps1）或用 migrate-members.mjs 生成名册'
+  }
+} catch {
+  Add-Row '端口登记' 'WARN' ("名册读不了：{0}" -f $_.Exception.Message) 'NEXT: 看 pool\members.json 是不是合法 JSON'
+}
+
 # 4d. 环境说明：每条鱼的 环境.md 是不是当前模板生成的
 #     家目录是数据、说明书是生成的：模板改了、名册加鱼了、路径搬家了，纸不会自己变。
 #     判据用文件末尾那行机器指纹 `<!-- env: template=<sha8> -->`，不用"看起来像新的"。
