@@ -53,7 +53,7 @@ pwsh -File scripts\fish.ps1 doctor | refresh <鱼|all>
 | `fish.ps1` | 人 + 鱼塘（`/pond/api/action`）+ 巡守自启动（`up all -NoBrowser`） |
 | `start-whale.ps1` | `watchman.ps1`。输出约定：`already-awake` / `awake` / `failed` |
 | `wake-whale.ps1` | `dsh-group` 插件的巡守定时器（`HER_WAKER`）：每 60 秒看一次，到点且她关着窗就跑它 |
-| `watchman.ps1` | **手工兜底的老巡守，日常不必跑**。现在门由 `dsh-group` 插件推（见上一行）。主 dsh 不常开时才需要它：`pwsh -File scripts\watchman.ps1`（旧的双击入口在 `legacy\watchman-run.cmd`） |
+| `watchman.ps1` | **手工兜底的老巡守，日常不必跑**。现在门由 `dsh-group` 插件推（见上一行）。主 dsh 不常开时才需要它：`pwsh -File scripts\watchman.ps1`（旧的双击入口已挪到 `archive\legacy-scripts-2026-11-13\watchman-run.cmd`） |
 | `stop.ps1` / `launch.ps1` | `fish.ps1` 的薄壳；直接调也认老参数 |
 | `doctor.ps1` | `fish.ps1 doctor`、鱼塘「检修」、`release-check.ps1` |
 | `install.ps1` / `release-check.ps1` / `pack.ps1` | 装、验、打包 |
@@ -65,11 +65,13 @@ pwsh -File scripts\fish.ps1 doctor | refresh <鱼|all>
 | 大肥鱼 | `<你的 dsh 家>\logs\web-latest.log` / `.err.log` |
 | 小肥鱼 | `<小肥鱼的家>\dsh-home\logs\web-latest.log` / `.err.log` |
 | 每条鱼的起停账 | `pool\state\runs\<成员>.log` |
-| 巡守（插件版） | `pool\state\watchman.log`；脚本版兜底在 `dsh-lil-whale\logs\watchman-console.log` |
+| 巡守（插件版） | `pool\state\watchman.log`；脚本版兜底只打控制台（`scripts\watchman.ps1` 不落日志文件） |
 
-## legacy\
+## 旧脚本去哪了
 
-旧的入口：`tab-lee.ps1`、`tab-whale.ps1`、`RUN-双鱼.cmd`（Windows Terminal 双标签页那套）、`启动小肥鱼.ps1`、`唤醒小肥鱼.cmd`、`stop-whale.ps1`、`watchman-run.cmd`（老巡守的双击入口，改成手敲 `pwsh -File scripts\watchman.ps1` 了）。没删，只是挪开。
+旧的入口（`tab-lee.ps1`、`tab-whale.ps1`、`RUN-双鱼.cmd`、`启动小肥鱼.ps1`、`唤醒小肥鱼.cmd`、`stop-whale.ps1`、`watchman-run.cmd`）**已经挪到 `archive\legacy-scripts-2026-11-13\`**，不进发布包。
+
+挪的理由：功能已被 `fish.ps1` 全覆盖，留着就是"同一个动作两个入口"的旧版本——旧入口不会报错，只会慢慢和现场不一致。要翻历史还能翻，但别再拿它当入口。
 
 ## 项目的 ASCII 入口
 

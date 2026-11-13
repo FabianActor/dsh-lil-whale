@@ -171,7 +171,12 @@ function lastRunStateOf(member) {
     const lines = readFileSync(file, 'utf8').slice(-8192).split('\n')
     for (let i = lines.length - 1; i >= 0; i--) {
       const line = lines[i]
-      if (!line || line.includes(' | started |') || line.includes(' | stopped |')) {
+      // 空行必须跳过，不能当"找到了"：追加写的文件末尾本来就有一个换行，
+      // split 之后最后一项是 ''。以前它落进下面那个分支，被当成 started 行，
+      // slice(0,19) 出来是空串 —— 于是 resumed 行永远写着 `previous-start=` 空着。
+      // （2026-11-13 早上查的：fishball.log / whale.log 每条 resumed 都空。）
+      if (!line.trim()) continue
+      if (line.includes(' | started |') || line.includes(' | stopped |')) {
         if (line.includes(' | stopped |')) {
           // 往前找它对应的 started（只为了报告"上一轮是什么时候起的"）
           for (let j = i - 1; j >= 0; j--) {

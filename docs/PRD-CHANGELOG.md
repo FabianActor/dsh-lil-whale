@@ -3,6 +3,13 @@
 > 本文件只记「哪一版改了哪几处、为什么改」。当前结论都在 [小小肥鱼-PRD.md](小小肥鱼-PRD.md) 里，那边不背历史。
 > 自 v0.3.5 起从 PRD 头部搬到这里（此前几块原样搬出，未改写）。v1.0 是整篇重写。
 
+## v1.0.43（2026-11-13）
+
+- **修 `resumed` 行 `previous-start=` 永远空**：`lastRunStateOf()` 读日志尾巴时把文件末尾那个空行当成"找到了 started 行"，`slice(0,19)` 出来是空串。改成空行 `continue`。现场复算：fishball → `2026-11-13 00:16:13`、whale → `00:16:06`。（要重启两个窗才生效。）
+- **文件整理**（他 2026-11-13 00:37 加的一项）：删 `probe\`、两个 0 字节 console 日志、`her-reset` 里未跟踪的 `plugin.log`、`pre-pool` 留底（逐文件确认 pool 有对应）、profile 里四份旧 `.bak-*`、`dist\` 旧 zip；`scripts\legacy\` 与 `plugin\retired\` 挪进 `archive\`（不进发布包）。她的三份 `archive\her-*` 与所有证据文件未动。
+- **`pack.ps1`**：排除清单只剩 `archive\`（`scripts\legacy\` 已搬走）；打包后只留最新 1 个 zip（原 2 个）。
+- `scripts\README.md`：`legacy\` 一节改成"旧脚本去哪了"（指向 `archive\legacy-scripts-2026-11-13\`）；巡守脚本版不再声称会写 `watchman-console.log`（那两个文件是 0 字节遗留）。
+
 ## v1.0.42（2026-11-13）
 
 - **`Run All Whales.cmd` 语义改**（他 00:23）：起所有鱼，但**只给主 dsh 开浏览器窗** —— `fish.ps1 up all -BrowserMainOnly`（原来一个窗都不开）。

@@ -1,4 +1,4 @@
-﻿# 打包：把一个能带走、能装起来跑的项目副本打成 zip
+# 打包：把一个能带走、能装起来跑的项目副本打成 zip
 #
 # 用法：
 #   pwsh -File scripts\pack.ps1                  # 只打 zip
@@ -29,7 +29,7 @@ try {
   # 排除清单靠"从 ls-files 里挑"而不是 pathspec magic：
   # git archive 不支持 `:(exclude)`（实测 fatal: pathspec magic not supported），
   # 而它会照样把 archive\ 打进去、还返回 0 —— 一个静默的错误包。
-  $files = @(git -c core.quotepath=false ls-files | Where-Object { $_ -notlike 'archive/*' -and $_ -notlike 'scripts/legacy/*' })
+  $files = @(git -c core.quotepath=false ls-files | Where-Object { $_ -notlike 'archive/*' })
   if ($files.Count -eq 0) { throw 'ls-files 一个文件都没列出来，不对' }
 
   # --prefix：解压出来是一个 lil-whale\ 目录，而不是一堆文件撒在面前。
@@ -40,7 +40,7 @@ try {
   $count = $files.Count
   Write-Host ("打包完成：{0}" -f $zip)
   Write-Host ("  文件 {0} 个，{1:N1} KB" -f $count, ($size / 1KB))
-  Write-Host ("  不含：archive\（她旧家的真实记录）、scripts\legacy\（本机快捷方式）、本机配置、tmp\、logs\、node_modules\")
+  Write-Host ("  不含：archive\（她的旧家记录 + 旧脚本存档）、本机配置、tmp\、logs\、node_modules\")
 
   if ($Npm) {
     foreach ($pkg in @('plugin\dsh-group', 'plugin\dsh-group-ui')) {
@@ -54,9 +54,9 @@ try {
     }
   }
 
-  # 只留最近 2 个 zip：产物堆起来会把 dist 变成垃圾场（而且以前还被 git add -A 误提交过一次）
+  # 只留最新 1 个 zip：产物堆起来会把 dist 变成垃圾场（而且以前还被 git add -A 误提交过一次）
   $zips = @(Get-ChildItem $OutDir -Filter 'lil-whale-*.zip' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
-  foreach ($old in ($zips | Select-Object -Skip 2)) {
+  foreach ($old in ($zips | Select-Object -Skip 1)) {
     Remove-Item -LiteralPath $old.FullName -Force
     Write-Host ("  删除旧包：{0}" -f $old.Name)
   }
