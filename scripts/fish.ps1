@@ -1,4 +1,4 @@
-﻿# fish.ps1 -- 鱼群唯一的入口。ASCII 文件名 + UTF-8 BOM。
+# fish.ps1 -- 鱼群唯一的入口。ASCII 文件名 + UTF-8 BOM。
 #
 # 为什么要有它：鱼一多，"开/停/体检"三件事各有各的脚本，每加一条鱼就多一套参数。
 # 这个脚本只做一件事：把命令套到 pool\members.json 里那条鱼身上。
@@ -462,17 +462,21 @@ function Stop-Fish($member) {
   foreach ($w in $wrappers) {
     try { Stop-Process -Id $w.ProcessId -Force -ErrorAction Stop } catch { }
   }
+  # 关窗的账在**杀完进程之后立刻写**，不等端口确认。
+  # 这是防御性排序，不是修一个已发生的 bug：18:07 那次 Stop DSH 之后他 13 秒才重启，
+  # 端口一直是关的，账正常写下了。但若有人在 6 秒内又把进程拉起来，旧顺序会判
+  # "没停干净"并跳过 close.log / Clear-Mode —— 那会让"确实停过"从账上消失。
+  Write-FishWindowLog $member 'close'
+  Clear-Mode $member
   for ($i = 0; $i -lt 20; $i++) {
     Start-Sleep -Milliseconds 300
     if (-not (Test-Port $fishPort)) { break }
   }
   if (Test-Port $fishPort) {
-    Write-Host ("{0}：端口 {1} 还开着 —— 没停干净。" -f $member.Label, $fishPort)
-    return $false
+    Write-Host ("{0}：端口 {1} 又开了 —— 可能是有人马上重启了它（close 账已记）。" -f $member.Label, $fishPort)
+    return $true
   }
   Write-Host ("{0}：停了（{1} 已关闭）。" -f $member.Label, $fishPort)
-  Write-FishWindowLog $member 'close'
-  Clear-Mode $member
   return $true
 }
 
@@ -658,6 +662,10 @@ try {
         Write-Host ('注意：还有 {0} 条鱼在跑（{1}），这次只关主 dsh，它们继续跑。' -f $runningFish.Count, (($runningFish | ForEach-Object { $_.Label }) -join '、'))
         Write-Host '要连鱼一起关：scripts\bin\Stop All Whales.cmd（或鱼塘里点「全部休眠」）。'
       }
+      # 用户点的是快捷方式（或鱼塘按钮）——那一下就是确认，不要再弹 Read-Host。
+      # 2026-11-13 17:59 实测：down-main 没传 -Yes，Stop-Fish 在非交互里 Read-Host 拿到空串就"没停"，
+      # 结果 Stop DSH.cmd 双击后什么都没发生（窗口里只有一句"注意…"，看起来像失败又不像）。
+      $Yes = $true
       if (-not (Stop-Fish $m)) { $ok = $false }
     }
     'doctor' { $ok = Invoke-Doctor }
