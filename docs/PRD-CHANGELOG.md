@@ -4,6 +4,12 @@
 > 它与两个 npm 包的版本（各自 `package.json` 里的 semver，如 `1.2.0`）是**两条线**：包版本只在功能或破坏性变化、发布时才动。
 > 编号从 r1 开始（第一稿就是 r1）。2026-11-13 之前这些号写作 `v1.0.NN`，本次统一改名，编号不变。
 
+## r70 — 2026-11-13 22:5x
+
+- **D4-2 的第一件：养鱼入口**。`scripts\fish.ps1` 新增 `new` 子命令（`-Key` / `-Name` / `-Parent` / `-DryRun`）：查重 → 建家（复用 `install.ps1`）→ 进名册（`status: experiment`）→ 记 `pool\state\births.log`。规则：名字由家长起、键必须 ASCII、**实验鱼不能当家长**、鱼数上限 `maxFish`（默认 5）。PRD 附录 A.64。
+- **`Get-Members` 补 `Status` / `Parent` / `BornAt`**：原来构造的对象里没有 `status`，于是"实验鱼不能当家长"这条守卫读到的永远是 `$null`、根本不生效——DryRun 测出来的。教训：守卫读的字段必须先确认它在对象里存在。
+- **`install.ps1` 的 `family.json` 改成每次安装都补节点**（`gen-family.mjs --seed` 幂等）：以前只在文件不存在时 seed，第二条以后的鱼永远进不了谱系。
+- 踩坑两条：PowerShell 里 `$home` 是只读自动变量 `$HOME` 的别名，赋值直接报错（改名 `$childHome`）；JS `String.replace(from, to)` 的替换串里 `$'` 是特殊模式，会把补丁文本吃坏（必须用 `replace(from, () => to)`）。
 ## r69 — 2026-11-13 22:2x
 
 - **停的人记账**：`scripts\fish.ps1` 新增 `Write-RunLogStopped`，停鱼时由停止方往 `pool\state\runs\<鱼>.log` 补一行 `stopped | fmt=2 reason=stop-script by=fish.ps1 pid=…`。此前 `stopped` 只由进程自己的 `dispose` 写，而 `Stop-Process -Force` 不给它机会，于是 35 次 started 对 0 次 stopped，每次正常重启都被记成 `resumed reason=unclean`。PRD 附录 A.63。

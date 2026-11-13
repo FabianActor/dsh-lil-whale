@@ -445,7 +445,9 @@ if (-not (Test-Path $membersPath)) {
 # 2026-11-13 19:xx 补：以前只有 members.json，谱系页要人手跑 gen-family；装完就该是齐的。
 $genFamily = Join-Path $RepoRoot 'scripts\gen-family.mjs'
 $familyPath = Join-Path $PoolRoot 'family.json'
-if ((Test-Path -LiteralPath $genFamily) -and -not (Test-Path -LiteralPath $familyPath)) {
+# 2026-11-13 22:4x 修：以前只在 family.json 不存在时 seed —— 鱼塘里加第二条鱼时它已经存在，
+# 新鱼就永远进不了谱系（gen-family.mjs 自己会补缺失节点，重跑无害）。
+if (Test-Path -LiteralPath $genFamily) {
   $gfOut = & node $genFamily --seed 2>&1
   if ($LASTEXITCODE -eq 0) { Ok "family.json 已初始化：$($gfOut | Select-Object -Last 1)" }
   else { Warn "family.json 没生成：$($gfOut | Select-Object -Last 3)" }

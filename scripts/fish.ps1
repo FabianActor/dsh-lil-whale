@@ -16,6 +16,7 @@
 #   pwsh -File fish.ps1 up-main            启动主 dsh（快捷方式用；已在跑就直接开浏览器）
 #   pwsh -File fish.ps1 down-main          关闭主 dsh（还在跑的小鱼继续跑）
 #   pwsh -File fish.ps1 doctor             体检（现在只对配置里那条鱼）
+#   pwsh -File fish.ps1 new -Key <键> -Name <名字> -Parent whale   养一条新鱼（查重 → 建家 → 进名册 → 记 birth）
 #   pwsh -File fish.ps1 help
 #
 # 选项：-Window（开窗起；默认无人值守） -NoBrowser（强制不开） -BrowserMainOnly（只给主 dsh 开窗） -Yes（不停下来问）
@@ -39,7 +40,11 @@ param(
   # 起多条鱼时只给巡守（主 dsh）开浏览器窗，其余鱼后台起。Run All Whales.cmd 用。
   [switch]$BrowserMainOnly,
   # 检修用：起一个可见的控制台窗，日志一边显示一边 Tee 到 web-latest.log（token 在文件里才捞得到）。
-  [switch]$Console
+  [switch]$Console,
+  # new 用（D4-2 养一条新鱼）：成员键 / 名字（-Name 位置参数）/ 父辈成员键 / 只查不做。
+  [string]$Key = '',
+  [string]$Parent = '',
+  [switch]$DryRun
 )
 
 $ErrorActionPreference = 'Stop'
@@ -69,6 +74,9 @@ function Get-Members {
           Port    = if ($m.port) { [int]$m.port } else { 0 }
           Cwd     = if ($m.cwd) { [string]$m.cwd } else { $null }
           ConfigFile = if ($m.configFile) { [string]$m.configFile } else { $null }
+          Status  = if ($m.status) { [string]$m.status } else { $null }
+          Parent  = if ($m.parent) { [string]$m.parent } else { $null }
+          BornAt  = if ($m.bornAt) { [string]$m.bornAt } else { $null }
         }
       }
     } catch {
@@ -76,8 +84,8 @@ function Get-Members {
     }
   }
   if ($out.Count -eq 0) {
-    $out['lee'] = [pscustomobject]@{ Key = 'lee'; Label = '大肥鱼'; Kind = 'fish'; Role = 'watcher'; Home = $Cfg.LeeHome; DshHome = $Cfg.LeeHome; Profile = $Cfg.LeeProfile; Port = $Cfg.LeePort; Cwd = $Cfg.LeeStartCwd }
-    $out['whale'] = [pscustomobject]@{ Key = 'whale'; Label = '小肥鱼'; Kind = 'fish'; Role = 'member'; Home = $Cfg.HerHome; DshHome = $Cfg.HerDshHome; Profile = $Cfg.WhaleProfile; Port = $Cfg.HerPort; Cwd = $Cfg.WhaleCwd }
+    $out['lee'] = [pscustomobject]@{ Key = 'lee'; Label = '大肥鱼'; Kind = 'fish'; Role = 'watcher'; Home = $Cfg.LeeHome; DshHome = $Cfg.LeeHome; Profile = $Cfg.LeeProfile; Port = $Cfg.LeePort; Cwd = $Cfg.LeeStartCwd; Status = $null; Parent = $null; BornAt = $null }
+    $out['whale'] = [pscustomobject]@{ Key = 'whale'; Label = '小肥鱼'; Kind = 'fish'; Role = 'member'; Home = $Cfg.HerHome; DshHome = $Cfg.HerDshHome; Profile = $Cfg.WhaleProfile; Port = $Cfg.HerPort; Cwd = $Cfg.WhaleCwd; Status = $null; Parent = $null; BornAt = $null }
   }
   return $out
 }
@@ -544,12 +552,14 @@ fish.ps1 -- 鱼群唯一的入口
   pwsh -File fish.ps1 up-main          启动主 dsh（已在跑就打开它的 WebUI）
   pwsh -File fish.ps1 down-main        关闭主 dsh（还在跑的小鱼继续跑）
   pwsh -File fish.ps1 doctor           体检
+  pwsh -File fish.ps1 new -Key <键> -Name <名字> -Parent whale   养一条新鱼（查重 → 建家 → 进名册 → 记 birth）
   pwsh -File fish.ps1 refresh whale    重新生成环境.md（模板/名册/工具变了以后）
   pwsh -File fish.ps1 maintain whale   检修：先停，再开窗（看完关窗 → restore）
   pwsh -File fish.ps1 restore whale    回无人值守（无窗起，会话由 host 自己挂上）
   pwsh -File fish.ps1 help
 
 选项：-NoBrowser -Window -BrowserMainOnly -Console -Yes -By <谁> -Why <为什么> -Port <n>
+      new 专用：-Key <成员键> -Parent <父辈键> -DryRun（只查规则，不建东西）
 '@ | Write-Host
 }
 
@@ -641,6 +651,125 @@ function Invoke-Restore([string]$name) {
   return $true
 }
 
+
+# ---------- 养一条新鱼（D4-2：让一条鱼自己当家长） ----------
+# 用法：pwsh -File scripts\fish.ps1 new -Key <成员键> -Name <名字> -Parent <父辈键> [-Port 0] [-DryRun]
+# 它做什么：查重（键 / 名字 / 端口 / 鱼数上限）→ 调 install.ps1（-SkipParent，不碰父辈的 profile）→ 记 births.log → 打印还缺什么。
+# 它不做什么：不填 API key、不替你开窗、不写第一句话 —— 这三件必须由人或孩子自己完成。
+function Invoke-NewFish {
+  $repoRoot = Split-Path $PSScriptRoot -Parent
+  $pondRoot = Split-Path $repoRoot -Parent
+  if ((Split-Path $repoRoot -Leaf) -ne 'app' -or -not (Test-Path -LiteralPath (Join-Path $pondRoot 'pool'))) {
+    Write-Host 'xx new 只在鱼塘布局里用（仓库要在 <鱼塘>\app\，旁边要有 pool\）。'
+    Write-Host 'NEXT: 单克隆布局没有加一条鱼这条路 —— 用 install.ps1 装一个新的鱼塘。'
+    return $false
+  }
+  $key = ([string]$Key).Trim()
+  $childName = ([string]$Name).Trim()
+  $parentKey = ([string]$Parent).Trim()
+  $reserved = @('lee', 'whale', 'fishball', 'fabian', 'all', 'main', 'app', 'pool', 'homes', 'acl', 'dsh')
+  if ($key -notmatch '^[a-z][a-z0-9-]{1,15}$') {
+    Write-Host ("xx 成员键「{0}」不合规：小写字母开头，后面是小写字母/数字/短横线，2-16 位。" -f $key)
+    Write-Host 'NEXT: 换个键（比如 xiaoxingxing）；名字放 -Name，键只用来认人。'
+    return $false
+  }
+  if ($MEMBERS.Contains($key)) {
+    Write-Host ("xx 名册里已经有「{0}」了 —— 加鱼不是改鱼。" -f $key)
+    return $false
+  }
+  if ($reserved -contains $key) {
+    Write-Host ("xx 「{0}」是保留键（脚本和布局在用）。" -f $key)
+    return $false
+  }
+  if ($childName -eq '') {
+    Write-Host 'xx 得先有名字：-Name <名字>。'
+    Write-Host 'NEXT: 名字由当家长的那条鱼起，别用占位符。'
+    return $false
+  }
+  if ($childName.Length -gt 16) {
+    Write-Host 'xx 名字太长（16 个字以内）。'
+    return $false
+  }
+  $sameName = @($MEMBERS.Values | Where-Object { $_.Kind -eq 'fish' -and $_.Label -eq $childName })
+  if ($sameName.Count -gt 0) {
+    Write-Host ("xx 已经有鱼叫「{0}」了（{1}）。" -f $childName, $sameName[0].Key)
+    Write-Host 'NEXT: 名字在群里认人，重名会叫错人。'
+    return $false
+  }
+  if ($parentKey -eq '') {
+    Write-Host 'xx 得说清是谁在养：-Parent <父辈成员键>。'
+    return $false
+  }
+  $parent = Get-Fish $parentKey
+  if (-not $parent) {
+    Write-Host ("xx 名册里没有「{0}」这条鱼。" -f $parentKey)
+    return $false
+  }
+  if ($parent.Status -eq 'experiment') {
+    Write-Host ("xx 「{0}」还是实验鱼，实验鱼不能当家长。" -f $parent.Label)
+    Write-Host 'NEXT: 先把它转成常驻（pool\members.json 的 status），再让它养。'
+    return $false
+  }
+  $fishCount = @($MEMBERS.Values | Where-Object { $_.Kind -eq 'fish' }).Count
+  $maxFish = 5
+  $settingsFile = Join-Path $Cfg.PoolState 'settings.json'
+  if (Test-Path -LiteralPath $settingsFile) {
+    try {
+      $st = Get-Content -LiteralPath $settingsFile -Raw -Encoding utf8 | ConvertFrom-Json
+      if ($st.maxFish) { $maxFish = [int]$st.maxFish }
+    } catch { }
+  }
+  if ($fishCount -ge $maxFish) {
+    Write-Host ("xx 鱼已经 {0} 条，到了上限 {1} 条（pool\state\settings.json 的 maxFish）。" -f $fishCount, $maxFish)
+    Write-Host 'NEXT: 先归档一条不用的鱼（scripts\archive-fish.ps1），或者改上限。'
+    return $false
+  }
+  $childHome = Join-Path (Join-Path $pondRoot 'homes') $key
+  $portText = if ($Port -gt 0) { [string]$Port } else { '自动挑一个空口' }
+  Write-Host ''
+  Write-Host ('  养一条新鱼：{0}（{1}）' -f $childName, $key)
+  Write-Host ('  家长        {0}（{1}）' -f $parent.Label, $parent.Key)
+  Write-Host ('  她的家      {0}' -f $childHome)
+  Write-Host ('  端口        {0}' -f $portText)
+  Write-Host ('  现在鱼数    {0} / {1}' -f $fishCount, $maxFish)
+  if ($DryRun) {
+    Write-Host ''
+    Write-Host '（-DryRun：只查了规则，什么都没建。）'
+    Write-Host '去掉 -DryRun 才会真的建家、装 profile、写名册、记 birth。'
+    return $true
+  }
+  Write-Host ''
+  $install = Join-Path $PSScriptRoot 'install.ps1'
+  if (-not (Test-Path -LiteralPath $install)) {
+    Write-Host 'xx 找不到 install.ps1（new 只是它的套壳）。'
+    return $false
+  }
+  & pwsh -NoProfile -File $install -ChildName $childName -ChildMemberId $key -ParentMemberId $parent.Key -ChildProfile $key -SkipParent -ChildPort $Port
+  if ($LASTEXITCODE -ne 0) {
+    Write-Host 'xx 安装没成（原因在上面）。什么都没记账。'
+    Write-Host ('NEXT: 修掉上面那条，再跑 pwsh -File scripts\fish.ps1 new -Key {0} -Name {1} -Parent {2}' -f $key, $childName, $parent.Key)
+    return $false
+  }
+  $realPort = $Port
+  try {
+    $fresh = Get-Content -LiteralPath $Cfg.MembersFile -Raw -Encoding utf8 | ConvertFrom-Json
+    $realPort = [int]$fresh.members.$key.port
+  } catch { }
+  $birthLog = Join-Path $Cfg.PoolState 'births.log'
+  $line = '{0} | birth | fmt=1 key={1} name={2} parent={3} by={4} port={5} status=experiment' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $key, $childName, $parent.Key, $By, $realPort
+  try { Add-Content -LiteralPath $birthLog -Value $line -Encoding utf8 } catch { Write-Host ('!! birth 没记上：{0}' -f $_.Exception.Message) }
+  Write-Host ''
+  Write-Host ('{0} 出生了：{1}（{2}），端口 {3}。' -f $parent.Label, $childName, $key, $realPort)
+  Write-Host ''
+  Write-Host '还缺三步（前两步得有人做，第三步是给它第一句话）：'
+  Write-Host ('  1) 给它一把钥匙：pwsh -File scripts\fish.ps1 maintain {0}' -f $key)
+  Write-Host '     在弹出的窗里进 设置 → Models，填它自己的 API key；填完关窗。'
+  Write-Host ('  2) 回到无人值守：pwsh -File scripts\fish.ps1 restore {0}' -f $key)
+  Write-Host '  3) 在群里对它说第一句话 —— 它会从这句话开始记事。'
+  Write-Host '  4) 看它起没起来：pwsh -File scripts\fish.ps1 list'
+  return $true
+}
+
 # ---------- 分发 ----------
 $ok = $true
 $locked = $false
@@ -668,6 +797,7 @@ try {
         if (-not (Invoke-RefreshEnv $m)) { $ok = $false }
       }
     }
+    'new'    { if (-not (Invoke-NewFish)) { $ok = $false } }
     'maintain' { if (-not (Invoke-Maintain $Name)) { $ok = $false } }
     'restore'  { if (-not (Invoke-Restore $Name)) { $ok = $false } }
     'unattended' { if (-not (Invoke-Restore $Name)) { $ok = $false } }
