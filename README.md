@@ -87,7 +87,25 @@ pwsh -File scripts\doctor.ps1 -IncludeLee  # 连你的窗一起看
 
 一条鱼出问题时最麻烦的地方是：**它坏掉的样子和正常时一样**。进程在、端口通，但 `group_say` 没注册（她哑了）、名册指向一段不存在的会话（叫错人）、`群.md` 落后于 `messages.jsonl`（她读到旧消息）—— 这些都不会自己喊。
 
-体检只读、不改，十二条检查：配置、端口、心跳、工具注册、名册、**全鱼**（每条鱼一行：端口 / 心跳 / 启动痕迹 / 名册；常驻鱼关着算 FAIL，实验鱼关着只算 WARN——"不承诺一直醒着"）、启动痕迹、**版本一致**（启动痕迹说的版本 vs 磁盘上的 `package.json`——版本号说谎时，你会拿它判断"新代码有没有生效"）、投递账本、群投影、**私聊可读版**（`dm\*.jsonl` 比 `私聊-*.md` 新 = 可读版没跟上）、窗口留痕。全过 exit 0；有 FAIL exit 1，每条 FAIL 带一条 `NEXT:` 告诉你下一步做什么。
+体检只读、不改，十八组检查：
+
+| 组 | 看什么 |
+|---|---|
+| 配置 | `lil-whale.config.json` 读到了没有 |
+| 她的端口 / 他的端口 | TCP 通不通（`-IncludeLee` 才看他的） |
+| 她的心跳 | `pool\state\presence\whale.json` 的年龄（>24h 只 WARN：可能只是没人叫她） |
+| 工具注册 | `plugin.log` 里有没有 `group_say-registered`（缺了 = 她哑了） |
+| 名册 / 名册（全鱼） | `pins.json` 里每条鱼都有会话、会话目录存在；名册外的旧段近两小时有没有被写过 |
+| 端口登记 | `members.json` 里有没有两条鱼登记同一个端口 |
+| 环境说明 | 每条鱼的 `环境.md` 指纹是不是当前模板（`fish.ps1 refresh all` 可修） |
+| writer 唯一 | 同一 profile 有没有两个进程；日志里有没有 `writer-held` |
+| 启动痕迹 / 版本一致 | `plugin-boot.log` 的 pkg/pid/home；版本 vs 磁盘 `package.json`（版本号说谎时你会拿它判断"新代码生效没"） |
+| 投递账本 | `wake-deliver.log` 最近一次递话 |
+| 群投影 / 私聊可读版 | `群.md`、`私聊-*.md` 是不是跟得上 jsonl |
+| 窗口留痕 | `close.log` 有没有开门/关门记录 |
+| 全鱼 | 每条鱼一行：名字 / 端口 / 心跳 / 启动痕迹 / 名册；常驻鱼关着算 FAIL，实验鱼关着只算 WARN——"不承诺一直醒着" |
+
+全过 exit 0；有 FAIL exit 1，每条 FAIL 带一条 `NEXT:` 告诉你下一步做什么。
 
 ## 它会花多少钱
 
@@ -112,7 +130,8 @@ pwsh -File scripts\doctor.ps1 -IncludeLee  # 连你的窗一起看
 ```
 lil-whale/                      鱼塘根（不在 git 里；装第二条鱼时这里长出新的一层）
   app/                          工程（这个仓库）
-    docs/                       设计文档、判据、观察记录
+     docs/                       活跃文档（PRD、安装流程详解、出生流程、发布、打包、能力地图、判据、谱系）
+     docs/archive/               历史记录（旧待办、观察、交接演练、review 意见）——只归档不删
     plugin/dsh-group/           宿主半边：群发言工具 + 跨进程唤醒（她的 profile 也装）
     plugin/dsh-group-ui/        浏览器半边：群聊面板、设置页、HTTP 路由（只你的 profile 装）
     scripts/                    安装、启动器（fish）、巡守（原守夜）、体检、重建器、名册、谱系、迁移、打包
@@ -238,10 +257,27 @@ pwsh -File scripts\release-check.ps1
 
 `-SkipPack` 用 dist 里最新的包；`-Keep` 保留现场。
 
+## 文档在哪
+
+| 想知道什么 | 看哪 |
+|---|---|
+| 这东西是什么、怎么算成、做到哪一步停 | [`docs/小小肥鱼-PRD.md`](docs/小小肥鱼-PRD.md)（当前结论 + 附录 A.x 事故与判据） |
+| 从零装到跑起来的每一步（变量、路径、时序） | [`docs/安装流程详解.md`](docs/安装流程详解.md) |
+| 怎么"出生"一条新鱼、怎么换段搬家 | [`docs/出生流程.md`](docs/出生流程.md) |
+| 发版前逐条检查 | [`docs/发布.md`](docs/发布.md)、`scripts\release-check.ps1` |
+| 打包/编码/发布注意事项 | [`docs/打包.md`](docs/打包.md) |
+| 她"能做什么"的目录 | [`docs/能力地图.md`](docs/能力地图.md) |
+| 她的自主分级与判据 | [`docs/自主回合.md`](docs/自主回合.md)、[`docs/判据与名字.md`](docs/判据与名字.md) |
+| 谁是谁的爹 | [`docs/谱系.md`](docs/谱系.md)（生成的） |
+| 每一版改了什么、为什么 | [`docs/PRD-CHANGELOG.md`](docs/PRD-CHANGELOG.md) |
+
+历史记录（旧待办、观察、交接演练、review 意见）在 `docs\archive\`，不删——它们是证据。
+
 ## 状态
 
 - M0–M4 已通过：出生、插件探针、跨进程通路、唤醒阀门、人类入口（群面板 + 私聊）
 - M5 观察中：一周数据（她说不说话、被叫醒后回不回、定时推门准不准）
+- 2026-11-13 完成：**鱼塘布局**（一个根四层）、**无人值守成为默认**（进程起来即挂载会话，不需要浏览器窗）、**计划表归每条鱼自己**（主 dsh 关着她的闹钟也响）、**鱼塘页**（谱系树 + 一键全开/全关 + 检修/回无人值守）、**四个快捷方式**（实测通过：先鱼后主、只开主窗、停主不带走鱼）、`doctor` / `verify-pending` / `release-check` 三套自检。
 - M6 收尾中：配置抽离、包改名、安装脚本、种子文件模板、manifest 字段、发布清单都已就绪；剩**发布当天**的两件：npm scope 改名 `@fabianactor/dsh-lil-whale-group(-ui)`、`npm publish`（见 `docs/发布.md`）。
 
 进度和每一条「为什么这样定」都在 `docs/` 里，包括踩过的坑。

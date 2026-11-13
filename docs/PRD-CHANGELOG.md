@@ -1,3 +1,8 @@
+## v1.0.59
+
+- §0 摘要与 §4 架构按当前实现重写：**一个鱼塘根（app / pool / homes / acl）**、每条鱼一套 HOME+profile+端口、共享区必须在家之外、无人值守挂载、一条鱼一份账。
+- 状态行更新：鱼塘布局、无人值守默认、计划表归属 B、四个快捷方式实测。
+- `docs\` 清理：历史记录（11-12 待办、morning-read 观察、交接演练、两份 review 文件）移入 `docs\archive\`，活跃文档里的引用同步改路径。
 ## v1.0.58
 
 - 附录 A.56：四个快捷方式实测（Run All Whales / Stop All Whales / Stop DSH / `down <鱼> -Yes`）全过，记下关闭顺序、pid 变化、`mode` 账判据。
@@ -34,7 +39,7 @@
 
 ## v1.0.53（2026-11-13）
 
-- **PRD review 采纳三条**（回应全文：`docs\PRD-review-2026-11-13-回应.md`）：①计划表归属定 **B**（每条鱼自己的进程执行自己家的 plan，巡守只管推门记账）+ 自执行 `selfPlanTick()` + 宽限 15 分钟 + `trigger=self` 账；②§3 加「适用鱼」（`experiment` 只判 A4/A6/A7）；③R13 措辞改成"不放**默认开启**的自启"。
+- **PRD review 采纳三条**（回应全文：`docs\archive\PRD-review-2026-11-13-回应.md`）：①计划表归属定 **B**（每条鱼自己的进程执行自己家的 plan，巡守只管推门记账）+ 自执行 `selfPlanTick()` + 宽限 15 分钟 + `trigger=self` 账；②§3 加「适用鱼」（`experiment` 只判 A4/A6/A7）；③R13 措辞改成"不放**默认开启**的自启"。
 - **唤醒总量封顶**：`WAKE.totalPerDay = 120`（每鱼 perHour 12 / perDay 60 不变），两条路都记 `deny=total-cap`。
 - 新增 **附录 A.50 计划表归每条鱼自己**（问题/两步改动/为什么不是 A/判据/没做）。
 - 顺手修两处"读法对不上"：①`wakeCountsOf()` 把 `state\wakes\<键>.json` 当平铺读（文件其实是 `{"<键>":{…}}`）⇒ `gate=pass(hour=0/12)` 一直是假的；②推门分支不写 `claim` ⇒ 鱼起来后自己的闹钟会在宽限期内再递一次（现在推门也先声明）。
@@ -255,7 +260,7 @@
 - **A.19 的"怎么加"落成一条命令**：新增 `scripts\apply-neutral-preset.mjs`——现读当前 dsh 的 `standard` 生成中立 preset（复用 `gen-neutral-preset.mjs`）→ **幂等**插进 profile patch（已有 `preset-neutral` 就跳过）→ 写前备份 `.bak-<stamp>`、`tmp-<pid>` + rename 写入 → 用 `dsh --profile <p> --patch <新文件> --dump-config` 只读验证（失败自动还原备份）。`--default` 把默认 preset 也改成 `neutral`；`--dry-run` 只打印要追加的内容。
 - **为什么还要一层脚本**：YAML 的缩进、`- insert:` 层级、末尾换行、"跑第二遍插两份"都是手改容易错的地方；而这四件事脚本都能幂等做完，并且**写之前就知道会写什么**（dry-run）。
 - **已验证（不用重启）**：在她真实 patch 的副本上跑通三遍——dry-run 只打印；写入后 `--dump-config` exit 0、`preset-neutral` 与 `default: neutral` 都在；再跑一次输出"已经装过了"、文件未变。
-- 同步：`docs\出生流程.md`「以后换段怎么办」第 5 步改成一条命令；`docs\待办-2026-11-12.md` D5 行补 `apply` 脚本。
+- 同步：`docs\出生流程.md`「以后换段怎么办」第 5 步改成一条命令；`docs\archive\待办-2026-11-12.md` D5 行补 `apply` 脚本。
 
 ## v1.0.18（2026-11-12）
 
@@ -263,7 +268,7 @@
 - **新增 `scripts\gen-neutral-preset.mjs`**：从当前装着的 dsh 现读 `preset-standard` 的 `plugins` 清单（`--dump-config`），只把 `persona` 的 `prefix` 换成能力陈述，输出 `templates\preset-neutral.yml`（`- insert:` 形式）。**为什么生成而不是手抄**：preset 的 `plugins` 是完整快照，覆盖后不会自动合并上游更新——手抄等于把今天这份冻结进仓库，生成则升级 dsh 后重跑一次就跟着走。
 - **已验证（不用重启）**：生成物插进 `whale` profile 的临时副本，`dsh --profile whale --dump-config` exit 0，`- id: preset-neutral` 出现且 `standard` 仍在。**未验证**：真会话选 `neutral` 后的行为（要重启 + 搬家当天）。
 - **两个坑**：①`prefix` 里含 `: `，裸写会被 YAML 当 mapping（`bad indentation of a mapping entry`）⇒ 单引号包住；②沙箱里用 `import.meta.url.pathname` 手算仓库根会留下 `%E6%96%87…` 编码（`cwd` 不存在 ⇒ `spawnSync` 返回 `status=null` 且无 error），要用 `fileURLToPath`。
-- 同步：`docs\出生流程.md`「以后换段怎么办」第 5 步写了用法与"升级后重跑"；`docs\待办-2026-11-12.md` 加 D5 行。
+- 同步：`docs\出生流程.md`「以后换段怎么办」第 5 步写了用法与"升级后重跑"；`docs\archive\待办-2026-11-12.md` 加 D5 行。
 
 ## v1.0.17（2026-11-12）
 
@@ -279,7 +284,7 @@
 
 - **私聊也有可读投影**（她 12:35 提的"私聊没有可读版"，他 14:03 说放开手脚之后做的）：`sayPrivate()` 落完 jsonl 就追写 `dm\私聊-<a>__<b>.md`（标题 `# 私聊 · A / B`，每条 `**时间 · 谁**` + 正文，带图写 `（图片 images/<月>/<id>.<ext>）`）；`scripts\rebuild-group-md.mjs` 增私聊段，能从 jsonl 整本重建，说不清来源的差异照旧拒绝整本写。群和私聊共用 `readableBodyOf()`——"图片在可读文件里怎么写"只有一个出处。
 - **修重建脚本漏掉纯图消息**：`blockOf()` 原来只认 `text`，12:28 那条"只有图没有字"的记录被整条跳过 ⇒ 重建结果比 `群.md` 少一行，对照脚本报成"未归类差异"。改成"有字或有图都算有正文"，重建 1775 行与 `群.md` 零差异。教训同 A.17：**派生脚本漏一种输入，会让源头看起来在说谎**。
-- **修 `docs\待办-2026-11-12.md` 里被 PowerShell 双引号 here-string 吃掉的 code 标记**（六行：`` ` ``→`\`、`` `t ``→TAB、`` `r ``→CR）。同一个坑 A.16 初稿踩过一次；规矩补进 `docs\打包.md`：**写含反引号的文档不要用 `@"..."@`**，用 edit/write 工具或单引号 here-string。
+- **修 `docs\archive\待办-2026-11-12.md` 里被 PowerShell 双引号 here-string 吃掉的 code 标记**（六行：`` ` ``→`\`、`` `t ``→TAB、`` `r ``→CR）。同一个坑 A.16 初稿踩过一次；规矩补进 `docs\打包.md`：**写含反引号的文档不要用 `@"..."@`**，用 edit/write 工具或单引号 here-string。
 - 状态行 → v1.0.16。
 
 ## v1.0.15（2026-11-12）

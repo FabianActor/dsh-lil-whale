@@ -1,25 +1,24 @@
 {
   "_说明": "这是模板。install.ps1 会照着它在你自己的仓库根目录生成 lil-whale.config.json（那个文件不进版本库，因为里面是你的绝对路径）。字段含义见 docs/打包.md。",
-  "_版本": 1,
-
-  "repoRoot": "D:\\path\\to\\dsh-lil-whale",
-  "herHome": "D:\\path\\to\\lil-whale",
-  "herDshHome": "D:\\path\\to\\lil-whale\\dsh-home",
-  "groupDir": "D:\\path\\to\\lil-whale\\group",
-  "herWaker": "D:\\path\\to\\dsh-lil-whale\\scripts\\wake-whale.ps1",
+  "_版本": 2,
+  "repoRoot": "D:\\path\\to\\lil-whale\\app",
+  "herHome": "D:\\path\\to\\lil-whale\\homes\\whale",
+  "herDshHome": "D:\\path\\to\\lil-whale\\homes\\whale\\dsh-home",
+  "poolDir": "D:\\path\\to\\lil-whale\\pool",
+  "poolStateDir": "D:\\path\\to\\lil-whale\\pool\\state",
+  "groupDir": "D:\\path\\to\\lil-whale\\pool\\group",
+  "dmDir": "D:\\path\\to\\lil-whale\\pool\\dm",
+  "membersFile": "D:\\path\\to\\lil-whale\\pool\\members.json",
+  "herWaker": "D:\\path\\to\\lil-whale\\app\\scripts\\wake-whale.ps1",
   "pwshExe": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
-  "wakeMetrics": "D:\\path\\to\\dsh-lil-whale\\logs\\wake-metrics.log",
-  "watchmanPidFile": "D:\\path\\to\\lil-whale\\logs\\watchman.pid",
-
+  "wakeMetrics": "D:\\path\\to\\lil-whale\\pool\\state\\wake-metrics.log",
   "chatCwd": "D:\\path\\to",
   "leeStartCwd": "C:\\Users\\you\\Desktop",
-  "leeCwd": "D:\\path\\to\\dsh-lil-whale",
-  "whaleCwd": "D:\\path\\to\\lil-whale",
-
+  "leeCwd": "D:\\path\\to\\lil-whale\\app",
+  "whaleCwd": "D:\\path\\to\\lil-whale\\homes\\whale",
   "leeHome": "C:\\Users\\you\\.dsh",
   "leeProfile": "web",
   "whaleProfile": "whale",
-
   "herPort": 3082,
   "leePort": 3080
 }

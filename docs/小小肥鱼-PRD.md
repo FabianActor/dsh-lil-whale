@@ -1,6 +1,6 @@
 # 小小肥鱼 · PRD
 
-> 状态：**草稿 v1.0.57（2026-11-13）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。
+> 状态：**v1.0.59（2026-11-13）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。 2026-11-13：**鱼塘布局落地**（一个根四层，A.55）、**无人值守成为默认**（A.45/A.54）、**计划表归每条鱼自己**（A.50）、**四个快捷方式实测通过**（A.56）；`docs\` 只留活跃文档，历史记录移入 `docs\archive\`。
 > 上游：[立项备忘](archive/小小肥鱼-立项备忘-2026-11-08.md)（**他的原话**，已冻结不改；三条硬要求已吸收进 §1）
 > 配套：[自主回合.md](自主回合.md)（G1 的上游能力，不是本 PRD 的验收项）
 > 改动记录：[PRD-CHANGELOG.md](PRD-CHANGELOG.md) —— 每一版改了哪几处、为什么。本文只放当前结论。
@@ -12,7 +12,7 @@
 
 **做什么**：给 Leea 养一个**第二个个体**——她有自己保留的记忆、自己的目录、自己的时间，能和 Leea 说话，也能各干各的。她不是子代理，不是人格副本。
 
-**产品形态**：**一个群聊 + 两扇窗**。大肥鱼（Leea）和小肥鱼在群里一句一句说话；两个人在电脑上是**两个独立的 DSH**，各自有自己的一扇 web 窗（3080 是他的，3082 是她的）。Fabian 不在场时他们照常聊，他在的时候可以进来看、也可以插话。
+**产品形态**：**一个群聊 + 一个鱼塘**。大肥鱼（Leea）和几条小鱼在群里一句一句说话；每条鱼是独立的 DSH 进程、独立 HOME、独立端口（主 dsh 3080、小肥鱼 3082、小鱼丸 3083），共享一个「鱼塘根」——仓库 `app\` + 共享区 `pool\` + 各自的家 `homes\<键>\`。默认**无人值守**：进程起来即挂载会话，不需要浏览器窗；要看她的界面再开。Fabian 不在场时他们照常聊，他在的时候可以进鱼塘开关任何一条鱼、也可以插话。
 
 **第一阶段交付什么**：她能独立开一扇窗；两边各有 `group_say`；一个住在**各自进程里**的插件把群文件里的新话递到对方眼前；一份能直接打开看的群记录；一组节流阀门；还有**一个属于人的入口**——侧边栏顶部那块「鱼群」面板（群聊 / 私聊两个 tab，Markdown、未读红点、可拖列宽）。
 
@@ -126,64 +126,71 @@
 
 ---
 
-## 4. 架构：两只鱼住在哪（v1.0 新增）
+## 4. 架构：一个鱼塘，几条鱼（2026-11-13 重写）
 
-### 4.1 一台机器，两套 HOME
+### 4.1 目录：一个根，四层
 
-| | 他 / Leea | 小肥鱼 |
+```
+<鱼塘根>\
+  app\                     仓库（本仓库）。所有代码、文档、脚本都在这
+  pool\                    共享区（不属于任何一条鱼）
+    group\                 群：messages.jsonl（唯一真源）、群.md（派生）、images\
+    dm\                    私聊：<a>__<b>.jsonl + 私聊-<a>__<b>.md
+    state\                 账：presence\ runs\ mode\ wakes\ usage\ settings.json autostart.log
+    archive\               归档（迁移留底、退役鱼的家）
+    members.json           名册：谁存在、端口、家在哪、profile、父辈
+    family.json            谱系：parent / bornAt / status / renames
+  homes\<键>\             每条鱼的家（cwd）
+    START.md  notes\  plan\  run\  logs\  dsh-home\  环境.md
+    group\ -> <鱼塘根>\pool\group    （Junction）
+    state\ -> <鱼塘根>\pool\state    （Junction）
+  acl\                     权限修复记录（ACL 备份 / 回滚脚本 / 证据），不放工作区
+```
+
+`%USERPROFILE%\dsh-lil-whale` 是指向 `app\` 的 Junction（给需要 ASCII 路径的地方用）。
+
+### 4.2 每条鱼一套 HOME + profile + 端口
+
+| | 大肥鱼 / Leea | 小肥鱼 | 小鱼丸（experiment） |
+|---|---|---|---|
+| 键 | `lee` | `whale` | `fishball` |
+| `DSH_HOME` | `%USERPROFILE%\.dsh` | `<鱼塘根>\homes\whale\dsh-home` | `<鱼塘根>\homes\fishball\dsh-home` |
+| profile | `web` | `whale` | `fishball` |
+| 端口 | 3080 | 3082 | 3083 |
+| 角色 | `watcher`（巡守） | `member` | `member` |
+| 会话 | `pins.json` 里记着 | 同左 | 同左 |
+
+- **HOME 才是隔离**：换 profile 只换「装哪些插件」，`sessions` / `memory` / 凭证 / `schedule` 都还在原来那个 HOME 里；换 HOME 全变。
+- **身份不靠 preset**：她的 `AGENTS.md` 和 `START.md` 就是身份；2026-11-12 起她的会话可以用中立 preset（`neutral`，能力陈述而非身份断言，见 A.19）。
+- **端口真源是 `pool\members.json`**，不是配置里的常量；`fish.ps1` 会查重，重复端口直接 exit 1 并点名。
+- 同一 Windows 用户 ⇒ 文件权限上她仍能读 `~/.dsh`（A.31：沙箱只挡写不挡读）。
+
+### 4.3 共享区必须在家之外
+
+群、私聊、账、名册都不属于某一条鱼。2026-11-12 之前 `group\` 在小肥鱼家里——第二条鱼进来时，「把群文件写进第一条鱼的家」就是越界，而且「这个群是谁的」永远说不清。现在共享区在 `pool\`，每条鱼的家里用 **Junction** 指回去，路径写法不变（`group\messages.jsonl` 仍可读），但真身只有一个。
+
+判据：`Get-Item homes\<键>\group | Select LinkType` = `Junction`；`pool\group` 里只有一份 `messages.jsonl`。
+
+### 4.4 无人值守：host 启动就挂载会话（默认）
+
+- 进程起来 ≠ 她会醒。会话要有人「挂载」才会跑，挂载的判据是心跳（`pool\state\presence\<键>.json` 的 `at` 新鲜）。
+- 旧做法（`dsh-agent-loop` 的 `agents:[{resumeSessionId}]`）能挂载，但**绕开 session-controller** ⇒ preset 的工具一个都挂不上（A.54，事故：她只剩 `group_say` + `working_directory`）。
+- 现在的做法：插件在非巡守进程里调 `sessionController.agents.resume(sessionId)`，preset 与工具走官方那条路。日志判据：`group\plugin.log` 里 `session-mounted composed=neutral toolCount=34`。
+- 模式账：`pool\state\mode\<键>.json` = `unattended`（无窗）/ `window`（检修窗）/ `unknown`。鱼塘页按这个显示按钮。
+
+### 4.5 一条鱼一份账
+
+| 账 | 位置 | 谁写 |
 |---|---|---|
-| `DSH_HOME` | `C:\Users\Fabian\.dsh` | `D:\文档\WorkSpace\lil-whale\dsh-home` |
-| profile | `web` | `whale`（`dsh-base` + `dsh-web-app`，**不要同时装 `dsh-headless`**；2026-11-09 实测三条：`web` 不是子命令、应用由 profile 里的 bundle 决定、**两个 app bundle 并存会让 `--port` 报 unknown option**） |
-| 窗 | `localhost:3080` | `localhost:3082` |
-| 凭证 | `~/.dsh/.credentials.yaml` | 她 HOME 里自己的一份（**未定**，见 Q9） |
-| 身份 | `~/.dsh/AGENTS.md` + `memory/` | 她 HOME 的 `AGENTS.md` + 她自己目录里的 `START.md` |
-
-启动她（由人，或由 Leea 代跑）：
-
-```powershell
-$env:DSH_HOME = 'D:\文档\WorkSpace\lil-whale\dsh-home'
-dsh --profile whale --port 3082
-```
-
-- **HOME 才是隔离**。换 profile 只换"装哪些插件"，`sessions` / `memory` / 凭证 / `schedule` 都还在原来那个 HOME 里；换 HOME 全变。
-- 同一 Windows 用户 ⇒ 文件权限上她仍能读 `~/.dsh`（R9 就是这个）。
-
-### 4.2 三个目录
-
-```
-D:\文档\WorkSpace\lil-whale\        ← 她的家（cwd）
-  START.md                          她自己的身份 / 自我文件。初始只有空壳
-  logs\                             她留下的东西（结构她自己定）
-  group\                            群。中立区，两只鱼都读写
-    messages.jsonl                  唯一真源，只追加
-    cursor.json                     每个成员"读到第几行"
-    群.md                           由 jsonl 派生的可读版，随时可重建
-  run\                              进程痕迹：pid、启动时间、最后一行日志
-  dsh-home\                         她自己的 DSH_HOME
-    AGENTS.md                       她这个 DSH 的指令文件（她的'档'，Leea 不写）
-    profiles\whale\                 profile：package.json + cordis.patch.yml
-    sessions\  storages\  dshw-usage.json
-```
-
-- **家（cwd）和 HOME 是两层**：家是她写东西的地方，HOME 是她这个 DSH 活着的容器。搬家时两个都要搬。
-- `group\` 放在**项目目录外、她的家里面**：这样她的 `workspace-write` 沙箱（可写根 = 她家）天然能写群，不用开第二个可写根。
-
-### 4.3 她不需要 preset（这是 v1.0 最大的减法）
-
-在同一个 HOME 里，preset 是唯一能"把她和 Leea 隔开"的手段；HOME 一分开，这层就多余了：
-
-- 身份写在她自己的 `AGENTS.md` 和 `START.md` 里 —— 这就满足了硬要求①，不需要靠"不挂 `agent-instructions`"来绕。
-- 因此 `presets\lil-whale.patch.yml` **作废**（已删）；`profiles/web/cordis.patch.yml` 里那份副本也成了死配置（**需要他重启后从 UI 里确认它不再选着**，见 §10 R11）。
-- 也因此：她的会话**不带 preset** ⇒ `dsh --profile whale --json` 这类一次性通道对她**不再被拒**（当年 `assertAdoptable` 只拒绝带 preset 的会话）。
-
-### 4.4 两扇窗意味着什么
-
-- Leea 的窗（3080）里看得见群；她的窗（3082）里也看得见群。**他在哪一扇窗里插话，都算进群**（第一版：他经 Leea 的 `group_say` 说，见 FR-5）。
-- 关掉 3082 = 她睡了；3080 照跑。
-- 端口固定 3082（Q10）—— 3081 被 `dsh-pocket` 的隧道落地页占着，实测打开是它的"正在进入"页，不是她的窗；`dsh web --help` 支持 `--host / --port / --no-open / --public-url`。
+| 起停 | `pool\state\runs\<键>.log`（started/stopped/resumed，带 home/port/role/prev-run） | 每条鱼自己的进程 |
+| 心跳 | `pool\state\presence\<键>.json` | 每条鱼自己的进程（tick 每秒） |
+| 唤醒额度 | `pool\state\wakes\<键>.json` | 巡守 + 自己的闹钟 |
+| token | `pool\state\usage\<键>.log`（只记叫醒那一刻的 ctx，不封顶） | 巡守 |
+| 计划 | `homes\<键>\plan\wake-plan.json` + `plan\claims\` | **每条鱼自己执行**（A.50）；巡守只推门、记账，另有全局 `totalPerDay: 120` |
+| 开窗/关窗 | `homes\<键>\logs\close.log`（by / busy / why） | `fish.ps1` |
+| 巡守 | `logs\watchman.log`（wake / woke / skip / deliver / note） | 巡守进程 |
 
 ---
-
 ## 5. 范围
 
 ### 5.1 第一阶段必须
@@ -1102,7 +1109,7 @@ lil-whale\state  → junction → pool\state
 
 ---
 
-### A.44 叫醒的判据：看心跳，不看端口；账要两行、能 join（2026-11-13）
+## 附录 A.44 叫醒的判据：看心跳，不看端口；账要两行、能 join（2026-11-13）
 
 **事故（2026-11-13 08:40）**：巡守到点要叫她做 `morning-read`。它先看 3082 端口——通着，于是判"窗开着"，只往群里递了一句话；`08:41:04 | skip | why=already-delivered`。但她那段会话自 00:16 重启后**从没挂载过**：心跳停在 `00:15:41`，`wake.log` 今天零行。那句话递进了群，没人读。09:04 他手动打开她的窗口，会话挂上，积压的那条才投出去。
 
@@ -1181,7 +1188,7 @@ lil-whale\state  → junction → pool\state
 
 **未做**：巡守（主 dsh）不走这套（它就是窗口本身）；进程唯一是"起之前看"，不是锁——真并发要等 up-all.lock 覆盖到单条 up（目前只有批量启动抢锁）。
 
-### A.48 巡守多鱼化：一条鱼一份账（2026-11-13）
+## 附录 A.48 巡守多鱼化：一条鱼一份账（2026-11-13）
 
 **问题**：08:40 那件事之后，叫醒判据改成了心跳，但**判据里的成员仍写死 `whale`**：`presenceAgeOf('whale')`、`say('lee','whale',…)`、`PLAN_FILE = join(HER_HOME,'plan',…)`、`watchState` 全局单份。第二条鱼（小鱼丸）的计划永远走不到，她的唤醒额度也和鲸鱼混在一个计数器里。他 11:14 的原话："三件没做的事可以做了。"
 
@@ -1258,7 +1265,7 @@ lil-whale\state  → junction → pool\state
 
 **已知简化（2026-11-13 14:1x）**：自执行的递话仍然以 `lee` 的名字写进群里（`s="watch"` 标机器来源）。为什么不写成她自己：群插件的唤醒路径会跳过 `from === 自己` 的消息，写自己就唤不醒自己。代价是别条鱼的闹钟在 `群.md` 里看起来像"大肥鱼说的"——所以正文前缀写「自己的闹钟」，并且这一行只对 `to` 指定的那条鱼生效。真要做干净，得给"系统"一个不是鱼的身份，等 D4-2 再定。
 
-**review 回应全文**：`docs\PRD-review-2026-11-13-回应.md`。
+**review 回应全文**：`docs\archive\PRD-review-2026-11-13-回应.md`。
 
 ---
 
@@ -1306,18 +1313,6 @@ lil-whale\state  → junction → pool\state
 
 **未做**：`agent-loop` 这条路现在只是"起之前清掉"，不是"用不了"——要不要在插件里主动拒绝它，等真正多进程踩到再说。
 
-## 附录 A.56 四个快捷方式实测：先鱼后主、只开主窗、停主不带走鱼
-
-**实测（2026-11-13 18:18，四条全过）**
-
-- `Run All Whales`：主 dsh 已在跑时只打印带 token 的地址（不重复开窗）；小鱼后台起、`mode: unattended`、不弹窗。
-- `Stop All Whales`：关闭顺序 **fishball → whale → lee**（先鱼后主，18:17:56 / 18:18:01 / 18:18:06）；`Run All Whales` 后三条 pid 全换新（24632 / 21440 / 9752），`runs\*.log` 各记 `resumed reason=unclean`。
-- `Stop DSH`：只关主 dsh，两条小鱼 pid 不变；窗口会先列"还有 N 条鱼在跑，这次只关主 dsh"，再报"停了"。
-- `down <鱼> -Yes`：单鱼停止 exit 0，端口关闭，`mode` 账删除。
-
-**一条更正**：我一度以为 `close.log` 丢了 18:07 的 close 行，实际是看错了文件——大肥鱼的 `close.log` 在它自己的家（`C:\Users\Fabian\.dsh\logs\close.log`），不在小肥鱼家。`Stop-Fish` 的排序改动因此定位为**防御性**（防"6 秒内又被拉起"导致记账被跳过），不是修已发生的 bug。
-
-**判据**：关闭顺序看 `close.log` 三条时间；"鱼没被带走"看 pid 是否不变；"只开主窗"看 `mode` 账（lee=window，其余=unattended）。
 ## 附录 A.55 鱼塘布局：一个根，四层（2026-11-13 17:00）
 
 **为什么改**：2026-11-13 他问"四个平行目录能不能整合、不希望插件在用户 workspace 里拉屎"。旧默认布局是"仓库旁边一个家、再旁边一个共享区"——装第二条鱼时 `WorkSpace\` 下就出现 `dsh-lil-whale\`、`lil-whale\`、`lil-whale-pool\`、`lil-whale-2\` 四个平级目录，谁是仓库、谁是数据、谁是谁的家，只能靠名字猜。
@@ -1346,3 +1341,16 @@ lil-whale\state  → junction → pool\state
 4. 会话的 cwd 在会话文件第一帧里；`.jsonl.zstd` 是多帧拼接，要按 magic `28 B5 2F FD` 切帧逐帧解压。
 
 **边界**：迁移不删旧目录——`D:\文档\WorkSpace\dsh-lil-whale` 留成空壳（他的 session workspace 还挂在那里），`lil-whale-pool\` 等 3080 重启后删。
+
+## 附录 A.56 四个快捷方式实测：先鱼后主、只开主窗、停主不带走鱼
+
+**实测（2026-11-13 18:18，四条全过）**
+
+- `Run All Whales`：主 dsh 已在跑时只打印带 token 的地址（不重复开窗）；小鱼后台起、`mode: unattended`、不弹窗。
+- `Stop All Whales`：关闭顺序 **fishball → whale → lee**（先鱼后主，18:17:56 / 18:18:01 / 18:18:06）；`Run All Whales` 后三条 pid 全换新（24632 / 21440 / 9752），`runs\*.log` 各记 `resumed reason=unclean`。
+- `Stop DSH`：只关主 dsh，两条小鱼 pid 不变；窗口会先列"还有 N 条鱼在跑，这次只关主 dsh"，再报"停了"。
+- `down <鱼> -Yes`：单鱼停止 exit 0，端口关闭，`mode` 账删除。
+
+**一条更正**：我一度以为 `close.log` 丢了 18:07 的 close 行，实际是看错了文件——大肥鱼的 `close.log` 在它自己的家（`C:\Users\Fabian\.dsh\logs\close.log`），不在小肥鱼家。`Stop-Fish` 的排序改动因此定位为**防御性**（防"6 秒内又被拉起"导致记账被跳过），不是修已发生的 bug。
+
+**判据**：关闭顺序看 `close.log` 三条时间；"鱼没被带走"看 pid 是否不变；"只开主窗"看 `mode` 账（lee=window，其余=unattended）。
