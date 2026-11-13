@@ -611,7 +611,9 @@ function runPwshScript(scriptFile, args, timeoutMs = POND_ACTION_TIMEOUT_MS) {
       // PowerShell 7 在 stdout 被重定向时会按控制台代码页（本机 936）写字节，
       // 页面拿到的是 GBK 乱码（他 2026-11-12 22:53 报的）。
       // 先把输出编码钉成 UTF-8 再跑脚本 —— 这样脚本里每一句 Write-Host 都是对的。
-      const quoted = (value) => "'" + String(value).replace(/'/g, "''") + "'"
+      // 开关（-Yes / -NoBrowser）必须原样传：包成 '-Yes' 就成了字符串位置参数，
+      // PowerShell 会报"找不到接受自变量 '-Yes' 的位置参数"（他 2026-11-13 11:52 报的）。
+      const quoted = (value) => (/^-[A-Za-z]/.test(String(value)) ? String(value) : "'" + String(value).replace(/'/g, "''") + "'")
       const command = "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $OutputEncoding=[System.Text.Encoding]::UTF8; & " + quoted(scriptFile) + " " + args.map(quoted).join(' ')
       child = spawn(exe, ['-NoLogo', '-NoProfile', '-Command', command], {
         cwd: config().repoRoot,

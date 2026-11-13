@@ -1,4 +1,4 @@
-# fish.ps1 -- 鱼群唯一的入口。ASCII 文件名 + UTF-8 BOM。
+﻿# fish.ps1 -- 鱼群唯一的入口。ASCII 文件名 + UTF-8 BOM。
 #
 # 为什么要有它：鱼一多，"开/停/体检"三件事各有各的脚本，每加一条鱼就多一套参数。
 # 这个脚本只做一件事：把命令套到 pool\members.json 里那条鱼身上。
@@ -38,7 +38,9 @@ param(
   # 只给 down-main 用：明知还有鱼在跑也关主 dsh（默认拒绝——"先停鱼再关 dsh"是推荐用法）。
   [switch]$Force,
   # 起多条鱼时只给巡守（主 dsh）开浏览器窗，其余鱼后台起。Run All Whales.cmd 用。
-  [switch]$BrowserMainOnly
+  [switch]$BrowserMainOnly,
+  # 检修用：起一个可见的控制台窗，日志一边显示一边 Tee 到 web-latest.log（token 在文件里才捞得到）。
+  [switch]$Console
 )
 
 $ErrorActionPreference = 'Stop'
@@ -124,6 +126,17 @@ function Start-Hidden([string]$Command, [string]$WorkingDirectory, [string]$OutL
     -ArgumentList '-NoLogo', '-NoProfile', '-Command', $Command `
     -WorkingDirectory $WorkingDirectory -WindowStyle Hidden `
     -RedirectStandardOutput $OutLog -RedirectStandardError $ErrLog | Out-Null
+}
+
+
+# 检修用的"看得见的窗"：控制台不隐藏、不退出（关窗才结束），输出同时 Tee 到日志。
+# 为什么要 Tee：token 只印在启动那行输出里，$OutLog 里没有就拼不出带 token 的地址。
+function Start-Visible([string]$Command, [string]$WorkingDirectory, [string]$OutLog) {
+  New-Item -ItemType Directory -Force -Path (Split-Path $OutLog) | Out-Null
+  $wrapped = $Command + " 2>&1 | Tee-Object -FilePath '" + $OutLog + "'"
+  Start-Process -FilePath 'pwsh' `
+    -ArgumentList '-NoLogo', '-NoProfile', '-NoExit', '-Command', $wrapped `
+    -WorkingDirectory $WorkingDirectory | Out-Null
 }
 
 function Wait-Port([int]$p, [int]$Seconds = 120) {
@@ -349,15 +362,29 @@ function Start-Fish($member) {
     }
     "${cfgLine}`$env:DSH_HOME='$($member.DshHome)'; dsh --profile $($member.Profile) --port $port --no-open"
   }
-  Start-Hidden -Command $command -WorkingDirectory $cwd -OutLog $out -ErrLog $err
+  if ($openWindow -and $Console) {
+    Start-Visible -Command $command -WorkingDirectory $cwd -OutLog $out
+  } else {
+    Start-Hidden -Command $command -WorkingDirectory $cwd -OutLog $out -ErrLog $err
+  }
   if (-not (Wait-Port $port)) {
     Write-Host ("{0}：没起来。" -f $member.Label)
     Show-Tail $err
     return $false
   }
-  Write-Host ("{0}：起来了 http://127.0.0.1:{1}" -f $member.Label, $port)
+  $url = Get-Url $member
+  for ($i = 0; $i -lt 20; $i++) {
+    if ($url -match 'token=') { break }
+    Start-Sleep -Milliseconds 400
+    $url = Get-Url $member
+  }
+  if ($url -notmatch 'token=') {
+    Write-Host ("{0}：起来了 http://127.0.0.1:{1}（日志里还没看到 token，地址可能打不开）" -f $member.Label, $port)
+  } else {
+    Write-Host ("{0}：起来了 {1}" -f $member.Label, $url)
+  }
   if ($openWindow) {
-    Start-Process (Get-Url $member) | Out-Null
+    Start-Process $url | Out-Null
     Write-FishWindowLog $member 'open'
     Set-Mode $member 'window' $port
   } else {
@@ -405,6 +432,15 @@ function Stop-Fish($member) {
   $children = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $ids -contains $_.ParentProcessId })
   foreach ($p in @($children) + @($roots)) {
     try { Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop } catch { }
+  }
+  # 检修用的控制台窗是 -NoExit 的 pwsh：dsh 退出后窗还留着，得一起收掉，
+  # 否则"回无人值守"之后桌面上挂着一个空窗（2026-11-13 11:58 实测）。
+  $wrappers = @(Get-CimInstance Win32_Process -Filter "Name='pwsh.exe'" -ErrorAction SilentlyContinue | Where-Object {
+    $_.CommandLine -and $_.CommandLine -match 'Tee-Object' -and
+    ($_.CommandLine -match ('--profile\s+' + [regex]::Escape($member.Profile)) -or $_.CommandLine -match ('--port\s+' + $port + '\b'))
+  })
+  foreach ($w in $wrappers) {
+    try { Stop-Process -Id $w.ProcessId -Force -ErrorAction Stop } catch { }
   }
   for ($i = 0; $i -lt 20; $i++) {
     Start-Sleep -Milliseconds 300
@@ -463,7 +499,7 @@ fish.ps1 -- 鱼群唯一的入口
   pwsh -File fish.ps1 restore whale    回无人值守（无窗起，会话由 host 自己挂上）
   pwsh -File fish.ps1 help
 
-选项：-NoBrowser -BrowserMainOnly -Yes -Force -By <谁> -Why <为什么> -Port <n>
+选项：-NoBrowser -Window -BrowserMainOnly -Console -Yes -Force -By <谁> -Why <为什么> -Port <n>
 '@ | Write-Host
 }
 
@@ -506,13 +542,17 @@ function Invoke-Maintain([string]$name) {
   Write-Host ("{0}：检修 —— 先休眠。" -f $m.Label)
   if (-not (Stop-Fish $m)) { return $false }
   $savedWindow = $Window
+  $savedConsole = $Console
   $Window = $true
+  $Console = $true
   try {
     if (-not (Start-Fish $m)) { return $false }
   } finally {
     $Window = $savedWindow
+    $Console = $savedConsole
   }
   Write-Host ''
+  Write-Host '日志在那个新开的控制台窗里（关掉窗就是结束）。'
   Write-Host '看完以后：'
   Write-Host ("  关掉窗口 → pwsh -File scripts\fish.ps1 restore {0}" -f $m.Key)
   Write-Host '  或者在鱼塘里点「回无人值守」。'

@@ -3,6 +3,11 @@
 > 本文件只记「哪一版改了哪几处、为什么改」。当前结论都在 [小小肥鱼-PRD.md](小小肥鱼-PRD.md) 里，那边不背历史。
 > 自 v0.3.5 起从 PRD 头部搬到这里（此前几块原样搬出，未改写）。v1.0 是整篇重写。
 
+## v1.0.49（2026-11-13）
+
+- 鱼塘四个按钮的语义与可用性（他 11:52 报的 4 条）：修面板拼 PowerShell 命令时把 `-Yes` / `-NoBrowser` 也加引号（变成位置参数，休眠/唤醒报"找不到接受自变量"）；检修改开**看得见的控制台窗**（`Start-Visible` + `-NoExit` + `Tee-Object` 到 web-latest.log，日志既显示又留 token）；`restore` 时把残留控制台窗一起收掉；起完等 token 出现再开浏览器；按钮可用性矩阵（没开/无人值守/检修/执行中），灰掉时有 title 说明。
+- 新增 **附录 A.49**（四条现象、根因、矩阵、教训）。
+
 ## v1.0.48（2026-11-13）
 
 - **巡守多鱼化（PRD A.48）**：`watchedMembers()`（名册里 kind=fish 且 role≠watcher）；`watchState` 改成 `{day, members:{<键>:{wakes,fails,planFired,skipped,triedWid,lastFresh,pendingWake,lastTry}}}`（旧格式迁到 whale 名下）；`planFileOf(member)` / `dueTasks(member)` / `claimPlanDelivery(member, job)` / `startHer(member)`；`watchmanTick` 拆成 `watchOne(member, st)` + 遍历名册。
