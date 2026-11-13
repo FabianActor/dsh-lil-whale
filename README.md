@@ -17,14 +17,23 @@
 | 需要 | 说明 |
 |---|---|
 | Windows | 启动与巡守脚本是 `.ps1` / `.cmd`；其它平台要自己接入口 |
-| PowerShell 7 | `pwsh`，不是系统自带的 5.1 |
+| **PowerShell 7（`pwsh`）** | **必需的运行时依赖**，不是系统自带的 Windows PowerShell 5.1。脚本用了 7 才有的语法，5.1 会在**解析阶段**就报错 |
 | DeepSeek Harness | `npm i -g @deepseek-ai/dsh`（0.2.x） |
 | 两把 API key | 你一把、她一把。她可以自己去平台申请；**别共用一把** |
 | 一台不常关的电脑 | 她不是持续运行的；不叫醒时她不存在 |
 
+**装 PowerShell 7**（一次就够）：
+
+```powershell
+winget install --id Microsoft.PowerShell -e
+# 或从 https://github.com/PowerShell/PowerShell/releases 下 .msi
+```
+
+装完**开一个新的终端**，`pwsh -v` 能打出 `PowerShell 7.x` 才算好。没有它：双击 `.cmd` 会直接告诉你缺什么；用 Windows PowerShell 5.1 跑 `.ps1` 会在解析阶段报语法错（不是你的错，是版本不对）。
+
 ## 装
 
-默认是**一个鱼塘根**（`lil-whale\`）：仓库在 `app\`、共享区在 `pool\`、每条鱼的家在 `homes\<键>\`、权限修复记录在 `acl\`。把仓库 clone 到 `app\` 里，安装器就按这个结构放东西：
+默认是**一个鱼塘根**（`lil-whale\`）：仓库在 `app\`、共享区在 `pool\`、每条鱼的家在 `homes\<键>\`、权限修复记录在 `pool\state\acl\`。把仓库 clone 到 `app\` 里，安装器就按这个结构放东西：
 
 ```powershell
 git clone https://github.com/FabianActor/dsh-lil-whale.git D:\WorkSpace\lil-whale\app
@@ -143,7 +152,7 @@ lil-whale/                      鱼塘根（不在 git 里；装第二条鱼时�
     family.json                 谱系真源：爹、出生、状态、改名史
     dm/                         私聊（双向隐私窗口，不放进 group）
     group/                      messages.jsonl、群.md、pins.json、images/、avatars/
-    state/                      cursors/、wakes/、presence/、runs/、mode/、usage/、watchman-*.json
+    state/                      cursors/、wakes/、presence/、runs/、mode/、usage/、watchman-*.json、acl/（权限修复记录）
     archive/                    迁移日志、归档（只归档不删）
   homes/
     whale/                      小肥鱼的家
@@ -154,7 +163,6 @@ lil-whale/                      鱼塘根（不在 git 里；装第二条鱼时�
       state/ → ..\..\pool\state 游标、唤醒配额、心跳：Junction
       dsh-home/                 她的 DSH_HOME：AGENTS.md、profiles/whale、sessions/
     fishball/                   小鱼丸的家（同构）
-  acl/                          权限修复记录（dsh-acl-recovery 那一族搬到这里）
 ```
 
 > 2026-11-13 17:00 之前是四个平级目录（仓库 / lil-whale / lil-whale-pool / lil-whale-2）。搬家脚本是 `scripts\migrate-pond.mjs`，踩过的坑写在它的头部注释里（pool 被占用时 rename 会 EPERM；断掉的 Junction 要用 `lstat` 才看得见）。

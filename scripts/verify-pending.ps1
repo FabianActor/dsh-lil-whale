@@ -1,3 +1,4 @@
+#requires -Version 7.0
 #Requires -Version 7
 <#
   verify-pending.ps1 — 重启后验收：把"改了但没生效"的几项一次看完。

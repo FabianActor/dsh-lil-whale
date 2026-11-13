@@ -4,6 +4,13 @@
 > 它与两个 npm 包的版本（各自 `package.json` 里的 semver，如 `1.2.0`）是**两条线**：包版本只在功能或破坏性变化、发布时才动。
 > 编号从 r1 开始（第一稿就是 r1）。2026-11-13 之前这些号写作 `v1.0.NN`，本次统一改名，编号不变。
 
+## r66 — 2026-11-13 21:1x
+
+- **把 pwsh 7 写成明面上的依赖**：README 前置表标成必需运行时依赖 + 安装命令 + "5.1 会在解析阶段报错"；`docs\安装流程详解.md` §2.1 版本写 7.2+ 并说明原因。PRD 附录 A.61。
+- **运行期护栏**：七个入口 `.ps1` 首行加 `#requires -Version 7.0`；四个 `.cmd` 启动器先 `where pwsh`，缺了给英文提示并退出（`.cmd` 中文可能乱码，这句宁可丑）。
+- 顺带修文档里过时的 `acl\` 位置（C1 之后已在 `pool\state\acl\`）：README 依赖节与目录树、PRD §4.1 与 A.55 树、`docs\安装流程详解.md` 目录树、`docs\出生流程.md` 开头布局说明。
+- 起因：我用 Windows PowerShell 5.1 跑 `release-check.ps1` 撞了一串语法错——脚本没坏，是版本不对。这类坑只有踩过的人知道，所以写进用户说明。
+
 ## r65 — 2026-11-13 20:5x
 
 - **C1 命名统一**：包名 → `@fabianactor/dsh-lil-whale-group(-ui)`（版本 1.2.0，版本线连续）；目录 → `plugin/dsh-lil-whale-group(-ui)`；配置行 id → `dsh-lil-whale-group(-ui)`；插件内部自报 `name` 与包名一致。

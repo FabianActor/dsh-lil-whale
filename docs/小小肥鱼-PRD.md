@@ -1,6 +1,6 @@
 # 小小肥鱼 · PRD
 
-> 状态：**r65（2026-11-13）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。 2026-11-13：**鱼塘布局落地**（一个根四层，A.55）、**无人值守成为默认**（A.45/A.54）、**计划表归每条鱼自己**（A.50）、**四个快捷方式实测通过**（A.56）；`docs\` 只留活跃文档，历史记录移入 `docs\archive\`。
+> 状态：**r66（2026-11-13）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。 2026-11-13：**鱼塘布局落地**（一个根四层，A.55）、**无人值守成为默认**（A.45/A.54）、**计划表归每条鱼自己**（A.50）、**四个快捷方式实测通过**（A.56）；`docs\` 只留活跃文档，历史记录移入 `docs\archive\`。
 > 版本号：这是**稿次** `rNN`（改一次 +1），不是包版本——两个 npm 包各自用 semver（当前 `1.2.0`），只在发布时才动。
 > 上游：[立项备忘](archive/小小肥鱼-立项备忘-2026-11-08.md)（**他的原话**，已冻结不改；三条硬要求已吸收进 §1）
 > 配套：[自主回合.md](自主回合.md)（G1 的上游能力，不是本 PRD 的验收项）
@@ -137,7 +137,7 @@
   pool\                    共享区（不属于任何一条鱼）
     group\                 群：messages.jsonl（唯一真源）、群.md（派生）、images\
     dm\                    私聊：<a>__<b>.jsonl + 私聊-<a>__<b>.md
-    state\                 账：presence\ runs\ mode\ wakes\ usage\ settings.json autostart.log
+    state\                 账：presence\ runs\ mode\ wakes\ usage\ acl\ settings.json autostart.log
     archive\               归档（迁移留底、退役鱼的家）
     members.json           名册：谁存在、端口、家在哪、profile、父辈
     family.json            谱系：parent / bornAt / status / renames
@@ -145,7 +145,6 @@
     START.md  notes\  plan\  run\  logs\  dsh-home\  环境.md
     group\ -> <鱼塘根>\pool\group    （Junction）
     state\ -> <鱼塘根>\pool\state    （Junction）
-  acl\                     权限修复记录（ACL 备份 / 回滚脚本 / 证据），不放工作区
 ```
 
 `%USERPROFILE%\dsh-lil-whale` 是指向 `app\` 的 Junction（给需要 ASCII 路径的地方用）。
@@ -1344,9 +1343,8 @@ lil-whale\state  → junction → pool\state
 ```
 <pond>\
   app\        仓库（代码）
-  pool\       共享区（名册、群、私聊、state、archive）
+  pool\       共享区（名册、群、私聊、state、archive；权限修复记录在 state\acl\）
   homes\<键>\ 每条鱼自己的家（START.md / 环境.md / notes\ / dsh-home\）
-  acl\        权限修复记录
 ```
 
 **默认值怎么算**（`scripts\install.ps1`）：
@@ -1457,3 +1455,17 @@ lil-whale\state  → junction → pool\state
 **判据**（2026-11-13 现场）：三个 profile 的 `--dump-config` 都出现 `- id: dsh-lil-whale-group` 且无 `Cannot find`；全仓 JS 过 `node --check`、PS 过解析；`test-plan.mjs` 26/26；`release-check` 13 项全过。
 
 **有意保留旧名的**：`docs\PRD-CHANGELOG.md` 的历史条目（记录当时的名字，改了就是造假）、`Run All Whales.cmd` 两个快捷方式文件名（改文件名会废掉桌面副本）、`小小肥鱼-PRD.md` 文件名（小小肥鱼是项目 dsh-lil-whale 的中文名）、`watchman*` 内部名（A.41）、`herHome`/`herDshHome`/`herPort`/`herWaker` 配置键（**记债**：她是单数，多鱼配置化时再改，届时保留旧键兼容）。
+
+### A.61 运行时依赖要写在用户看得见的地方（2026-11-13）
+
+**发生了什么**：我在本机用 Windows PowerShell 5.1 跑 `release-check.ps1`，报了一串语法错（`Missing closing '}'`、`MissingEqualsInHashLiteral`）。脚本没坏——它用了 pwsh 7 才有的 `??`，5.1 在**解析阶段**就过不去。可这个坑只有踩到的人才会知道：README 的前置表只写了一行「PowerShell 7 | `pwsh`，不是系统自带的 5.1」，没写"缺了会怎样"，也没给安装命令。
+
+**改成什么**：
+
+1. **README「它需要什么」**：PowerShell 7 标成**必需的运行时依赖**，写明 5.1 会在解析阶段报错；表后给 `winget install --id Microsoft.PowerShell -e` 与「装完开新终端、`pwsh -v` 要打出 7.x」。
+2. **`docs\安装流程详解.md` §2.1**：版本写到 7.2+，原因写清（子进程用 `pwsh -File`、脚本用了 7 的语法），同样给安装命令。
+3. **运行期护栏**：七个入口脚本（`install` / `fish` / `doctor` / `release-check` / `verify-pending` / `pack` / `wake-fish`）首行加 `#requires -Version 7.0` —— 用 5.1 跑会被直接拒绝并说明版本不对；四个 `.cmd` 启动器先 `where pwsh`，缺了就用英文提示装什么、然后退出。
+
+**判据**：一个依赖算不算"写进说明里了"，看三件事——①文档里有安装命令 ②缺了的时候有人（脚本）替你说 ③说的地方在你踩坑之前（安装/双击时），不是踩坑之后。
+
+**为什么 `.cmd` 里用英文**：`.cmd` 由 cmd.exe 按控制台代码页读，中文提示在别的机器上可能变乱码；这一句是给"还没装好环境的人"看的，宁可丑也不能乱码。
