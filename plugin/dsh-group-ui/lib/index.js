@@ -220,8 +220,13 @@ function readConfig() {
     }
   }
   // 成员列表跟着名册走：名册里多一条鱼，这里就多一个名字/头像的位置。
+  //
+  // 2026-11-13 18:5x 修：显示名的真源是 `pool\members.json` 的 `name`，不是
+  // `ui-config.json` 的 `names`。以前这里是 `normalizeName(raw?.names?.[key], LABEL[key])`，
+  // 于是名册改了名、面板还念旧名字（现场：名册 lee=大肥鱼，面板 lee=Leea，两个真源漂了
+  // 一天多也没人报错）。现在这里只读名册；设置页改名会写回名册（见 writeMemberName）。
   for (const key of Object.keys(MEMBERS)) {
-    names[key] = normalizeName(raw?.names?.[key], LABEL[key] ?? key)
+    names[key] = LABEL[key] ?? key
     avatars[key] = normalizeAvatar(raw?.avatars?.[key], defaultAvatarOf(key))
   }
   return {
@@ -272,6 +277,38 @@ function normalizeAvatar(value, fallback) {
 function writeConfig(config) {
   writeFileSync(UI_CONFIG, JSON.stringify(config, null, 2) + '\n', 'utf8')
   return config
+}
+
+/**
+ * 改一条鱼的显示名：写 `pool\members.json`（真源），再同步内存里的 LABEL/MEMBERS。
+ *
+ * 为什么不在 ui-config.json 里存名字：那会让"她叫什么"有两个真源。名册是数据、
+ * 面板是显示层——显示层可以缓存，但不能自己记一个名字。
+ */
+function writeMemberName(key, name) {
+  const file = config().membersFile || join(config().poolDir || join(GROUP_DIR, '..'), 'members.json')
+  if (!existsSync(file)) return { ok: false, why: 'members-file-missing' }
+  let json
+  try {
+    json = JSON.parse(readFileSync(file, 'utf8'))
+  } catch {
+    return { ok: false, why: 'members-unreadable' }
+  }
+  const member = json?.members?.[key]
+  if (!member) return { ok: false, why: 'unknown-member' }
+  if (member.name === name) return { ok: true, changed: false }
+  member.name = name
+  json.updatedAt = new Date().toISOString()
+  const tmp = file + '.tmp-' + process.pid
+  try {
+    writeFileSync(tmp, JSON.stringify(json, null, 2) + '\n', 'utf8')
+    renameSync(tmp, file)
+  } catch (error) {
+    return { ok: false, why: 'write-failed', detail: String(error?.message ?? error) }
+  }
+  if (MEMBERS[key]) MEMBERS[key].name = name
+  LABEL[key] = name
+  return { ok: true, changed: true }
 }
 
 function readUiRead() {
@@ -705,6 +742,14 @@ export function apply(ctx) {
       for (const key of Object.keys(MEMBERS)) {
         next.names[key] = normalizeName(payload?.names?.[key], LABEL[key] ?? key)
         next.avatars[key] = normalizeAvatar(payload?.avatars?.[key], defaultAvatarOf(key))
+        // 名字不是显示层的东西：改了要写回名册（A.25/A.36 的同一条：真源只有一个）。
+        if (next.names[key] !== (LABEL[key] ?? key)) {
+          const renamed = writeMemberName(key, next.names[key])
+          if (!renamed.ok) {
+            sendJson(res, 500, { error: 'rename-failed', member: key, why: renamed.why ?? 'unknown', detail: renamed.detail ?? null })
+            return
+          }
+        }
       }
       try {
         writeConfig(next)

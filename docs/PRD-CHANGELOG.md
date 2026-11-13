@@ -1,3 +1,8 @@
+## v1.0.61 — 2026-11-13 18:5x
+
+- **显示名的真源改成名册**：`plugin\dsh-group-ui\lib\index.js` 的 `readConfig()` 不再用 `ui-config.json` 的 `names` 覆盖 `pool\members.json`；设置页改名改为写回名册（`writeMemberName()`，tmp + rename，失败 500 带 why）。现场把 `ui-config.json` 的 `names` 按名册重写（lee: Leea → 大肥鱼）。PRD 新增 A.57；状态行 v1.0.61。
+- **`scripts\enable-unattended.mjs` 退役为只读提示**（见 v1.0.60），`wake-whale.ps1` 的失败提示改指 `plugin.log`。
+
 ## v1.0.60 — 2026-11-13 18:4x
 
 - **退役 `scripts\enable-unattended.mjs`**：它往 profile patch 写 `agent-loop` 的 `resumeSessionId`，那条路会绕开 session-controller 的 preset 挂载（A.54：只剩 2 个工具）。现在改成只读提示，写入直接拒绝并指向 `fish.ps1 up <键>`；清旧块仍用 `disable-unattended.mjs`。
