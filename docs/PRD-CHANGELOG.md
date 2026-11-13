@@ -4,6 +4,11 @@
 > 它与两个 npm 包的版本（各自 `package.json` 里的 semver，如 `1.2.0`）是**两条线**：包版本只在功能或破坏性变化、发布时才动。
 > 编号从 r1 开始（第一稿就是 r1）。2026-11-13 之前这些号写作 `v1.0.NN`，本次统一改名，编号不变。
 
+## r71 — 2026-11-13 23:0x
+
+- **实验鱼可以当家长**（他的口径）：`fish.ps1 new` 不再拒实验鱼，只在计划里提醒"它的孩子会跟着它一起归档"；`births.log` 出生行加 `parentStatus=resident|experiment`。原因：这条规则会把 D4 要验的递归直接排除掉——她养的孩子默认也是 experiment，按旧规则孩子永远不能再养，深度封死在两代。
+- **归档支持整枝**：`scripts\archive-fish.mjs` 新增 `--subtree`，先递归归档孩子、再归档家长，`manifest.json` 记 `subtree: [孩子键]`；顺手修 `--mark-archived` 一直找不到节点（它查 `family.members`/`family.fishes`，而 `gen-family.mjs` 写的是 `family.nodes`——所以状态从来没标上过）。
+- PRD 附录 A.64 的规则条改成"实验鱼可以当家长 + 整枝归档"。
 ## r70 — 2026-11-13 22:5x
 
 - **D4-2 的第一件：养鱼入口**。`scripts\fish.ps1` 新增 `new` 子命令（`-Key` / `-Name` / `-Parent` / `-DryRun`）：查重 → 建家（复用 `install.ps1`）→ 进名册（`status: experiment`）→ 记 `pool\state\births.log`。规则：名字由家长起、键必须 ASCII、**实验鱼不能当家长**、鱼数上限 `maxFish`（默认 5）。PRD 附录 A.64。

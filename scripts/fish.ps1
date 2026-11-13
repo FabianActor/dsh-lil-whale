@@ -706,9 +706,9 @@ function Invoke-NewFish {
     return $false
   }
   if ($parent.Status -eq 'experiment') {
-    Write-Host ("xx 「{0}」还是实验鱼，实验鱼不能当家长。" -f $parent.Label)
-    Write-Host 'NEXT: 先把它转成常驻（pool\members.json 的 status），再让它养。'
-    return $false
+    # 2026-11-13 他改了口径：实验鱼可以当家长（小鱼丸的孩子是二代的第一次实验），
+    # 试验结束后和孩子一起归档。这里只提醒，不拦。
+    Write-Host ("  注意：家长「{0}」还是实验鱼 —— 它的孩子会跟着它一起归档。" -f $parent.Label)
   }
   $fishCount = @($MEMBERS.Values | Where-Object { $_.Kind -eq 'fish' }).Count
   $maxFish = 5
@@ -756,7 +756,8 @@ function Invoke-NewFish {
     $realPort = [int]$fresh.members.$key.port
   } catch { }
   $birthLog = Join-Path $Cfg.PoolState 'births.log'
-  $line = '{0} | birth | fmt=1 key={1} name={2} parent={3} by={4} port={5} status=experiment' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $key, $childName, $parent.Key, $By, $realPort
+  $parentStatus = if ($parent.Status) { $parent.Status } else { 'resident' }
+  $line = '{0} | birth | fmt=1 key={1} name={2} parent={3} by={4} port={5} status=experiment parentStatus={6}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $key, $childName, $parent.Key, $By, $realPort, $parentStatus
   try { Add-Content -LiteralPath $birthLog -Value $line -Encoding utf8 } catch { Write-Host ('!! birth 没记上：{0}' -f $_.Exception.Message) }
   Write-Host ''
   Write-Host ('{0} 出生了：{1}（{2}），端口 {3}。' -f $parent.Label, $childName, $key, $realPort)

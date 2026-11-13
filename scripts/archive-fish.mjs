@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // 归档一条实验鱼（2026-11-13 他要的）：
 //
-//   node scripts/archive-fish.mjs --member fishball [--dry-run] [--mark-archived]
+//   node scripts/archive-fish.mjs --member fishball [--dry-run] [--mark-archived] [--subtree]
+//
+// --subtree：先把它的孩子（递归）归档掉，再归档它自己 —— 孩子跟着家长一起走。
 //
 // 只归档、不注销：`pins.json` / `members.json` 一个字节都不动 —— 要不要把她从名册里
 // 拿掉是人的决定，不是脚本的。归档产物在 `pool\archive\fish-<名字>-<日期>\`：
@@ -15,6 +17,7 @@
 // 判据：原家不动、manifest 能说清"这是谁、从哪来、什么时候"、gen-family.mjs --check 仍过。
 import { existsSync, readFileSync, writeFileSync, mkdirSync, cpSync, statSync, readdirSync } from 'node:fs'
 import { join, resolve, dirname, basename } from 'node:path'
+import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -43,15 +46,16 @@ function die(message, next = '') {
   process.exit(1)
 }
 
-const args = { member: '', dryRun: false, markArchived: false }
+const args = { member: '', dryRun: false, markArchived: false, subtree: false }
 for (let i = 2; i < process.argv.length; i += 1) {
   const arg = process.argv[i]
   const next = process.argv[i + 1]
   if (arg === '--dry-run') args.dryRun = true
   else if (arg === '--mark-archived') args.markArchived = true
+  else if (arg === '--subtree') args.subtree = true
   else if (arg === '--member') { args.member = next ?? ''; i += 1 }
   else if (arg.startsWith('--member=')) args.member = arg.slice('--member='.length)
-  else die(`不认识的参数：${arg}`, 'node scripts\\archive-fish.mjs --member <键> [--dry-run] [--mark-archived]')
+  else die(`不认识的参数：${arg}`, 'node scripts\\archive-fish.mjs --member <键> [--dry-run] [--mark-archived] [--subtree]')
 }
 
 if (!args.member) die('要给 --member <键>（名册里的键，例如 fishball）', '看名册：node scripts\\gen-family.mjs --check 或打开 pool\\members.json')
@@ -73,6 +77,27 @@ if (member.role === 'watcher') die(`${args.member} 是巡守（role=watcher）�
 const home = member.home
 if (!home) die(`${args.member} 名册里没有 home —— 不知道要归档什么`, '在 pool\\members.json 里补上 home 再跑')
 if (!existsSync(home)) die(`她的家不存在：${home}`, '家已经被删了？那只能归档剩下的部分——先确认是不是你想的那样')
+
+// --subtree：孩子先归档（递归收集后代），再归档自己。
+const subtreeChildren = []
+if (args.subtree) {
+  const parentOf = (key) => (members?.members?.[key]?.parent ?? null)
+  const walk = (key) => {
+    for (const childKey of Object.keys(members?.members ?? {})) {
+      if (parentOf(childKey) !== key) continue
+      walk(childKey)
+      subtreeChildren.push(childKey)
+    }
+  }
+  walk(args.member)
+  if (subtreeChildren.length === 0) console.log(`（${args.member} 名下没有孩子，--subtree 只归档它自己）`)
+  for (const childKey of subtreeChildren) {
+    const childArgs = [fileURLToPath(import.meta.url), '--member', childKey, '--mark-archived']
+    if (args.dryRun) childArgs.push('--dry-run')
+    console.log(`--- 先归档子代 ${childKey} ---`)
+    execFileSync(process.execPath, childArgs, { stdio: 'inherit' })
+  }
+}
 
 const name = String(member.name || args.member)
 const stamp = new Date().toLocaleDateString('sv-SE').replace(/-/g, '')
@@ -188,7 +213,8 @@ const manifest = {
   sessions: copiedSessions,
   groupSlice: { file: 'group-slice.jsonl', lines: sliceLines.length },
   dm: dmFiles.map((file) => `dm/${basename(file)}`),
-  note: '只归档、不注销：pins.json 与 members.json 没有改动。要不要把她从名册里拿掉，由人决定。',
+    note: '只归档、不注销：pins.json 与 members.json 没有改动。要不要把她从名册里拿掉，由人决定。',
+    subtree: args.subtree ? subtreeChildren : undefined,
 }
 writeFileSync(join(archiveDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', 'utf8')
 
@@ -202,7 +228,8 @@ if (args.markArchived) {
   const familyFile = join(poolDir, 'family.json')
   try {
     const family = JSON.parse(readFileSync(familyFile, 'utf8'))
-    const node = family?.members?.[args.member] ?? family?.fishes?.[args.member]
+    // gen-family.mjs 的节点在 family.nodes 下（早期版本写过 members/fishes，一起兼容）
+    const node = family?.nodes?.[args.member] ?? family?.members?.[args.member] ?? family?.fishes?.[args.member]
     if (node && typeof node === 'object') {
       node.status = 'archived'
       node.archivedAt = manifest.archivedAt
