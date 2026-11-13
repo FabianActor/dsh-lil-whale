@@ -65,13 +65,14 @@ if ($gateRows.Count -eq 0) {
   Add-Row 'gate 的 hour 读数' $(if ($hourVal -ge 0) { 'PASS' } else { 'WARN' }) "最后一条：$last"
 }
 
-# 4) 全局唤醒封顶的配置在（代码里的数，不是运行时）
-$plugin = Join-Path $repo 'plugin\dsh-group\lib\index.js'
-if (Test-Path -LiteralPath $plugin) {
-  $src = Get-Content -LiteralPath $plugin -Raw -Encoding utf8
-  $hasTotal = $src -match 'totalPerDay:\s*120'
-  $hasSelf = $src -match 'function selfPlanTick'
-  Add-Row '计划归属 B + 全局 120（代码）' $(if ($hasTotal -and $hasSelf) { 'PASS' } else { 'FAIL' }) ("totalPerDay=" + $hasTotal + " selfPlanTick=" + $hasSelf)
+# 4) 计划逻辑（行为测试，不 grep 源码 —— 改名不误报，注释骗不过去）
+$planTest = Join-Path $repo 'scripts\test-plan.mjs'
+if (Test-Path -LiteralPath $planTest) {
+  $planOut = & node $planTest 2>&1
+  $planOk = ($LASTEXITCODE -eq 0)
+  Add-Row '计划逻辑（行为测试）' $(if ($planOk) { 'PASS' } else { 'FAIL' }) (($planOut | Select-Object -Last 1))
+} else {
+  Add-Row '计划逻辑（行为测试）' 'FAIL' 'scripts\test-plan.mjs 不见了'
 }
 
 # 5) 自启动开关

@@ -1,3 +1,8 @@
+## v1.0.64 — 2026-11-13 20:1x
+
+- **计划逻辑抽成可测模块**：新增 `plugin\dsh-group\lib\plan-core.js`（todayKey / planFileOf / planDue / planDeliveryText / parseWakeCounts / sumWakesToday），`index.js` 改薄壳注入上下文，行为不变。
+- **新增 `scripts\test-plan.mjs`**：直接 import 真代码做行为测试（26 用例），替代 `verify-pending.ps1` 里对源码字符串的正则检查；`release-check.ps1` 新增「计划逻辑」检查（13 项）。PRD 附录 A.59；状态行 v1.0.64。
+
 ## v1.0.63 — 2026-11-13 19:5x
 
 - **第三批（P2）**：`rebuild-group-md.mjs` 有说不清差异时不再整本写 `群.md`；`claimPlanDelivery` 缺 home 时按成员兜底；`saveWatchState` 失败留痕；`fish.ps1` 按 `role=watcher` 找主 dsh、`refresh all` 跳过巡守；`wake-whale.ps1` 跳 spawn 时等心跳、路径单引号转义；`settings.json` 写回 `crashNotify`。PRD A.58 续；状态行 v1.0.63。

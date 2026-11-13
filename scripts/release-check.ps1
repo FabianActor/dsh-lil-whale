@@ -112,6 +112,14 @@ if ($root) {
   }
   if ($psBad.Count) { Fail 'PS 语法' ($psBad -join '、') } else { Ok 'PS 语法' '全部通过 PowerShell 解析' }
 
+  # ── 4b. 计划逻辑行为测试（验的是行为，不是源码字符串）─────────────────
+  $planTest = Join-Path $pkg 'scripts\test-plan.mjs'
+  if (Test-Path $planTest) {
+    $planOut = & node $planTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '计划逻辑' (($planOut | Select-Object -Last 2) -join ' / ') }
+    else { Ok '计划逻辑' '行为测试全过（test-plan.mjs）' }
+  } else { Fail '计划逻辑' 'scripts\test-plan.mjs 不在包里' }
+
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {

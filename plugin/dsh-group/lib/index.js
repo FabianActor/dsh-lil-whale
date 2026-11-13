@@ -16,6 +16,14 @@ import { randomUUID, createHash } from 'node:crypto'
 import { spawn, execFileSync } from 'node:child_process'
 import { connect } from 'node:net'
 import { config } from './config.js'
+import {
+  todayKey,
+  planFileOf as planFileOfCore,
+  planDue as planDueCore,
+  planDeliveryText as planDeliveryTextCore,
+  parseWakeCounts,
+  sumWakesToday,
+} from './plan-core.js'
 
 // 这个包是用 link: 挂进 profile 的，它的真实路径在项目里，walk-up 找不到宿主的
 // @deepseek-ai/* 依赖（会 ERR_MODULE_NOT_FOUND，整个插件加载失败、工具静默消失）。
@@ -914,11 +922,9 @@ function presenceAgeOf(member) {
 
 function wakeCountsOf(member) {
   try {
-    // 2026-11-13：wakes 文件里是按成员键的对象（{\"whale\":{...}}），
+    // 2026-11-13：wakes 文件里是按成员键的对象（{"whale":{...}}），
     // 原来平铺读 json.hourCount ⇒ 永远 0，日志里的 gate=pass(hour=0/12) 是假的。
-    const json = JSON.parse(readFileSync(wakesFileOf(member), 'utf8'))
-    const state = json?.[member] ?? json ?? {}
-    return { hour: Number(state?.hourCount) || 0, day: Number(state?.dayCount) || 0 }
+    return parseWakeCounts(JSON.parse(readFileSync(wakesFileOf(member), 'utf8')), member)
   } catch {
     return { hour: 0, day: 0 }
   }
@@ -933,11 +939,8 @@ function totalWakesToday() {
     for (const name of readdirSync(dir)) {
       if (!name.endsWith('.json')) continue
       try {
-        const json = JSON.parse(readFileSync(join(dir, name), 'utf8'))
         // 文件内容是按成员键的对象；一条文件里可能不止一个成员（历史原因）。
-        for (const state of Object.values(json ?? {})) {
-          if (state?.dayStart === today) sum += Number(state?.dayCount) || 0
-        }
+        sum += sumWakesToday(JSON.parse(readFileSync(join(dir, name), 'utf8')), today)
       } catch {}
     }
   } catch {}
@@ -1991,15 +1994,10 @@ function startHer(member) {
 }
 
 function planFileOf(member) {
-  return join(member.home ?? HER_HOME, 'plan', 'wake-plan.json')
+  return planFileOfCore(member, HER_HOME)
 }
 const PLAN_MAX = 3
 const planNotes = new Set()
-
-function todayKey(d) {
-  const p = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
-}
 
 function noteOnce(member, msg) {
   const key = `${todayKey(new Date())}|${member.key}|${msg}`
@@ -2008,51 +2006,20 @@ function noteOnce(member, msg) {
   watchmanLog('skip', `to=${member.key} why=${msg}`)
 }
 
-/** 读她自己写的那份"什么时候该推我"。格式不对一律只记一行、不推。 */
 function planDue(member, st, now, graceMin = 1) {
-  let raw
-  try {
-    raw = JSON.parse(readFileSync(planFileOf(member), 'utf8'))
-  } catch (e) {
-    if (e?.code !== 'ENOENT') noteOnce(member, `plan-unreadable ${e?.message ?? e}`)
-    return []
-  }
-  const list = Array.isArray(raw) ? raw : Array.isArray(raw?.items) ? raw.items : null
-  if (!list) {
-    noteOnce(member, 'plan-bad-shape（要一个数组，或 {items:[...]}）')
-    return []
-  }
-  if (list.length > PLAN_MAX) noteOnce(member, `plan-too-many count=${list.length} 只认前 ${PLAN_MAX} 条`)
-  const today = todayKey(now)
-  const mins = now.getHours() * 60 + now.getMinutes()
-  const fired = st.planFired ?? {}
-  const out = []
-  for (const it of list.slice(0, PLAN_MAX)) {
-    const id = String(it?.id ?? 'unnamed')
-    if (it?.enabled === false) continue
-    if (!it?.why) { noteOnce(member, `plan-item-without-why id=${id}`); continue }
-    if (it?.until && String(it.until) < today) { noteOnce(member, `plan-expired id=${id} until=${it.until}`); continue }
-    if (fired[id] === today) continue
-    const m = /^(\d{1,2}):(\d{2})$/.exec(String(it?.at ?? ''))
-    if (!m) { noteOnce(member, `plan-bad-time id=${id} at=${it?.at}`); continue }
-    // 可选 days：[ "sun", "mon" ... ]，只在这些日子推；不写 = 每天。
-    if (Array.isArray(it?.days) && it.days.length > 0) {
-      const dow = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][now.getDay()]
-      const wanted = it.days.map((x) => String(x).slice(0, 3).toLowerCase())
-      if (!wanted.includes(dow)) continue
-    }
-    const delta = mins - (Number(m[1]) * 60 + Number(m[2]))
-    if (delta < 0 || delta > graceMin) continue
-    out.push({ id, at: String(it.at), why: String(it.why) })
-  }
-  return out
+  return planDueCore({
+    member,
+    st,
+    now,
+    graceMin,
+    herHome: HER_HOME,
+    maxItems: PLAN_MAX,
+    onNote: (msg) => noteOnce(member, msg),
+  })
 }
 /** 闹钟递的那句话。开着的窗直接用；刚被推开的窗也递进去，等她起来自己读到。
  *  `by === 'self'` 表示这条是她自己的进程按她自己的表递的（巡守关着也照样响）。 */
-function planDeliveryText(job) {
-  const who = job.by === 'self' ? '自己的闹钟' : '巡守递话'
-  return `${who}：\`${job.key}\` 到点了（${job.tag}）。\n\n表上写的理由：${job.itemWhy || '（没写）'}\n\n做着看不做也行，你定。这条只递一次。`
-}
+const planDeliveryText = planDeliveryTextCore
 
 /**
  * 每条鱼执行自己家的计划表（2026-11-13，PRD review 的建议 B）。
