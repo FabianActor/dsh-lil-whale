@@ -1,6 +1,6 @@
 # 小小肥鱼 · PRD
 
-> 状态：**草稿 v1.0.56（2026-11-13）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。
+> 状态：**草稿 v1.0.57（2026-11-13）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。
 > 上游：[立项备忘](archive/小小肥鱼-立项备忘-2026-11-08.md)（**他的原话**，已冻结不改；三条硬要求已吸收进 §1）
 > 配套：[自主回合.md](自主回合.md)（G1 的上游能力，不是本 PRD 的验收项）
 > 改动记录：[PRD-CHANGELOG.md](PRD-CHANGELOG.md) —— 每一版改了哪几处、为什么。本文只放当前结论。
@@ -1305,3 +1305,32 @@ lil-whale\state  → junction → pool\state
 **次要教训（她的，不是我们的）**：工具第 14 轮就加回来了，她又连报五轮"2 个"——因为她在念第 8 轮那条 `tool-removal`。判据是：**先伸手，抓空了再说抓空**；不要凭历史里的清单声明自己有什么。笃定的错比不确定的错难查，因为它看起来像结论。
 
 **未做**：`agent-loop` 这条路现在只是"起之前清掉"，不是"用不了"——要不要在插件里主动拒绝它，等真正多进程踩到再说。
+
+## 附录 A.55 鱼塘布局：一个根，四层（2026-11-13 17:00）
+
+**为什么改**：2026-11-13 他问"四个平行目录能不能整合、不希望插件在用户 workspace 里拉屎"。旧默认布局是"仓库旁边一个家、再旁边一个共享区"——装第二条鱼时 `WorkSpace\` 下就出现 `dsh-lil-whale\`、`lil-whale\`、`lil-whale-pool\`、`lil-whale-2\` 四个平级目录，谁是仓库、谁是数据、谁是谁的家，只能靠名字猜。
+
+**现在的结构**（一个根，四个角色）：
+
+```
+<pond>\
+  app\        仓库（代码）
+  pool\       共享区（名册、群、私聊、state、archive）
+  homes\<键>\ 每条鱼自己的家（START.md / 环境.md / notes\ / dsh-home\）
+  acl\        权限修复记录
+```
+
+**默认值怎么算**（`scripts\install.ps1`）：
+- 仓库的父目录叫 `app` 且它旁边有 `pool\` ⇒ 认为自己在鱼塘里：新鱼装到 `<pond>\homes\<成员键>`，共享区用 `<pond>\pool`，配置文件按鱼分开（`whale` 用 `lil-whale.config.json`，其余用 `lil-whale.config.<键>.json`）。
+- 否则退回旧布局（仓库旁边的 `lil-whale\` + `lil-whale-pool\`）——不破坏已经装好的机器。
+- 装第二条鱼时名册已经存在：安装器会**自动**调 `scripts\members-add.mjs` 把新鱼加进去（以前只打印一句"用 members-add"，结果新鱼不在名册里、fish.ps1 认不出、面板看不见——A.32 同族）。
+
+**搬家脚本 `scripts\migrate-pond.mjs`**（一次性，本机已跑过）：停鱼 → staging → 搬仓库内容（留空壳）→ 搬家 → 搬 pool → 改名 → 改配置/名册 → 重建 Junction → 修 profile link → 改 ASCII Junction（`%USERPROFILE%\dsh-lil-whale` → `app\`）→ 会话 cwd 改写 + 挪 projectKey → 写 `pool\archive\migration-<stamp>\`。
+
+**踩过的坑（都写进脚本注释）**：
+1. 3080 开着时 rename `pool` 会 `EPERM`（有打开的文件句柄）——重试即可；迁移前能停就停。
+2. 路径映射必须"长路径先换"，而且**不能重复跑**：新路径里含旧前缀（`...\lil-whale\pool` 含旧 `...\lil-whale`），第二次映射会把新路径再套一层（本机真踩过，配置里出现 `homes\whale\app`）。
+3. 断掉的 Junction 用 `existsSync` 看不见（它跟随目标），判断"链接本身在不在"必须用 `lstatSync`。
+4. 会话的 cwd 在会话文件第一帧里；`.jsonl.zstd` 是多帧拼接，要按 magic `28 B5 2F FD` 切帧逐帧解压。
+
+**边界**：迁移不删旧目录——`D:\文档\WorkSpace\dsh-lil-whale` 留成空壳（他的 session workspace 还挂在那里），`lil-whale-pool\` 等 3080 重启后删。

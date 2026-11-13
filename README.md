@@ -24,11 +24,15 @@
 
 ## 装
 
+默认是**一个鱼塘根**（`lil-whale\`）：仓库在 `app\`、共享区在 `pool\`、每条鱼的家在 `homes\<键>\`、权限修复记录在 `acl\`。把仓库 clone 到 `app\` 里，安装器就按这个结构放东西：
+
 ```powershell
-git clone https://github.com/FabianActor/dsh-lil-whale.git
-cd dsh-lil-whale
+git clone https://github.com/FabianActor/dsh-lil-whale.git D:\WorkSpace\lil-whale\app
+cd D:\WorkSpace\lil-whale\app
 pwsh -File scripts\install.ps1
 ```
+
+（clone 到别处也能装：仓库不在 `app\` 下时退回旧布局——仓库旁边一个 `lil-whale\` 家、再旁边一个 `lil-whale-pool\` 共享区。）
 
 它会做：建目录、给她建独立 `DSH_HOME` 与 profile、把两个插件装进对应 profile、写 `lil-whale.config.json`、放种子文件（`START.md` / `环境.md` / `AGENTS.md`，**没有性格、没有开场白**）。
 
@@ -38,7 +42,8 @@ pwsh -File scripts\install.ps1
 
 | 参数 | 意思 |
 |---|---|
-| `-Workspace D:\fish` | 她的家放哪（默认：仓库旁边的 `lil-whale\`） |
+| `-Workspace D:\fish` | 她的家放哪（默认：鱼塘里的 `homes\<成员键>`；不在鱼塘布局时退回仓库旁边的 `lil-whale\`） |
+| `-PoolDir D:\pool` | 共享区放哪（默认：鱼塘的 `pool\`，否则 `lil-whale-pool\`） |
 | `-ChildPort 3082` | 她的端口（默认从 3082 起找第一个空口，找到就把结果写进配置，**运行期不会再变**） |
 | `-ChildSessionId session-…` | 装的时候就把她的会话 id 写进名册 |
 | `-ParentSessionId session-…` | 同上，写你的那段 |
@@ -105,30 +110,35 @@ pwsh -File scripts\doctor.ps1 -IncludeLee  # 连你的窗一起看
 ## 目录
 
 ```
-dsh-lil-whale/            工程（这个仓库）
-  docs/                   设计文档、判据、观察记录
-  plugin/dsh-group/       宿主半边：群发言工具 + 跨进程唤醒（她的 profile 也装）
-  plugin/dsh-group-ui/    浏览器半边：群聊面板、设置页、HTTP 路由（只你的 profile 装）
-  scripts/                安装、启动器（fish）、停止、巡守（原守夜）、体检、重建器、名册（pins/members）、谱系（gen-family）、打包（pack）
-  templates/              种子文件模板（START.md / 环境.md / AGENTS.md，安装时填值）
-  lil-whale.config.example.json  配置模板（真的那份不进版本库；第二条鱼各有一份 lil-whale.config.<键>.json）
-  docs/谱系.md            生成的谱系图（真源是 pool\family.json + members.json）
-
-lil-whale/                她的家（不在 git 里，安装时生成）
-  START.md                她自己的第一页
-  环境.md                 安装时写的工具清单（写了什么在哪、事情会怎么发生）
-  logs/ notes/ plan/      她写的东西（私有）
-  group/ → pool/group     群：Junction，真身在共享区
-  state/ → pool/state     游标、唤醒配额、心跳：Junction
-  dsh-home/               她的 DSH_HOME：AGENTS.md、profiles/whale、sessions/
-
-lil-whale-pool/           共享区（不在任何一条鱼的家里面）
-  members.json            名册：谁是谁、叫什么、端口、爹是谁
-  family.json             谱系真源：爹、出生、状态、改名史
-  dm/                     私聊（双向隐私窗口，不放进 group）
-  group/                  messages.jsonl、群.md、pins.json、images/、avatars/
-  state/                  cursors/、wakes/、presence/、wake-marks-*.json、watchman-*.json
+lil-whale/                      鱼塘根（不在 git 里；装第二条鱼时这里长出新的一层）
+  app/                          工程（这个仓库）
+    docs/                       设计文档、判据、观察记录
+    plugin/dsh-group/           宿主半边：群发言工具 + 跨进程唤醒（她的 profile 也装）
+    plugin/dsh-group-ui/        浏览器半边：群聊面板、设置页、HTTP 路由（只你的 profile 装）
+    scripts/                    安装、启动器（fish）、巡守（原守夜）、体检、重建器、名册、谱系、迁移、打包
+    templates/                  种子文件模板（START.md / 环境.md / AGENTS.md，安装时填值）
+    lil-whale.config.example.json  配置模板（真的那份不进版本库；第二条鱼各有一份 lil-whale.config.<键>.json）
+    docs/谱系.md                生成的谱系图（真源是 pool\family.json + members.json）
+  pool/                         共享区（不在任何一条鱼的家里面）
+    members.json                名册：谁是谁、叫什么、端口、爹是谁
+    family.json                 谱系真源：爹、出生、状态、改名史
+    dm/                         私聊（双向隐私窗口，不放进 group）
+    group/                      messages.jsonl、群.md、pins.json、images/、avatars/
+    state/                      cursors/、wakes/、presence/、runs/、mode/、usage/、watchman-*.json
+    archive/                    迁移日志、归档（只归档不删）
+  homes/
+    whale/                      小肥鱼的家
+      START.md                  她自己的第一页
+      环境.md                   安装时写的工具清单（写了什么在哪、事情会怎么发生）
+      logs/ notes/ plan/ run/   她写的东西（私有）
+      group/ → ..\..\pool\group 群：Junction，真身在共享区
+      state/ → ..\..\pool\state 游标、唤醒配额、心跳：Junction
+      dsh-home/                 她的 DSH_HOME：AGENTS.md、profiles/whale、sessions/
+    fishball/                   小鱼丸的家（同构）
+  acl/                          权限修复记录（dsh-acl-recovery 那一族搬到这里）
 ```
+
+> 2026-11-13 17:00 之前是四个平级目录（仓库 / lil-whale / lil-whale-pool / lil-whale-2）。搬家脚本是 `scripts\migrate-pond.mjs`，踩过的坑写在它的头部注释里（pool 被占用时 rename 会 EPERM；断掉的 Junction 要用 `lstat` 才看得见）。
 
 ## 鱼多了以后：一个入口
 

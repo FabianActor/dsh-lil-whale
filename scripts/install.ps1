@@ -74,12 +74,23 @@ function Render-Template([string]$templatePath, [hashtable]$values) {
   return $text
 }
 
-if (-not $Workspace) { $Workspace = Join-Path (Split-Path $RepoRoot -Parent) 'lil-whale' }
+# 布局（2026-11-13 17:00 起）：默认"鱼塘"结构 —— <pond>\app（仓库）/ pool（共享区）/ homes\<鱼> / acl。
+# 仓库就在 <pond>\app 里时，新鱼装到 <pond>\homes\<成员键>，共享区用 <pond>\pool；
+# 仓库不在 app\ 下（单克隆/老布局），退回"家旁边一个共享区"。
+$PondRoot = Split-Path $RepoRoot -Parent
+$InPond = ((Split-Path $RepoRoot -Leaf) -eq 'app') -and (Test-Path (Join-Path $PondRoot 'pool'))
+$childKey = if ($ChildMemberId) { $ChildMemberId } else { $ChildProfile }
+if (-not $Workspace) {
+  if ($InPond) { $Workspace = Join-Path (Join-Path $PondRoot 'homes') $childKey }
+  else { $Workspace = Join-Path $PondRoot 'lil-whale' }
+}
 if (-not $DshHome) { $DshHome = Join-Path $Workspace 'dsh-home' }
 $Workspace = [System.IO.Path]::GetFullPath($Workspace)
-# 共享区（群/账本/私聊）在鱼的家旁边。必须在 $Workspace 补完默认值之后再算：
+# 共享区（群/账本/私聊）。必须在 $Workspace 补完默认值之后再算：
 # 2026-11-12 22:20 修 —— 原来这行在上面，$Workspace 为空时 Split-Path '' 直接抛错。
-$PoolRoot = if ($PoolDir -ne '') { $PoolDir } else { Join-Path (Split-Path $Workspace -Parent) 'lil-whale-pool' }
+if ($PoolDir -ne '') { $PoolRoot = $PoolDir }
+elseif ($InPond) { $PoolRoot = Join-Path $PondRoot 'pool' }
+else { $PoolRoot = Join-Path (Split-Path $Workspace -Parent) 'lil-whale-pool' }
 $PoolRoot = [System.IO.Path]::GetFullPath($PoolRoot)
 $DshHome = [System.IO.Path]::GetFullPath($DshHome)
 
@@ -202,7 +213,10 @@ if (-not $SkipParent) {
 Step '5. 写配置'
 # 合并写，不是覆盖写：已有的字段（repoRoot / herWaker / pwshExe …）原样留着，
 # 否则在装好的机器上重跑一次 install，会把这份配置里手写的东西全丢掉。
-$cfgPath = if ($ConfigPath -ne '') { $ConfigPath } else { Join-Path $RepoRoot 'lil-whale.config.json' }
+# 一条鱼一份配置：鱼塘里第一条（whale）用 lil-whale.config.json，其余用 lil-whale.config.<键>.json。
+$cfgName = 'lil-whale.config.json'
+if ($InPond -and $childKey -ne 'whale') { $cfgName = "lil-whale.config.$childKey.json" }
+$cfgPath = if ($ConfigPath -ne '') { $ConfigPath } else { Join-Path $RepoRoot $cfgName }
 if ((Test-Path $cfgPath) -and -not $Force) {
   try {
     $existing = [System.IO.File]::ReadAllText($cfgPath) | ConvertFrom-Json -AsHashtable
@@ -410,7 +424,20 @@ if (-not (Test-Path $membersPath)) {
   Write-Utf8NoBom $membersPath (($rawMembers | ConvertTo-Json -Depth 8) + "`n")
   Ok 'members.json（共享区，新建：父辈 + 人 + 这条鱼）'
 } else {
-  Ok 'members.json 已存在，保留（加鱼用 scripts\members-add.mjs）'
+  # 名册已存在（鱼塘里已经有别的鱼）：把这条新鱼加进去，别让用户再手跑一次。
+  # 2026-11-13 17:0x 修：原来这里只打印"用 members-add.mjs"，装第二条鱼时新鱼不在名册里，
+  # fish.ps1 认不出它、面板里也看不见（A.32 同族）。
+  $membersAdd = Join-Path $RepoRoot 'scripts\members-add.mjs'
+  if (Test-Path $membersAdd) {
+    $addArgs = @($membersAdd, '--key', $childMember, '--name', $ChildName, '--parent', $ParentMemberId,
+      '--port', [string]$port, '--home', $Workspace, '--dshHome', $DshHome,
+      '--profile', $ChildProfile, '--configFile', $cfgName, '--status', 'experiment')
+    $addOut = & node @addArgs 2>&1
+    if ($LASTEXITCODE -eq 0) { Ok "members.json 已更新：$($addOut | Select-Object -Last 1)" }
+    else { Warn "新鱼没写进名册：$($addOut | Select-Object -Last 3) —— 手动跑 node scripts\members-add.mjs --key $childMember ..." }
+  } else {
+    Warn '找不到 scripts\members-add.mjs，新鱼没写进名册'
+  }
 }
 
 $planPath = Join-Path $Workspace 'plan\wake-plan.json'
@@ -433,7 +460,7 @@ Say ""
 Say "  装好了。接下来的四件事脚本替不了：" -ForegroundColor Green
 Say ""
 Say "  1) 重启你的 dsh（装进你 profile 的两个插件要重启才生效）。"
-Say "  2) 起她的窗：pwsh -File scripts\fish.ps1 up whale（或双击 scripts\bin\Run All Whales.cmd）"
+Say "  2) 起她的窗：pwsh -File scripts\fish.ps1 up $childMember（或双击 scripts\bin\Run All Whales.cmd）"
 Say "     -- 它会打印她的网址，形如  http://127.0.0.1:$port/?token=xxxx"
 Say "     -- token 是每次启动随机生成的，只印在那一行；自己敲 127.0.0.1:$port 会 401。"
 Say "  3) 在她的网页里填她自己的 API key（设置 -> Models），别和你共用一把。"

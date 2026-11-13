@@ -96,6 +96,22 @@ if (existsSync(membersFile)) {
 const members = roster?.members && typeof roster.members === 'object' ? roster.members : null
 if (!members) die('名册里没有 members 字段')
 
+// 名册存在但还没有这条鱼（装第二条鱼时 members.json 先于这一步存在）：只在内存里补一条，
+// 让 环境.md 能写出来；名册本身由 install.ps1 的名册步骤负责写。
+if (
+  !Object.keys(members).some((k) => members[k]?.profile === args.profile) &&
+  !Object.keys(members).some((k) => members[k]?.home && resolve(members[k].home) === workspace)
+) {
+  const childId = args.childId || args.profile
+  const childName = args.childName || childId
+  const parentId = args.parentId || 'lee'
+  members[childId] = {
+    name: childName, kind: 'fish', role: 'member', parent: parentId,
+    profile: args.profile, home: workspace, dshHome: join(workspace, 'dsh-home'),
+  }
+  console.error(`render-env: 名册里还没有这条鱼，按安装参数临时补了一条（${childId}）；名册本身由 install.ps1 负责写`)
+}
+
 // 哪一条是我：按 profile 认；认不出来就用 workspace 对 home 认。
 const myKey =
   Object.keys(members).find((k) => members[k]?.profile === args.profile) ||
