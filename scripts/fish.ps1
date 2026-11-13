@@ -441,6 +441,21 @@ function Get-FishProcesses($member) {
   })
 }
 
+# 起停账：进程被 Stop-Process 强杀时自己没机会写 stopped（Cordis 的 dispose 不跑），
+# 于是每次正常重启都被下一次启动记成 `resumed reason=unclean`——虽然报警那边用
+# "端口在听"挡住了误报，但账本自己说"上次没正常退出"，跟 close.log 打架。
+# 2026-11-13 22:1x 查账：close.log 今天 20/37/21 次 close，runs 账里 stopped 是 0。
+# 修法：由"停的人"补一行——停止方记账，不指望被杀的进程自己写。
+function Write-RunLogStopped($member, $ids) {
+  try {
+    $dir = Join-Path $Cfg.PoolState 'runs'
+    if (-not (Test-Path -LiteralPath $dir)) { return }
+    $file = Join-Path $dir ("{0}.log" -f $member.Key)
+    $line = '{0} | stopped | fmt=2 reason=stop-script by=fish.ps1 pid={1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), (@($ids) -join ',')
+    Add-Content -LiteralPath $file -Value $line -Encoding utf8
+  } catch { }
+}
+
 function Stop-Fish($member) {
   $fishPort = Get-PortOf $member
   $roots = Get-FishProcesses $member
@@ -472,6 +487,8 @@ function Stop-Fish($member) {
   # 这是防御性排序，不是修一个已发生的 bug：18:07 那次 Stop DSH 之后他 13 秒才重启，
   # 端口一直是关的，账正常写下了。但若有人在 6 秒内又把进程拉起来，旧顺序会判
   # "没停干净"并跳过 close.log / Clear-Mode —— 那会让"确实停过"从账上消失。
+  # 停的人记账：被强杀的进程自己写不了 stopped。
+  Write-RunLogStopped $member $ids
   Write-FishWindowLog $member 'close'
   for ($i = 0; $i -lt 20; $i++) {
     Start-Sleep -Milliseconds 300

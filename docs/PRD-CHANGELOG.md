@@ -4,6 +4,10 @@
 > 它与两个 npm 包的版本（各自 `package.json` 里的 semver，如 `1.2.0`）是**两条线**：包版本只在功能或破坏性变化、发布时才动。
 > 编号从 r1 开始（第一稿就是 r1）。2026-11-13 之前这些号写作 `v1.0.NN`，本次统一改名，编号不变。
 
+## r69 — 2026-11-13 22:2x
+
+- **停的人记账**：`scripts\fish.ps1` 新增 `Write-RunLogStopped`，停鱼时由停止方往 `pool\state\runs\<鱼>.log` 补一行 `stopped | fmt=2 reason=stop-script by=fish.ps1 pid=…`。此前 `stopped` 只由进程自己的 `dispose` 写，而 `Stop-Process -Force` 不给它机会，于是 35 次 started 对 0 次 stopped，每次正常重启都被记成 `resumed reason=unclean`。PRD 附录 A.63。
+- 验证：停一次小鱼丸 → 出现 `stopped`；再起 → `started … prev-run=closed`、无 `resumed` 行、`session-mounted toolCount=34`。
 ## r68 — 2026-11-13 21:5x
 
 - **修 21:2x 的启动崩溃**：`plugin/dsh-lil-whale-group-ui/lib/client.js` 里模块注册的 id 从 `'dsh-lil-whale-group-ui'` 改回完整包名 `'@fabianactor/dsh-lil-whale-group-ui'`。C1 改名时漏了 scope，而客户端按 package name 找模块，找不到就 `import failed`。PRD 附录 A.62。

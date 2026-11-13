@@ -1,6 +1,6 @@
 # 小小肥鱼 · PRD
 
-> 状态：**r68（2026-11-13）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。 2026-11-13：**鱼塘布局落地**（一个根四层，A.55）、**无人值守成为默认**（A.45/A.54）、**计划表归每条鱼自己**（A.50）、**四个快捷方式实测通过**（A.56）；`docs\` 只留活跃文档，历史记录移入 `docs\archive\`。
+> 状态：**r69（2026-11-13）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。 2026-11-13：**鱼塘布局落地**（一个根四层，A.55）、**无人值守成为默认**（A.45/A.54）、**计划表归每条鱼自己**（A.50）、**四个快捷方式实测通过**（A.56）；`docs\` 只留活跃文档，历史记录移入 `docs\archive\`。
 > 版本号：这是**稿次** `rNN`（改一次 +1），不是包版本——两个 npm 包各自用 semver（当前 `1.2.1`），只在发布时才动。
 > 上游：[立项备忘](archive/小小肥鱼-立项备忘-2026-11-08.md)（**他的原话**，已冻结不改；三条硬要求已吸收进 §1）
 > 配套：[自主回合.md](自主回合.md)（G1 的上游能力，不是本 PRD 的验收项）
@@ -1496,3 +1496,23 @@ window.__ModuleLoader__.load({
 **顺带修的**：自启动（巡守 8 秒后 `fish.ps1 up all`）以前不看主 dsh 是否真的起来了——启动失败时它照样可能把鱼拉起来，现场留下孤儿。现在先探主 dsh 的端口（`watcherPort()` 从名册找 `role: watcher` 那条鱼），端口不在听就记 `autostart skip why=main-port-not-listening` 并跳过。
 
 **教训**：改名脚本按字符串替换，改对了 34 个文件，却漏了"这个字符串是契约"的那一处。契约型字符串（模块 id、注册 id、数据目录名）要在脚本里点名，不能靠全局替换。
+
+### A.63 停的人记账：被强杀的进程写不了 stopped（2026-11-13）
+
+**症状**：查日志时发现 `pool\state\runs\<鱼>.log` 里今天 `started` 有 29/28/46 行，`stopped` 是 **0** 行；可 `close.log` 里今天有 20/37/21 次 `event=close`。于是每次正常重启都被下一次启动记成 `resumed reason=unclean`——账本自己说"上次没正常退出"，跟 `close.log` 打架。
+
+**为什么没在群里误报**：报警前会判"活着"（端口通就算起来了），所以只在 `watchman.log` 里留下 `why=crash-alive` 的 note，没有发消息。但这只是**把误报挡住**，账本身还是错的。
+
+**根因**：`stopped` 只由进程自己在 Cordis 的 `dispose` 里写；而 `fish.ps1` 停鱼是 `Stop-Process -Force` 强杀，`dispose` 根本不跑。
+
+**修法**：`scripts\fish.ps1` 新增 `Write-RunLogStopped($member, $ids)`，在杀完进程之后、写 `close.log` 之前，由"停的人"补一行：
+
+```
+2026-11-13 22:19:15 | stopped | fmt=2 reason=stop-script by=fish.ps1 pid=15716
+```
+
+**验证**（2026-11-13 22:19，停一次小鱼丸）：停 → 账上出现 `stopped`；再起 → `started … prev-run=closed`，**没有** `resumed` 行；随后 `session-mounted member=fishball toolCount=34 composed=neutral`。
+
+**判据**：①每条 `started` 之前，要么有 `stopped`（正常重启），要么有 `resumed`（异常退出）——不能两条都没有；②`stopped` 行里 `by=` 说明是谁停的（现在只有 `fish.ps1`）；③`close.log` 与 `runs` 账的条数允许不一致，但差异要能解释。
+
+**教训**：账要由"能确定事实的那一方"写。被杀的进程没有发言权——它连自己死了都来不及说。
