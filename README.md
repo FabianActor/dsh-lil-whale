@@ -65,6 +65,14 @@ pwsh -File scripts\install.ps1
    - 她的写进 `group\pins.json` 的 `whale` 数组，你的写进 `lee` 数组
    - （装的时候用 `-ChildSessionId` / `-ParentSessionId` 也能直接写）
 
+## 重启后先跑这个
+
+```powershell
+pwsh -File scripts\verify-pending.ps1
+```
+
+只读：把"改了但还没生效"的几项（runs 账、自己的闹钟、gate 读数、全局封顶、自启动、鱼塘接口、模式账）一次列出来。FAIL 才要管，INFO 是"还没到点"。
+
 ## 它还好吗
 
 ```
