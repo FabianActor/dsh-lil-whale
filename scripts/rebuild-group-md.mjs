@@ -8,12 +8,20 @@
 // 跑法：node scripts\rebuild-group-md.mjs            只看对照（有未归类差异 → exit 1）
 //       node scripts\rebuild-group-md.mjs --write    覆盖 群.md
 //       node scripts\rebuild-group-md.mjs --migrate  格式迁移：跳过差异闸、整本重写（先备份！）
-import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
+import {renameSync, readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
 import { config } from '../plugin/dsh-group/lib/config.js'
 
 // 路径从 lil-whale.config.json 读（真源见 plugin/dsh-group/lib/config.js）
 const GROUP_DIR = config().groupDir
 const MESSAGES = `${GROUP_DIR}\\messages.jsonl`
+// 整本写必须原子：宿主同时在对 群.md appendFileSync，直接 writeFileSync
+// 会在窗口期被读到半截（更糟的是 append 的那几句被覆盖）。先 tmp 再 rename。
+function writeAtomic(file, content) {
+  const tmp = file + '.tmp-' + process.pid
+  writeFileSync(tmp, content, 'utf8')
+  renameSync(tmp, file)
+}
+
 const READABLE = `${GROUP_DIR}\\群.md`
 
 // 显示名从名册读（A.25/A.32：成员表只有一个真源）。读不到就退回旧三条。
@@ -253,7 +261,7 @@ if (dmUnexplained > 0) process.exitCode = 1
 // 前提是已经手工备份（本脚本不替你备份）——迁移是把旧的投影按新规则重排，
 // 差异必然"说不清"，所以这一刻只能靠人先留底。
 if (process.argv.includes('--migrate')) {
-  writeFileSync(READABLE, rebuilt, 'utf8')
+  writeAtomic(READABLE, rebuilt)
   console.log(`已按新格式整本重写 群.md（${blocks.length} 段，指名带箭头的 ${records.filter((r) => r?.to && r.to !== 'all').length} 条）`)
   process.exitCode = 0
 }
@@ -263,7 +271,7 @@ if (process.argv.includes('--write')) {
   console.log('已写入 群.md')
   if (dmUnexplained === 0) {
     for (const item of dmWrites) {
-      writeFileSync(item.target, item.rebuilt, 'utf8')
+      writeAtomic(item.target, item.rebuilt)
       console.log(`已写入 ${item.target}`)
     }
   } else {

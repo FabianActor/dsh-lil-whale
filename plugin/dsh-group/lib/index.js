@@ -2303,7 +2303,7 @@ async function crashNotify() {
     let hb = null
     try {
       portOpen = await isPortOpen(member.port)
-      hb = presenceAgeOf(member)
+      hb = presenceAgeOf(member.key) // 这里原来传的是成员对象，拼出来是 "[object Object].json"，hb 恒 null
       alive = portOpen || (hb !== null && hb <= WAKE_STALE_SEC)
     } catch { alive = false }
     if (alive) {

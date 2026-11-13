@@ -168,7 +168,7 @@ function Get-Url($member) {
   try {
     $line = Get-Content -LiteralPath $log -Tail 60 -ErrorAction Stop |
       Where-Object { $_ -match "127\.0\.0\.1:$($member.Port)/\?token=" } | Select-Object -Last 1
-    if ($line -match "(http://127\.0\.0\.1:$($member.Port)/\?token=[A-Za-z0-9_\-]+)") { return $Matches[1] }
+    if ($line -match "(http://127\.0\.0\.1:$($member.Port)/\?token=[A-Za-z0-9._~\-]+)") { return $Matches[1] }
   } catch { }
   return "http://127.0.0.1:$($member.Port)"
 }

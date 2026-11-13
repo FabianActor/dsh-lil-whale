@@ -100,7 +100,7 @@ function FishUrl([int]$p) {
   $token = ''
   if (Test-Path -LiteralPath $outLog) {
     foreach ($line in (Get-Content -LiteralPath $outLog -Tail 80 -ErrorAction SilentlyContinue)) {
-      $mt = [regex]::Match([string]$line, 'token=([A-Za-z0-9_\-]+)')
+      $mt = [regex]::Match([string]$line, 'token=([A-Za-z0-9._~\-]+)')
       if ($mt.Success) { $token = $mt.Groups[1].Value }
     }
   }

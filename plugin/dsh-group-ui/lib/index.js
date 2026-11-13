@@ -573,7 +573,17 @@ function readPondSettings() {
 }
 
 function writePondSettings(payload) {
+  // 读-改-写：这个文件不只存自启动开关（宿主读 crashNotify，见 PRD A.52）。
+  // 2026-11-13 18:5x 修：以前整份重建 {version,autoStartFish,updatedAt}，
+  // 点一下开关就把 crashNotify 抹掉，报警复发而且不报错。
+  let prev = {}
+  try {
+    prev = JSON.parse(readFileSync(POND_SETTINGS_FILE, 'utf8')) ?? {}
+  } catch {
+    prev = {}
+  }
   const settings = {
+    ...prev,
     version: 1,
     autoStartFish: payload?.autoStartFish === true,
     updatedAt: new Date().toISOString(),
@@ -1070,6 +1080,8 @@ export function apply(ctx) {
         ...(image === null ? {} : { image }),
       }
       try {
+        // 宿主 say() 会先 ensureDir；面板这条路以前没建目录，group 被清掉后第一条消息 500。
+        mkdirSync(GROUP_DIR, { recursive: true })
         appendFileSync(MESSAGES, JSON.stringify(record) + '\n', 'utf8')
         // 投影格式必须和宿主 say() 逐字一致（2026-11-12 19:46 起：指名时写「时间 · 谁 → 收信人」）。
         // 收信人写在投影里，是为了让"读记录"的人知道这条是在对谁说话——不写，指名和公开在纸上一样。
@@ -1077,7 +1089,7 @@ export function apply(ctx) {
           ? text
           : `（图片 images/${image.month}/${image.id}.${image.ext}）${text === '' ? '' : `\n\n${text}`}`
         const toLabel = to !== '' && to !== 'all' ? ` → ${LABEL[to] ?? to}` : ''
-        appendFileSync(READABLE, `**${stamp(now)} · Fabian${toLabel}**\n\n${body}\n\n`, 'utf8')
+        appendFileSync(READABLE, `**${stamp(now)} · ${LABEL[HUMAN_ID] ?? HUMAN_ID}${toLabel}**\n\n${body}\n\n`, 'utf8')
       } catch (error) {
         sendJson(res, 500, { error: 'write-failed', detail: String(error?.message ?? error) })
         return
@@ -1088,9 +1100,12 @@ export function apply(ctx) {
 
   // ---------- 私聊：一个人和一条鱼的那段对话 ----------
   // 这个窗口里说话的人固定是 Fabian，收信的人是 peer；两个方向都写进同一个文件。
+  // 不认识就返回 null，由调用方回 400。
+  // 2026-11-13 18:5x 修：以前静默回退 KNOWN_PEERS[0]，peer 拼错就把话写进第一条鱼的私聊，
+  // 未读也标错人，全程 200。这是"错的东西长得很安静"那一族。
   const dmPeerOf = (value) => {
     const peer = typeof value === 'string' ? value.trim() : ''
-    return peer && KNOWN_PEERS.includes(peer) ? peer : KNOWN_PEERS[0]
+    return peer && KNOWN_PEERS.includes(peer) ? peer : null
   }
 
   disposers.push(ctx.webServer.register({
@@ -1100,6 +1115,10 @@ export function apply(ctx) {
       const url = new URL(req.url ?? '/', 'http://127.0.0.1')
       if (req.method === 'GET') {
         const peer = dmPeerOf(url.searchParams.get('peer'))
+        if (peer === null) {
+          sendJson(res, 400, { error: 'bad-peer' })
+          return
+        }
         const messages = readMessages(dmFileOf(peer))
         sendJson(res, 200, { peer, count: messages.length, messages })
         return
@@ -1129,6 +1148,10 @@ export function apply(ctx) {
         return
       }
       const peer = dmPeerOf(payload?.peer)
+      if (peer === null) {
+        sendJson(res, 400, { error: 'bad-peer' })
+        return
+      }
       const now = new Date()
       const record = {
         ts: now.toISOString(), from: HUMAN_ID, to: peer, text, kind: 'dm', channel: 'dm',
@@ -1209,6 +1232,10 @@ export function apply(ctx) {
         state.group = lastTsOf(MESSAGES)
       } else if (channel === 'dm') {
         const peer = dmPeerOf(payload?.peer)
+        if (peer === null) {
+          sendJson(res, 400, { error: 'bad-peer' })
+          return
+        }
         state.dm[peer] = lastTsOf(dmFileOf(peer))
       } else {
         sendJson(res, 400, { error: 'bad-channel' })
