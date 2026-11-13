@@ -1,7 +1,7 @@
 # 小小肥鱼 · PRD
 
-> 状态：**r67（2026-11-13）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。 2026-11-13：**鱼塘布局落地**（一个根四层，A.55）、**无人值守成为默认**（A.45/A.54）、**计划表归每条鱼自己**（A.50）、**四个快捷方式实测通过**（A.56）；`docs\` 只留活跃文档，历史记录移入 `docs\archive\`。
-> 版本号：这是**稿次** `rNN`（改一次 +1），不是包版本——两个 npm 包各自用 semver（当前 `1.2.0`），只在发布时才动。
+> 状态：**r68（2026-11-13）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。 2026-11-13：**鱼塘布局落地**（一个根四层，A.55）、**无人值守成为默认**（A.45/A.54）、**计划表归每条鱼自己**（A.50）、**四个快捷方式实测通过**（A.56）；`docs\` 只留活跃文档，历史记录移入 `docs\archive\`。
+> 版本号：这是**稿次** `rNN`（改一次 +1），不是包版本——两个 npm 包各自用 semver（当前 `1.2.1`），只在发布时才动。
 > 上游：[立项备忘](archive/小小肥鱼-立项备忘-2026-11-08.md)（**他的原话**，已冻结不改；三条硬要求已吸收进 §1）
 > 配套：[自主回合.md](自主回合.md)（G1 的上游能力，不是本 PRD 的验收项）
 > 改动记录：[PRD-CHANGELOG.md](PRD-CHANGELOG.md) —— 每一版改了哪几处、为什么。本文只放当前结论。
@@ -1471,3 +1471,28 @@ lil-whale\state  → junction → pool\state
 **判据**：一个依赖算不算"写进说明里了"，看三件事——①文档里有安装命令 ②缺了的时候有人（脚本）替你说 ③说的地方在你踩坑之前（安装/双击时），不是踩坑之后。
 
 **为什么 `.cmd` 里用英文**：`.cmd` 由 cmd.exe 按控制台代码页读，中文提示在别的机器上可能变乱码；这一句是给"还没装好环境的人"看的，宁可丑也不能乱码。
+
+### A.62 客户端插件的模块 id 必须等于包名（含 scope）（2026-11-13）
+
+**症状**：2026-11-13 21:2x 他打开 Web UI，页面变成 `HARNESS / Failed to load plugins`：`@fabianactor/dsh-lil-whale-group-ui`、`web boot: 1 entry did not activate`、`import failed (see console for the import error)`。他先在 `web` profile 的 patch 里手动写了 `disabled: true` 把插件关掉。
+
+**根因**：C1 改名把 `client.js` 里模块注册的 id 从 `'lil-whale-group-ui'` 改成了 `'dsh-lil-whale-group-ui'`，但客户端模块系统要求**注册 id 必须等于 `package.json` 的 `name`（含 scope）**。服务器按 package name 建 boot 行（`@fabianactor/dsh-lil-whale-group-ui`），客户端 `modules.import(row.id)` 找不到以该 id 注册的模块 ⇒ `entry.fiber === undefined` ⇒ `client-modules: <id> import failed`。
+
+**为什么 bundle 没 404**：bundle 路由按包名解析（`plugins/??@fabianactor/dsh-lil-whale-group-ui/client.js&rev=…`）是好的，坏的只是 bundle 里注册的那个字符串。所以现象是"文件拿到了、模块没注册"。
+
+**修法**：`plugin/dsh-lil-whale-group-ui/lib/client.js` 第一段：
+
+```js
+window.__ModuleLoader__.load({
+  id: '@fabianactor/dsh-lil-whale-group-ui',   // 必须等于 package.json 的 name（含 scope）
+  ...
+})
+```
+
+**怎么验（不碰正在跑的窗口）**：起一个隔离实例——`DSH_HOME` 指向临时目录（其中 `profiles` 用 Junction 指向真实 profiles）、`--patch` 只启用 UI 插件、`--port 3099 --no-open`；用启动打印的 token 拉首页，取 boot 行里的 `id` 与 `url`；下载 bundle，在 node 里用假的 `window.__ModuleLoader__.load` 执行，捕获到的 id 必须与 boot 行 id 逐字相等。
+
+**判据**：①boot 行的 `id` 与 bundle 注册的 `id` 逐字相等（含 scope）②`node --check` 过 ③真实浏览器控制台不再出现 `import failed`。
+
+**顺带修的**：自启动（巡守 8 秒后 `fish.ps1 up all`）以前不看主 dsh 是否真的起来了——启动失败时它照样可能把鱼拉起来，现场留下孤儿。现在先探主 dsh 的端口（`watcherPort()` 从名册找 `role: watcher` 那条鱼），端口不在听就记 `autostart skip why=main-port-not-listening` 并跳过。
+
+**教训**：改名脚本按字符串替换，改对了 34 个文件，却漏了"这个字符串是契约"的那一处。契约型字符串（模块 id、注册 id、数据目录名）要在脚本里点名，不能靠全局替换。

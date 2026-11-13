@@ -10,7 +10,9 @@
  * /group/api/config、/group/api/presence），不在浏览器里直接读文件。
  */
 window.__ModuleLoader__.load({
-  id: 'dsh-lil-whale-group-ui',
+  // 模块 id 必须等于包名（含 scope）：客户端 boot 图按 package.json 的 name 去找这个 id，
+  // 少写 scope 时 bundle 能取到、但加载器找不到模块，表现成 "import failed"。
+  id: '@fabianactor/dsh-lil-whale-group-ui',
   factory(require) {
     const React = require('react')
     const h = React.createElement

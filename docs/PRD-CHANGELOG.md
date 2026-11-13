@@ -4,6 +4,12 @@
 > 它与两个 npm 包的版本（各自 `package.json` 里的 semver，如 `1.2.0`）是**两条线**：包版本只在功能或破坏性变化、发布时才动。
 > 编号从 r1 开始（第一稿就是 r1）。2026-11-13 之前这些号写作 `v1.0.NN`，本次统一改名，编号不变。
 
+## r68 — 2026-11-13 21:5x
+
+- **修 21:2x 的启动崩溃**：`plugin/dsh-lil-whale-group-ui/lib/client.js` 里模块注册的 id 从 `'dsh-lil-whale-group-ui'` 改回完整包名 `'@fabianactor/dsh-lil-whale-group-ui'`。C1 改名时漏了 scope，而客户端按 package name 找模块，找不到就 `import failed`。PRD 附录 A.62。
+- **自启动护栏**：巡守 8 秒后的 `fish.ps1 up all` 先探主 dsh 端口，端口不在听就跳过并记 `autostart skip why=main-port-not-listening`——启动失败时不再把鱼拉起来留下孤儿。
+- 两个包版本 **1.2.0 → 1.2.1**（bugfix，版本线连续）。
+- 把他手动加的 `disabled: true` 从 `web` profile 的 patch 里撤掉（备份 `cordis.patch.yml.bak-before-enable-ui-20261113-215419`），重启 3080 后恢复。
 ## r67 — 2026-11-13 21:1x
 
 - **使用建议改成"直接跑 scripts 里的"**：他 21:11 说桌面副本会过时（"更新频率非常高…我现在直接去 scripts 里面跑脚本"），把桌面四份清掉了。README「自启动与四个快捷方式」、`docs\安装流程详解.md` §1.3 与故障排查表、PRD A.43 都改成：`.cmd` 的定位是 `scripts\bin\` 里的原件（永远最新），桌面副本只是快照、不跟着更新，不再推荐拷到桌面。

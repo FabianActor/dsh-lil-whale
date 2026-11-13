@@ -391,21 +391,40 @@ function autostartLog(result, detail) {
   } catch {}
 }
 
+/** 主 dsh 自己那条鱼的端口：自启动前先确认"这扇窗真的开着"。 */
+function watcherPort() {
+  try {
+    for (const m of Object.values(MEMBERS)) {
+      if (m?.kind === 'fish' && m?.role === 'watcher' && m?.port) return Number(m.port)
+    }
+  } catch {}
+  return Number(CFG.leePort) || 3080
+}
+
 function scheduleAutoStart(ctx) {
   if (!readAutoStartSettings().autoStartFish) return
   const timer = setTimeout(() => {
-    let child
-    try {
-      child = spawn(PWSH_EXE, ['-NoProfile', '-File', FISH_PS1, 'up', 'all', '-NoBrowser'], {
-        windowsHide: true,
-        stdio: 'ignore',
-      })
-    } catch (error) {
-      autostartLog('fail', `spawn-error=${String(error?.message ?? error)}`)
-      return
-    }
-    child.once('error', (error) => autostartLog('fail', `error=${String(error?.message ?? error)}`))
-    child.once('exit', (code) => autostartLog(code === 0 ? 'ok' : 'fail', `exit=${code} script=fish.ps1 up all`))
+    void (async () => {
+      // 2026-11-13 21:5x 事故：`dsh web` 因端口被占启动失败，自启动这条支线却仍可能把鱼拉起来，
+      // 现场留下一排没有主窗的 pwsh/node。判据改成"主 dsh 的端口在听"——窗没开，就不该放鱼出去。
+      const port = watcherPort()
+      if (!(await isPortOpen(port))) {
+        autostartLog('skip', `why=main-port-not-listening port=${port}`)
+        return
+      }
+      let child
+      try {
+        child = spawn(PWSH_EXE, ['-NoProfile', '-File', FISH_PS1, 'up', 'all', '-NoBrowser'], {
+          windowsHide: true,
+          stdio: 'ignore',
+        })
+      } catch (error) {
+        autostartLog('fail', `spawn-error=${String(error?.message ?? error)}`)
+        return
+      }
+      child.once('error', (error) => autostartLog('fail', `error=${String(error?.message ?? error)}`))
+      child.once('exit', (code) => autostartLog(code === 0 ? 'ok' : 'fail', `exit=${code} script=fish.ps1 up all`))
+    })()
   }, 8000)
   timer.unref?.()
   ctx.on('dispose', () => clearTimeout(timer))
