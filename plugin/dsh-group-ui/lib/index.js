@@ -641,7 +641,17 @@ function runPwshScript(scriptFile, args, timeoutMs = POND_ACTION_TIMEOUT_MS) {
       clearTimeout(timer)
       finish(-1, false)
     })
+    // 父进程（pwsh）退出了就先返回：它启动的 dsh 会继承 stdout 管道，
+    // 'close' 可能要等到那条鱼也退出才来（他 2026-11-13 12:09 报的"按钮一直 …"）。
+    let exitTimer = null
+    child.once('exit', (code) => {
+      exitTimer = setTimeout(() => {
+        clearTimeout(timer)
+        finish(code ?? -1, false)
+      }, 400)
+    })
     child.once('close', (code) => {
+      if (exitTimer) clearTimeout(exitTimer)
       clearTimeout(timer)
       finish(code ?? -1, false)
     })

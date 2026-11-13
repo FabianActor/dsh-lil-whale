@@ -2558,6 +2558,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       heartbeat: '心跳',
       heartbeatAgo: (minutes) => (minutes < 1 ? '刚刚' : `${minutes} 分钟前`),
       noHeartbeat: '没有记录',
+      heartbeatStopped: '没在跑',
       lastRun: '起停账',
       selfHint: '这是你自己所在的窗口，不能从这里操作',
       confirmAllDown: '让所有鱼休眠？巡守那条（这个窗口）不会动。',
@@ -2866,7 +2867,10 @@ function Bubble({ config, message, onMention, animate = false }) {
       const card = (item, parentItem, depth) => {
         const self = item.canManage === false
         const hb = item.heartbeatAgeMs
-        const hbText = hb === null || hb === undefined ? POND.noHeartbeat : POND.heartbeatAgo(Math.floor(hb / 60000))
+        // 停了的鱼：心跳文件还留着最后一次的值，不能显示成"刚刚"（他 2026-11-13 12:09 报的）。
+        const hbText = !item.portOpen
+          ? POND.heartbeatStopped
+          : hb === null || hb === undefined ? POND.noHeartbeat : POND.heartbeatAgo(Math.floor(hb / 60000))
         return h(
           'div',
           {
@@ -3122,7 +3126,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[lil-whale-group-ui] client build v30 · pond-buttons:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[lil-whale-group-ui] client build v31 · pond-heartbeat:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('lil-whale-group-keyframes')) {
           const style = document.createElement('style')
