@@ -9,7 +9,7 @@
 // 用法：
 //   node scripts/migrate-scope.mjs --profile-dir <profile 目录> [--dry-run]
 // 例：
-//   node scripts/migrate-scope.mjs --profile-dir C:\Users\Fabian\.dsh\profiles\web
+//   node scripts/migrate-scope.mjs --profile-dir <你的 DSH_HOME>\profiles\web
 //
 // 写前备份 package.json / pnpm-lock.yaml 为 *.bak-scope-<时间>。
 
