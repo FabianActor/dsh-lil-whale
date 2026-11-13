@@ -135,7 +135,7 @@ pwsh -File scripts\fish.ps1 down whale   # 停一条
 pwsh -File scripts\fish.ps1 doctor       # 体检
 ```
 
-`launch.ps1` / `stop.ps1` 还在，但只剩"翻译参数"——桌面 `.cmd` 和巡守脚本照旧能用。**新增一条鱼不要新增一个脚本**：改名册。
+`launch.ps1` / `stop.ps1` / `start-whale.ps1` / `watchman.ps1` 已在 2026-11-13 归档到 `archive\legacy-scripts-2026-11-13\`——`fish.ps1` 是唯一入口。**新增一条鱼不要新增一个脚本**：改名册。
 
 ## 谱系
 

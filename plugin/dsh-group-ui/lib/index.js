@@ -5,7 +5,7 @@
  * 而 webServer 有现成的具名路由。群里那份 messages.jsonl 本来就是接口，
  * 这里只是给它开一扇 HTTP 的门。
  */
-import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, rmSync, readdirSync, statSync } from 'node:fs'
+import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, rmSync, readdirSync, statSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { spawn } from 'node:child_process'

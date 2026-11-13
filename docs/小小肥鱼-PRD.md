@@ -1,6 +1,6 @@
 # 小小肥鱼 · PRD
 
-> 状态：**草稿 v1.0.47（2026-11-13）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。
+> 状态：**草稿 v1.0.48（2026-11-13）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。
 > 上游：[立项备忘](archive/小小肥鱼-立项备忘-2026-11-08.md)（**他的原话**，已冻结不改；三条硬要求已吸收进 §1）
 > 配套：[自主回合.md](自主回合.md)（G1 的上游能力，不是本 PRD 的验收项）
 > 改动记录：[PRD-CHANGELOG.md](PRD-CHANGELOG.md) —— 每一版改了哪几处、为什么。本文只放当前结论。
@@ -808,7 +808,7 @@ lil-whale\state  → junction → pool\state
 
 **问题**：开 / 停 / 体检各有脚本，每加一条鱼就多一套参数。他原话："随着鱼越来越多，做一个启动器是迫切之选。否则启动脚本（正常的，检修的，关闭的）会越来越多。"
 
-**做法**：`scripts\fish.ps1` 是唯一实现，命令 `list` / `up` / `down` / `doctor` / `help`；成员从 `pool\members.json` 读，**新鱼进名册即被认识**。`launch.ps1` / `stop.ps1` 退化成翻译参数的薄壳 —— 桌面 `.cmd` 和 `start-whale.ps1` 一个字不用改。
+**做法**：`scripts\fish.ps1` 是唯一实现，命令 `list` / `up` / `down` / `doctor` / `help`；成员从 `pool\members.json` 读，**新鱼进名册即被认识**。`launch.ps1` / `stop.ps1` / `start-whale.ps1` / `watchman.ps1` 一度退化成薄壳/兜底，2026-11-13 全部归档到 `archive\legacy-scripts-2026-11-13\` —— `fish.ps1` 是唯一入口。
 
 **判据**：`fish.ps1 list` 的端口 / 状态 / 心跳与实际一致；`up` 对已在跑的只开窗、不起进程；`down` 只认「node.exe 第一个参数是 dsh 的 bin.js」的进程，再按 `--profile` 区分 —— 不按进程名杀（会带走别人的 node），也不按"命令行里出现某段字"杀（第一版把自己的 shell 杀了）。
 
@@ -997,7 +997,7 @@ lil-whale\state  → junction → pool\state
 | 位置 | 原来 | 后果 | 现在 |
 |---|---|---|---|
 | `环境.md` 模板的 `from` / `to` 行 | 逐个列 `lee`/`whale`/`fabian` | 名册一变，纸就自相矛盾（小鱼丸报的"第 66 行漏了 whale"） | 改成"见下面那张名册表"，不再列 id |
-| `launch.ps1` / `stop.ps1` 的 `-Target` | `ValidateSet('all','lee','whale')` | 新鱼直接参数非法 | 任意成员键，由 `fish.ps1` 校验 |
+| `launch.ps1` / `stop.ps1` 的 `-Target` | `ValidateSet('all','lee','whale')` | 新鱼直接参数非法 | 已随脚本归档；`fish.ps1` 按名册校验任意成员键 |
 | `install.ps1` 初始化 `pins.json` | `lee = …; whale = …` | 装第二条鱼时把名册写成两条老鱼（A.29 事故的一半） | 用 `-ParentMemberId` / `-ChildMemberId` 的真实键 |
 | UI 私聊文件名 / 未读口径 / `mine` 判断 | 字面量 `'fabian'` | 人类成员换 id 就错 | 服务端从名册取 `humanId`，客户端用它 |
 | 面板 `@` 列表 / 设置页成员卡 / 忙态 | 写死 `['lee','whale']` | 新鱼不出现（A.32） | 由 `config.names`（= 名册）遍历 |
@@ -1173,4 +1173,19 @@ lil-whale\state  → junction → pool\state
 
 **未做**：巡守（主 dsh）不走这套（它就是窗口本身）；进程唯一是"起之前看"，不是锁——真并发要等 up-all.lock 覆盖到单条 up（目前只有批量启动抢锁）。
 
+### A.48 巡守多鱼化：一条鱼一份账（2026-11-13）
 
+**问题**：08:40 那件事之后，叫醒判据改成了心跳，但**判据里的成员仍写死 `whale`**：`presenceAgeOf('whale')`、`say('lee','whale',…)`、`PLAN_FILE = join(HER_HOME,'plan',…)`、`watchState` 全局单份。第二条鱼（小鱼丸）的计划永远走不到，她的唤醒额度也和鲸鱼混在一个计数器里。他 11:14 的原话："三件没做的事可以做了。"
+
+**做法**（`plugin/dsh-group/lib/index.js`）：
+- 新增 `watchedMembers()`：名册里 `kind: fish` 且 `role ≠ watcher` 的成员 —— 巡守不叫醒自己。
+- `watchState` 从单份改成 `{ day, members: { <键>: { wakes, fails, planFired, skipped, triedWid, lastFresh, pendingWake, lastTry } } }`；旧格式（只服务 whale 的时代）读进来时迁到 `whale` 名下，不让上限一夜清零。
+- 每条鱼各自：`planFileOf(member)` 读她自己家的 `plan\wake-plan.json`；`dueTasks(member)` 读她自己 `dshHome\storages\schedule.json`；`claimPlanDelivery(member, job)` 的 `.claim` 写她自己家的 `plan\claims\`；`startHer(member)` 传 `-Member <键>`。
+- 原来 `watchmanTick` 的函数体抽成 `watchOne(member, st)`（机械替换，逻辑不动）；新的 `watchmanTick` 只做两件事：换日、遍历名册。一条鱼抛错只记一行 `watch-member-failed`，不影响别的鱼。
+- 日志行都带 `to=<键>`；`wake-try` / `woke` / `wake-skip` 的 `wid` 仍是 `wl-<HHMM>-<jobKey>`（同一 id 才能 join）。
+
+**`wake-whale.ps1` 多鱼化**：参数 `-Member`（默认 `whale` 兼容旧调用）；家、profile、端口、心跳路径全从名册取；**僵尸分支按模式分叉**：`mode=window` 才开浏览器；无人值守时只记 `zombie-unattended` 并退出 1 —— 开窗会撞 writer（A.47）。`-DryRun` 保留。
+
+**判据**：①`wake-whale.ps1 -Member <鱼> -DryRun` 能读出 `member=/hb-age=/mode=`；②巡守日志里每条鱼的 `woke` 行都带 `to=<键>`，`wakes` 各算各的；③无人值守的鱼被叫醒时不开浏览器（`mode=unattended` 下不出现 `pushed-browser`）；④名册里加第三条鱼不用改代码。
+
+**未做**：`watchState` 仍是单文件（巡守只有主进程一个写者，多进程写会 lost update）；每条鱼的唤醒额度目前各自 `perHour 12 / perDay 60`，总量没有封顶（D4-1 待拍板）。

@@ -39,7 +39,7 @@ pwsh -File scripts\fish.ps1 up-main / down-main  # 主 dsh（down-main 有鱼在
 pwsh -File scripts\fish.ps1 doctor | refresh <鱼|all>
 ```
 
-`launch.ps1` / `stop.ps1` 是它的薄壳（参数翻译后转调），留着是为了老命令行和文档不失效；新东西请直接写 `fish.ps1`。
+`launch.ps1` / `stop.ps1` / `start-whale.ps1` / `watchman.ps1` 已在 2026-11-13 归档到 `archive\legacy-scripts-2026-11-13\`——同一个动作只留一个入口，新东西请直接写 `fish.ps1`。
 
 - 已经在跑的端口不会重复起（用 TCP 连一下判断，不用 `Get-NetTCPConnection` —— 它在某些沙箱里静默返回空）。
 - 子进程用 `Start-Process -WindowStyle Hidden` + 输出重定向离开，所以**父窗口退出、孩子继续跑**。
@@ -51,10 +51,7 @@ pwsh -File scripts\fish.ps1 doctor | refresh <鱼|all>
 | 文件 | 谁调它 |
 | --- | --- |
 | `fish.ps1` | 人 + 鱼塘（`/pond/api/action`）+ 巡守自启动（`up all -NoBrowser`） |
-| `start-whale.ps1` | `watchman.ps1`。输出约定：`already-awake` / `awake` / `failed` |
-| `wake-whale.ps1` | `dsh-group` 插件的巡守定时器（`HER_WAKER`）：每 60 秒看一次，到点且她关着窗就跑它 |
-| `watchman.ps1` | **手工兜底的老巡守，日常不必跑**。现在门由 `dsh-group` 插件推（见上一行）。主 dsh 不常开时才需要它：`pwsh -File scripts\watchman.ps1`（旧的双击入口已挪到 `archive\legacy-scripts-2026-11-13\watchman-run.cmd`） |
-| `stop.ps1` / `launch.ps1` | `fish.ps1` 的薄壳；直接调也认老参数 |
+| `wake-whale.ps1` | `dsh-group` 插件的巡守定时器（`HER_WAKER`）：每 60 秒看一次，按名册逐条鱼判断；`-Member <键>` 指定叫谁 |
 | `doctor.ps1` | `fish.ps1 doctor`、鱼塘「检修」、`release-check.ps1` |
 | `install.ps1` / `release-check.ps1` / `pack.ps1` | 装、验、打包 |
 
@@ -65,7 +62,7 @@ pwsh -File scripts\fish.ps1 doctor | refresh <鱼|all>
 | 大肥鱼 | `<你的 dsh 家>\logs\web-latest.log` / `.err.log` |
 | 小肥鱼 | `<小肥鱼的家>\dsh-home\logs\web-latest.log` / `.err.log` |
 | 每条鱼的起停账 | `pool\state\runs\<成员>.log` |
-| 巡守（插件版） | `pool\state\watchman.log`；脚本版兜底只打控制台（`scripts\watchman.ps1` 不落日志文件） |
+| 巡守（插件版） | `pool\state\watchman.log`（多鱼化后每行带 `to=<键>`） |
 
 ## 旧脚本去哪了
 
@@ -85,4 +82,4 @@ pwsh -File scripts\fish.ps1 doctor | refresh <鱼|all>
 
 1. **别用命令行里出现的字符串判断"某进程在不在"**：搜 `watchman.ps1` 会把任何一个正在读这段文字的 pwsh（包括你排障时敲的那条命令）都算成巡守。现在巡守自己往 `logs\watchman.pid` 写 PID，只认这个文件。
 2. **别套两层 pwsh**：`Start-Process pwsh -Command "pwsh -File x.ps1"` 会多出一个没人管的父进程。要跑脚本就用 `-Command "& 'x.ps1'"`。
-3. **杀进程要反过来收紧**：`stop.ps1` 只认「`node.exe` 的**第一个参数**就是 `bin.js`」的进程，再看参数里有没有 `--profile whale`。只搜「命令行里出现过这两个词」的话，会把正在读这两个词的 shell 当成鱼杀掉 —— 测试时真撞上了。
+3. **杀进程要反过来收紧**：`fish.ps1` 的 `down` 只认「`node.exe` 的**第一个参数**就是 `bin.js`」的进程，再看参数里有没有 `--profile <鱼>`。只搜「命令行里出现过这两个词」的话，会把正在读这两个词的 shell 当成鱼杀掉 —— 测试时真撞上了。

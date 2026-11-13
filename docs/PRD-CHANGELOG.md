@@ -3,6 +3,15 @@
 > 本文件只记「哪一版改了哪几处、为什么改」。当前结论都在 [小小肥鱼-PRD.md](小小肥鱼-PRD.md) 里，那边不背历史。
 > 自 v0.3.5 起从 PRD 头部搬到这里（此前几块原样搬出，未改写）。v1.0 是整篇重写。
 
+## v1.0.48（2026-11-13）
+
+- **巡守多鱼化（PRD A.48）**：`watchedMembers()`（名册里 kind=fish 且 role≠watcher）；`watchState` 改成 `{day, members:{<键>:{wakes,fails,planFired,skipped,triedWid,lastFresh,pendingWake,lastTry}}}`（旧格式迁到 whale 名下）；`planFileOf(member)` / `dueTasks(member)` / `claimPlanDelivery(member, job)` / `startHer(member)`；`watchmanTick` 拆成 `watchOne(member, st)` + 遍历名册。
+- **`wake-whale.ps1` 多鱼化**：新增 `-Member`（默认 whale 兼容），家/profile/端口/心跳路径全从名册取；僵尸分支按模式分叉——`mode=window` 才开浏览器，无人值守只记 `zombie-unattended` 并退出 1（开窗会撞 writer）。
+- **鱼塘「打开」守卫**：无人值守时不直接开窗，提示"先休眠再打开、看完点回无人值守"（`client build v29 · pond-open-guard`）。
+- **启停脚本收拢**：`launch.ps1` / `stop.ps1` / `start-whale.ps1` / `watchman.ps1` 归档到 `archive\legacy-scripts-2026-11-13\`；`doctor.ps1` 两处文案改指 `fish.ps1`。
+- **修 `renameSync is not defined`**：UI 插件 fs 导入缺 `renameSync`（`writePondSettings` 用到），勾选自启动开关会报"开关没保存"。
+- 现场：两条鱼被我早前 kill job 带走后，用 `fish.ps1 up` 无窗起回（3082/3083，`mode: unattended`，心跳 0s）。
+
 ## v1.0.47（2026-11-13）
 
 - **无人值守设为默认（他 10:56 拍板）**：`fish.ps1` 新增 `-Window`；小鱼 `up` 默认无窗（无人值守），巡守仍开窗。要看窗用 `maintain`，看完 `restore`。

@@ -68,7 +68,7 @@ if ($Cfg.ConfigFound) {
 if (Test-Port $Cfg.HerPort) {
   Add-Row '她的端口' 'OK' ("127.0.0.1:{0} 通" -f $Cfg.HerPort)
 } else {
-  Add-Row '她的端口' 'FAIL' ("127.0.0.1:{0} 不通" -f $Cfg.HerPort) ("NEXT: 起她的窗：pwsh -File scripts\launch.ps1 -Target whale（然后看 dsh-home\logs\web-latest.err.log）")
+  Add-Row '她的端口' 'FAIL' ("127.0.0.1:{0} 不通" -f $Cfg.HerPort) ("NEXT: 起她：pwsh -File scripts\fish.ps1 up whale（然后看 dsh-home\logs\web-latest.err.log）")
 }
 
 if ($IncludeLee) {
@@ -362,7 +362,7 @@ if (Test-Path -LiteralPath $closeLog) {
   $last = Tail-Line $closeLog
   Add-Row '窗口留痕' 'OK' ('close.log 最近：' + $last)
 } else {
-  Add-Row '窗口留痕' 'WARN' 'logs\close.log 不存在（开门/关门的账还没记过：launch.ps1 只在真开了浏览器时记 open）'
+  Add-Row '窗口留痕' 'WARN' 'logs\close.log 不存在（开门/关门的账还没记过：fish.ps1 只在真开窗/真停时才记 open/close）'
 }
 
 # 9. 全鱼：每条鱼一行（端口 / 心跳 / 启动痕迹 / 名册）

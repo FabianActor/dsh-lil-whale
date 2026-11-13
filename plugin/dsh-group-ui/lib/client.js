@@ -2542,6 +2542,8 @@ function Bubble({ config, message, onMention, animate = false }) {
       upHint: '无窗起，会话由 host 自己挂上（无人值守）',
       down: '休眠',
       open: '打开',
+      openHint: '打开她的 WebUI。无人值守时先休眠，否则会撞 writer。',
+      openBlocked: '无人值守时不能直接开窗——一段会话只能一个 writer。先点「休眠」，再「打开」，看完点「回无人值守」。',
       running: '在跑',
       stopped: '没开',
       port: '端口',
@@ -2748,7 +2750,11 @@ function Bubble({ config, message, onMention, animate = false }) {
         [load],
       )
 
-      const openFish = useCallback(async (key) => {
+      const openFish = useCallback(async (key, mode) => {
+        if (mode === 'unattended') {
+          setError(POND.openBlocked)
+          return
+        }
         setOpenBusy(key)
         try {
           const response = await fetch(`/pond/api/url?key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } })
@@ -2964,7 +2970,7 @@ function Bubble({ config, message, onMention, animate = false }) {
               item.portOpen
                 ? h(
                   'button',
-                  { onClick: () => openFish(item.key), disabled: openBusy === item.key, style: pondButtonStyle(false) },
+                  { onClick: () => openFish(item.key, item.mode?.mode), disabled: openBusy === item.key, style: pondButtonStyle(false), title: POND.openHint },
                   POND.open,
                 )
                 : null,
@@ -3087,7 +3093,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[lil-whale-group-ui] client build v28 · pond-maintain:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[lil-whale-group-ui] client build v29 · pond-open-guard:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('lil-whale-group-keyframes')) {
           const style = document.createElement('style')
