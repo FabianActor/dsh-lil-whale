@@ -199,6 +199,50 @@ if (Test-Path -LiteralPath $envTemplate) {
   }
 }
 
+# 4e. writer 唯一：一段会话只能一个进程写（PRD A.47）
+#     两个进程各自 resume 同一段会话，第二个会拿到 session/writer-held —— 它不会炸 host，
+#     但会静默地"起不来"，看起来像"点了唤醒没反应"。判据两样：
+#       ①同一个 profile 出现两个以上 node 进程（进程级的抢写）；
+#       ②日志里出现过 session/writer-held（历史证据，可能是刚才那次）。
+try {
+  $dupes = @()
+  $byProfile = @{}
+  $nodeProcs = @(Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -match 'bin\.js' })
+  foreach ($proc in $nodeProcs) {
+    if ($proc.CommandLine -match '--profile\s+(\S+)') {
+      $p = $Matches[1]
+      if (-not $byProfile.ContainsKey($p)) { $byProfile[$p] = @() }
+      $byProfile[$p] = @($byProfile[$p]) + $proc.ProcessId
+    }
+  }
+  foreach ($k in $byProfile.Keys) {
+    if (@($byProfile[$k]).Count -gt 1) { $dupes += ('{0}×{1}' -f $k, @($byProfile[$k]).Count) }
+  }
+  $held = @()
+  if ($Cfg.MembersFile -and (Test-Path -LiteralPath $Cfg.MembersFile)) {
+    $mjW = Get-Content -LiteralPath $Cfg.MembersFile -Raw -Encoding utf8 | ConvertFrom-Json
+    foreach ($p in $mjW.members.PSObject.Properties) {
+      $m = $p.Value
+      if (-not $m.dshHome) { continue }
+      $logDir = Join-Path ([string]$m.dshHome) 'logs'
+      if (-not (Test-Path -LiteralPath $logDir)) { continue }
+      foreach ($logFile in @(Get-ChildItem -LiteralPath $logDir -Filter '*.log' -File -ErrorAction SilentlyContinue | Select-Object -First 8)) {
+        $hit = Select-String -LiteralPath $logFile.FullName -Pattern 'writer-held' -SimpleMatch -ErrorAction SilentlyContinue | Select-Object -Last 1
+        if ($hit) { $held += ('{0}/{1}' -f $p.Name, $logFile.Name) }
+      }
+    }
+  }
+  if ($dupes.Count) {
+    Add-Row 'writer 唯一' 'FAIL' ('同一个 profile 有多个进程：' + ($dupes -join '、')) 'NEXT: fish.ps1 down <键> 再 up；两个进程抢同一段会话会报 session/writer-held'
+  } elseif ($held.Count) {
+    Add-Row 'writer 唯一' 'WARN' ('日志里出现过 writer-held：' + (($held | Select-Object -Unique) -join '、')) 'NEXT: 一次只起一份（fish.ps1 或鱼塘）；别同时开两个窗口连同一段会话'
+  } else {
+    Add-Row 'writer 唯一' 'OK' '每个 profile 只有一个进程，日志里没有 writer-held'
+  }
+} catch {
+  Add-Row 'writer 唯一' 'WARN' ('核不了：' + $_.Exception.Message)
+}
+
 # 4b. 旧段：不在名册里、却还在被写的会话
 #     搬段之后最容易出的不是丢数据，是"旧标签页还开着"——他在那儿打字，话进了退休的那一段。
 #     那段现在既发不出群消息（group_say 要名册里有）、也唤不醒（tick 只叫名册里的），

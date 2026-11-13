@@ -375,6 +375,7 @@ const POND_SCRIPTS = join(config().repoRoot, 'scripts')
 const FISH_PS1 = join(POND_SCRIPTS, 'fish.ps1')
 const DOCTOR_PS1 = join(POND_SCRIPTS, 'doctor.ps1')
 const RUNS_DIR = join(POOL_STATE, 'runs')
+const MODE_DIR = join(POOL_STATE, 'mode')
 const POND_TCP_TIMEOUT_MS = 700
 const POND_ACTION_TIMEOUT_MS = 150_000
 
@@ -389,6 +390,22 @@ function pondMembers() {
   return Object.fromEntries(
     Object.entries(MEMBERS).map(([key, m]) => [key, { name: m.name, kind: m.kind, role: m.kind === 'human' ? 'human' : 'member' }]),
   )
+}
+
+/**
+ * 这条鱼是怎么起的（fish.ps1 写的模式账，PRD A.47）：
+ *   unattended = 无窗起、会话由 host 自己挂上；window = 开着浏览器窗；null = 不知道（旧进程或别人起的）。
+ */
+function modeOf(key) {
+  const file = join(MODE_DIR, `${key}.json`)
+  if (!existsSync(file)) return null
+  try {
+    const raw = JSON.parse(readFileSync(file, 'utf8'))
+    const mode = typeof raw?.mode === 'string' ? raw.mode : null
+    return { mode, at: typeof raw?.at === 'string' ? raw.at : null, port: Number(raw?.port) || null }
+  } catch {
+    return null
+  }
 }
 
 /** 端口开没开：连得上就是开着。连不上不代表"进程死了"，只代表这扇门没开。 */
@@ -555,6 +572,7 @@ async function pondStatus() {
       lastRun: run,
       heartbeat: presence,
       heartbeatAgeMs: presence?.ageMs ?? null,
+      mode: modeOf(key),
       canManage: member?.role !== 'watcher',
       url: portOpen ? pondUrlOf(member) : null,
     })
@@ -1239,17 +1257,14 @@ export function apply(ctx) {
         if (act === 'up') return runPwshScript(FISH_PS1, ['up', target, '-NoBrowser'])
         if (act === 'down') return runPwshScript(FISH_PS1, ['down', target, '-Yes'])
         if (act === 'maintain') {
-          // 检修 = 先体检、再启动，把体检结果和启动输出一起贴回页面。
-          // 不另开"可见控制台"：启动日志要 redirect 到 `web-latest.log`（token 只印在那里），
-          // 一个 redirect 的控制台窗口是空白的，看着像卡住了 —— 不如把输出贴到页面上。
-          const doctor = await runPwshScript(DOCTOR_PS1, [], 90_000)
-          const up = await runPwshScript(FISH_PS1, ['up', target, '-NoBrowser'])
-          return {
-            ...up,
-            code: up.code,
-            seconds: Math.round((doctor.seconds + up.seconds) * 10) / 10,
-            output: `--- 体检 ---\n${doctor.output}\n\n--- 启动 ---\n${up.output}`.slice(-6000),
-          }
+          // 检修（2026-11-13 他定的语义）：先休眠，再开一扇窗让人看。
+          // 为什么必须"先休眠"：一段会话只能一个 writer，无人值守挂着 agent 时再起第二个会被拒（A.47）。
+          // 开窗动作在 fish.ps1 里（浏览器由它打开），这里只把输出贴回页面。
+          return runPwshScript(FISH_PS1, ['maintain', target])
+        }
+        if (act === 'restore') {
+          // 回无人值守：关掉窗那份，无窗起，会话由 host 自己挂上（A.45）。
+          return runPwshScript(FISH_PS1, ['restore', target])
         }
         return { code: -1, timedOut: false, seconds: 0, output: `unknown-action ${act}` }
       }
@@ -1275,7 +1290,7 @@ export function apply(ctx) {
         return
       }
 
-      if (!['up', 'down', 'maintain'].includes(action)) {
+      if (!['up', 'down', 'maintain', 'restore'].includes(action)) {
         sendJson(res, 400, { error: 'unknown-action', action })
         return
       }

@@ -1,6 +1,6 @@
 # 小小肥鱼 · PRD
 
-> 状态：**草稿 v1.0.45（2026-11-13）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。
+> 状态：**草稿 v1.0.46（2026-11-13）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。
 > 上游：[立项备忘](archive/小小肥鱼-立项备忘-2026-11-08.md)（**他的原话**，已冻结不改；三条硬要求已吸收进 §1）
 > 配套：[自主回合.md](自主回合.md)（G1 的上游能力，不是本 PRD 的验收项）
 > 改动记录：[PRD-CHANGELOG.md](PRD-CHANGELOG.md) —— 每一版改了哪几处、为什么。本文只放当前结论。
@@ -1145,5 +1145,25 @@ lil-whale\state  → junction → pool\state
 3. **在翻历史时，在"回到底部"按钮左边写一句「底部有了新消息」**——这是唯一值得说的一件事：底下有东西，你没看见。
 
 配套：翻历史时**不替人清未读**（`markRead` 只在贴底时触发），否则那句提示会自己消失；"到底了没有"用消息列表最后一条 ts 判断，不用未读数（未读是服务器口径，可能包含别的窗口看过的）。
+
+## 附录 A.47 一段会话一个 writer：三处一起守（2026-11-13）
+
+**现象**：无人值守的鱼已经挂着会话，再从鱼塘点「检修」/用浏览器开第二个窗，第二个进程 resume 同一段会话时拿到 `session/writer-held`。它不炸 host、不写错误日志，只表现为"点了没反应"。
+
+**根因**：dsh 的会话有唯一写入者（`dsh-api-session-controller` 的 `session/writer-held`）。同一 host 内多个客户端没问题（`agents.get(sessionId)` 会返回已有 agent）；**跨进程**才会抢写。
+
+**三处一起守**：
+1. **进程唯一**：`fish.ps1` 的 `Start-Fish` 起之前按 `--profile` 找 node 进程；已有别的进程（端口可能不同）就拒绝，提示先 down。
+2. **会话唯一**：`scripts\enable-unattended.mjs` 写 profile patch 前扫所有 profile 的 `resumeSessionId` 与 `pins.json`；同一段会话挂在两个名字下就拒绝。
+3. **可观测**：`doctor.ps1` 的「writer 唯一」（同 profile 多进程 = FAIL；日志里出现过 `writer-held` = WARN）；加上 `fish.ps1` 写的**模式账** `pool\state\mode\<键>.json`（`{mode: unattended|window, port, at}`），鱼塘和脚本都不用再猜"这扇窗是谁开的"。
+
+**「检修」的语义（他 2026-11-13 拍板）**：先休眠 → 开一扇窗 → 看完关窗 → 回无人值守。
+- `fish.ps1 maintain <键>` 做前两步，并打印后两步怎么做；
+- `fish.ps1 restore <键>` 做最后一步（窗开着会先停掉再无窗起）；
+- 鱼塘里窗开着时，卡片上的「检修」变成「回无人值守」。
+
+**判据**：①同一 profile 永远只有一个 node 进程（doctor「writer 唯一」OK）；②日志里没有新的 `session/writer-held`；③`mode` 文件与现场一致（无窗 = `unattended`、开窗 = `window`、停掉 = 文件消失）；④检修之后 `restore` 能回到无人值守（心跳继续、没有窗）。
+
+**未做**：巡守（主 dsh）不走这套（它就是窗口本身）；进程唯一是"起之前看"，不是锁——真并发要等 up-all.lock 覆盖到单条 up（目前只有批量启动抢锁）。
 
 

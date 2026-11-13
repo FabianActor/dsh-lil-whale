@@ -2533,6 +2533,13 @@ function Bubble({ config, message, onMention, animate = false }) {
       allDown: '全部休眠',
       up: '唤醒',
       maintain: '检修',
+      restore: '回无人值守',
+      modeLabel: '模式',
+      modeUnattended: '无人值守',
+      modeWindow: '开着窗',
+      modeUnknown: '模式未知',
+      maintainHint: '先休眠，再开一扇窗让你看；看完关窗，再点「回无人值守」',
+      upHint: '无窗起，会话由 host 自己挂上（无人值守）',
       down: '休眠',
       open: '打开',
       running: '在跑',
@@ -2556,6 +2563,12 @@ function Bubble({ config, message, onMention, animate = false }) {
       autoStartHint: '下次启动主 dsh 生效：巡守起来 8 秒后按名册逐条唤醒，不开浏览器窗。',
       autoStartFailed: '开关没保存：',
       generation: (n) => (n <= 0 ? '根' : `第 ${n} 代`),
+      modeText: (mode) => {
+        const value = mode?.mode ?? null
+        if (value === 'unattended') return POND.modeUnattended
+        if (value === 'window') return POND.modeWindow
+        return POND.modeUnknown
+      },
     }
 
     // 谱系示例的数据。渲染走的就是下面同一套卡片与同一套排序，不是另捏一个界面。
@@ -2905,6 +2918,7 @@ function Bubble({ config, message, onMention, animate = false }) {
             h('span', null, `${POND.port} ${item.port ?? '—'}`),
             h('span', null, item.portOpen ? POND.running : POND.stopped),
             h('span', null, `${POND.heartbeat} ${hbText}`),
+            h('span', { title: item.mode?.at ?? '' }, `${POND.modeLabel} ${POND.modeText(item.mode)}`),
             parentItem ? h('span', null, `父代 ${parentItem.name}`) : null,
           ),
           item.lastRun
@@ -2928,14 +2942,20 @@ function Bubble({ config, message, onMention, animate = false }) {
               { style: { display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 2 } },
               h(
                 'button',
-                { onClick: () => act('up', item.key), disabled: busyAny, style: pondButtonStyle(true) },
+                { onClick: () => act('up', item.key), disabled: busyAny, style: pondButtonStyle(true), title: POND.upHint },
                 busy === `up:${item.key}` ? '…' : POND.up,
               ),
-              h(
-                'button',
-                { onClick: () => act('maintain', item.key), disabled: busyAny, style: pondButtonStyle(false) },
-                busy === `maintain:${item.key}` ? '…' : POND.maintain,
-              ),
+              item.mode?.mode === 'window'
+                ? h(
+                  'button',
+                  { onClick: () => act('restore', item.key), disabled: busyAny, style: pondButtonStyle(false), title: POND.restore },
+                  busy === `restore:${item.key}` ? '…' : POND.restore,
+                )
+                : h(
+                  'button',
+                  { onClick: () => act('maintain', item.key), disabled: busyAny, style: pondButtonStyle(false), title: POND.maintainHint },
+                  busy === `maintain:${item.key}` ? '…' : POND.maintain,
+                ),
               h(
                 'button',
                 { onClick: () => act('down', item.key), disabled: busyAny, style: pondButtonStyle(false) },
@@ -3067,7 +3087,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[lil-whale-group-ui] client build v27 · group-unread:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[lil-whale-group-ui] client build v28 · pond-maintain:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('lil-whale-group-keyframes')) {
           const style = document.createElement('style')

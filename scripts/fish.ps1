@@ -9,6 +9,8 @@
 #   pwsh -File fish.ps1 up all             全开（巡守那条 + 所有鱼，每条鱼各开一个窗）
 #   pwsh -File fish.ps1 up all -BrowserMainOnly  全开，但只给主 dsh 开窗（Run All Whales.cmd 用）
 #   pwsh -File fish.ps1 down whale         停一条
+#   pwsh -File fish.ps1 maintain whale     检修：先停，再开一扇窗（看完关窗，再回无人值守）
+#   pwsh -File fish.ps1 restore whale      回无人值守：无窗起（会话由 host 自己挂上）
 #   pwsh -File fish.ps1 down all -Yes      全停（含主 dsh；Stop All Whales.cmd 用）
 #   pwsh -File fish.ps1 up-main            启动主 dsh（快捷方式用；已在跑就直接开浏览器）
 #   pwsh -File fish.ps1 down-main          关闭主 dsh（还有鱼在跑时拒绝，除非 -Force）
@@ -17,6 +19,11 @@
 #
 # 选项：-NoBrowser（不开浏览器） -BrowserMainOnly（只给主 dsh 开窗） -Yes（不停下来问）
 #       -Force（down-main 带着鱼一起关） -By/-Why（记账用） -Port（覆盖端口）
+#
+# 两种"在跑"：
+#   unattended = 无窗起，会话由 dsh-agent-loop 在 host 启动时自己挂上（PRD A.45）
+#   window     = 开着浏览器窗（会话由客户端挂上；一段会话只能一个 writer）
+# 模式记在 pool\state\mode\<键>.json —— 不记的话，鱼塘和脚本都只能猜"这扇窗是谁开的"。
 #
 # 退出码：0 = 都成了；1 = 有一项没成（原因在上面）。
 param(
@@ -163,6 +170,42 @@ function Get-HeartbeatAgeSec($member) {
   } catch { return $null }
 }
 
+# 模式账：这轮是谁开的、有没有窗。文件不在 = 不知道（旧进程或别人起的）。
+function Get-ModeFile($member) {
+  return (Join-Path $Cfg.PoolState ("mode\{0}.json" -f $member.Key))
+}
+
+function Get-Mode($member) {
+  $file = Get-ModeFile $member
+  if (-not (Test-Path -LiteralPath $file)) { return $null }
+  try { return (Get-Content -LiteralPath $file -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { return $null }
+}
+
+function Set-Mode($member, [string]$mode, [int]$port) {
+  $file = Get-ModeFile $member
+  New-Item -ItemType Directory -Force -Path (Split-Path $file) | Out-Null
+  $obj = [ordered]@{ key = $member.Key; mode = $mode; port = $port; at = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss') }
+  Set-Content -LiteralPath $file -Value ($obj | ConvertTo-Json -Compress) -Encoding UTF8
+}
+
+function Clear-Mode($member) {
+  Remove-Item -LiteralPath (Get-ModeFile $member) -Force -ErrorAction SilentlyContinue
+}
+
+# 同一个 profile 只许一个进程：两个进程会各自去 resume 同一段会话，
+# 第二个拿到的是 session/writer-held（PRD A.47）。端口只是"有没有人监听"，
+# 端口没开也可能已经有一个正在启动/换了端口的进程 —— 所以按 profile 找。
+function Get-ProfileProcesses($member) {
+  if (-not $member.Profile) { return @() }
+  $pat = "--profile\s+" + [regex]::Escape($member.Profile) + "(\s|$)"
+  @(Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue | Where-Object {
+    $cl = $_.CommandLine
+    if (-not $cl) { return $false }
+    if ($cl -notmatch 'bin\.js') { return $false }
+    return ($cl -match $pat)
+  })
+}
+
 function Write-FishWindowLog($member, [string]$Event) {
   if (-not $member.Home) { return }
   $dir = Join-Path $member.Home 'logs'
@@ -213,6 +256,7 @@ function Show-List {
       '端口' = $port
       '状态' = if ($up) { '在跑' } else { '没开' }
       '心跳' = if ($up) { Get-Heartbeat $m } else { '-' }
+      '模式' = if ($up) { $md = Get-Mode $m; if ($md) { $md.mode } else { '?' } } else { '-' }
       '角色' = $m.Role
       '家'   = $m.Home
     }
@@ -225,12 +269,21 @@ function Show-List {
 # ---------- up ----------
 function Start-Fish($member) {
   $port = Get-PortOf $member
+  if (-not (Test-Port $port)) {
+    $others = @(Get-ProfileProcesses $member)
+    if ($others.Count -gt 0) {
+      $ids = ($others | ForEach-Object { $_.ProcessId }) -join ', '
+      Write-Host ("{0}：已经有一个进程在跑（pid={1}，端口可能不是 {2}）—— 同一段会话只能一个 writer，先 down 再 up。" -f $member.Label, $ids, $port)
+      return $false
+    }
+  }
   if (Test-Port $port) {
     $hbAge = Get-HeartbeatAgeSec $member
     if ($null -ne $hbAge -and $hbAge -le 90) {
       # 已经在跑就不再开一次浏览器：重复 `up` 会开出第二个一模一样的窗口，
       # 看着像"一条鱼开了两个 webui"，其实是一条鱼、两扇窗（2026-11-12 他报的）。
       Write-Host ("{0}：已经在跑（{1}）：{2}" -f $member.Label, $port, (Get-Url $member))
+      if (-not (Get-Mode $member)) { Set-Mode $member 'unknown' $port }
       return $true
     }
     # 端口通但心跳 stale = 服务活着、会话没挂（08:40 那天的样子）。
@@ -240,6 +293,7 @@ function Start-Fish($member) {
     if (-not $NoBrowser) {
       Start-Process (Get-Url $member) | Out-Null
       Write-FishWindowLog $member 'open'
+      Set-Mode $member 'window' $port
     } else {
       Write-Host '（-NoBrowser：只起服务，不开窗；要挂上会话得进鱼塘点「打开」）'
     }
@@ -275,6 +329,9 @@ function Start-Fish($member) {
   if (-not $NoBrowser) {
     Start-Process (Get-Url $member) | Out-Null
     Write-FishWindowLog $member 'open'
+    Set-Mode $member 'window' $port
+  } else {
+    Set-Mode $member 'unattended' $port
   }
   return $true
 }
@@ -329,6 +386,7 @@ function Stop-Fish($member) {
   }
   Write-Host ("{0}：停了（{1} 已关闭）。" -f $member.Label, $port)
   Write-FishWindowLog $member 'close'
+  Clear-Mode $member
   return $true
 }
 
@@ -370,6 +428,8 @@ fish.ps1 -- 鱼群唯一的入口
   pwsh -File fish.ps1 down-main        关闭主 dsh（还有鱼在跑时拒绝，-Force 强行）
   pwsh -File fish.ps1 doctor           体检
   pwsh -File fish.ps1 refresh whale    重新生成环境.md（模板/名册/工具变了以后）
+  pwsh -File fish.ps1 maintain whale   检修：先停，再开窗（看完关窗 → restore）
+  pwsh -File fish.ps1 restore whale    回无人值守（无窗起，会话由 host 自己挂上）
   pwsh -File fish.ps1 help
 
 选项：-NoBrowser -BrowserMainOnly -Yes -Force -By <谁> -Why <为什么> -Port <n>
@@ -405,6 +465,61 @@ function Invoke-Down([string]$name) {
   return $okAll
 }
 
+# ---------- 检修 / 回无人值守 ----------
+# 检修 = 先停掉无人值守的那份，再开一扇窗让人看（PRD A.47）。
+# 为什么必须"先停"：一段会话只能一个 writer；无人值守已经挂着 agent 时再起第二个进程会被拒。
+function Invoke-Maintain([string]$name) {
+  $m = Get-Fish $name
+  if (-not $m) { throw "没有这条鱼：$name" }
+  if ($m.Role -eq 'watcher') { throw '巡守那条就是主 dsh，检修它请直接关窗/重启。' }
+  Write-Host ("{0}：检修 —— 先休眠。" -f $m.Label)
+  if (-not (Stop-Fish $m)) { return $false }
+  $saved = $NoBrowser
+  $NoBrowser = $false
+  try {
+    if (-not (Start-Fish $m)) { return $false }
+  } finally {
+    $NoBrowser = $saved
+  }
+  Write-Host ''
+  Write-Host '看完以后：'
+  Write-Host ("  关掉窗口 → pwsh -File scripts\fish.ps1 restore {0}" -f $m.Key)
+  Write-Host '  或者在鱼塘里点「回无人值守」。'
+  return $true
+}
+
+# 回无人值守：无窗起，会话由 host 自己挂上（A.45）。
+function Invoke-Restore([string]$name) {
+  $m = Get-Fish $name
+  if (-not $m) { throw "没有这条鱼：$name" }
+  if ($m.Role -eq 'watcher') { throw '巡守那条不适用无人值守。' }
+  if (Test-Port (Get-PortOf $m)) {
+    $md = Get-Mode $m
+    if ($md -and $md.mode -eq 'unattended') {
+      Write-Host ("{0}：本来就是无人值守（心跳 {1} 秒前）。" -f $m.Label, (Get-HeartbeatAgeSec $m))
+      return $true
+    }
+    # 窗开着（或不知道是谁起的）：先停，再按无人值守起 —— 一段会话只能一个 writer。
+    Write-Host ("{0}：先停掉现在这份（模式：{1}）。" -f $m.Label, $(if ($md) { $md.mode } else { '未知' }))
+    if (-not (Stop-Fish $m)) { return $false }
+  }
+  $saved = $NoBrowser
+  $NoBrowser = $true
+  try {
+    if (-not (Start-Fish $m)) { return $false }
+  } finally {
+    $NoBrowser = $saved
+  }
+  if (-not (Test-Port (Get-PortOf $m))) { return $false }
+  $age = Get-HeartbeatAgeSec $m
+  if ($null -ne $age -and $age -le 90) {
+    Write-Host ("{0}：回到无人值守（心跳 {1} 秒前）。" -f $m.Label, $age)
+  } else {
+    Write-Host ("{0}：进程起来了，但心跳还没挂上（{1}）—— 检查 profile patch 里的 agent-loop。" -f $m.Label, $(if ($null -eq $age) { '没有心跳' } else { "$age 秒前" }))
+  }
+  return $true
+}
+
 # ---------- 分发 ----------
 $ok = $true
 $locked = $false
@@ -426,6 +541,9 @@ try {
     'down'   { if (-not (Invoke-Down $Name)) { $ok = $false } }
     'stop'   { if (-not (Invoke-Down $Name)) { $ok = $false } }
     'refresh' { foreach ($m in (Resolve-Targets $Name)) { if (-not (Invoke-RefreshEnv $m)) { $ok = $false } } }
+    'maintain' { if (-not (Invoke-Maintain $Name)) { $ok = $false } }
+    'restore'  { if (-not (Invoke-Restore $Name)) { $ok = $false } }
+    'unattended' { if (-not (Invoke-Restore $Name)) { $ok = $false } }
     'up-main' {
       $m = Get-Fish 'lee'
       if (-not $m) { throw '名册里没有巡守那条鱼（lee）' }

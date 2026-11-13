@@ -120,6 +120,31 @@ const sessionId = String(sessions[0])
 const cwd = member.home || member.cwd || ''
 if (!cwd) die(`NEXT: 名册里 "${memberKey}" 没有 home/cwd`)
 
+// 一段会话只能挂在一个 profile 上（PRD A.47：一段会话一个 writer）。
+// 挂两次的后果不是"两份都能用"，而是第二个进程 resume 时拿到 session/writer-held。
+for (const [otherKey, other] of Object.entries(members)) {
+  if (otherKey === memberKey) continue
+  if (!other?.dshHome) continue
+  const otherProfile = other.profile || otherKey
+  const otherPatch = join(other.dshHome, 'profiles', otherProfile, 'cordis.patch.yml')
+  if (!existsSync(otherPatch)) continue
+  let otherText = ''
+  try {
+    otherText = readFileSync(otherPatch, 'utf8')
+  } catch {
+    continue
+  }
+  if (otherText.includes(`resumeSessionId: ${sessionId}`)) {
+    die(`NEXT: 这段会话已经挂在 "${otherKey}" 的 profile 上（${otherPatch}）—— 一段会话只能挂一处，先把它从那边摘掉`)
+  }
+}
+for (const [otherKey, ids] of Object.entries(pins ?? {})) {
+  if (otherKey === memberKey || !Array.isArray(ids)) continue
+  if (ids.map(String).includes(sessionId)) {
+    die(`NEXT: pins.json 里这段会话同时挂在 "${otherKey}" 名下 —— 一个名字一段会话，先理清名册`)
+  }
+}
+
 const block = [
   MARK_BEGIN,
   '# 无人值守：host 启动就 resume 这段会话、挂载 agent，不需要任何浏览器窗（PRD A.45）。',

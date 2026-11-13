@@ -3,6 +3,15 @@
 > 本文件只记「哪一版改了哪几处、为什么改」。当前结论都在 [小小肥鱼-PRD.md](小小肥鱼-PRD.md) 里，那边不背历史。
 > 自 v0.3.5 起从 PRD 头部搬到这里（此前几块原样搬出，未改写）。v1.0 是整篇重写。
 
+## v1.0.46（2026-11-13）
+
+- **A.47 一段会话一个 writer：三处一起守**。同一条会话被两个进程 resume 时，第二个拿到 `session/writer-held`，不炸 host、不报错，表现为"点了没反应"。
+- `fish.ps1`：起之前按 `--profile` 查重（端口不同也算）；新增 `maintain <键>`（先停再开窗）与 `restore <键>`（窗开着先停、再无窗起）；新增**模式账** `pool\state\mode\<键>.json`，`list` 多一列「模式」。
+- `scripts\enable-unattended.mjs`：写 patch 前扫所有 profile 的 `resumeSessionId` 与 `pins.json`，一段会话只许挂一个名字。
+- `doctor.ps1`：新增「writer 唯一」（同 profile 多进程 = FAIL；日志有 `writer-held` = WARN）。
+- 鱼塘：「检修」改成真检修（先休眠→开窗）；窗开着时按钮变「回无人值守」；卡片显示模式。
+- 用户视角：README 的鱼塘一节补按钮语义与「检修为什么要先休眠」（用户说明的草稿，发布前夕再写全）。
+
 ## v1.0.45（2026-11-13）
 
 - **无人值守查清并实测**：端口通 ≠ 窗开着，会话要等客户端打开才挂载 agent。dsh 自带办法：`dsh-agent-loop` 的 `agents: [{ id, resumeSessionId, cwd }]` 让 host 启动时 resume 会话、挂载 agent，不需要任何浏览器窗。在小鱼丸上验过：无窗口启动 → 心跳持续 → 群消息能叫醒她并回话。边界：一段会话只能有一个 writer（开窗与无人值守二选一）。他拍板选**无人值守**。PRD 新增 **A.45**。
