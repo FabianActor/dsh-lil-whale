@@ -14,6 +14,13 @@ import { config } from '../plugin/dsh-group/lib/config.js'
 const args = process.argv.slice(2)
 const dryRun = args.includes('--dry-run')
 const force = args.includes('--force')
+// 未知参数一律拒绝：2026-11-13 实测 `--help` 会真的重写 members.json（用当前会话 id 覆盖 lee.sessionId）。
+const mmUnknown = args.filter((a) => a.startsWith('--') && !['--dry-run', '--force'].includes(a))
+if (mmUnknown.length > 0) {
+  console.error('未知参数：' + mmUnknown.join(' '))
+  console.error('用法：node scripts\\migrate-members.mjs [--dry-run] [--force]')
+  process.exit(2)
+}
 
 const cfg = config()
 const file = cfg.membersFile

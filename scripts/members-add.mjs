@@ -48,6 +48,14 @@ function opt(name) {
   return v
 }
 const dryRun = args.includes('--dry-run')
+// 未知参数拒绝：以前写错一个参数名也会照常跑完（拿默认值把名册写坏）。
+const maKnown = ['--key', '--name', '--parent', '--port', '--home', '--dshHome', '--profile', '--configFile', '--status', '--bornAt', '--dry-run']
+const maUnknown = args.filter((a) => a.startsWith('--') && !maKnown.includes(a))
+if (maUnknown.length > 0) {
+  console.error('未知参数：' + maUnknown.join(' '))
+  console.error('用法：node scripts\\members-add.mjs --key <键> --name <名字> [--parent lee] [--port 3083] [--home <家>] [--dshHome <家>\\dsh-home] [--profile <p>] [--status experiment] [--dry-run]')
+  process.exit(2)
+}
 
 const key = opt('key')
 if (!key) die('缺 --key', '例如：node scripts\\members-add.mjs --key fishball --name 小鱼丸 --parent lee --port 3083 ...')

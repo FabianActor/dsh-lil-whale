@@ -13,15 +13,15 @@
 #   pwsh -File fish.ps1 restore whale      回无人值守：无窗起（会话由 host 自己挂上）
 #   pwsh -File fish.ps1 down all -Yes      全停（含主 dsh；Stop All Whales.cmd 用）
 #   pwsh -File fish.ps1 up-main            启动主 dsh（快捷方式用；已在跑就直接开浏览器）
-#   pwsh -File fish.ps1 down-main          关闭主 dsh（还有鱼在跑时拒绝，除非 -Force）
+#   pwsh -File fish.ps1 down-main          关闭主 dsh（还在跑的小鱼继续跑）
 #   pwsh -File fish.ps1 doctor             体检（现在只对配置里那条鱼）
 #   pwsh -File fish.ps1 help
 #
 # 选项：-Window（开窗起；默认无人值守） -NoBrowser（强制不开） -BrowserMainOnly（只给主 dsh 开窗） -Yes（不停下来问）
-#       -Force（down-main 带着鱼一起关） -By/-Why（记账用） -Port（覆盖端口）
+#       -By/-Why（记账用） -Port（覆盖端口）
 #
 # 两种"在跑"：
-#   unattended = 无窗起，会话由 dsh-agent-loop 在 host 启动时自己挂上（PRD A.45）
+#   unattended = 无窗起，会话由插件调 sessionController 自己挂上（PRD A.45 / A.54）
 #   window     = 开着浏览器窗（会话由客户端挂上；一段会话只能一个 writer）
 # 模式记在 pool\state\mode\<键>.json —— 不记的话，鱼塘和脚本都只能猜"这扇窗是谁开的"。
 #
@@ -35,8 +35,6 @@ param(
   [string]$By = 'fabian',
   [string]$Why = '',
   [int]$Port = 0,
-  # 只给 down-main 用：明知还有鱼在跑也关主 dsh（默认拒绝——"先停鱼再关 dsh"是推荐用法）。
-  [switch]$Force,
   # 起多条鱼时只给巡守（主 dsh）开浏览器窗，其余鱼后台起。Run All Whales.cmd 用。
   [switch]$BrowserMainOnly,
   # 检修用：起一个可见的控制台窗，日志一边显示一边 Tee 到 web-latest.log（token 在文件里才捞得到）。
@@ -467,15 +465,18 @@ function Stop-Fish($member) {
   # 端口一直是关的，账正常写下了。但若有人在 6 秒内又把进程拉起来，旧顺序会判
   # "没停干净"并跳过 close.log / Clear-Mode —— 那会让"确实停过"从账上消失。
   Write-FishWindowLog $member 'close'
-  Clear-Mode $member
   for ($i = 0; $i -lt 20; $i++) {
     Start-Sleep -Milliseconds 300
     if (-not (Test-Port $fishPort)) { break }
   }
   if (Test-Port $fishPort) {
-    Write-Host ("{0}：端口 {1} 又开了 —— 可能是有人马上重启了它（close 账已记）。" -f $member.Label, $fishPort)
-    return $true
+    # 没停干净：进程可能还活着，或刚被别人重新拉起。返回 false —— 调用方不该当成功。
+    # mode 账改成 unknown：文件里不能再写着"无人值守在跑"，那是纸面比现场乐观。
+    Set-Mode $member 'unknown' $fishPort
+    Write-Host ("{0}：端口 {1} 还开着 —— 没停干净（可能是有人马上重启了它）。" -f $member.Label, $fishPort)
+    return $false
   }
+  Clear-Mode $member
   Write-Host ("{0}：停了（{1} 已关闭）。" -f $member.Label, $fishPort)
   return $true
 }
@@ -516,14 +517,14 @@ fish.ps1 -- 鱼群唯一的入口
   pwsh -File fish.ps1 down whale       停一条
   pwsh -File fish.ps1 down all -Yes    全停（含主 dsh）
   pwsh -File fish.ps1 up-main          启动主 dsh（已在跑就打开它的 WebUI）
-  pwsh -File fish.ps1 down-main        关闭主 dsh（还有鱼在跑时拒绝，-Force 强行）
+  pwsh -File fish.ps1 down-main        关闭主 dsh（还在跑的小鱼继续跑）
   pwsh -File fish.ps1 doctor           体检
   pwsh -File fish.ps1 refresh whale    重新生成环境.md（模板/名册/工具变了以后）
   pwsh -File fish.ps1 maintain whale   检修：先停，再开窗（看完关窗 → restore）
   pwsh -File fish.ps1 restore whale    回无人值守（无窗起，会话由 host 自己挂上）
   pwsh -File fish.ps1 help
 
-选项：-NoBrowser -Window -BrowserMainOnly -Console -Yes -Force -By <谁> -Why <为什么> -Port <n>
+选项：-NoBrowser -Window -BrowserMainOnly -Console -Yes -By <谁> -Why <为什么> -Port <n>
 '@ | Write-Host
 }
 
@@ -610,7 +611,7 @@ function Invoke-Restore([string]$name) {
   if ($null -ne $age -and $age -le 90) {
     Write-Host ("{0}：回到无人值守（心跳 {1} 秒前）。" -f $m.Label, $age)
   } else {
-    Write-Host ("{0}：进程起来了，但心跳还没挂上（{1}）—— 检查 profile patch 里的 agent-loop。" -f $m.Label, $(if ($null -eq $age) { '没有心跳' } else { "$age 秒前" }))
+    Write-Host ("{0}：进程起来了，但心跳还没挂上（{1}）—— 看 pool\group\plugin.log 里的 session-mount-failed。" -f $m.Label, $(if ($null -eq $age) { '没有心跳' } else { "$age 秒前" }))
   }
   return $true
 }
@@ -622,7 +623,7 @@ $cmd = $Command.ToLower()
 $targetsAll = ($Name -eq '' -or $Name -eq 'all')
 if (($cmd -eq 'up' -or $cmd -eq 'start') -and $targetsAll) {
   if (-not (Enter-UpLock)) {
-    Write-Host '另一个批量启动正在进行（pool\state\up-all.lock），这次跳过。'
+    Write-Host '另一个批量启动正在进行（pool\state\up-all.lock）—— 结果：跳过（没有做事，不是失败）。'
     exit 0
   }
   $locked = $true

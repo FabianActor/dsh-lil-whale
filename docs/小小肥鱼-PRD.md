@@ -1,6 +1,6 @@
 # 小小肥鱼 · PRD
 
-> 状态：**v1.0.61（2026-11-13）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。 2026-11-13：**鱼塘布局落地**（一个根四层，A.55）、**无人值守成为默认**（A.45/A.54）、**计划表归每条鱼自己**（A.50）、**四个快捷方式实测通过**（A.56）；`docs\` 只留活跃文档，历史记录移入 `docs\archive\`。
+> 状态：**v1.0.62（2026-11-13）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。 2026-11-13：**鱼塘布局落地**（一个根四层，A.55）、**无人值守成为默认**（A.45/A.54）、**计划表归每条鱼自己**（A.50）、**四个快捷方式实测通过**（A.56）；`docs\` 只留活跃文档，历史记录移入 `docs\archive\`。
 > 上游：[立项备忘](archive/小小肥鱼-立项备忘-2026-11-08.md)（**他的原话**，已冻结不改；三条硬要求已吸收进 §1）
 > 配套：[自主回合.md](自主回合.md)（G1 的上游能力，不是本 PRD 的验收项）
 > 改动记录：[PRD-CHANGELOG.md](PRD-CHANGELOG.md) —— 每一版改了哪几处、为什么。本文只放当前结论。
@@ -1375,3 +1375,30 @@ lil-whale\state  → junction → pool\state
 **一条更正**：我一度以为 `close.log` 丢了 18:07 的 close 行，实际是看错了文件——大肥鱼的 `close.log` 在它自己的家（`C:\Users\Fabian\.dsh\logs\close.log`），不在小肥鱼家。`Stop-Fish` 的排序改动因此定位为**防御性**（防"6 秒内又被拉起"导致记账被跳过），不是修已发生的 bug。
 
 **判据**：关闭顺序看 `close.log` 三条时间；"鱼没被带走"看 pid 是否不变；"只开主窗"看 `mode` 账（lee=window，其余=unattended）。
+
+## 附录 A.58 第二批 bug 修复：真源、静默、假成功
+
+**2026-11-13 19:1x，全仓扫描（27 条）与安装文档复核（9 条）之后修的第二批。** 每一条都不是"代码不好看"，而是**错了以后看起来和对了差不多**：
+
+| 修的是什么 | 之前错的样子 | 现在 |
+|---|---|---|
+| 游标写回（`writeCursors`） | 两个写者各持一份快照，后写的把先写的推进**退回去** | 与磁盘现值逐通道取较大值（只许前进），再剪座位影子 |
+| `dmPeerOf` | peer 拼错就静默回退第一条鱼，200 写进别人的私聊 | 返回 null，三个调用点回 400 `bad-peer` |
+| `writePondSettings` | 整份重建 `{version,autoStartFish,updatedAt}`，点一下开关抹掉 `crashNotify` | 读-改-写，保留未知键 |
+| `Stop-Fish` | 端口还开着也 `return $true`（"假成功"）；mode 账在确认前就删 | 端口仍开 → `return $false` + `mode=unknown`；确认关闭后才 `Clear-Mode` |
+| `crashNotify` 的 `presenceAgeOf(member)` | 传成员对象，拼出 `[object Object].json`，`hb` 恒 null（报警判据退化） | 传 `member.key` |
+| 面板发群消息 | `group` 被清后不建目录，第一条 500；投影发送人写死 Fabian | 先 `mkdirSync`；发送人取名册 `LABEL[HUMAN_ID]` |
+| 面板发私聊 | 只写 jsonl，不写 `私聊-<a>__<b>.md`（宿主一直写） | 补上可读投影，格式与宿主逐字一致 |
+| token 正则 | 不含 `.` 和 `~`，某些 token 捞不到 URL | `[A-Za-z0-9._~\-]+` |
+| 重建器整本写 | `writeFileSync` 与宿主 append 抢窗口期 | tmp + rename 原子写；`--migrate` 同时迁移私聊投影 |
+| 两份 `config.js` 默认值 | 配置丢了会指回旧布局（`<repo>\..\lil-whale`、`lil-whale-pool`） | 默认鱼塘布局：`<pond>\homes\<键>` + `<pond>\pool`；`watchmanPidFile` 归 pool |
+| `install.ps1` | 不生成 `family.json`；`$InPond` 硬要求仓库目录名 `app` | 装完 seed 一份 `family.json`；只认"旁边有 `pool\`" |
+| `doctor.ps1`「她的端口」 | 只看第一条鱼端口（多鱼后等于没看主 dsh） | 改名「主 dsh 端口」，按名册找 `role=watcher` 那条 |
+| 四个 `scripts\*.mjs` | `--help` 会真的执行（曾重写 `members.json` 与 `谱系.md`） | 未知参数一律 `exit 2` + 用法 |
+
+**两条判据**（她 11-12 定的口径，这里只是用上）：
+
+1. **静默成功比报错更坏**：`dmPeerOf` 回退、`Stop-Fish` 的 `$true`、`--help` 的执行——三处都能"看起来没事"。
+2. **账要能在事后分得清**：游标只许前进、mode 账 `unknown` 而不是乐观值、`close.log` 先记再确认——都是让"到底发生了什么"留在纸上。
+
+**未修（记在待办）**：`verify-pending.ps1` 第 4 项靠源码字符串匹配（重构即误报，设计取舍）；`fish.ps1` 里 `up-all` 抢锁失败仍 `exit 0`（有意：跳过不是失败，但输出必须写"结果：跳过"）。

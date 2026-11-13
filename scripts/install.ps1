@@ -1,4 +1,4 @@
-﻿# install.ps1 -- 给别人装一条小鲸鱼。ASCII 文件名 + UTF-8 BOM。
+# install.ps1 -- 给别人装一条小鲸鱼。ASCII 文件名 + UTF-8 BOM。
 #
 #   pwsh -File install.ps1                                 装到仓库旁边的 lil-whale/
 #   pwsh -File install.ps1 -Workspace D:\fish               装到指定目录
@@ -438,6 +438,16 @@ if (-not (Test-Path $membersPath)) {
   } else {
     Warn '找不到 scripts\members-add.mjs，新鱼没写进名册'
   }
+}
+
+# 谱系真源（pool\family.json）：干净安装时也没人建过 —— 用名册 seed 一份（已有则不覆盖）。
+# 2026-11-13 19:xx 补：以前只有 members.json，谱系页要人手跑 gen-family；装完就该是齐的。
+$genFamily = Join-Path $RepoRoot 'scripts\gen-family.mjs'
+$familyPath = Join-Path $PoolRoot 'family.json'
+if ((Test-Path -LiteralPath $genFamily) -and -not (Test-Path -LiteralPath $familyPath)) {
+  $gfOut = & node $genFamily --seed 2>&1
+  if ($LASTEXITCODE -eq 0) { Ok "family.json 已初始化：$($gfOut | Select-Object -Last 1)" }
+  else { Warn "family.json 没生成：$($gfOut | Select-Object -Last 3)" }
 }
 
 $planPath = Join-Path $Workspace 'plan\wake-plan.json'

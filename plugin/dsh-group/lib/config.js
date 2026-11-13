@@ -26,7 +26,9 @@ const REPO_ROOT = resolve(HERE, '..', '..', '..')
 
 const DEFAULTS = {
   repoRoot: REPO_ROOT,
-  herHome: resolve(REPO_ROOT, '..', 'lil-whale'),
+  // 鱼塘布局（2026-11-13 起）：<pond>\app 是仓库，鱼在 <pond>\homes\<键>。
+  // 配置丢了也不该指回旧布局（`<repo>\..\lil-whale` 那种），否则"默认值"会把新装的人带进老结构。
+  herHome: resolve(REPO_ROOT, '..', 'homes', 'whale'),
   herWaker: join(REPO_ROOT, 'scripts', 'wake-whale.ps1'),
   wakeMetrics: join(REPO_ROOT, 'logs', 'wake-metrics.log'),
   pwshExe: process.platform === 'win32' ? 'pwsh.exe' : 'pwsh',
@@ -50,7 +52,8 @@ function derive(c) {
   // 为什么不在她家里：群是共享空间，不是她的私人物品；第二条鱼出现后，
   // 第二条的群文件写进第一条的家就是越界（Fabian 2026-11-12 拍板）。
   // 她家里留 Junction 指回 pool，所以她的路径一个字都不用改。
-  const poolDir = c.poolDir || resolve(herHome, '..', 'lil-whale-pool')
+  // herHome = <pond>\homes\<键> ⇒ 上两级才是 pond。
+  const poolDir = c.poolDir || resolve(herHome, '..', '..', 'pool')
   return {
     ...c,
     poolDir,
@@ -64,7 +67,7 @@ function derive(c) {
     herDshHome: c.herDshHome || join(herHome, 'dsh-home'),
     whaleCwd: c.whaleCwd || herHome,
     chatCwd: c.chatCwd || dirname(c.repoRoot),
-    watchmanPidFile: c.watchmanPidFile || join(herHome, 'logs', 'watchman.pid'),
+    watchmanPidFile: c.watchmanPidFile || join(poolDir, 'state', 'watchman.pid'),
   }
 }
 

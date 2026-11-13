@@ -64,11 +64,21 @@ if ($Cfg.ConfigFound) {
   Add-Row '配置' 'WARN' '没读到 lil-whale.config.json，按标准布局猜的' 'NEXT: 检查仓库根目录的 lil-whale.config.json（或用 LIL_WHALE_CONFIG 指到别处）'
 }
 
-# 1. 她的窗：进程在不在
-if (Test-Port $Cfg.HerPort) {
-  Add-Row '她的端口' 'OK' ("127.0.0.1:{0} 通" -f $Cfg.HerPort)
+# 1. 主 dsh（巡守）的端口。每条鱼各自的端口在「全鱼」那一组里看 ——
+# 2026-11-13 19:xx 修：这里原来只看 $Cfg.HerPort（第一条鱼），多鱼之后等于没看主 dsh。
+$watcherPort = 3080
+if ($Cfg.PSObject.Properties['LeePort'] -and $Cfg.LeePort) { $watcherPort = [int]$Cfg.LeePort }
+if ($Cfg.MembersFile -and (Test-Path -LiteralPath $Cfg.MembersFile)) {
+  try {
+    $mjW0 = Get-Content -LiteralPath $Cfg.MembersFile -Raw -Encoding utf8 | ConvertFrom-Json
+    $w0 = @($mjW0.members | Where-Object { $_.role -eq 'watcher' }) | Select-Object -First 1
+    if ($w0 -and $w0.port) { $watcherPort = [int]$w0.port }
+  } catch { }
+}
+if (Test-Port $watcherPort) {
+  Add-Row '主 dsh 端口' 'OK' ("127.0.0.1:{0} 通" -f $watcherPort)
 } else {
-  Add-Row '她的端口' 'FAIL' ("127.0.0.1:{0} 不通" -f $Cfg.HerPort) ("NEXT: 起她：pwsh -File scripts\fish.ps1 up whale（然后看 dsh-home\logs\web-latest.err.log）")
+  Add-Row '主 dsh 端口' 'FAIL' ("127.0.0.1:{0} 不通" -f $watcherPort) 'NEXT: 启动主 dsh：scripts\bin\Run DSH.cmd'
 }
 
 if ($IncludeLee) {

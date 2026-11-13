@@ -44,7 +44,7 @@ pwsh -File scripts\install.ps1
 |---|---|
 | `-Workspace D:\fish` | 她的家放哪（默认：鱼塘里的 `homes\<成员键>`；不在鱼塘布局时退回仓库旁边的 `lil-whale\`） |
 | `-PoolDir D:\pool` | 共享区放哪（默认：鱼塘的 `pool\`，否则 `lil-whale-pool\`） |
-| `-ChildPort 3082` | 她的端口（默认从 3082 起找第一个空口，找到就把结果写进配置，**运行期不会再变**） |
+| `-ChildPort 3082` | 主 dsh 端口（默认从 3082 起找第一个空口，找到就把结果写进配置，**运行期不会再变**） |
 | `-ChildSessionId session-…` | 装的时候就把她的会话 id 写进名册 |
 | `-ParentSessionId session-…` | 同上，写你的那段 |
 | `-SkipParent` | 只装她，不动你这边的主 profile |
@@ -92,7 +92,7 @@ pwsh -File scripts\doctor.ps1 -IncludeLee  # 连你的窗一起看
 | 组 | 看什么 |
 |---|---|
 | 配置 | `lil-whale.config.json` 读到了没有 |
-| 她的端口 / 他的端口 | TCP 通不通（`-IncludeLee` 才看他的） |
+| 主 dsh 端口 / 他的端口 | TCP 通不通（`-IncludeLee` 才看他的） |
 | 她的心跳 | `pool\state\presence\whale.json` 的年龄（>24h 只 WARN：可能只是没人叫她） |
 | 工具注册 | `plugin.log` 里有没有 `group_say-registered`（缺了 = 她哑了） |
 | 名册 / 名册（全鱼） | `pins.json` 里每条鱼都有会话、会话目录存在；名册外的旧段近两小时有没有被写过 |

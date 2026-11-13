@@ -262,12 +262,18 @@ if (dmUnexplained > 0) process.exitCode = 1
 // 差异必然"说不清"，所以这一刻只能靠人先留底。
 if (process.argv.includes('--migrate')) {
   writeAtomic(READABLE, rebuilt)
+  // 私聊投影也一起迁移：迁移模式已跳过差异闸（前提是有人先备份）。
+  // 只重写群、不重写私聊，会让"面板发的私聊"这类旧缺口永远留在纸上。
+  for (const item of dmWrites) {
+    writeAtomic(item.target, item.rebuilt)
+    console.log(`已按新格式重写 ${item.target}`)
+  }
   console.log(`已按新格式整本重写 群.md（${blocks.length} 段，指名带箭头的 ${records.filter((r) => r?.to && r.to !== 'all').length} 条）`)
   process.exitCode = 0
 }
 
 if (process.argv.includes('--write')) {
-  writeFileSync(READABLE, rebuilt, 'utf8')
+  writeAtomic(READABLE, rebuilt)
   console.log('已写入 群.md')
   if (dmUnexplained === 0) {
     for (const item of dmWrites) {

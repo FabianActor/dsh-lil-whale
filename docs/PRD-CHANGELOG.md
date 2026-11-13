@@ -1,3 +1,7 @@
+## v1.0.62 — 2026-11-13 19:1x
+
+- **第二批 bug 修复（13 处）**：游标只许前进的合并写；`dmPeerOf` 不再静默回退（三处 400）；`writePondSettings` 读-改-写保住 `crashNotify`；`Stop-Fish` 不再"假成功"（端口还开着返回 false，mode 账 `unknown`）；`crashNotify` 传 `member.key`；面板群发先建目录、发送人用名册；面板私聊补可读投影；token 正则允许 `.`/`~`；重建器整本写改原子、`--migrate` 同步迁移私聊；两份 `config.js` 默认布局改鱼塘；`install.ps1` seed `family.json`、放宽 `$InPond`；`doctor.ps1` 的端口检查按名册找 watcher；四个 `scripts\*.mjs` 拒绝未知参数（`--help` 不再执行）。PRD 新增 A.58；状态行 v1.0.62。
+
 ## v1.0.61 — 2026-11-13 18:5x
 
 - **显示名的真源改成名册**：`plugin\dsh-group-ui\lib\index.js` 的 `readConfig()` 不再用 `ui-config.json` 的 `names` 覆盖 `pool\members.json`；设置页改名改为写回名册（`writeMemberName()`，tmp + rename，失败 500 带 why）。现场把 `ui-config.json` 的 `names` 按名册重写（lee: Leea → 大肥鱼）。PRD 新增 A.57；状态行 v1.0.61。

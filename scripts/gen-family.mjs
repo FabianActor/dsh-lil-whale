@@ -14,6 +14,14 @@ import { fileURLToPath } from 'node:url'
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const checkOnly = process.argv.includes('--check')
+// 未知参数拒绝（`--help` 曾经真的重写 docs\谱系.md）。
+const gfArgs = process.argv.slice(2)
+const gfUnknown = gfArgs.filter((a) => a.startsWith('--') && !['--check', '--seed'].includes(a))
+if (gfUnknown.length > 0) {
+  console.error('未知参数：' + gfUnknown.join(' '))
+  console.error('用法：node scripts\\gen-family.mjs [--check] [--seed]')
+  process.exit(2)
+}
 
 function die(msg, next) {
   console.error('xx ' + msg)

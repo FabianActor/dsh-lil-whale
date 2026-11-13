@@ -23,6 +23,11 @@ const READABLE = join(GROUP_DIR, '群.md')
 const DM_DIR = config().dmDir || join(GROUP_DIR, 'dm')
 // 一个人和一条鱼的那段对话：两个方向都写在同一个文件里（他 2026-11-10 定）
 // 文件名 = 两个 id 按字母序拼：`fabian__whale.jsonl`
+function dmReadableOf(peer) {
+  const [x, y] = [HUMAN_ID, peer].sort()
+  return join(DM_DIR, `私聊-${x}__${y}.md`)
+}
+
 function dmFileOf(peer) {
   return join(DM_DIR, [HUMAN_ID, peer].sort().join('__') + '.jsonl')
 }
@@ -1160,6 +1165,17 @@ export function apply(ctx) {
       try {
         mkdirSync(DM_DIR, { recursive: true })
         appendFileSync(dmFileOf(peer), JSON.stringify(record) + '\n', 'utf8')
+        // 私聊也要有一份人眼能读的投影（宿主 sayPrivate 一直写，面板这条路漏了）。
+        // 判据：rebuild-group-md.mjs 对每个 dm\*.jsonl 都应 0 差异。
+        const readable = dmReadableOf(peer)
+        if (!existsSync(readable)) {
+          const [x, y] = [HUMAN_ID, peer].sort()
+          appendFileSync(readable, `# 私聊 · ${LABEL[x] ?? x} / ${LABEL[y] ?? y}\n\n`, 'utf8')
+        }
+        const dmBody = image === null
+          ? text
+          : `（图片 images/${image.month}/${image.id}.${image.ext}）${text === '' ? '' : `\n\n${text}`}`
+        appendFileSync(readable, `**${stamp(now)} · ${LABEL[HUMAN_ID] ?? HUMAN_ID}**\n\n${dmBody}\n\n`, 'utf8')
       } catch (error) {
         sendJson(res, 500, { error: 'write-failed', detail: String(error?.message ?? error) })
         return

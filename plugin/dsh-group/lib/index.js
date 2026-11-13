@@ -298,7 +298,7 @@ function saveWatchState() {
  * 这是 lost update 的第 N 个面孔（cursor.json、errors_total、new-day 都是它）。
  *
  * 所以改用 `writeFileSync(..., { flag: 'wx' })`：文件已存在就 EEXIST，等于"已经有人声明过了"。
- * 判据：`state\plans\<日期>-<条目>.claim` 唯一存在 ⇒ 这件事今天最多被递一次。
+ * 判据：`<鱼的家>\plan\claims\<日期>-<条目>.claim` 唯一存在 ⇒ 这件事今天最多被递一次。
  * 文件本身就是证据（含 pid 与时间），不用再去日志里对时间线。
  */
 function claimPlanDelivery(member, jobKey) {
@@ -960,6 +960,21 @@ function readCursors(member) {
  * 写游标前顺手剪掉"让出去的椅子"的影子游标：座位号已经不在 pins.json 里的，那一格不该再留着。
  * （她 2026-11-11 17:01 的观察：`lee@e17c3c` 停在 102，人已经不在群里了，账还挂着。）
  */
+// 游标合并：只许前进。
+// 为什么：同一成员的账可能被两个写者各持一份快照（巡守与成员进程、或同一成员的两段会话），
+// 后写的那份会把别人刚推进的格子退回去 —— lost update 的老面孔（PRD A.28/A.30 同族）。
+// 合并规则按通道逐格取较大值；座位号已经不在 pins 里的格子仍然剪掉（她 2026-11-11 的要求）。
+function mergeCursorValue(a, b) {
+  const isNum = (v) => typeof v === 'number' && Number.isFinite(v)
+  if (isNum(a) && isNum(b)) return Math.max(a, b)
+  if (a !== null && typeof a === 'object' && b !== null && typeof b === 'object') {
+    const out = { ...a }
+    for (const [key, value] of Object.entries(b)) out[key] = mergeCursorValue(out[key], value)
+    return out
+  }
+  return a === undefined ? b : a
+}
+
 function writeCursors(member, cursors) {
   const liveSeats = new Set(
     pinnedSessions(member).map((sid) => sid.replace(/^session-/, '').slice(0, 6)),
@@ -973,6 +988,17 @@ function writeCursors(member, cursors) {
     const [who, seat] = key.split('@')
     if (who !== member || typeof seat !== 'string' || seat === '') continue
     if (liveSeats.has(seat)) kept[key] = value
+  }
+  // 与磁盘现值合并（只许前进），再剪一次座位影子。
+  const disk = readJson(cursorFileOf(member), null)
+  if (disk !== null && typeof disk === 'object' && !Array.isArray(disk)) {
+    for (const [key, value] of Object.entries(disk)) {
+      const mine = kept[key]
+      const merged = mergeCursorValue(mine, value)
+      if (key === member) { kept[key] = merged; continue }
+      const [who, seat] = key.split('@')
+      if (who === member && typeof seat === 'string' && liveSeats.has(seat)) kept[key] = merged
+    }
   }
   ensureParent(cursorFileOf(member))
   writeJson(cursorFileOf(member), kept)
