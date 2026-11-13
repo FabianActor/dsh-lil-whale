@@ -1306,6 +1306,18 @@ lil-whale\state  → junction → pool\state
 
 **未做**：`agent-loop` 这条路现在只是"起之前清掉"，不是"用不了"——要不要在插件里主动拒绝它，等真正多进程踩到再说。
 
+## 附录 A.56 四个快捷方式实测：先鱼后主、只开主窗、停主不带走鱼
+
+**实测（2026-11-13 18:18，四条全过）**
+
+- `Run All Whales`：主 dsh 已在跑时只打印带 token 的地址（不重复开窗）；小鱼后台起、`mode: unattended`、不弹窗。
+- `Stop All Whales`：关闭顺序 **fishball → whale → lee**（先鱼后主，18:17:56 / 18:18:01 / 18:18:06）；`Run All Whales` 后三条 pid 全换新（24632 / 21440 / 9752），`runs\*.log` 各记 `resumed reason=unclean`。
+- `Stop DSH`：只关主 dsh，两条小鱼 pid 不变；窗口会先列"还有 N 条鱼在跑，这次只关主 dsh"，再报"停了"。
+- `down <鱼> -Yes`：单鱼停止 exit 0，端口关闭，`mode` 账删除。
+
+**一条更正**：我一度以为 `close.log` 丢了 18:07 的 close 行，实际是看错了文件——大肥鱼的 `close.log` 在它自己的家（`C:\Users\Fabian\.dsh\logs\close.log`），不在小肥鱼家。`Stop-Fish` 的排序改动因此定位为**防御性**（防"6 秒内又被拉起"导致记账被跳过），不是修已发生的 bug。
+
+**判据**：关闭顺序看 `close.log` 三条时间；"鱼没被带走"看 pid 是否不变；"只开主窗"看 `mode` 账（lee=window，其余=unattended）。
 ## 附录 A.55 鱼塘布局：一个根，四层（2026-11-13 17:00）
 
 **为什么改**：2026-11-13 他问"四个平行目录能不能整合、不希望插件在用户 workspace 里拉屎"。旧默认布局是"仓库旁边一个家、再旁边一个共享区"——装第二条鱼时 `WorkSpace\` 下就出现 `dsh-lil-whale\`、`lil-whale\`、`lil-whale-pool\`、`lil-whale-2\` 四个平级目录，谁是仓库、谁是数据、谁是谁的家，只能靠名字猜。

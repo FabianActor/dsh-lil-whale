@@ -1,3 +1,8 @@
+## v1.0.58
+
+- 附录 A.56：四个快捷方式实测（Run All Whales / Stop All Whales / Stop DSH / `down <鱼> -Yes`）全过，记下关闭顺序、pid 变化、`mode` 账判据。
+- 更正：`close.log` 的 close 行一直存在，此前判断"丢了"是看错文件；`Stop-Fish` 的排序改动降级为防御性修复。
+- `fish.ps1` 的 `down-main` 不再走 `Read-Host`（双击即确认）。
 ## v1.0.57（2026-11-13）
 
 - 布局：默认改成"鱼塘"结构（`<pond>\app + pool + homes\<鱼> + acl`），安装器自动识别并在装第二条鱼时自动写名册；旧布局仍可用。新增 `scripts\migrate-pond.mjs` 并在本机跑通（仓库/两个家/共享区/会话 cwd/profile link/ASCII Junction 全部迁完）。PRD 新增 A.55。
