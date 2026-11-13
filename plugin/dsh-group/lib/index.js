@@ -1441,7 +1441,9 @@ function apply(ctx) {
     if (prevText === 'open') {
       runLog(self, 'resumed', `fmt=2 reason=unclean previous-start=${lastRun.startedAt ?? 'unknown'} pid=${process.pid}`)
     }
-    runLog(self, 'started', `fmt=2 pid=${process.pid} member=${self} home=${HER_HOME} role=${isMainProcess() ? 'watcher' : 'member'} prev-run=${prevText} port=${CFG.herPort}`)
+    // 家/端口要按「这条鱼自己」写（2026-11-13 12:38 发现：lee 的账写成 home=lil-whale、port=3082）。
+    const ownRec = MEMBERS[self] ?? {}
+    runLog(self, 'started', `fmt=2 pid=${process.pid} member=${self} home=${ownRec.home ?? HER_HOME} role=${ownRec.role ?? (isMainProcess() ? 'watcher' : 'member')} prev-run=${prevText} port=${ownRec.port ?? CFG.herPort}`)
     ctx.on('dispose', () => {
       const aliveSec = Math.round((Date.now() - startedAtMs) / 1000)
       runLog(self, 'stopped', `fmt=2 reason=dispose pid=${process.pid} lived=${aliveSec}s`)

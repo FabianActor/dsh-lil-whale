@@ -894,6 +894,8 @@ lil-whale\state  → junction → pool\state
 - 每个进程写 `pool\state\runs\<成员>.log`：`started` / `stopped`，上一轮没写 `stopped` 就先补一行 `resumed | fmt=2 reason=unclean previous-start=…`。
 - `watchman.log` 的格式**一个字节都不动**（她每天 08:40 读它）。
 
+**2026-11-13 12:38 补**：`started` 行的 `home` / `port` 必须按**这条鱼自己**写 —— 多鱼化时漏改，lee 的账曾写成小肥鱼的家和端口。判据：`runs\lee.log` 的 `started` 行是 `home=C:\Users\<人>\.dsh`、`port=3080`。
+
 **判据**：`runs\<成员>.log` 里 `started` 与 `stopped` 成对；进程被杀之后下次启动，第一行是 `resumed | reason=unclean`；`watchman-errors-<成员>.json` 不再串到 whale 的账上。
 
 **遗留**：`close.log` 仍只由 `fish.ps1` 写 —— 直接关窗时 `by=` 只能是 `unknown`，这一条要等"窗口留痕"接进 DSH 自己的退出事件（B 组那条）才补得齐。
