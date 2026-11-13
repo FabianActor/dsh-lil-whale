@@ -1574,11 +1574,13 @@ window.__ModuleLoader__.load({
 
 ---
 
-## 附录 A.67 沙箱的写权限靠继承，早于授权的目录不继承
+## 附录 A.67 沙箱的写权限：根上有通行证，搬进来的老目录没有
 
 **症状**（小肥鱼 2026-11-13 23:56 报）：`homes\whale\notes\` 里 `Add-Content` 报 Access denied；同一个文件用文件工具写却成功。她顺手发现自己 `run\stamp.ps1` 撒了谎——`Set-Content` 的拒绝是非终止错误，脚本照样打印 `通过=True`、`exit=0`。
 
-**根因**：Windows 沙箱给子进程一个 write-restricted token，写权限来自 capability SID（`S-1-4-…`，由 workspaceRoot 路径的 sha256 派生）。这个 Allow ACE 由沙箱插件贴在 workspace 根上、靠 `(OI)(CI)` 继承往下传。**继承只对之后新建的对象生效**：`notes\ run\ plan\ logs\` 是搬家（`migrate-pond.mjs`）之前就存在的目录，保留的是旧 workspace（`D:\文档\WorkSpace\lil-whale`）的 SID，没有新家（`homes\whale`）的 SID ⇒ 沙箱里的 pwsh 被拒；宿主文件工具不受沙箱限制，照写不误。
+**根因**：Windows 沙箱给子进程一个 write-restricted token，写权限来自 capability SID（`S-1-4-…`，由 workspaceRoot 路径的 sha256 派生）。这个 Allow ACE 由沙箱插件贴在 workspace 根上、靠 `(OI)(CI)` 继承往下传。`notes\ run\ plan\ logs\` 是搬家（`migrate-pond.mjs`）之前就存在的目录，保留的是旧 workspace（`D:\文档\WorkSpace\lil-whale`）的 SID，没有新家（`homes\whale`）的 SID ⇒ 沙箱里的 pwsh 被拒；宿主文件工具不受沙箱限制，照写不误。
+
+**机制上真正卡住的地方**（2026-11-14 00:4x 对照实验后修正，先前"`SetNamedSecurityInfoW` 不做继承传播"的说法是错的）：给父目录加 ACE 时，**已经存在的子目录会立刻继承**（实测 `inherited=True`）。但沙箱插件的 grant 是**幂等**的——根上已经带了同一个 ACE 就整次跳过 apply，而 apply 才是那个把 ACE 重新传播到全树的动作（插件注释自己写着 "would otherwise re-propagate the identical descriptor across the whole tree"）。于是：根上有 ACE + 下面有一批搬家搬进来、没接到它的对象 ⇒ 之后再 grant 也修不了它们，也没有任何自检会报"这个子目录缺通行证"。
 
 **判据**：同一路径、同样内容，文件工具能写而 pwsh 不能 ⇒ 是"手"的问题，不是语法问题。查法：`icacls <目录>` 看有没有该鱼的 workspace SID；SID 算法 = `sha256(workspaceRoot)` 前 8 字节取两个 uint32，各自 `% (2^30-1) + 1`。
 
