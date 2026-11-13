@@ -230,7 +230,14 @@ pwsh -File scripts\fish.ps1 doctor       # 体检
 
 鱼塘工具栏有一个勾选框：**「主 dsh 启动时自动唤醒所有鱼」**（默认关）。勾上以后，主 dsh 起来 8 秒会按名册把其他鱼逐个唤醒——只弹出主 dsh 的 WebUI，其他鱼在后台起、不开窗。开关存在 `pool\state\settings.json`（数据，不是配置），改完**下次启动主 dsh 生效**。
 
-推荐用法：四个快捷方式都在 `scripts\bin\`，可以拖到桌面。
+**推荐直接跑脚本，别用桌面副本**：这个仓库改得勤，桌面副本是"复制那一刻的快照"，脚本更新它不会跟着变。两个不会过时的入口：
+
+```powershell
+pwsh -File scripts\fish.ps1 up all -BrowserMainOnly   # 起全部，只给主 dsh 开窗
+pwsh -File scripts\fish.ps1 down all -Yes             # 全停（先鱼后主）
+```
+
+想双击就去 `scripts\bin\` 里双击——那里的 `.cmd` 永远是最新的；拷到桌面就等于冻结了当时那份。
 
 | 快捷方式 | 做什么 |
 |---|---|
