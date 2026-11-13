@@ -49,7 +49,9 @@ param(
   # 才用 -InheritKey <家长键>，并且出生行记 keyInherited=。
   [string]$InheritKey = '',
   # 谁想养的（留痕用）：比如 whale。
-  [string]$RequestedBy = ''
+  [string]$RequestedBy = '',
+  # 人给钥匙用：fish.ps1 key grant <孩子> -From <家长>
+  [string]$From = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -454,21 +456,21 @@ function Get-FishProcesses($member) {
   })
 }
 
-# 起停账：进程被 Stop-Process 强杀时自己没机会写 stopped（Cordis 的 dispose 不跑），
-# 于是每次正常重启都被下一次启动记成 `resumed reason=unclean`——虽然报警那边用
-# "端口在听"挡住了误报，但账本自己说"上次没正常退出"，跟 close.log 打架。
-# 2026-11-13 22:1x 查账：close.log 今天 20/37/21 次 close，runs 账里 stopped 是 0。
-# 修法：由"停的人"补一行——停止方记账，不指望被杀的进程自己写。
-function Write-RunLogStopped($member, $ids) {
-  try {
-    $dir = Join-Path $Cfg.PoolState 'runs'
-    if (-not (Test-Path -LiteralPath $dir)) { return }
-    $file = Join-Path $dir ("{0}.log" -f $member.Key)
-    $line = '{0} | stopped | fmt=2 reason=stop-script by=fish.ps1 pid={1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), (@($ids) -join ',')
-    Add-Content -LiteralPath $file -Value $line -Encoding utf8
-  } catch { }
-}
-
+# 起停账：进程被 Stop-Process 强杀时自己没机会写 stopped（Cordis 的 dispose 不跑），
+# 于是每次正常重启都被下一次启动记成 `resumed reason=unclean`——虽然报警那边用
+# "端口在听"挡住了误报，但账本自己说"上次没正常退出"，跟 close.log 打架。
+# 2026-11-13 22:1x 查账：close.log 今天 20/37/21 次 close，runs 账里 stopped 是 0。
+# 修法：由"停的人"补一行——停止方记账，不指望被杀的进程自己写。
+function Write-RunLogStopped($member, $ids) {
+  try {
+    $dir = Join-Path $Cfg.PoolState 'runs'
+    if (-not (Test-Path -LiteralPath $dir)) { return }
+    $file = Join-Path $dir ("{0}.log" -f $member.Key)
+    $line = '{0} | stopped | fmt=2 reason=stop-script by=fish.ps1 pid={1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), (@($ids) -join ',')
+    Add-Content -LiteralPath $file -Value $line -Encoding utf8
+  } catch { }
+}
+
 function Stop-Fish($member) {
   $fishPort = Get-PortOf $member
   $roots = Get-FishProcesses $member
@@ -500,8 +502,8 @@ function Stop-Fish($member) {
   # 这是防御性排序，不是修一个已发生的 bug：18:07 那次 Stop DSH 之后他 13 秒才重启，
   # 端口一直是关的，账正常写下了。但若有人在 6 秒内又把进程拉起来，旧顺序会判
   # "没停干净"并跳过 close.log / Clear-Mode —— 那会让"确实停过"从账上消失。
-  # 停的人记账：被强杀的进程自己写不了 stopped。
-  Write-RunLogStopped $member $ids
+  # 停的人记账：被强杀的进程自己写不了 stopped。
+  Write-RunLogStopped $member $ids
   Write-FishWindowLog $member 'close'
   for ($i = 0; $i -lt 20; $i++) {
     Start-Sleep -Milliseconds 300
@@ -565,6 +567,7 @@ fish.ps1 -- 鱼群唯一的入口
 
 选项：-NoBrowser -Window -BrowserMainOnly -Console -Yes -By <谁> -Why <为什么> -Port <n>
       new 专用：-Key <成员键> -Parent <父辈键> -DryRun（只查规则，不建东西）
+      key 专用：key grant -Key <孩子键> -From <家长键> / key revoke -Key <孩子键>（人执行，见 PRD A.65）
 '@ | Write-Host
 }
 
@@ -661,6 +664,55 @@ function Invoke-Restore([string]$name) {
 # 用法：pwsh -File scripts\fish.ps1 new -Key <成员键> -Name <名字> -Parent <父辈键> [-Port 0] [-DryRun]
 # 它做什么：查重（键 / 名字 / 端口 / 鱼数上限）→ 调 install.ps1（-SkipParent，不碰父辈的 profile）→ 记 births.log → 打印还缺什么。
 # 它不做什么：不填 API key、不替你开窗、不写第一句话 —— 这三件必须由人或孩子自己完成。
+# ---------- 钥匙：人给、人收（死命令，见 PRD A.65） ----------
+# 只有人能跑这两个动作：把某条鱼的 .credentials.yaml 复制给孩子，或者停用它。
+function Invoke-KeyCmd($action, $childKey) {
+  if (-not $childKey) { Write-Host '用法：fish.ps1 key grant -Key <孩子键> -From <家长键> / key revoke -Key <孩子键>'; return $false }
+  $child = $MEMBERS[$childKey]
+  if (-not $child -or $child.Kind -ne 'fish') { Write-Host ("xx 名册里没有这条鱼：{0}" -f $childKey); return $false }
+  if (-not $child.DshHome) { Write-Host 'xx 这条鱼没有 dshHome，没法谈钥匙。'; return $false }
+  $childCred = Join-Path $child.DshHome '.credentials.yaml'
+  $keyLog = Join-Path $Cfg.PoolState 'keys.log'
+  $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+
+  if ($action -eq 'grant') {
+    if (-not $From) { Write-Host '用法：fish.ps1 key grant -Key <孩子键> -From <家长键>（人必须点名从谁的钥匙里给）'; return $false }
+    $src = $MEMBERS[$From]
+    if (-not $src -or $src.Kind -ne 'fish') { Write-Host ("xx 名册里没有这条鱼：{0}" -f $From); return $false }
+    if ($src.Key -eq $child.Key) { Write-Host 'xx 不能把钥匙给自己。'; return $false }
+    $srcCred = Join-Path $src.DshHome '.credentials.yaml'
+    if (-not (Test-Path -LiteralPath $srcCred)) {
+      Write-Host ("xx「{0}」家里没有凭证文件，先让它自己填过 key。" -f $src.Label)
+      return $false
+    }
+    if (Test-Path -LiteralPath $childCred) {
+      Write-Host ("注意：{0} 家里已经有 .credentials.yaml，这次会覆盖。" -f $child.Label)
+    }
+    Copy-Item -LiteralPath $srcCred -Destination $childCred -Force
+    Add-Content -LiteralPath $keyLog -Value ('{0} | key-grant | fmt=1 child={1} from={2} via=fish.ps1' -f $ts, $child.Key, $src.Key) -Encoding utf8
+    Write-Host ''
+    Write-Host ("!! 已把「{0}」的 API key 复制给「{1}」—— 花的是它的额度（人明确要求的继承）。" -f $src.Label, $child.Label)
+    Write-Host '   回收方式：fish.ps1 key revoke <孩子键>（停用它那份），或到平台轮换家长那把 key。'
+    return $true
+  }
+
+  if ($action -eq 'revoke') {
+    if (-not (Test-Path -LiteralPath $childCred)) {
+      Write-Host ("xx「{0}」家里没有 .credentials.yaml，本来就没有钥匙。" -f $child.Label)
+      return $false
+    }
+    $bak = $childCred + '.revoked-' + (Get-Date -Format 'yyyyMMddHHmmss')
+    Move-Item -LiteralPath $childCred -Destination $bak -Force
+    Add-Content -LiteralPath $keyLog -Value ('{0} | key-revoke | fmt=1 child={1} kept={2} via=fish.ps1' -f $ts, $child.Key, (Split-Path $bak -Leaf)) -Encoding utf8
+    Write-Host ("已停用「{0}」的钥匙：文件改名成 {1}" -f $child.Label, (Split-Path $bak -Leaf))
+    Write-Host '   它下一次请求会报 MISSING_CREDENTIAL；真要吊销请到平台轮换那把 key。'
+    return $true
+  }
+
+  Write-Host ('xx 不认识的 key 动作：{0}' -f $action)
+  return $false
+}
+
 function Invoke-NewFish {
   $repoRoot = Split-Path $PSScriptRoot -Parent
   $pondRoot = Split-Path $repoRoot -Parent
@@ -858,6 +910,7 @@ try {
       }
     }
     'new'    { if (-not (Invoke-NewFish)) { $ok = $false } }
+    'key'    { if (-not (Invoke-KeyCmd $Name $Key)) { $ok = $false } }
     'maintain' { if (-not (Invoke-Maintain $Name)) { $ok = $false } }
     'restore'  { if (-not (Invoke-Restore $Name)) { $ok = $false } }
     'unattended' { if (-not (Invoke-Restore $Name)) { $ok = $false } }
