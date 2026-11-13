@@ -1,3 +1,9 @@
+## v1.0.60 — 2026-11-13 18:4x
+
+- **退役 `scripts\enable-unattended.mjs`**：它往 profile patch 写 `agent-loop` 的 `resumeSessionId`，那条路会绕开 session-controller 的 preset 挂载（A.54：只剩 2 个工具）。现在改成只读提示，写入直接拒绝并指向 `fish.ps1 up <键>`；清旧块仍用 `disable-unattended.mjs`。
+- `scripts\wake-whale.ps1` 的失败提示改口：会话没挂上时指向 `pool\group\plugin.log` 的 `session-mount-failed` / `session-mounted`，不再指向已退役的 agent-loop 办法。
+- PRD A.47「会话唯一」改写为"一段会话一个名字 + session-controller 挂载"；A.54 补退役说明；状态行 v1.0.60。
+
 ## v1.0.59
 
 - §0 摘要与 §4 架构按当前实现重写：**一个鱼塘根（app / pool / homes / acl）**、每条鱼一套 HOME+profile+端口、共享区必须在家之外、无人值守挂载、一条鱼一份账。

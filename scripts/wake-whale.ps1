@@ -1,4 +1,4 @@
-﻿# wake-whale.ps1 -- 把一条鱼叫起来（ASCII 文件名；UTF-8 带 BOM）
+# wake-whale.ps1 -- 把一条鱼叫起来（ASCII 文件名；UTF-8 带 BOM）
 # 每一步都往那条鱼自己的 dsh-home\logs\wake.log 记一行，以便在"被插件调起"的环境里也能看清发生了什么。
 # 2026-11-10 她要求：call 行必须带 why=（manual / plan / archive），并带 gap=（距上一行多少秒），
 # 理由："推了门但没带话"必须留痕，否则它跟"没人来过"又是一张脸。
@@ -231,5 +231,5 @@ if ($mode -eq 'window') {
 }
 
 Log ("mounted-timeout member={0} port={1} hb-age={2} mode={3} -- 端口通了但心跳没更新" -f $Member, $port, (HeartbeatAge), $mode)
-Write-Output ("failed: {0} 端口通了但会话没挂上。无人值守要检查 profile patch 里 agent-loop 的 resumeSessionId（node scripts\enable-unattended.mjs --member {1} --dry-run）。" -f $port, $Member)
+Write-Output ("failed: {0} 端口通了但会话没挂上。看 pool\group\plugin.log 里的 session-mount-failed / session-mounted（无人值守由插件调 session-controller 挂载，不再用 agent-loop）。" -f $port)
 exit 1
