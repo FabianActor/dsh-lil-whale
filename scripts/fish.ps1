@@ -51,7 +51,8 @@ if ($env:DSH_LAUNCH_NO_BROWSER -eq '1') { $NoBrowser = $true }
 # ---------- 名册 ----------
 # 真源是 pool\members.json（PRD A.25）。文件不在就退回配置里那两条 —— 能跑，但只有两条。
 function Get-Members {
-  $file = Join-Path $Cfg.PoolDir 'members.json'
+  # 配置里能指定名册（membersFile）；没有才退回 pool 下的默认位置。
+  $file = if ($Cfg.MembersFile) { $Cfg.MembersFile } else { Join-Path $Cfg.PoolDir 'members.json' }
   $out = [ordered]@{}
   if (Test-Path -LiteralPath $file) {
     try {
@@ -195,10 +196,10 @@ function Get-Mode($member) {
   try { return (Get-Content -LiteralPath $file -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { return $null }
 }
 
-function Set-Mode($member, [string]$mode, [int]$port) {
+function Set-Mode($member, [string]$mode, [int]$fishPort) {
   $file = Get-ModeFile $member
   New-Item -ItemType Directory -Force -Path (Split-Path $file) | Out-Null
-  $obj = [ordered]@{ key = $member.Key; mode = $mode; port = $port; at = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss') }
+  $obj = [ordered]@{ key = $member.Key; mode = $mode; port = $fishPort; at = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss') }
   Set-Content -LiteralPath $file -Value ($obj | ConvertTo-Json -Compress) -Encoding UTF8
 }
 
@@ -262,12 +263,12 @@ function Exit-UpLock {
 function Show-List {
   $rows = @()
   foreach ($m in ($MEMBERS.Values | Where-Object { $_.Kind -eq 'fish' })) {
-    $port = Get-PortOf $m
-    $up = Test-Port $port
+    $fishPort = Get-PortOf $m
+    $up = Test-Port $fishPort
     $rows += [pscustomobject]@{
       '名字' = $m.Label
       '键'   = $m.Key
-      '端口' = $port
+      '端口' = $fishPort
       '状态' = if ($up) { '在跑' } else { '没开' }
       '心跳' = if ($up) { Get-Heartbeat $m } else { '-' }
       '模式' = if ($up) { $md = Get-Mode $m; if ($md) { $md.mode } else { '?' } } else { '-' }
@@ -276,7 +277,7 @@ function Show-List {
     }
   }
   $rows | Format-Table -AutoSize | Out-String | Write-Host
-  Write-Host ("名册：{0}" -f (Join-Path $Cfg.PoolDir 'members.json'))
+  Write-Host ("名册：{0}" -f $(if ($Cfg.MembersFile) { $Cfg.MembersFile } else { Join-Path $Cfg.PoolDir 'members.json' }))
   Write-Host '用法：fish.ps1 up <名字|all> / down <名字|all> / doctor'
 }
 
@@ -310,22 +311,31 @@ function Start-Fish($member) {
   # 无人值守是默认（Fabian 2026-11-13 拍板）：小鱼起来不开窗，会话由 host 自己挂上。
   # 巡守（主 dsh）例外 —— 它就是那扇窗。要看窗用 maintain，或显式 -Window。
   $openWindow = if ($member.Role -eq 'watcher') { -not $NoBrowser } else { $Window }
-  $port = Get-PortOf $member
-  if (-not (Test-Port $port)) {
-    $others = @(Get-ProfileProcesses $member)
-    if ($others.Count -gt 0) {
-      $ids = ($others | ForEach-Object { $_.ProcessId }) -join ', '
-      Write-Host ("{0}：已经有一个进程在跑（pid={1}，端口可能不是 {2}）—— 同一段会话只能一个 writer，先 down 再 up。" -f $member.Label, $ids, $port)
+  $fishPort = Get-PortOf $member
+  # 主 dsh 没在跑就不开小鱼（Fabian 2026-11-13 12:24：关着主 dsh 只开闭小鱼不合逻辑）。
+  # 判据用端口：巡守的窗关掉后端口就没了，跟"进程还在不在"一致。
+  if ($member.Role -ne 'watcher') {
+    $main = Get-Fish 'lee'
+    if ($main -and -not (Test-Port (Get-PortOf $main))) {
+      Write-Host ("主 dsh 没在跑（{0} 不通）—— 先启动主 dsh（scripts\bin\Run DSH.cmd），再开小鱼。" -f (Get-PortOf $main))
       return $false
     }
   }
-  if (Test-Port $port) {
+  if (-not (Test-Port $fishPort)) {
+    $others = @(Get-ProfileProcesses $member)
+    if ($others.Count -gt 0) {
+      $ids = ($others | ForEach-Object { $_.ProcessId }) -join ', '
+      Write-Host ("{0}：已经有一个进程在跑（pid={1}，端口可能不是 {2}）—— 同一段会话只能一个 writer，先 down 再 up。" -f $member.Label, $ids, $fishPort)
+      return $false
+    }
+  }
+  if (Test-Port $fishPort) {
     $hbAge = Get-HeartbeatAgeSec $member
     if ($null -ne $hbAge -and $hbAge -le 90) {
       # 已经在跑就不再开一次浏览器：重复 `up` 会开出第二个一模一样的窗口，
       # 看着像"一条鱼开了两个 webui"，其实是一条鱼、两扇窗（2026-11-12 他报的）。
-      Write-Host ("{0}：已经在跑（{1}）：{2}" -f $member.Label, $port, (Get-Url $member))
-      if (-not (Get-Mode $member)) { Set-Mode $member 'unknown' $port }
+      Write-Host ("{0}：已经在跑（{1}）：{2}" -f $member.Label, $fishPort, (Get-Url $member))
+      if (-not (Get-Mode $member)) { Set-Mode $member 'unknown' $fishPort }
       return $true
     }
     # 端口通但心跳 stale = 服务活着、会话没挂（08:40 那天的样子）。
@@ -335,7 +345,7 @@ function Start-Fish($member) {
     if ($openWindow) {
       Start-Process (Get-Url $member) | Out-Null
       Write-FishWindowLog $member 'open'
-      Set-Mode $member 'window' $port
+      Set-Mode $member 'window' $fishPort
     } else {
       Write-Host '（无人值守：会话没挂上 —— 用 restore 重起一份，或 maintain 开窗看）'
     }
@@ -349,7 +359,7 @@ function Start-Fish($member) {
   $out = Join-Path $member.DshHome 'logs\web-latest.log'
   $err = Join-Path $member.DshHome 'logs\web-latest.err.log'
   $cwd = if ($member.Cwd) { $member.Cwd } else { $member.Home }
-  Write-Host ("{0}：开机中（{1}）……" -f $member.Label, $port)
+  Write-Host ("{0}：开机中（{1}）……" -f $member.Label, $fishPort)
   # 巡守那条（role=watcher）保持老命令 `dsh web`；其余鱼按 profile + 端口起。
   # 巡守那条（role=watcher）保持老命令 `dsh web`；其余鱼按 profile + 端口起，并指到它自己的配置。
   $command = if ($member.Role -eq 'watcher') {
@@ -360,14 +370,14 @@ function Start-Fish($member) {
       $cfgPath = if ([System.IO.Path]::IsPathRooted($member.ConfigFile)) { $member.ConfigFile } else { Join-Path (Split-Path $PSScriptRoot -Parent) $member.ConfigFile }
       $cfgLine = "`$env:LIL_WHALE_CONFIG='$cfgPath'; "
     }
-    "${cfgLine}`$env:DSH_HOME='$($member.DshHome)'; dsh --profile $($member.Profile) --port $port --no-open"
+    "${cfgLine}`$env:DSH_HOME='$($member.DshHome)'; dsh --profile $($member.Profile) --port $fishPort --no-open"
   }
   if ($openWindow -and $Console) {
     Start-Visible -Command $command -WorkingDirectory $cwd -OutLog $out
   } else {
     Start-Hidden -Command $command -WorkingDirectory $cwd -OutLog $out -ErrLog $err
   }
-  if (-not (Wait-Port $port)) {
+  if (-not (Wait-Port $fishPort)) {
     Write-Host ("{0}：没起来。" -f $member.Label)
     Show-Tail $err
     return $false
@@ -379,16 +389,16 @@ function Start-Fish($member) {
     $url = Get-Url $member
   }
   if ($url -notmatch 'token=') {
-    Write-Host ("{0}：起来了 http://127.0.0.1:{1}（日志里还没看到 token，地址可能打不开）" -f $member.Label, $port)
+    Write-Host ("{0}：起来了 http://127.0.0.1:{1}（日志里还没看到 token，地址可能打不开）" -f $member.Label, $fishPort)
   } else {
     Write-Host ("{0}：起来了 {1}" -f $member.Label, $url)
   }
   if ($openWindow) {
     Start-Process $url | Out-Null
     Write-FishWindowLog $member 'open'
-    Set-Mode $member 'window' $port
+    Set-Mode $member 'window' $fishPort
   } else {
-    Set-Mode $member 'unattended' $port
+    Set-Mode $member 'unattended' $fishPort
   }
   return $true
 }
@@ -416,14 +426,14 @@ function Get-FishProcesses($member) {
 }
 
 function Stop-Fish($member) {
-  $port = Get-PortOf $member
+  $fishPort = Get-PortOf $member
   $roots = Get-FishProcesses $member
   if ($roots.Count -eq 0) {
     Write-Host ("{0}：没在跑。" -f $member.Label)
     return $true
   }
   if ($member.Role -eq 'watcher' -and -not $Yes) {
-    Write-Host ("注意：{0} 就是你现在用的这个 {1}。停掉会中断正在跑的一轮对话和排队的任务。" -f $member.Label, $port)
+    Write-Host ("注意：{0} 就是你现在用的这个 {1}。停掉会中断正在跑的一轮对话和排队的任务。" -f $member.Label, $fishPort)
     $answer = Read-Host '确定要停？（输入 Y 确认，直接回车取消）'
     if ($answer -ne 'Y' -and $answer -ne 'y') { Write-Host '没停。'; return $true }
   }
@@ -437,20 +447,20 @@ function Stop-Fish($member) {
   # 否则"回无人值守"之后桌面上挂着一个空窗（2026-11-13 11:58 实测）。
   $wrappers = @(Get-CimInstance Win32_Process -Filter "Name='pwsh.exe'" -ErrorAction SilentlyContinue | Where-Object {
     $_.CommandLine -and $_.CommandLine -match 'Tee-Object' -and
-    ($_.CommandLine -match ('--profile\s+' + [regex]::Escape($member.Profile)) -or $_.CommandLine -match ('--port\s+' + $port + '\b'))
+    ($_.CommandLine -match ('--profile\s+' + [regex]::Escape($member.Profile)) -or $_.CommandLine -match ('--port\s+' + $fishPort + '\b'))
   })
   foreach ($w in $wrappers) {
     try { Stop-Process -Id $w.ProcessId -Force -ErrorAction Stop } catch { }
   }
   for ($i = 0; $i -lt 20; $i++) {
     Start-Sleep -Milliseconds 300
-    if (-not (Test-Port $port)) { break }
+    if (-not (Test-Port $fishPort)) { break }
   }
-  if (Test-Port $port) {
-    Write-Host ("{0}：端口 {1} 还开着 —— 没停干净。" -f $member.Label, $port)
+  if (Test-Port $fishPort) {
+    Write-Host ("{0}：端口 {1} 还开着 —— 没停干净。" -f $member.Label, $fishPort)
     return $false
   }
-  Write-Host ("{0}：停了（{1} 已关闭）。" -f $member.Label, $port)
+  Write-Host ("{0}：停了（{1} 已关闭）。" -f $member.Label, $fishPort)
   Write-FishWindowLog $member 'close'
   Clear-Mode $member
   return $true
@@ -507,10 +517,10 @@ fish.ps1 -- 鱼群唯一的入口
 # 起：巡守先起（它的浏览器窗是唯一会打开的那扇），其余鱼后台起。
 # 停：先停小鱼，最后停巡守（关主 dsh 会中断正在跑的对话，放最后）。
 function Invoke-Up([string]$name) {
-  $members = @(Resolve-Targets $name)
-  $members = @($members | Sort-Object -Property @{ Expression = { if ($_.Role -eq 'watcher') { 0 } else { 1 } } })
+  $targets = @(Resolve-Targets $name)
+  $targets = @($targets | Sort-Object -Property @{ Expression = { if ($_.Role -eq 'watcher') { 0 } else { 1 } } })
   $okAll = $true
-  foreach ($m in $members) {
+  foreach ($m in $targets) {
     $saved = $NoBrowser
     if ($BrowserMainOnly -and $m.Role -ne 'watcher') { $NoBrowser = $true }
     try {
@@ -523,10 +533,10 @@ function Invoke-Up([string]$name) {
 }
 
 function Invoke-Down([string]$name) {
-  $members = @(Resolve-Targets $name)
-  $members = @($members | Sort-Object -Property @{ Expression = { if ($_.Role -eq 'watcher') { 1 } else { 0 } } })
+  $targets = @(Resolve-Targets $name)
+  $targets = @($targets | Sort-Object -Property @{ Expression = { if ($_.Role -eq 'watcher') { 1 } else { 0 } } })
   $okAll = $true
-  foreach ($m in $members) {
+  foreach ($m in $targets) {
     if (-not (Stop-Fish $m)) { $okAll = $false }
   }
   return $okAll
@@ -627,19 +637,18 @@ try {
       }
     }
     'down-main' {
+      # 只关主 dsh，小鱼继续跑（Fabian 2026-11-13 12:24：缺的正是这个方式）。
+      # 以前这里会拒绝并要求 -Force，但用户没有地方敲 -Force —— 那就等于没有这条路。
       $m = Get-Fish 'lee'
       if (-not $m) { throw '名册里没有巡守那条鱼（lee）' }
       $runningFish = @($MEMBERS.Values | Where-Object {
         $_.Kind -eq 'fish' -and $_.Role -ne 'watcher' -and (Test-Port (Get-PortOf $_))
       })
-      if ($runningFish.Count -gt 0 -and -not $Force) {
-        Write-Host ('还有 {0} 条鱼在跑：{1}' -f $runningFish.Count, (($runningFish | ForEach-Object { $_.Label }) -join '、'))
-        Write-Host '推荐先关鱼再关 dsh：鱼塘里点「全部休眠」，或运行 scripts\bin\Stop All Whales.cmd。'
-        Write-Host '（确定要带着鱼一起关主 dsh，加 -Force。）'
-        $ok = $false
-      } else {
-        if (-not (Stop-Fish $m)) { $ok = $false }
+      if ($runningFish.Count -gt 0) {
+        Write-Host ('注意：还有 {0} 条鱼在跑（{1}），这次只关主 dsh，它们继续跑。' -f $runningFish.Count, (($runningFish | ForEach-Object { $_.Label }) -join '、'))
+        Write-Host '要连鱼一起关：scripts\bin\Stop All Whales.cmd（或鱼塘里点「全部休眠」）。'
       }
+      if (-not (Stop-Fish $m)) { $ok = $false }
     }
     'doctor' { $ok = Invoke-Doctor }
     'help'   { Show-Help }

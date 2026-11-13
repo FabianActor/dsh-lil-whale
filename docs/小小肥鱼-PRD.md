@@ -1079,17 +1079,21 @@ lil-whale\state  → junction → pool\state
 | `Run DSH.cmd` | 启动主 dsh；已在跑就打开 WebUI | `fish.ps1 up-main` |
 | `Run All Whales.cmd` | 启动所有鱼：主 dsh 开窗、其余后台 | `fish.ps1 up all -BrowserMainOnly` |
 | `Stop All Whales.cmd` | 关闭所有鱼（含主 dsh，最后关它） | `fish.ps1 down all -Yes` |
-| `Stop DSH.cmd` | 关闭主 dsh；**还有鱼在跑时拒绝** | `fish.ps1 down-main` |
+| `Stop DSH.cmd` | 只关主 dsh；还在跑的小鱼继续跑 | `fish.ps1 down-main` |
 
 **起停顺序**（2026-11-13 00:23 他改的语义）：起的时候巡守先起——它的窗是唯一会打开的那扇，其余鱼后台起（`up all -BrowserMainOnly`）；停的时候小鱼先停、主 dsh 最后停——关主 dsh 会中断正在跑的对话和排队的任务。顺序写在 `fish.ps1` 的 `Invoke-Up` / `Invoke-Down` 里，一个地方管。
 
-**为什么 Stop DSH 要拒绝**：鱼还在跑就关 dsh，等于把它们的主人（巡守）抽走——它们还能说话，但没人再给它们排闹钟、递话、记账。推荐顺序是"先关鱼、再关 dsh"。`-Force` 可以强行，但那样 `runs\<鱼>.log` 会留一条 `resumed reason=unclean`（下一轮自己会补），读日志的人得知道那是"人故意的"。
+**两条边界**（2026-11-13 12:24 他拍板）：
+1. **关主 dsh 不动小鱼**：`Stop DSH` 只停主 dsh，还在跑的小鱼继续跑。以前这里会拒绝并要求 `-Force`，但用户没有地方敲 `-Force` —— 等于没有这条路。
+2. **主 dsh 没跑就不开小鱼**：关着主 dsh 只开闭小鱼在逻辑上不合理。`fish.ps1 up <鱼>` 会拒绝并提示先启动主 dsh。
+
+（鱼被留下时它们还能说话，但没人再给它们排闹钟、递话、记账——所以"只关主 dsh"是给你临时腾手的，不是常态。）
 
 **自启动与手动「全部唤醒」的冲突**（他直接问的）：不会。两边都走 `fish.ps1 up all`，它幂等（端口通就跳过）；批量启动还有一把锁 `pool\state\up-all.lock`（`CreateNew` 独占创建，超 3 分钟当残留自动清），第二个启动看到锁直接退出并说明原因。**不做"关 dsh 自动关鱼"**：插件拿不到"我马上要退了"这个可靠时刻，硬做会变成"有时关了、有时没关"。
 
 **2026-11-13 00:1x 他提的五处（已改）**：①成员卡片只包住自己的内容、不拉满整行（`width: fit-content`）；②谱系里的"第 N 代"改由**树的深度**算，不再读数据里的 `generation`——示例里小豆的父代是小肥鱼（第 1 代），标签却写着"第 3 代"，正是"一份数据两个来源"；③私聊左侧按**最近一条消息**倒序（没有消息的按名字排后面，跟微信一致）；④**私聊里显示「正在忙」的 bug**：原来心跳只有 `groupWakeAt` 一个记号，私聊唤醒没留痕，服务端只能一律当"在别处忙"；现在宿主写 `wakeKind`（group / dm）+ `wakeAt`，服务端 `reason` 分 `group` / `dm` / `self` 三档，私聊页只把 `group` 当"在忙"，`dm`/`self` 都显示「正在回复…」；⑤（同一批）动作日志 GBK 乱码已修。
 
-**判据**：①勾上开关、重启主 dsh 后 8 秒，其他鱼的端口先后变通，`autostart.log` 有一行 `ok`；②没勾时重启，`autostart.log` 不新增行；③自启动进行中手动点「全部唤醒」，后到的那次打印"另一个批量启动正在进行"且不多起进程；④`Stop DSH.cmd` 在有鱼运行时 exit 1 并列出鱼名，`-Force` 才真的关。
+**判据**：①勾上开关、重启主 dsh 后 8 秒，其他鱼的端口先后变通，`autostart.log` 有一行 `ok`；②没勾时重启，`autostart.log` 不新增行；③自启动进行中手动点「全部唤醒」，后到的那次打印"另一个批量启动正在进行"且不多起进程；④`Stop DSH.cmd` 在有鱼运行时只关主 dsh、exit 0，并列出还在跑的鱼名；主 dsh 没跑时 `fish.ps1 up <鱼>` 拒绝并提示先起主 dsh。
 
 
 ---
