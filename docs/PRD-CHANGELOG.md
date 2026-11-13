@@ -1,3 +1,8 @@
+## v1.0.56（2026-11-13）
+
+- 修：异常退出报警的"活着"判据从"心跳新鲜且端口通"改成"端口通就算起来了"——懒挂载下刚起来的鱼没有心跳，上一版会把它误判成没起来（他重启一次，两条鱼各误报一次）。
+- PRD A.52 补这段与原因。
+
 ## v1.0.55（2026-11-13）
 
 - 修：无人值守会话的工具丢失——agent-loop 那条捷径绕开 session-controller，preset 工具没挂上；改成用 `sessionController.agents.resume` 挂，成功记 `session-mounted composed=… toolCount=…`。

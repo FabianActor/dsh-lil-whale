@@ -2293,13 +2293,21 @@ async function crashNotify() {
     if (firstRun) continue // 第一次上线先记账，不补报历史
     // 现在活着就不是"坏了"：他手动关窗重启也会留下 unclean，但鱼马上又起来了。
     // 只在"没写 stopped 且现在没在跑"时报警。
+    //
+    // 2026-11-13 16:2x 修：判"活着"不能用心跳。懒挂载下，鱼要等第一次被叫醒才挂会话，
+    // 在那之前端口通、进程在、心跳文件却还是上一轮的（甚至没有）——用 `hb && port` 判，
+    // 刚起来的鱼会被当成"没起来"，于是重启一次就误报一次（16:19:44 实测两条都误报）。
+    // 端口通 = 宿主进程在监听 = 它起来了；心跳只用来分辨"挂没挂上会话"，写进日志，不参与判决。
     let alive = false
+    let portOpen = false
+    let hb = null
     try {
-      const hb = presenceAgeOf(member)
-      alive = hb !== null && hb <= WAKE_STALE_SEC && (await isPortOpen(member.port))
+      portOpen = await isPortOpen(member.port)
+      hb = presenceAgeOf(member)
+      alive = portOpen || (hb !== null && hb <= WAKE_STALE_SEC)
     } catch { alive = false }
     if (alive) {
-      watchmanLog('note', `why=crash-alive member=${member.key} at=${at}`)
+      watchmanLog('note', `why=crash-alive member=${member.key} at=${at} port=${portOpen ? 'open' : 'closed'} hb-age=${hb === null ? 'none' : `${hb}s`}`)
       continue
     }
     try {
