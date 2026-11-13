@@ -4,7 +4,7 @@
 // `function selfPlanTick`）来判断"机制在不在"。那种检查有两条骗法：
 //   1) 改名就误报 FAIL —— 机制好好的，检查却红；
 //   2) 注释里写一行 `totalPerDay: 120` 也能 PASS —— 证明的是"这串字存在"，不是"这机制在跑"。
-// 所以把判断逻辑抽到 `plugin/dsh-group/lib/plan-core.js`，这里直接 import 真代码，
+// 所以把判断逻辑抽到 `plugin/dsh-lil-whale-group/lib/plan-core.js`，这里直接 import 真代码，
 // 用真文件跑真分支。改名会红，注释骗不过去。
 //
 // 用法：node scripts/test-plan.mjs      退出码 0 = 全过，1 = 有失败。
@@ -20,7 +20,7 @@ import {
   planDeliveryText,
   parseWakeCounts,
   sumWakesToday,
-} from '../plugin/dsh-group/lib/plan-core.js'
+} from '../plugin/dsh-lil-whale-group/lib/plan-core.js'
 
 let pass = 0
 let fail = 0

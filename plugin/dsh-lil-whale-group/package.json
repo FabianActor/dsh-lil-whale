@@ -1,22 +1,23 @@
 {
-  "name": "lil-whale-group-ui",
-  "version": "1.1.0",
+  "name": "@fabianactor/dsh-lil-whale-group",
+  "version": "1.2.0",
   "private": true,
+  "description": "小小肥鱼的群：发言入队即返回，进程内 tailer 只在新消息到达时唤醒对方。",
   "type": "module",
-  "description": "群聊页面：侧边栏一个图标，点开是三条鱼的群（读写 lil-whale\\group\\messages.jsonl）",
+  "main": "lib/index.js",
   "author": "Fabian",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/FabianActor/dsh-lil-whale.git",
-    "directory": "plugin/dsh-group-ui"
+    "directory": "plugin/dsh-lil-whale-group"
   },
   "keywords": [
     "dsh",
     "dsh-plugin",
     "deepseek-harness",
     "group-chat",
-    "web-ui"
+    "multi-agent"
   ],
   "engines": {
     "dsh": ">=0.2.2-rc.1"
@@ -25,23 +26,19 @@
     "access": "public"
   },
   "exports": {
-    ".": "./lib/index.js",
-    "./client": "./lib/client.js"
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
   },
   "files": [
-    "lib/*.js",
+    "lib",
     "cordis.patch.yml"
   ],
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
-    },
-    "client": {
-      "platform": "web",
-      "immediately": true,
-      "inject": [
-        "@deepseek-ai/dsh-client-ui-primitives"
-      ]
     }
   }
 }

@@ -53,7 +53,7 @@ pwsh -File scripts\fish.ps1 doctor | refresh <鱼|all>
 | 文件 | 谁调它 |
 | --- | --- |
 | `fish.ps1` | 人 + 鱼塘（`/pond/api/action`）+ 巡守自启动（`up all -NoBrowser`） |
-| `wake-whale.ps1` | `dsh-group` 插件的巡守定时器（`HER_WAKER`）：每 60 秒看一次，按名册逐条鱼判断；`-Member <键>` 指定叫谁 |
+| `wake-fish.ps1` | `dsh-lil-whale-group` 插件的巡守定时器（`HER_WAKER`）：每 60 秒看一次，按名册逐条鱼判断；`-Member <键>` 指定叫谁 |
 | `doctor.ps1` | `fish.ps1 doctor`、鱼塘「检修」、`release-check.ps1` |
 | `verify-pending.ps1` | 重启后验收：runs 账按鱼写 / 自己的闹钟 / gate 读数 / 归属 B 与全局 120 / 自启动开关 / 鱼塘接口 / 模式账 |
 | `test-plan.mjs` | 计划表与唤醒额度的行为测试（26 用例，真 import 真代码） |

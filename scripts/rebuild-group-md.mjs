@@ -9,9 +9,9 @@
 //       node scripts\rebuild-group-md.mjs --write    覆盖 群.md
 //       node scripts\rebuild-group-md.mjs --migrate  格式迁移：跳过差异闸、整本重写（先备份！）
 import {renameSync, readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
-import { config } from '../plugin/dsh-group/lib/config.js'
+import { config } from '../plugin/dsh-lil-whale-group/lib/config.js'
 
-// 路径从 lil-whale.config.json 读（真源见 plugin/dsh-group/lib/config.js）
+// 路径从 lil-whale.config.json 读（真源见 plugin/dsh-lil-whale-group/lib/config.js）
 const GROUP_DIR = config().groupDir
 const MESSAGES = `${GROUP_DIR}\\messages.jsonl`
 // 整本写必须原子：宿主同时在对 群.md appendFileSync，直接 writeFileSync
@@ -45,7 +45,7 @@ function loadLabel() {
 }
 const LABEL = loadLabel()
 
-// 机器发的话要自己说出来（同 plugin/dsh-group/lib/index.js 的 provenanceOf）。
+// 机器发的话要自己说出来（同 plugin/dsh-lil-whale-group/lib/index.js 的 provenanceOf）。
 // `s` 平时是会话 id；不是会话 id 的值说明这句不是某一轮人说的。
 const S_DISPLAY = { watch: '巡守' }
 

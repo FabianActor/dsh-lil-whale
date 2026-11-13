@@ -21,7 +21,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
-// lib/ → dsh-group/ → plugin/ → 仓库根
+// lib/ → dsh-lil-whale-group/ → plugin/ → 仓库根
 const REPO_ROOT = resolve(HERE, '..', '..', '..')
 
 const DEFAULTS = {
@@ -29,14 +29,12 @@ const DEFAULTS = {
   // 鱼塘布局（2026-11-13 起）：<pond>\app 是仓库，鱼在 <pond>\homes\<键>。
   // 配置丢了也不该指回旧布局（`<repo>\..\lil-whale` 那种），否则"默认值"会把新装的人带进老结构。
   herHome: resolve(REPO_ROOT, '..', 'homes', 'whale'),
-  herWaker: join(REPO_ROOT, 'scripts', 'wake-whale.ps1'),
+  herWaker: join(REPO_ROOT, 'scripts', 'wake-fish.ps1'),
   wakeMetrics: join(REPO_ROOT, 'logs', 'wake-metrics.log'),
   pwshExe: process.platform === 'win32' ? 'pwsh.exe' : 'pwsh',
   leeCwd: REPO_ROOT,
   leeProfile: 'web',
   whaleProfile: 'whale',
-  // 她那个进程开的端口。巡守要推门时敲的就是它；改端口必须同时改这里，否则巡守会去敲一扇没人的门。
-  herPort: 3082,
 }
 
 let cached = null
@@ -48,22 +46,17 @@ export function configPath() {
 /** 派生字段（只由上面几个推出来，不许单独写死）。 */
 function derive(c) {
   const herHome = c.herHome
-  // 共享区（pool）在她家之外：群、多成员账本都放这儿。
-  // 为什么不在她家里：群是共享空间，不是她的私人物品；第二条鱼出现后，
-  // 第二条的群文件写进第一条的家就是越界（Fabian 2026-11-12 拍板）。
-  // 她家里留 Junction 指回 pool，所以她的路径一个字都不用改。
+  // 共享区在她家外面（2026-11-12 起）：多条鱼共用同一个群、同一份名册。
+  // 注意顺序 —— poolDir 得先算出来，后面三个都从它推。
   // herHome = <pond>\homes\<键> ⇒ 上两级才是 pond。
   const poolDir = c.poolDir || resolve(herHome, '..', '..', 'pool')
   return {
     ...c,
     poolDir,
     poolStateDir: c.poolStateDir || join(poolDir, 'state'),
-    // 私聊是「两个人之间的窗口」，不放进群目录：群目录是共享区里公开的那一半（Fabian 2026-11-12 拍板）。
-    dmDir: c.dmDir || join(poolDir, 'dm'),
-    // 名册：谁是谁、叫什么、哪条鱼、端口、爹是谁。多鱼之后这些不许再写死在代码里。
-    membersFile: c.membersFile || join(poolDir, 'members.json'),
-    herPort: Number(c.herPort) || 3082,
     groupDir: c.groupDir || join(poolDir, 'group'),
+    dmDir: c.dmDir || join(poolDir, 'dm'),
+    membersFile: c.membersFile || join(poolDir, 'members.json'),
     herDshHome: c.herDshHome || join(herHome, 'dsh-home'),
     whaleCwd: c.whaleCwd || herHome,
     chatCwd: c.chatCwd || dirname(c.repoRoot),

@@ -169,7 +169,7 @@ if (existsSync(toolsScript)) {
 function wakeNumbers() {
   const fallback = { cooldownSec: 60, perHour: 12, perDay: 60, quietFromHour: 0, quietToHour: 8 }
   try {
-    const src = readFileSync(join(REPO_ROOT, 'plugin', 'dsh-group', 'lib', 'index.js'), 'utf8')
+    const src = readFileSync(join(REPO_ROOT, 'plugin', 'dsh-lil-whale-group', 'lib', 'index.js'), 'utf8')
     const block = src.match(/const WAKE = \{[\s\S]*?\n\}/)?.[0] ?? ''
     const num = (name) => {
       const m = block.match(new RegExp(`${name}\\s*:\\s*(\\d+)`))

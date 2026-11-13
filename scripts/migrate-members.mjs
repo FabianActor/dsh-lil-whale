@@ -9,7 +9,7 @@
 //   node scripts\migrate-members.mjs --force    已存在也整份重写（慎用：会丢手改的字段）
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
-import { config } from '../plugin/dsh-group/lib/config.js'
+import { config } from '../plugin/dsh-lil-whale-group/lib/config.js'
 
 const args = process.argv.slice(2)
 const dryRun = args.includes('--dry-run')

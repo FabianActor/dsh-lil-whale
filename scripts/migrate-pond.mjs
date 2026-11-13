@@ -177,11 +177,11 @@ const fixProfile = (profileDir, links) => {
     symlinkSync(target, linkPath, 'junction')
   }
 }
-fixProfile(join(NEW.home1, 'dsh-home', 'profiles', 'whale'), { 'lil-whale-group': join(NEW.app, 'plugin', 'dsh-group') })
-fixProfile(join(NEW.home2, 'dsh-home', 'profiles', 'fishball'), { 'lil-whale-group': join(NEW.app, 'plugin', 'dsh-group') })
+fixProfile(join(NEW.home1, 'dsh-home', 'profiles', 'whale'), { 'lil-whale-group': join(NEW.app, 'plugin', 'dsh-lil-whale-group') })
+fixProfile(join(NEW.home2, 'dsh-home', 'profiles', 'fishball'), { 'lil-whale-group': join(NEW.app, 'plugin', 'dsh-lil-whale-group') })
 fixProfile(join(homedir(), '.dsh', 'profiles', 'web'), {
-  'lil-whale-group': join(NEW.app, 'plugin', 'dsh-group'),
-  'lil-whale-group-ui': join(NEW.app, 'plugin', 'dsh-group-ui'),
+  'lil-whale-group': join(NEW.app, 'plugin', 'dsh-lil-whale-group'),
+  'lil-whale-group-ui': join(NEW.app, 'plugin', 'dsh-lil-whale-group-ui'),
 })
 
 // ---------- 9. %USERPROFILE%\dsh-lil-whale ----------

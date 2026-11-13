@@ -1,4 +1,4 @@
-﻿# wake-whale.ps1 -- 把一条鱼叫起来（ASCII 文件名；UTF-8 带 BOM）
+﻿# wake-fish.ps1 -- 把一条鱼叫起来（ASCII 文件名；UTF-8 带 BOM）
 # 每一步都往那条鱼自己的 dsh-home\logs\wake.log 记一行，以便在"被插件调起"的环境里也能看清发生了什么。
 # 2026-11-10 她要求：call 行必须带 why=（manual / plan / archive），并带 gap=（距上一行多少秒），
 # 理由："推了门但没带话"必须留痕，否则它跟"没人来过"又是一张脸。

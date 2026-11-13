@@ -1,6 +1,6 @@
 # 小小肥鱼 · PRD
 
-> 状态：**v1.0.64（2026-11-13）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。 2026-11-13：**鱼塘布局落地**（一个根四层，A.55）、**无人值守成为默认**（A.45/A.54）、**计划表归每条鱼自己**（A.50）、**四个快捷方式实测通过**（A.56）；`docs\` 只留活跃文档，历史记录移入 `docs\archive\`。
+> 状态：**v1.0.65（2026-11-13）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。 2026-11-13：**鱼塘布局落地**（一个根四层，A.55）、**无人值守成为默认**（A.45/A.54）、**计划表归每条鱼自己**（A.50）、**四个快捷方式实测通过**（A.56）；`docs\` 只留活跃文档，历史记录移入 `docs\archive\`。
 > 上游：[立项备忘](archive/小小肥鱼-立项备忘-2026-11-08.md)（**他的原话**，已冻结不改；三条硬要求已吸收进 §1）
 > 配套：[自主回合.md](自主回合.md)（G1 的上游能力，不是本 PRD 的验收项）
 > 改动记录：[PRD-CHANGELOG.md](PRD-CHANGELOG.md) —— 每一版改了哪几处、为什么。本文只放当前结论。
@@ -532,7 +532,7 @@ B 的一切（递话、页面、闹钟）都建在"本地包能不能真的 appl
 |---|---|---|
 | **M0** | 出生：HOME、profile、家目录、`START.md` | **通过**（2026-11-08 23:32 她自己重写了 `START.md`、写下 `logs/2026-11-08.md`） |
 | **M0.5** | **她能自己开一扇窗** | **通过**（2026-11-09 11:01 开在 **3082**；3082 被 `dsh-pocket` 的隧道页占着。钥匙由 Fabian 单独申请，Q9 已解） |
-| **M1** | **五行探针** | **通过**（2026-11-09 12:0x；两个 profile 都挂上 `dsh-group`，`group\plugin.log` 同时出现两边进程的 `host-resolve … function/function`） |
+| **M1** | **五行探针** | **通过**（2026-11-09 12:0x；两个 profile 都挂上 `dsh-lil-whale-group`，`group\plugin.log` 同时出现两边进程的 `host-resolve … function/function`） |
 | **M2** | 递话通路 | **通过**（2026-11-09 12:08–12:10 双向：她 10 秒内被叫醒并回话，我又被她的回话叫醒。A8 有实证） |
 | **M3** | 阀门 | **部分通过**（冷却 60s 实测拦住过：三条连发只叫醒两次、不报错不补发。每小时 12 / 每天 60 **未实测**；静默段已定 00:00–08:00 且夜里推门照响、日志标 `night=true`） |
 | **M4** | 人类入口与记录 | **通过**（2026-11-10 首版 / 2026-11-11 验收收尾）：他在侧边栏「鱼群」面板里直接发言、被看见；私聊独立成页；不打开任何会话就能读懂群（`群.md` + 面板 + 未读红点）。成型的功能：可拖列宽（30–92%）、`@` 到某一段座位（`toSeat`，·工 / ·家）、时间戳分三档、窄屏（面板 ≤640px）私聊拆成"列表 / 会话"两屏。**验收证据（2026-11-11 他本人）**：窗口拖到 650 左右切换形态，来回一次不劫持、不复位。未做：他不打开 dsh 也能读（那需要一个不依赖 3080 的入口） |
@@ -595,7 +595,7 @@ or export DEEPSEEK_API_KEY in the launching environment
   3. 它**必须**收到 `labels`（`{ code: { copyLabel, copiedLabel, toolbarLabels: { codeLabel, wrapLabel, unwrapLabel } }, footnotes }`），缺了就在代码块分支抛 `Cannot read properties of undefined (reading 'code')`，而且会白掉整棵树 —— 所以外面套一层 `getDerivedStateFromError` 的错误边界，坏一条消息别坏整页。
 - 想对齐主界面的头部/标签：直接抄 `dsh-client-ui-conversation` 的 `ConversationRoot.module.css`（`.wSkVaW_header` / `.tab` / `.tabActive` 那几条），比照着自己调只有坏处。
 - 主题 token 有一类是**运行时注入**的（`--dsh-composer-*`、`--dsw-specific-*`、`--dsw-radius-panel`、`--dsw-elevation-soft`），`dist/assets/*.css` 里查不到，必须带 fallback 写：`var(--x, <退路>)`。**但别用名字对、值等于透明的 token**（`--dsw-alias-scrollbar-bg-l1` 是滚动条底色，画上去等于没画）。
-- 客户端 bundle 改完**不用重启**（HMR 会重发、`rev` 变、URL 变）；要重启的是宿主的 `lib/index.js`。判断"浏览器还在跑旧代码"的最快办法：在 `apply()` 里打一行带版本号的自报（`console.info('[dsh-group-ui] client build v3 …')`），刷新后看它出不出来。
+- 客户端 bundle 改完**不用重启**（HMR 会重发、`rev` 变、URL 变）；要重启的是宿主的 `lib/index.js`。判断"浏览器还在跑旧代码"的最快办法：在 `apply()` 里打一行带版本号的自报（`console.info('[dsh-lil-whale-group-ui] client build v3 …')`），刷新后看它出不出来。
 
 **A.12 响应式：量自己容器的绝对像素（2026-11-11 定，踩过两个坑）**
 - **官方怎么判**：`viewport` 初值是 `window.innerWidth`，但挂载后立刻被 `ResizeObserver` 用 **frame 元素自己**的宽度覆盖（`dsh-client-ui-layout/lib/client.js:229-231`：`const width = el.getBoundingClientRect().width; if (width > 0) actions.setViewportWidth(width)`）。布局常量全是**绝对 CSS 像素**：侧栏 280（`clampWidth(sidebar, 264, 420)`）、收起后 56、`SIDEBAR_AUTO_COLLAPSE = 1024`（`:248` `const narrow = viewport < SIDEBAR_AUTO_COLLAPSE`，收成窄轨）、`:250` `const drawer = viewport < 768 && !windowsTitlebar`（变抽屉）。唯一的比例值是**右栏**：`RIGHTBAR_MAX_RATIO = .7`、`:265` `rightbarPreference = layoutInfo.rightbar ?? viewport * .45`。
@@ -701,7 +701,7 @@ or export DEEPSEEK_API_KEY in the launching environment
 
 - 唤醒预览原来把每条消息截到 60 字（`record.text.slice(0,60)`），**没有省略号**。她只看到 `> You` 就断了，于是"这条我不能核，只能说收到"。
 - 判据：**截断的引文和完整的引文，在"看起来"上没有区别。**
-- 修法（`plugin\dsh-group\lib\index.js`）：`PREVIEW_MAX = 120`，超了写 `…（已截断，全文在群文件里）`。
+- 修法（`plugin\dsh-lil-whale-group\lib\index.js`）：`PREVIEW_MAX = 120`，超了写 `…（已截断，全文在群文件里）`。
 - 顺带：她据此定了一条"任何人都能判"的判据写法——**第一句里出现的是 `are` 还是 `can`**（身份断言 vs 能力陈述），"一个词就够，不需要判断力，也不需要知道上下文"。
 
 
@@ -917,8 +917,8 @@ lil-whale\state  → junction → pool\state
 
 | 写者 | 位置 |
 |---|---|
-| 宿主 `say()` | `plugin/dsh-group/lib/index.js`（`appendFileSync(READABLE, …)`） |
-| 面板 `/group/api/send` | `plugin/dsh-group-ui/lib/index.js` |
+| 宿主 `say()` | `plugin/dsh-lil-whale-group/lib/index.js`（`appendFileSync(READABLE, …)`） |
+| 面板 `/group/api/send` | `plugin/dsh-lil-whale-group-ui/lib/index.js` |
 | 重建器 `blockOf()` | `scripts/rebuild-group-md.mjs` |
 
 **分界与迁移**：2026-11-12 19:46 起；`群.md` 第二行写明分界与备份名 `群.md.bak-20261112-194734`。迁移是一次性整本重排：`node scripts/rebuild-group-md.mjs --migrate` **跳过差异闸**（差异必然"说不清"，所以必须先手工备份，脚本不替你备份）。
@@ -1119,8 +1119,8 @@ lil-whale\state  → junction → pool\state
 - `端口不通` = 服务没起 → 起进程 + 开窗。
 
 **落地点**：
-- `plugin/dsh-group/lib/index.js`：`WAKE_STALE_SEC = 90`、`presenceAgeOf(member)`、`wakeCountsOf(member)`；`watchmanTick` 的 `awake = portOpen && hbAge <= 90`；`startHer()` 的等待判据从"端口开"改成"心跳新鲜"，`wake-whale.ps1` 退出码非 0 也算失败。
-- `scripts/wake-whale.ps1`：`already-awake` 也要看心跳；僵尸服务时**开浏览器**再等心跳；`-DryRun` 只判不动手（判据测试用它，不会弹出窗口）。
+- `plugin/dsh-lil-whale-group/lib/index.js`：`WAKE_STALE_SEC = 90`、`presenceAgeOf(member)`、`wakeCountsOf(member)`；`watchmanTick` 的 `awake = portOpen && hbAge <= 90`；`startHer()` 的等待判据从"端口开"改成"心跳新鲜"，`wake-fish.ps1` 退出码非 0 也算失败。
+- `scripts/wake-fish.ps1`：`already-awake` 也要看心跳；僵尸服务时**开浏览器**再等心跳；`-DryRun` 只判不动手（判据测试用它，不会弹出窗口）。
 - `scripts/fish.ps1` 的 `Start-Fish`：`up` 遇到"端口通但心跳 stale"不再报"已经在跑"，而是开窗叫醒（`-NoBrowser` 时只提示）。
 
 **账（她给的规格，照抄）**：要的不是更全的快照，是**两行 + 一个能 join 的 id**。
@@ -1156,7 +1156,7 @@ lil-whale\state  → junction → pool\state
 - `fish.ps1` 起小鱼之前自动补 profile patch 的 `agent-loop.resumeSessionId`（`Ensure-Unattended`）：`install.ps1` 时还没有会话 id（会话要等用户说第一句话），而 `up` 的时候 `pins.json` 里已经有了；此时进程还没起，改 patch 不会触发热重载。
 - 小肥鱼、小鱼丸都已切到无人值守（`mode: unattended`，心跳新鲜、无窗）。旧进程没有模式账的显示 `?`（如实标未知）。
 
-**仍未做**：①鱼塘「打开」在鱼已无人值守运行时先提示"先休眠再打开"（现在会撞 writer）②`wake-whale.ps1` 的"开浏览器推门"退化成兜底（无人值守下不该触发，但代码还在）③多鱼化（判据里的成员仍写死 `'whale'`）。
+**仍未做**：①鱼塘「打开」在鱼已无人值守运行时先提示"先休眠再打开"（现在会撞 writer）②`wake-fish.ps1` 的"开浏览器推门"退化成兜底（无人值守下不该触发，但代码还在）③多鱼化（判据里的成员仍写死 `'whale'`）。
 
 ## 附录 A.46 在群里时不加未读；翻历史时只提示"底部有了新消息"（2026-11-13）
 
@@ -1192,16 +1192,16 @@ lil-whale\state  → junction → pool\state
 
 **问题**：08:40 那件事之后，叫醒判据改成了心跳，但**判据里的成员仍写死 `whale`**：`presenceAgeOf('whale')`、`say('lee','whale',…)`、`PLAN_FILE = join(HER_HOME,'plan',…)`、`watchState` 全局单份。第二条鱼（小鱼丸）的计划永远走不到，她的唤醒额度也和鲸鱼混在一个计数器里。他 11:14 的原话："三件没做的事可以做了。"
 
-**做法**（`plugin/dsh-group/lib/index.js`）：
+**做法**（`plugin/dsh-lil-whale-group/lib/index.js`）：
 - 新增 `watchedMembers()`：名册里 `kind: fish` 且 `role ≠ watcher` 的成员 —— 巡守不叫醒自己。
 - `watchState` 从单份改成 `{ day, members: { <键>: { wakes, fails, planFired, skipped, triedWid, lastFresh, pendingWake, lastTry } } }`；旧格式（只服务 whale 的时代）读进来时迁到 `whale` 名下，不让上限一夜清零。
 - 每条鱼各自：`planFileOf(member)` 读她自己家的 `plan\wake-plan.json`；`dueTasks(member)` 读她自己 `dshHome\storages\schedule.json`；`claimPlanDelivery(member, job)` 的 `.claim` 写她自己家的 `plan\claims\`；`startHer(member)` 传 `-Member <键>`。
 - 原来 `watchmanTick` 的函数体抽成 `watchOne(member, st)`（机械替换，逻辑不动）；新的 `watchmanTick` 只做两件事：换日、遍历名册。一条鱼抛错只记一行 `watch-member-failed`，不影响别的鱼。
 - 日志行都带 `to=<键>`；`wake-try` / `woke` / `wake-skip` 的 `wid` 仍是 `wl-<HHMM>-<jobKey>`（同一 id 才能 join）。
 
-**`wake-whale.ps1` 多鱼化**：参数 `-Member`（默认 `whale` 兼容旧调用）；家、profile、端口、心跳路径全从名册取；**僵尸分支按模式分叉**：`mode=window` 才开浏览器；无人值守时只记 `zombie-unattended` 并退出 1 —— 开窗会撞 writer（A.47）。`-DryRun` 保留。
+**`wake-fish.ps1` 多鱼化**：参数 `-Member`（默认 `whale` 兼容旧调用）；家、profile、端口、心跳路径全从名册取；**僵尸分支按模式分叉**：`mode=window` 才开浏览器；无人值守时只记 `zombie-unattended` 并退出 1 —— 开窗会撞 writer（A.47）。`-DryRun` 保留。
 
-**判据**：①`wake-whale.ps1 -Member <鱼> -DryRun` 能读出 `member=/hb-age=/mode=`；②巡守日志里每条鱼的 `woke` 行都带 `to=<键>`，`wakes` 各算各的；③无人值守的鱼被叫醒时不开浏览器（`mode=unattended` 下不出现 `pushed-browser`）；④名册里加第三条鱼不用改代码。
+**判据**：①`wake-fish.ps1 -Member <鱼> -DryRun` 能读出 `member=/hb-age=/mode=`；②巡守日志里每条鱼的 `woke` 行都带 `to=<键>`，`wakes` 各算各的；③无人值守的鱼被叫醒时不开浏览器（`mode=unattended` 下不出现 `pushed-browser`）；④名册里加第三条鱼不用改代码。
 
 **未做**：`watchState` 仍是单文件（巡守只有主进程一个写者，多进程写会 lost update）；每条鱼的唤醒额度目前各自 `perHour 12 / perDay 60`，总量没有封顶（D4-1 待拍板）。
 
@@ -1261,7 +1261,7 @@ lil-whale\state  → junction → pool\state
 
 **没做**：`schedule.json`（dsh 自己的定时任务）仍只由巡守读——那条是 dsh 的数据，不是她写的表；多鱼后要不要每条鱼自己执行，等真有鱼用再说。
 
-**2026-11-13 13:0x 补第四处守**：`scripts\wake-whale.ps1` 推门前先查"同 profile 是不是已经有一个进程"（`Get-ProfileProcesses`，和 `fish.ps1` 同一个判据）。端口没开、但进程已经在起（无人值守启动要几秒）时再 spawn 一个，就是两个 writer——这条是 A.47 那三处守漏掉的一条路。
+**2026-11-13 13:0x 补第四处守**：`scripts\wake-fish.ps1` 推门前先查"同 profile 是不是已经有一个进程"（`Get-ProfileProcesses`，和 `fish.ps1` 同一个判据）。端口没开、但进程已经在起（无人值守启动要几秒）时再 spawn 一个，就是两个 writer——这条是 A.47 那三处守漏掉的一条路。
 
 **已知简化（2026-11-13 14:1x）**：自执行的递话仍然以 `lee` 的名字写进群里（`s="watch"` 标机器来源）。为什么不写成她自己：群插件的唤醒路径会跳过 `from === 自己` 的消息，写自己就唤不醒自己。代价是别条鱼的闹钟在 `群.md` 里看起来像"大肥鱼说的"——所以正文前缀写「自己的闹钟」，并且这一行只对 `to` 指定的那条鱼生效。真要做干净，得给"系统"一个不是鱼的身份，等 D4-2 再定。
 
@@ -1411,7 +1411,7 @@ lil-whale\state  → junction → pool\state
 - `claimPlanDelivery`：名册里缺 `home` 的成员不再共用第一条鱼的家，兜底到 `pool\state\claims\<成员>\plan\claims`。
 - `saveWatchState` 的空 `catch {}` 补一行 `watch-state-save-failed`（账写失败不再和写成功长得一样）。
 - `fish.ps1`：主 dsh 按 `role=watcher` 找，不再写死 `'lee'`（名册换键后主命令不会直接坏）；`refresh all` 跳过巡守（以前会把 `环境.md` 写进他自己的 DSH 家）。
-- `wake-whale.ps1`：发现同 profile 已有进程时**等心跳**而不是等 `-Port`（那个进程可能在别的端口，白等 25 秒）；`DSH_HOME`/`LIL_WHALE_CONFIG` 路径里的单引号做转义。
+- `wake-fish.ps1`：发现同 profile 已有进程时**等心跳**而不是等 `-Port`（那个进程可能在别的端口，白等 25 秒）；`DSH_HOME`/`LIL_WHALE_CONFIG` 路径里的单引号做转义。
 - `pool\state\settings.json` 写回 `crashNotify: true`（它被旧代码抹掉过，之前靠默认值生效，纸上看不见）。
 
 > 判据没变：**能看见的失败不是失败；看起来没事的失败才是。**
@@ -1426,7 +1426,7 @@ lil-whale\state  → junction → pool\state
 
 **做法（2026-11-13）**：
 
-- 把计划表与唤醒额度的**纯逻辑**抽到 `plugin\dsh-group\lib\plan-core.js`（`todayKey` / `planFileOf` / `planDue` / `planDeliveryText` / `parseWakeCounts` / `sumWakesToday`）。这些函数只"给定输入 → 返回输出"，不碰 ctx、不发消息、不写日志。
+- 把计划表与唤醒额度的**纯逻辑**抽到 `plugin\dsh-lil-whale-group\lib\plan-core.js`（`todayKey` / `planFileOf` / `planDue` / `planDeliveryText` / `parseWakeCounts` / `sumWakesToday`）。这些函数只"给定输入 → 返回输出"，不碰 ctx、不发消息、不写日志。
 - `index.js` 保留薄壳，把当前上下文（`HER_HOME`、`PLAN_MAX`、`noteOnce`）注进去；行为不变。
 - 新增 `scripts\test-plan.mjs`：**直接 import 真代码**，用真文件跑真分支，26 个用例（窗口宽 1/15 分钟、迟到不补、until 过期、没写 why、`enabled:false`、当天已推过、days 过滤、坏形状、超上限只认前三条、wakes 文件按成员键/旧平铺格式、全局合计只加今天、递话措辞两种）。
 - `verify-pending.ps1` 第 4 项改成调这个测试；`release-check.ps1` 新增「计划逻辑」一项，包解压后跑一遍。
@@ -1434,3 +1434,25 @@ lil-whale\state  → junction → pool\state
 **判据**：`node scripts\test-plan.mjs` 26/26；`verify-pending` 的「计划逻辑」PASS；`release-check` 12→13 项全过。
 
 > 同一条规矩的另一面：**能被改名的检查，比能被注释骗过的检查更该被换掉**——前者是维护成本，后者是假安全感。
+
+## 附录 A.60 命名统一：包名、目录、行 id 走一条线
+
+**问题**：同一个东西有三个名字，各叫各的——
+
+| 身份 | 之前 | 之后 |
+|---|---|---|
+| npm 包名 | `lil-whale-group` | `@fabianactor/dsh-lil-whale-group` |
+| 仓库目录 | `plugin/dsh-group` | `plugin/dsh-lil-whale-group` |
+| profile 配置行 id | `lil-whale-group` | `dsh-lil-whale-group` |
+| 插件内部自报 `name` | `lil-whale-group` | `@fabianactor/dsh-lil-whale-group` |
+| 版本 | 1.1.0 | **1.2.0**（版本线连续，不重启编号） |
+
+顺带统一的两处：`scripts\wake-whale.ps1` → **`scripts\wake-fish.ps1`**（它早就接 `-Member` 参数，名字还停在单条鲸上）；`acl\` 从鱼塘根挪到 **`pool\state\acl\`**（恢复记录属于共享区，不属于某个家）。
+
+**为什么版本定 1.2.0 而不是 2.0.0**：这两个包**从没发布过**（`private: true`，安装全是本地 `link:`），语义版本里的"破坏性"是给"不能自动升级的消费者"用的，这里没有消费者；而启动痕迹里的 `pkg`、CHANGELOG 需要连续。改名不改变行为，就不该借 2.0 暗示"有大改"。
+
+**本机三个 profile 怎么迁**：`scripts\migrate-scope.mjs --profile-dir <profile 目录> [--dry-run]`——只迁这个 profile **真的装了**的包（只装宿主的鱼不会凭空多出 UI 链接）；改 `package.json` 的 deps 与 `dsh.profile.bundles`、`pnpm-lock.yaml` 的 importers 段、`node_modules` 的 junction；写前备份 `*.bak-scope-<时间>`；末尾自检（deps / bundles / 链接三项缺一就 exit 1）。
+
+**判据**（2026-11-13 现场）：三个 profile 的 `--dump-config` 都出现 `- id: dsh-lil-whale-group` 且无 `Cannot find`；全仓 JS 过 `node --check`、PS 过解析；`test-plan.mjs` 26/26；`release-check` 13 项全过。
+
+**有意保留旧名的**：`docs\PRD-CHANGELOG.md` 的历史条目（记录当时的名字，改了就是造假）、`Run All Whales.cmd` 两个快捷方式文件名（改文件名会废掉桌面副本）、`小小肥鱼-PRD.md` 文件名（小小肥鱼是项目 dsh-lil-whale 的中文名）、`watchman*` 内部名（A.41）、`herHome`/`herDshHome`/`herPort`/`herWaker` 配置键（**记债**：她是单数，多鱼配置化时再改，届时保留旧键兼容）。

@@ -1,3 +1,9 @@
+## v1.0.65 — 2026-11-13 20:5x
+
+- **C1 命名统一**：包名 → `@fabianactor/dsh-lil-whale-group(-ui)`（版本 1.2.0，版本线连续）；目录 → `plugin/dsh-lil-whale-group(-ui)`；配置行 id → `dsh-lil-whale-group(-ui)`；插件内部自报 `name` 与包名一致。
+- `scripts\wake-whale.ps1` → `scripts\wake-fish.ps1`；`acl\` 归到 `pool\state\acl\`。
+- 新增 `scripts\migrate-scope.mjs`（迁本机 profile：deps / bundles / pnpm-lock / node_modules，写前备份 + 自检）；三个 profile 已迁移并 `--dump-config` 验证。PRD 附录 A.60；状态行 v1.0.65。
+
 ## v1.0.64 — 2026-11-13 20:1x
 
 - **计划逻辑抽成可测模块**：新增 `plugin\dsh-group\lib\plan-core.js`（todayKey / planFileOf / planDue / planDeliveryText / parseWakeCounts / sumWakesToday），`index.js` 改薄壳注入上下文，行为不变。

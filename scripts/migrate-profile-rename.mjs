@@ -1,8 +1,8 @@
-// 一次性迁移：把两个 profile 的 package.json 里的包名从 dsh-group* 改成 lil-whale-group*
+// 一次性迁移：把两个 profile 的 package.json 里的包名从 dsh-lil-whale-group* 改成 lil-whale-group*
 // 用 node 做，是因为刚才用 PowerShell 的字符串索引把数组展开成了字符串、把文件写坏过一次。
 import { readFileSync, writeFileSync } from 'node:fs'
 
-const MAP = { 'dsh-group-ui': 'lil-whale-group-ui', 'dsh-group': 'lil-whale-group' }
+const MAP = { 'dsh-lil-whale-group-ui': 'lil-whale-group-ui', 'dsh-lil-whale-group': 'lil-whale-group' }
 
 for (const file of process.argv.slice(2)) {
   const raw = readFileSync(file, 'utf8')

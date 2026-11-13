@@ -10,7 +10,7 @@
  * 小鱼丸 2026-11-13 全天都在这个状态里（PRD A.54）。
  *
  * 现在的做法：插件自己调 `ctx.get('sessionController').agents.resume(sessionId)`，
- * 由 session-controller 负责 preset 挂载（`plugin/dsh-group/lib/index.js` 的
+ * 由 session-controller 负责 preset 挂载（`plugin/dsh-lil-whale-group/lib/index.js` 的
  * `scheduleOwnMount()` / `ensureOwnMounted()`）。不需要改任何 profile patch。
  *
  * 所以这个文件保留但**拒绝写入**：

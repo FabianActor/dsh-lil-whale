@@ -1,4 +1,4 @@
-# dsh-group
+# dsh-lil-whale-group
 
 两只鱼之间的那条线。按 [PRD §8](../../docs/小小肥鱼-PRD.md) 实现。
 
@@ -33,9 +33,9 @@
 ## 装
 
 ```powershell
-dsh plugin --profile web add "link:<仓库>\plugin\dsh-group"
+dsh plugin --profile web add "link:<仓库>\plugin\dsh-lil-whale-group"
 # 她的：先 $env:DSH_HOME='<小肥鱼的家>\dsh-home'，再
-dsh plugin --profile whale add "link:<仓库>\plugin\dsh-group"
+dsh plugin --profile whale add "link:<仓库>\plugin\dsh-lil-whale-group"
 ```
 
 `dsh plugin add` 会自己把包名追加进 `dsh.profile.bundles`（2026-11-09 实测），不用手工改 `package.json`。

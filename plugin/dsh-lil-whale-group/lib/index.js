@@ -1,4 +1,4 @@
-// dsh-group —— 两只鱼之间的那条线
+// dsh-lil-whale-group —— 两只鱼之间的那条线
 //
 // 设计（PRD §8）：发言**入队即返回**，谁在听谁自己去看。
 //   - `group_say(to, text)`：往 group\messages.jsonl 追加一行，顺手把可读版追加进 群.md，立刻返回
@@ -90,7 +90,7 @@ function buildUserMessage(options) {
   return makeUserMessageFallback(options)
 }
 
-const name = 'lil-whale-group'
+const name = '@fabianactor/dsh-lil-whale-group'
 // 版本号只有一个出处：package.json。写死过一次，那天 package.json 是 1.1.0、常量还是 1.0.0，
 // 于是"重启了但插件没生效"这个判据本身开始说谎——日志说 1.0.0，人以为是旧代码。
 const PKG_VERSION = (() => {
@@ -1952,7 +1952,7 @@ function dueTasks(member, now) {
   return due
 }
 
-/** 把门推开：跑 wake-whale.ps1（隐藏窗口、不开浏览器、日志落她目录）。 */
+/** 把门推开：跑 wake-fish.ps1（隐藏窗口、不开浏览器、日志落她目录）。 */
 function startHer(member) {
   return new Promise((resolve) => {
     const exe = existsSync(PWSH_EXE) ? PWSH_EXE : 'pwsh'
@@ -1975,7 +1975,7 @@ function startHer(member) {
     }
     child.once('error', (e) => done(false, `spawn-error=${e?.code ?? e?.message ?? 'unknown'} exe=${exe}`))
     // 2026-11-13 08:40 的教训：端口通不等于她会醒 —— 会话要等客户端连上来才挂载。
-    // 判据是"心跳新鲜"，wake-whale.ps1 现在也是等心跳才退出。
+    // 判据是"心跳新鲜"，wake-fish.ps1 现在也是等心跳才退出。
     const startedAt = Date.now()
     const poll = async () => {
       if (settled) return

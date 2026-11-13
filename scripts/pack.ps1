@@ -43,7 +43,7 @@ try {
   Write-Host ("  不含：archive\（她的旧家记录 + 旧脚本存档）、本机配置、tmp\、logs\、node_modules\")
 
   if ($Npm) {
-    foreach ($pkg in @('plugin\dsh-group', 'plugin\dsh-group-ui')) {
+    foreach ($pkg in @('plugin\dsh-lil-whale-group', 'plugin\dsh-lil-whale-group-ui')) {
       Push-Location (Join-Path $repo $pkg)
       try {
         $tag = (Get-Content 'package.json' -Raw | ConvertFrom-Json).version

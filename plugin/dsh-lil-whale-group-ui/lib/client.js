@@ -10,7 +10,7 @@
  * /group/api/config、/group/api/presence），不在浏览器里直接读文件。
  */
 window.__ModuleLoader__.load({
-  id: 'lil-whale-group-ui',
+  id: 'dsh-lil-whale-group-ui',
   factory(require) {
     const React = require('react')
     const h = React.createElement
@@ -65,8 +65,8 @@ window.__ModuleLoader__.load({
 
     // 没发出去的字不能因为"切走看一眼"就没。草稿只存在这台机器的浏览器里
     // （localStorage，按会话分键），不进她的家、不进群记录。
-    const GROUP_DRAFT_KEY = 'dsh-group-draft'
-    const dmDraftKeyOf = (peer) => `dsh-group-dm-draft-${peer}`
+    const GROUP_DRAFT_KEY = 'dsh-lil-whale-group-draft'
+    const dmDraftKeyOf = (peer) => `dsh-lil-whale-group-dm-draft-${peer}`
     const readDraft = (key) => {
       try { return window.localStorage?.getItem(key) ?? '' } catch { return '' }
     }
@@ -285,11 +285,11 @@ window.__ModuleLoader__.load({
         // dsh 的 MarkdownText 是 React.memo(...) 包出来的，typeof 是 "object" 不是 "function"。
         // 只认 function 会把它判成"没有"——这个坑我踩过一次。
         if (md && (typeof md === 'function' || typeof md === 'object')) return md
-        console.warn('[lil-whale-group-ui] primitives 里没有可用的 MarkdownText，用自带渲染兜底')
+        console.warn('[dsh-lil-whale-group-ui] primitives 里没有可用的 MarkdownText，用自带渲染兜底')
         return null
       } catch (error) {
         // 退化成纯文本可以接受，但必须留一条痕迹：静默降级等于把错误藏起来。
-        console.warn('[lil-whale-group-ui] 取不到 @deepseek-ai/dsh-client-ui-primitives，退回纯文本：', error?.message ?? error)
+        console.warn('[dsh-lil-whale-group-ui] 取不到 @deepseek-ai/dsh-client-ui-primitives，退回纯文本：', error?.message ?? error)
         return null
       }
     })()
@@ -499,7 +499,7 @@ window.__ModuleLoader__.load({
       }
 
       componentDidCatch(error) {
-        console.warn('[lil-whale-group-ui] MarkdownText 渲染失败，这条改用自带渲染：', error?.message ?? error)
+        console.warn('[dsh-lil-whale-group-ui] MarkdownText 渲染失败，这条改用自带渲染：', error?.message ?? error)
       }
 
       render() {
@@ -1101,20 +1101,20 @@ function Bubble({ config, message, onMention, animate = false }) {
       const [seenDm, setSeenDm] = useState({})
       const [sidebar, setSidebar] = useState(() => {
         try {
-          const saved = Number(window.localStorage?.getItem('dsh-group-dm-sidebar'))
+          const saved = Number(window.localStorage?.getItem('dsh-lil-whale-group-dm-sidebar'))
           return Number.isFinite(saved) && saved >= 140 && saved <= 420 ? saved : 208
         } catch { return 208 }
       })
       // 私聊列宽：可拖、记在本机（跟左边的联系人栏一样，属于"这一台机器上的手感"）
       const [dmWidth, setDmWidth] = useState(() => {
         try {
-          const saved = Number(window.localStorage?.getItem('dsh-group-dm-width'))
+          const saved = Number(window.localStorage?.getItem('dsh-lil-whale-group-dm-width'))
           return Number.isFinite(saved) && saved >= 30 && saved <= 92 ? saved : 72
         } catch { return 72 }
       })
       const persistDmWidth = useCallback(() => {
         setDmWidth((current) => {
-          try { window.localStorage?.setItem('dsh-group-dm-width', String(current)) } catch {}
+          try { window.localStorage?.setItem('dsh-lil-whale-group-dm-width', String(current)) } catch {}
           return current
         })
       }, [])
@@ -1526,7 +1526,7 @@ function Bubble({ config, message, onMention, animate = false }) {
                   target.removeEventListener('pointermove', move)
                   target.removeEventListener('pointerup', up)
                   target.removeEventListener('pointercancel', up)
-                  setSidebar((current) => { try { window.localStorage?.setItem('dsh-group-dm-sidebar', String(current)) } catch {} ; return current })
+                  setSidebar((current) => { try { window.localStorage?.setItem('dsh-lil-whale-group-dm-sidebar', String(current)) } catch {} ; return current })
                 }
                 target.addEventListener('pointermove', move)
                 target.addEventListener('pointerup', up)
@@ -1619,7 +1619,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       // 列宽是"这台机器上怎么看"，不属于她家的数据，存在浏览器里。
       const [widthPct, setWidthPct] = useState(() => {
         try {
-          const saved = Number(window.localStorage?.getItem('dsh-group-width'))
+          const saved = Number(window.localStorage?.getItem('dsh-lil-whale-group-width'))
           return Number.isFinite(saved) && saved >= 30 && saved <= 92 ? saved : 72
         } catch { return 72 }
       })
@@ -1746,7 +1746,7 @@ function Bubble({ config, message, onMention, animate = false }) {
 
       const persistWidth = useCallback(() => {
         setWidthPct((current) => {
-          try { window.localStorage?.setItem('dsh-group-width', String(current)) } catch {}
+          try { window.localStorage?.setItem('dsh-lil-whale-group-width', String(current)) } catch {}
           return current
         })
       }, [])
@@ -3141,11 +3141,11 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[lil-whale-group-ui] client build v32 · memo-list:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v32 · memo-list:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
-        if (typeof document !== 'undefined' && !document.getElementById('lil-whale-group-keyframes')) {
+        if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')
-          style.id = 'lil-whale-group-keyframes'
+          style.id = 'dsh-lil-whale-group-keyframes'
       style.textContent = '@keyframes dshGroupPulse{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-1px)}}' + '@keyframes dshGroupRise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}' + '@keyframes dshGroupSpin{to{transform:rotate(360deg)}}'
           document.head.appendChild(style)
         }

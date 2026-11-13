@@ -128,7 +128,7 @@ $dsh = Get-Command dsh -ErrorAction SilentlyContinue
 if (-not $dsh) { Die '找不到 dsh 命令。' '先装 DeepSeek Harness：npm i -g @deepseek-ai/dsh，然后重跑 install.ps1' }
 $ver = (& dsh --version 2>&1 | Select-Object -First 1)
 Ok "dsh $ver"
-foreach ($rel in @('plugin\dsh-group\package.json', 'plugin\dsh-group-ui\package.json', 'templates\START.md.tpl')) {
+foreach ($rel in @('plugin\dsh-lil-whale-group\package.json', 'plugin\dsh-lil-whale-group-ui\package.json', 'templates\START.md.tpl')) {
   if (-not (Test-Path (Join-Path $RepoRoot $rel))) {
     Die "仓库不完整：找不到 $rel。" "确认你跑的是完整的项目仓库（git clone 下来那份），不是只有几个文件"
   }
@@ -182,11 +182,11 @@ try {
   }
 
   Step '3. 把群插件装进她的 profile'
-  $add = & dsh plugin --profile $ChildProfile add "link:$RepoRoot\plugin\dsh-group" 2>&1
+  $add = & dsh plugin --profile $ChildProfile add "link:$RepoRoot\plugin\dsh-lil-whale-group" 2>&1
   if ($LASTEXITCODE -ne 0) {
     Die "装插件失败：$($add | Select-Object -Last 5)" "进 $DshHome\profiles\$ChildProfile 手动跑 dsh plugin add 看完整报错"
   }
-  Ok 'lil-whale-group'
+  Ok '@fabianactor/dsh-lil-whale-group'
 } finally {
   $env:DSH_HOME = $savedHome
 }
@@ -195,15 +195,15 @@ if (-not $SkipParent) {
   Step "4. 把两个插件装进你的 profile（$ParentProfile）"
   try {
     $env:DSH_HOME = $savedHome
-    $add1 = & dsh plugin --profile $ParentProfile add "link:$RepoRoot\plugin\dsh-group" 2>&1
+    $add1 = & dsh plugin --profile $ParentProfile add "link:$RepoRoot\plugin\dsh-lil-whale-group" 2>&1
     if ($LASTEXITCODE -ne 0) {
-      Die "装 lil-whale-group 失败：$($add1 | Select-Object -Last 5)" "确认你的 profile 名对（默认 web），或用 -SkipParent 只装她"
+      Die "装 @fabianactor/dsh-lil-whale-group 失败：$($add1 | Select-Object -Last 5)" "确认你的 profile 名对（默认 web），或用 -SkipParent 只装她"
     }
-    $add2 = & dsh plugin --profile $ParentProfile add "link:$RepoRoot\plugin\dsh-group-ui" 2>&1
+    $add2 = & dsh plugin --profile $ParentProfile add "link:$RepoRoot\plugin\dsh-lil-whale-group-ui" 2>&1
     if ($LASTEXITCODE -ne 0) {
-      Die "装 lil-whale-group-ui 失败：$($add2 | Select-Object -Last 5)" "同上"
+      Die "装 @fabianactor/dsh-lil-whale-group-ui 失败：$($add2 | Select-Object -Last 5)" "同上"
     }
-    Ok 'lil-whale-group + lil-whale-group-ui'
+    Ok '@fabianactor/dsh-lil-whale-group + -ui'
     Warn "装好以后要重启一次你的 dsh，界面才认这两个插件"
   } finally {
     $env:DSH_HOME = $savedHome
@@ -257,7 +257,7 @@ $deployDate = Get-Date -Format 'yyyy-MM-dd'
 
 # 闸门参数从插件源码里读，免得这张纸和实现漂移；读不到就用默认值。
 $wakeSrc = ''
-$groupSrc = Join-Path $RepoRoot 'plugin\dsh-group\lib\index.js'
+$groupSrc = Join-Path $RepoRoot 'plugin\dsh-lil-whale-group\lib\index.js'
 if (Test-Path $groupSrc) { $wakeSrc = [System.IO.File]::ReadAllText($groupSrc) }
 $cooldown = 60; $perHour = 12; $perDay = 60; $quietFrom = 0; $quietTo = 8
 # 必须用 -cmatch：PowerShell 的 -match 默认不区分大小写，会先把 maxWakesPerDay: 8 当成 perDay 抓走。
@@ -457,11 +457,11 @@ Step '7. 验一遍'
 try {
   $env:DSH_HOME = $DshHome
   $dump = & dsh --profile $ChildProfile --dump-config 2>&1
-  $rows = ($dump | Select-String -Pattern 'id: lil-whale-group' | Measure-Object).Count
+  $rows = ($dump | Select-String -Pattern 'id: dsh-lil-whale-group' | Measure-Object).Count
   if ($LASTEXITCODE -ne 0 -or $rows -lt 1) {
     Die "她的 profile 没合成出群插件（dump 最后几行：$($dump | Select-Object -Last 3)）" "进 $DshHome\profiles\$ChildProfile 看 package.json 的 dsh.profile.bundles 里有没有 lil-whale-group"
   }
-  Ok "她的 profile：$rows 行 lil-whale-group"
+  Ok "她的 profile：$rows 行 dsh-lil-whale-group"
 } finally {
   $env:DSH_HOME = $savedHome
 }

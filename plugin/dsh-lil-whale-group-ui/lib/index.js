@@ -12,7 +12,7 @@ import { spawn } from 'node:child_process'
 import { Socket } from 'node:net'
 import { config } from './config.js'
 
-export const name = 'lil-whale-group-ui'
+export const name = '@fabianactor/dsh-lil-whale-group-ui'
 export const inject = ['webServer', 'agents']
 
 // 她的家在哪从 lil-whale.config.json 读（见本包 lib/config.js）
@@ -37,7 +37,7 @@ const UI_CONFIG = join(GROUP_DIR, 'ui-config.json')
 // 「看到哪儿了」的游标：只在面板里看，不影响她那边读群的游标
 const UI_READ = join(GROUP_DIR, 'ui-read.json')
 const PINS = join(GROUP_DIR, 'pins.json')
-// 跨进程心跳：dsh-group 插件在各自那个进程里每 5 秒写一份 `state\presence\<成员>.json`。
+// 跨进程心跳：dsh-lil-whale-group 插件在各自那个进程里每 5 秒写一份 `state\presence\<成员>.json`。
 // 面板要显示"小肥鱼 正在回复"，只能读这个 —— 这个进程里的 ctx.agents 只有大肥鱼自己的会话。
 const POOL_STATE = config().poolStateDir || join(GROUP_DIR, '..', 'state')
 const PRESENCE_DIR = join(POOL_STATE, 'presence')

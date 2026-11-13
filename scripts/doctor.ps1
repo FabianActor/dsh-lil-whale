@@ -325,7 +325,7 @@ if ($lastBoot) {
 if ($lastBoot) {
   try {
     $bootObj = $lastBoot | ConvertFrom-Json
-    $pkgPath = Join-Path $Cfg.Root 'plugin\dsh-group\package.json'
+    $pkgPath = Join-Path $Cfg.Root 'plugin\dsh-lil-whale-group\package.json'
     if ($bootObj.pkg -and (Test-Path -LiteralPath $pkgPath)) {
       $diskVer = (Get-Content -LiteralPath $pkgPath -Raw -Encoding UTF8 | ConvertFrom-Json).version
       $bootVer = ([string]$bootObj.pkg -replace '^.*@', '')
@@ -335,7 +335,7 @@ if ($lastBoot) {
         Add-Row '版本一致' 'WARN' ("启动痕迹 {0} ≠ 磁盘 {1}（进程里跑的是旧代码）" -f $bootVer, $diskVer) 'NEXT: 重启她的窗（以及你的），让进程加载新版本'
       }
     } else {
-      Add-Row '版本一致' 'WARN' '启动痕迹里没有 pkg，或找不到 plugin\dsh-group\package.json'
+      Add-Row '版本一致' 'WARN' '启动痕迹里没有 pkg，或找不到 plugin\dsh-lil-whale-group\package.json'
     }
   } catch {
     Add-Row '版本一致' 'WARN' ('核不了：' + $_.Exception.Message)
