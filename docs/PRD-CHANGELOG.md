@@ -4,6 +4,13 @@
 > 它与两个 npm 包的版本（各自 `package.json` 里的 semver，如 `1.2.0`）是**两条线**：包版本只在功能或破坏性变化、发布时才动。
 > 编号从 r1 开始（第一稿就是 r1）。2026-11-13 之前这些号写作 `v1.0.NN`，本次统一改名，编号不变。
 
+## r75 — 2026-11-14 00:5x
+
+- **新**：`fish.ps1 acl-check` / `acl-repair`（沙箱通行证查/补，补完记 `pool\state\acl.log`）；`doctor.ps1` 第 8e 节报「通行证（鱼）」与「钥匙（鱼）」两行。
+- **改**：`key grant` / `key revoke` 的账本改 `fmt=2`，带 `fp=`（sha256 前 12 位）与 `from-fp=`，**不记 key 值**；新附录 A.68。
+- **修**：`Get-WorkspaceGrantGaps` 返回 `,$list` 被 `@()` 包成"1 个缺口"的假失败；`acl-repair` 补完立刻复查读到旧 ACL 快照 ⇒ 等 300ms 再读一次。
+- **验证**：`acl-check all` 两条鱼 0 缺口；`doctor` 全过；`release-check` 13/13。
+
 ## r74 — 2026-11-14 00:2x
 
 - **修**：沙箱里的 pwsh 写不进 `notes\ run\ plan\ logs\`（capability SID 继承只对新建对象生效，搬家前的老目录没接上）。已对两条鱼的四个目录递归补 Allow ACE（ACL 先备份）。`dsh-home\` 不补（凭证在里面）。

@@ -17,6 +17,8 @@
 #   pwsh -File fish.ps1 down-main          关闭主 dsh（还在跑的小鱼继续跑）
 #   pwsh -File fish.ps1 doctor             体检（现在只对配置里那条鱼）
 #   pwsh -File fish.ps1 new -Key <键> -Name <名字> -Parent whale   养一条新鱼（查重 → 建家 → 进名册 → 记 birth）
+#   pwsh -File fish.ps1 acl-check [whale|all]   查沙箱通行证（文件工具能写、pwsh 不能写 = 缺它）
+#   pwsh -File fish.ps1 acl-repair [whale|all]  补沙箱通行证（补完记 pool\state\acl.log）
 #   pwsh -File fish.ps1 help
 #
 # 选项：-Window（开窗起；默认无人值守） -NoBrowser（强制不开） -BrowserMainOnly（只给主 dsh 开窗） -Yes（不停下来问）
@@ -563,6 +565,8 @@ fish.ps1 -- 鱼群唯一的入口
   pwsh -File fish.ps1 refresh whale    重新生成环境.md（模板/名册/工具变了以后）
   pwsh -File fish.ps1 maintain whale   检修：先停，再开窗（看完关窗 → restore）
   pwsh -File fish.ps1 restore whale    回无人值守（无窗起，会话由 host 自己挂上）
+  pwsh -File fish.ps1 acl-check [whale|all]   查沙箱通行证（文件工具能写、pwsh 不能写 = 缺它）
+  pwsh -File fish.ps1 acl-repair [whale|all]  补沙箱通行证（补完记 pool\state\acl.log）
   pwsh -File fish.ps1 help
 
 选项：-NoBrowser -Window -BrowserMainOnly -Console -Yes -By <谁> -Why <为什么> -Port <n>
@@ -688,8 +692,10 @@ function Invoke-KeyCmd($action, $childKey) {
     if (Test-Path -LiteralPath $childCred) {
       Write-Host ("注意：{0} 家里已经有 .credentials.yaml，这次会覆盖。" -f $child.Label)
     }
+    $srcFp = Get-FileFingerprint $srcCred
     Copy-Item -LiteralPath $srcCred -Destination $childCred -Force
-    Add-Content -LiteralPath $keyLog -Value ('{0} | key-grant | fmt=1 child={1} from={2} via=fish.ps1' -f $ts, $child.Key, $src.Key) -Encoding utf8
+    $childFp = Get-FileFingerprint $childCred
+    Add-Content -LiteralPath $keyLog -Value ('{0} | key-grant | fmt=2 child={1} from={2} via=fish.ps1 fp={3} from-fp={4}' -f $ts, $child.Key, $src.Key, $childFp, $srcFp) -Encoding utf8
     Write-Host ''
     Write-Host ("!! 已把「{0}」的 API key 复制给「{1}」—— 花的是它的额度（人明确要求的继承）。" -f $src.Label, $child.Label)
     Write-Host '   回收方式：fish.ps1 key revoke <孩子键>（停用它那份），或到平台轮换家长那把 key。'
@@ -701,9 +707,10 @@ function Invoke-KeyCmd($action, $childKey) {
       Write-Host ("xx「{0}」家里没有 .credentials.yaml，本来就没有钥匙。" -f $child.Label)
       return $false
     }
+    $fp = Get-FileFingerprint $childCred
     $bak = $childCred + '.revoked-' + (Get-Date -Format 'yyyyMMddHHmmss')
     Move-Item -LiteralPath $childCred -Destination $bak -Force
-    Add-Content -LiteralPath $keyLog -Value ('{0} | key-revoke | fmt=1 child={1} kept={2} via=fish.ps1' -f $ts, $child.Key, (Split-Path $bak -Leaf)) -Encoding utf8
+    Add-Content -LiteralPath $keyLog -Value ('{0} | key-revoke | fmt=2 child={1} kept={2} via=fish.ps1 fp={3}' -f $ts, $child.Key, (Split-Path $bak -Leaf), $fp) -Encoding utf8
     Write-Host ("已停用「{0}」的钥匙：文件改名成 {1}" -f $child.Label, (Split-Path $bak -Leaf))
     Write-Host '   它下一次请求会报 MISSING_CREDENTIAL；真要吊销请到平台轮换那把 key。'
     return $true
@@ -882,6 +889,45 @@ function Invoke-NewFish {
   return $true
 }
 
+# ---------- 沙箱通行证：查、补（PRD A.67） ----------
+# 判据：同一路径、同样内容，文件工具能写而 pwsh 不能写 —— 是"手"缺通行证，不是语法问题。
+function Invoke-AclCmd([string]$action, [string]$name) {
+  $members = @(Resolve-Targets $name | Where-Object { $_.Kind -eq 'fish' -and $_.Role -ne 'watcher' -and $_.Home })
+  if ($members.Count -eq 0) { Write-Host 'xx 没有可查的鱼。'; return $false }
+  $ok = $true
+  foreach ($m in $members) {
+    $sid = Get-WorkspaceSid ([string]$m.Home)
+    $gaps = Get-WorkspaceGrantGaps $m
+    if ($gaps.Count -eq 0) {
+      Write-Host ("{0}：通行证齐全（{1}）" -f $m.Label, $sid)
+      continue
+    }
+    if ($action -eq 'check') {
+      Write-Host ("{0}：{1} 个对象缺通行证（{2}）" -f $m.Label, $gaps.Count, $sid)
+      $gaps | Select-Object -First 8 | ForEach-Object { Write-Host ("   - {0}" -f $_) }
+      if ($gaps.Count -gt 8) { Write-Host ("   … 还有 {0} 个" -f ($gaps.Count - 8)) }
+      Write-Host ("NEXT: pwsh -File scripts\fish.ps1 acl-repair {0}" -f $m.Key)
+      $ok = $false
+      continue
+    }
+    $fixed = Repair-WorkspaceGrantGaps $m
+    $left = @(Get-WorkspaceGrantGaps $m)
+    if ($left.Count -gt 0) {
+      # Set-Acl 之后立刻读 ACL 有时还是旧快照（不是没补上）——等 300ms 再读一次
+      Start-Sleep -Milliseconds 300
+      $left = @(Get-WorkspaceGrantGaps $m)
+    }
+    if ($left.Count -gt 0) {
+      Write-Host ("xx {0}：补了 {1} 个，还剩 {2} 个补不上（看上面的 ! 行）" -f $m.Label, $fixed, $left.Count)
+      $ok = $false
+    } else {
+      Write-Host ("{0}：补了 {1} 个，现在齐全（{2}）" -f $m.Label, $fixed, $sid)
+      Add-Content -LiteralPath (Join-Path $Cfg.PoolState 'acl.log') -Value ('{0} | acl-repair | fmt=1 member={1} fixed={2} sid={3}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $m.Key, $fixed, $sid) -Encoding utf8
+    }
+  }
+  return $ok
+}
+
 # ---------- 分发 ----------
 $ok = $true
 $locked = $false
@@ -911,6 +957,8 @@ try {
     }
     'new'    { if (-not (Invoke-NewFish)) { $ok = $false } }
     'key'    { if (-not (Invoke-KeyCmd $Name $Key)) { $ok = $false } }
+    'acl-check'  { if (-not (Invoke-AclCmd 'check' $Name)) { $ok = $false } }
+    'acl-repair' { if (-not (Invoke-AclCmd 'repair' $Name)) { $ok = $false } }
     'maintain' { if (-not (Invoke-Maintain $Name)) { $ok = $false } }
     'restore'  { if (-not (Invoke-Restore $Name)) { $ok = $false } }
     'unattended' { if (-not (Invoke-Restore $Name)) { $ok = $false } }

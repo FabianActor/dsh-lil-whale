@@ -400,6 +400,50 @@ if (Test-Path -LiteralPath $closeLog) {
   Add-Row '窗口留痕' 'WARN' 'logs\close.log 不存在（开门/关门的账还没记过：fish.ps1 只在真开窗/真停时才记 open/close）'
 }
 
+# 8e. 沙箱通行证 & 钥匙指纹（2026-11-14 A.67 / A.68）
+#     "文件工具能写、pwsh 写不进"= 这只鱼的 workspace 子树缺 capability SID；
+#     "人从 UI 改了 key"不会进 keys.log —— 只能靠指纹对一下，报出来但不拦（换 key 是正常操作）。
+try {
+  if ($Cfg.MembersFile -and (Test-Path -LiteralPath $Cfg.MembersFile)) {
+    $rosterAcl = (Get-Content -LiteralPath $Cfg.MembersFile -Raw -Encoding utf8 | ConvertFrom-Json).members
+    $keyLog = Join-Path $Cfg.PoolState 'keys.log'
+    $lastKeyLine = @{}
+    if (Test-Path -LiteralPath $keyLog) {
+      foreach ($line in (Get-Content -LiteralPath $keyLog -Encoding utf8)) {
+        if ($line -match 'child=([a-z0-9-]+)') { $lastKeyLine[$Matches[1]] = $line }
+      }
+    }
+    foreach ($prop in $rosterAcl.PSObject.Properties) {
+      $m = $prop.Value
+      if ($m.kind -ne 'fish' -or $m.role -eq 'watcher' -or -not $m.home) { continue }
+      $fishName = if ($m.name) { [string]$m.name } else { $prop.Name }
+      $probe = [pscustomobject]@{ Key = $prop.Name; Label = $fishName; Home = [string]$m.home }
+      $gaps = @(Get-WorkspaceGrantGaps $probe)
+      if ($gaps.Count -gt 0) {
+        Add-Row ('通行证（' + $fishName + '）') 'WARN' ("{0} 个对象缺 capability SID（文件工具能写、pwsh 不能写）" -f $gaps.Count) ('NEXT: pwsh -File scripts\fish.ps1 acl-repair ' + $prop.Name)
+      } else {
+        Add-Row ('通行证（' + $fishName + '）') 'OK' ('workspace 子树都有 ' + (Get-WorkspaceSid ([string]$m.home)))
+      }
+      if ($m.dshHome) {
+        $cred = Join-Path ([string]$m.dshHome) '.credentials.yaml'
+        if (Test-Path -LiteralPath $cred) {
+          $fp = Get-FileFingerprint $cred
+          $rec = $lastKeyLine[$prop.Name]
+          if (-not $rec) {
+            Add-Row ('钥匙（' + $fishName + '）') 'OK' ("指纹 {0}（没有账本记录：人自己填的，正常）" -f $fp)
+          } elseif ($rec -match 'fp=([0-9a-f]{12})' -and $Matches[1] -ne $fp) {
+            Add-Row ('钥匙（' + $fishName + '）') 'WARN' ("指纹和上次记账不一样（{0} → {1}）：有人在 UI 里换过 key" -f $Matches[1], $fp)
+          } else {
+            Add-Row ('钥匙（' + $fishName + '）') 'OK' ("指纹 {0}，与上次记账一致" -f $fp)
+          }
+        }
+      }
+    }
+  }
+} catch {
+  Add-Row '通行证' 'WARN' ('查不了：' + $_.Exception.Message)
+}
+
 # 9. 全鱼：每条鱼一行（端口 / 心跳 / 启动痕迹 / 名册）
 #    为什么单独一段：上面那些检查只盯"她"（whale）。鱼多了以后，
 #    "第二条鱼没起""她的日志写成了第一条鱼的"这类错，单独看她那张表是看不出来的。
