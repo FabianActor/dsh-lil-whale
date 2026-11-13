@@ -54,7 +54,7 @@ pwsh -File scripts\install.ps1
 
 ## 第一次出生
 
-1. 起她的窗：`pwsh -File scripts\fish.ps1 up whale`（或双击 `scripts\bin\Run All Whales.cmd`，把主 dsh 和所有鱼都起来、只开主 dsh 一个窗）
+1. 起她：`pwsh -File scripts\fish.ps1 up whale`（**默认无人值守**：无窗起，会话由 host 自己挂上；或双击 `scripts\bin\Run All Whales.cmd`，把主 dsh 和所有鱼都起来、只开主 dsh 一个窗）
    - 它会打印她的网址，形如 `http://127.0.0.1:3082/?token=xxxx`
    - **token 每次启动随机生成，只印在那一行**；自己敲 `127.0.0.1:3082` 会得到 401
 2. 在她那个网页里填**她自己的** key：设置 → Models
@@ -128,8 +128,9 @@ lil-whale-pool/           共享区（不在任何一条鱼的家里面）
 
 ```powershell
 pwsh -File scripts\fish.ps1              # 看所有鱼：端口、在不在跑、心跳
-pwsh -File scripts\fish.ps1 up whale     # 开一条
-pwsh -File scripts\fish.ps1 up all       # 全开
+pwsh -File scripts\fish.ps1 up whale     # 开一条（无人值守：无窗，会话由 host 自己挂上）
+pwsh -File scripts\fish.ps1 up whale -Window  # 开一条并打开它的浏览器窗（调试用）
+pwsh -File scripts\fish.ps1 up all       # 全开（小鱼无人值守，只有主 dsh 开窗）
 pwsh -File scripts\fish.ps1 down whale   # 停一条
 pwsh -File scripts\fish.ps1 doctor       # 体检
 ```

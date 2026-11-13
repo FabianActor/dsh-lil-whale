@@ -17,7 +17,7 @@
 #   pwsh -File fish.ps1 doctor             体检（现在只对配置里那条鱼）
 #   pwsh -File fish.ps1 help
 #
-# 选项：-NoBrowser（不开浏览器） -BrowserMainOnly（只给主 dsh 开窗） -Yes（不停下来问）
+# 选项：-Window（开窗起；默认无人值守） -NoBrowser（强制不开） -BrowserMainOnly（只给主 dsh 开窗） -Yes（不停下来问）
 #       -Force（down-main 带着鱼一起关） -By/-Why（记账用） -Port（覆盖端口）
 #
 # 两种"在跑"：
@@ -30,6 +30,7 @@ param(
   [Parameter(Position = 0)][string]$Command = 'list',
   [Parameter(Position = 1)][string]$Name = '',
   [switch]$NoBrowser,
+  [switch]$Window,
   [switch]$Yes,
   [string]$By = 'fabian',
   [string]$Why = '',
@@ -266,8 +267,36 @@ function Show-List {
   Write-Host '用法：fish.ps1 up <名字|all> / down <名字|all> / doctor'
 }
 
+# ---------- 无人值守默认开 ----------
+# 新鱼第一次 up 时，把 profile patch 里的 agent-loop.resumeSessionId 补上（PRD A.45）。
+# 为什么放在 up 而不是 install：install 的时候还没有会话 id（会话要等用户说第一句话），
+# 而 up 的时候 pins 里已经有了；而且此刻进程还没起，改 patch 不会触发热重载。
+function Ensure-Unattended($member) {
+  if (-not $member.DshHome -or -not $member.Profile) { return }
+  $patch = Join-Path $member.DshHome ("profiles\{0}\cordis.patch.yml" -f $member.Profile)
+  if (-not (Test-Path -LiteralPath $patch)) { return }
+  $text = Get-Content -LiteralPath $patch -Raw -Encoding UTF8
+  if ($text -match 'agent-loop' -and $text -match 'resumeSessionId') { return }
+  $pinsPath = Join-Path $Cfg.GroupDir 'pins.json'
+  if (-not (Test-Path -LiteralPath $pinsPath)) { return }
+  try { $pins = Get-Content -LiteralPath $pinsPath -Raw -Encoding UTF8 | ConvertFrom-Json } catch { return }
+  $ids = @($pins.($member.Key) | Where-Object { $_ })
+  if ($ids.Count -lt 1) { return }
+  $script = Join-Path $PSScriptRoot 'enable-unattended.mjs'
+  if (-not (Test-Path -LiteralPath $script)) { return }
+  $out = & node $script --member $member.Key 2>&1
+  if ($LASTEXITCODE -eq 0) {
+    Write-Host ("{0}：已补上无人值守（profile patch 的 agent-loop）。" -f $member.Label)
+  } else {
+    Write-Host ("{0}：无人值守没配上 —— {1}" -f $member.Label, ($out -join ' '))
+  }
+}
+
 # ---------- up ----------
 function Start-Fish($member) {
+  # 无人值守是默认（Fabian 2026-11-13 拍板）：小鱼起来不开窗，会话由 host 自己挂上。
+  # 巡守（主 dsh）例外 —— 它就是那扇窗。要看窗用 maintain，或显式 -Window。
+  $openWindow = if ($member.Role -eq 'watcher') { -not $NoBrowser } else { $Window }
   $port = Get-PortOf $member
   if (-not (Test-Port $port)) {
     $others = @(Get-ProfileProcesses $member)
@@ -290,12 +319,12 @@ function Start-Fish($member) {
     # 这时候"已经在跑"是假的：要开窗，会话才会挂上。
     $hbText = if ($null -eq $hbAge) { '没有心跳' } else { "$hbAge 秒前" }
     Write-Host ("{0}：进程在跑但会话没挂上（心跳：{1}）—— 开窗叫醒。" -f $member.Label, $hbText)
-    if (-not $NoBrowser) {
+    if ($openWindow) {
       Start-Process (Get-Url $member) | Out-Null
       Write-FishWindowLog $member 'open'
       Set-Mode $member 'window' $port
     } else {
-      Write-Host '（-NoBrowser：只起服务，不开窗；要挂上会话得进鱼塘点「打开」）'
+      Write-Host '（无人值守：会话没挂上 —— 用 restore 重起一份，或 maintain 开窗看）'
     }
     return $true
   }
@@ -303,6 +332,7 @@ function Start-Fish($member) {
     Write-Host ("{0}：DSH_HOME 不存在（{1}）—— 先 install.ps1 建家。" -f $member.Label, $member.DshHome)
     return $false
   }
+  if ($member.Role -ne 'watcher') { Ensure-Unattended $member }
   $out = Join-Path $member.DshHome 'logs\web-latest.log'
   $err = Join-Path $member.DshHome 'logs\web-latest.err.log'
   $cwd = if ($member.Cwd) { $member.Cwd } else { $member.Home }
@@ -326,7 +356,7 @@ function Start-Fish($member) {
     return $false
   }
   Write-Host ("{0}：起来了 http://127.0.0.1:{1}" -f $member.Label, $port)
-  if (-not $NoBrowser) {
+  if ($openWindow) {
     Start-Process (Get-Url $member) | Out-Null
     Write-FishWindowLog $member 'open'
     Set-Mode $member 'window' $port
@@ -419,9 +449,10 @@ fish.ps1 -- 鱼群唯一的入口
 
   pwsh -File fish.ps1                  看所有鱼
   pwsh -File fish.ps1 list
-  pwsh -File fish.ps1 up whale         开一条
-  pwsh -File fish.ps1 up all           全开（每条鱼各开一个窗）
-  pwsh -File fish.ps1 up all -BrowserMainOnly  全开，只给主 dsh 开窗
+  pwsh -File fish.ps1 up whale         开一条（默认无人值守：无窗，会话由 host 自己挂上）
+  pwsh -File fish.ps1 up whale -Window 开一条，并且打开它的浏览器窗
+  pwsh -File fish.ps1 up all           全开（小鱼无人值守，只有主 dsh 开窗）
+  pwsh -File fish.ps1 up all -BrowserMainOnly  同上（兼容旧写法）
   pwsh -File fish.ps1 down whale       停一条
   pwsh -File fish.ps1 down all -Yes    全停（含主 dsh）
   pwsh -File fish.ps1 up-main          启动主 dsh（已在跑就打开它的 WebUI）
@@ -474,12 +505,12 @@ function Invoke-Maintain([string]$name) {
   if ($m.Role -eq 'watcher') { throw '巡守那条就是主 dsh，检修它请直接关窗/重启。' }
   Write-Host ("{0}：检修 —— 先休眠。" -f $m.Label)
   if (-not (Stop-Fish $m)) { return $false }
-  $saved = $NoBrowser
-  $NoBrowser = $false
+  $savedWindow = $Window
+  $Window = $true
   try {
     if (-not (Start-Fish $m)) { return $false }
   } finally {
-    $NoBrowser = $saved
+    $Window = $savedWindow
   }
   Write-Host ''
   Write-Host '看完以后：'
@@ -503,12 +534,12 @@ function Invoke-Restore([string]$name) {
     Write-Host ("{0}：先停掉现在这份（模式：{1}）。" -f $m.Label, $(if ($md) { $md.mode } else { '未知' }))
     if (-not (Stop-Fish $m)) { return $false }
   }
-  $saved = $NoBrowser
-  $NoBrowser = $true
+  $savedWindow = $Window
+  $Window = $false
   try {
     if (-not (Start-Fish $m)) { return $false }
   } finally {
-    $NoBrowser = $saved
+    $Window = $savedWindow
   }
   if (-not (Test-Port (Get-PortOf $m))) { return $false }
   $age = Get-HeartbeatAgeSec $m

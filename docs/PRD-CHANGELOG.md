@@ -3,6 +3,13 @@
 > 本文件只记「哪一版改了哪几处、为什么改」。当前结论都在 [小小肥鱼-PRD.md](小小肥鱼-PRD.md) 里，那边不背历史。
 > 自 v0.3.5 起从 PRD 头部搬到这里（此前几块原样搬出，未改写）。v1.0 是整篇重写。
 
+## v1.0.47（2026-11-13）
+
+- **无人值守设为默认（他 10:56 拍板）**：`fish.ps1` 新增 `-Window`；小鱼 `up` 默认无窗（无人值守），巡守仍开窗。要看窗用 `maintain`，看完 `restore`。
+- `fish.ps1` 起鱼前自动补 `agent-loop.resumeSessionId`（`Ensure-Unattended`）：`install.ps1` 时没有会话 id，`up` 时 `pins.json` 里已有；进程未起，改 patch 不触发热重载。
+- 现场：小肥鱼、小鱼丸切到 `mode: unattended`，心跳新鲜、无浏览器窗；旧进程无账显示 `?`。
+- README / `scripts\README.md` / `docs\安装流程详解.md` 的"起鱼"说明同步成默认无人值守；PRD A.45 补拍板与落地、留三项未做。
+
 ## v1.0.46（2026-11-13）
 
 - **A.47 一段会话一个 writer：三处一起守**。同一条会话被两个进程 resume 时，第二个拿到 `session/writer-held`，不炸 host、不报错，表现为"点了没反应"。

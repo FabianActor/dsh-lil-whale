@@ -14,7 +14,7 @@
 **为什么从九个删到四个**（删了 `Run DSH-Check` / `Run All Whales-Check` / `Run lil whale-Check` / `Stop lil whale` / `Run lil whale`）：
 
 - `-Check` 版当年存在的理由是"窗口留着看报错"。现在这件事有两个更好的去处：鱼塘里的**「检修」**按钮（先跑 `doctor.ps1` 再起，输出留在页面上）、以及 `fish.ps1` 本身会把失败原因和 `NEXT:` 打出来。同一个动作留两个入口，最后一定会有一个先过期。
-- **单条鱼的起停不进 `.cmd`**：起用 `pwsh -File scripts\fish.ps1 up <键>`，停用 `... down <键>`，或者进鱼塘点「唤醒 / 休眠」——那本来就是同一套命令的界面。
+- **单条鱼的起停不进 `.cmd`**：起用 `pwsh -File scripts\fish.ps1 up <键>`（默认无人值守、不开窗；要看窗用 `maintain` 或 `-Window`），停用 `... down <键>`，或者进鱼塘点「唤醒 / 休眠」——那本来就是同一套命令的界面。
 - 判据很简单：**一个动作只留一个入口**。加鱼不要加 `.cmd` —— 往名册里加，鱼塘和 `fish.ps1` 就都有了。
 
 **`bin\` 里的 .cmd 可以复制到任何地方**（桌面、任务栏、快捷方式）。它按三步找 `.ps1`：
@@ -33,7 +33,7 @@
 
 ```
 pwsh -File scripts\fish.ps1 list                 # 名册 + 端口 + 心跳
-pwsh -File scripts\fish.ps1 up   <鱼|all>        # 起；all 有锁，防重复启动
+pwsh -File scripts\fish.ps1 up   <鱼|all>        # 起；默认无人值守（无窗）；all 有锁，防重复启动
 pwsh -File scripts\fish.ps1 down <鱼|all> [-Yes] [-Force]
 pwsh -File scripts\fish.ps1 up-main / down-main  # 主 dsh（down-main 有鱼在跑会拒绝）
 pwsh -File scripts\fish.ps1 doctor | refresh <鱼|all>
