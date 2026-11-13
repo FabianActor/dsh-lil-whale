@@ -41,7 +41,7 @@ const home = join(root, 'fish')
 const planDir = join(home, 'plan')
 mkdirSync(planDir, { recursive: true })
 const member = { key: 'testfish', home }
-const herHome = join(root, 'fallback-home')
+const homeRoot = join(root, 'fallback-home')
 const writePlan = (data) => writeFileSync(join(planDir, 'wake-plan.json'), JSON.stringify(data), 'utf8')
 const at = (h, m) => {
   const d = new Date(2026, 10, 13, h, m, 0, 0) // 2026-11-13 本地时间
@@ -50,13 +50,13 @@ const at = (h, m) => {
 const TODAY = '2026-11-13'
 const notes = []
 const onNote = (msg) => notes.push(msg)
-const due = (now, opts = {}) => planDue({ member, st: opts.st ?? {}, now, graceMin: opts.graceMin ?? 1, herHome, maxItems: opts.maxItems ?? 3, onNote })
+const due = (now, opts = {}) => planDue({ member, st: opts.st ?? {}, now, graceMin: opts.graceMin ?? 1, homeRoot, maxItems: opts.maxItems ?? 3, onNote })
 
 try {
   // ---- todayKey / planFileOf ----
   check('todayKey 用本地日期', todayKey(at(9, 5)), TODAY)
-  check('planFileOf 优先 member.home', planFileOf(member, herHome), join(home, 'plan', 'wake-plan.json'))
-  check('planFileOf 缺 home 时退回 herHome', planFileOf({ key: 'x' }, herHome), join(herHome, 'plan', 'wake-plan.json'))
+  check('planFileOf 优先 member.home', planFileOf(member, homeRoot), join(home, 'plan', 'wake-plan.json'))
+  check('planFileOf 缺 home 时退回 homeRoot', planFileOf({ key: 'x' }, homeRoot), join(homeRoot, 'plan', 'wake-plan.json'))
 
   // ---- planDue 的窗口 ----
   writePlan([{ id: 'morning', at: '08:40', why: '读夜里的账' }])

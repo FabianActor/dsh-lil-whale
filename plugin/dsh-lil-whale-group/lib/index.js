@@ -134,13 +134,13 @@ const WAKES = join(GROUP_DIR, 'wake-state.json')
 // 住在"一直开着的那个进程"里（Fabian 的判断），不另起系统进程、不进启动项。
 const WATCH = {
   intervalMs: 60_000,
-  port: CFG.herPort,
+  port: CFG.selfPort,
   maxWakesPerDay: 8,
   maxConsecutiveFailures: 3,
 }
-const HER_HOME = CFG.herHome
-const SCHEDULE_FILE = join(HER_HOME, 'dsh-home', 'storages', 'schedule.json')
-const WATCHMAN_LOG = join(HER_HOME, 'logs', 'watchman.log')
+const SELF_HOME = CFG.selfHome
+const SCHEDULE_FILE = join(SELF_HOME, 'dsh-home', 'storages', 'schedule.json')
+const WATCHMAN_LOG = join(SELF_HOME, 'logs', 'watchman.log')
 
 // 每个进程自己的起停账（2026-11-12 19:25 加的）。
 //
@@ -202,7 +202,7 @@ function lastRunStateOf(member) {
 }
 
 const WATCH_STATE_FILE = join(POOL_STATE, 'watchman.json')
-const HER_WAKER = CFG.herWaker
+const HER_WAKER = CFG.selfWaker
 const PWSH_EXE = CFG.pwshExe
 // 自启动开关（2026-11-12 23:55 他要的）：主 dsh 起来时要不要顺手唤醒其他鱼。
 // 开关存 pool\state\settings.json —— 它是**数据**，不是配置：鱼塘页能改，下次启动生效。
@@ -720,7 +720,7 @@ const MEMBERS_FALLBACK = {
   whale: {
     label: '小肥鱼',
     kind: 'fish',
-    cwd: CFG.whaleCwd,
+    cwd: CFG.selfCwd,
     sessionId: '',
   },
   fabian: { label: 'Fabian', kind: 'human', cwd: null, sessionId: null },
@@ -882,7 +882,7 @@ function writeJson(file, value) {
     } catch {}
     logLine({
       note: 'atomic-write-degraded',
-      file: String(file).replace(HER_HOME, '~'),
+      file: String(file).replace(SELF_HOME, '~'),
       code: lastError?.code ?? null,
       fellBackTo: 'in-place',
     })
@@ -890,11 +890,11 @@ function writeJson(file, value) {
   } catch (error) {
     logLine({
       note: 'atomic-write-failed',
-      file: String(file).replace(HER_HOME, '~'),
+      file: String(file).replace(SELF_HOME, '~'),
       step: 'rename+inPlace',
       code: error?.code ?? lastError?.code ?? null,
       attempts: 10,
-      keptTmp: String(tmp).replace(HER_HOME, '~'),
+      keptTmp: String(tmp).replace(SELF_HOME, '~'),
     })
     throw error
   }
@@ -1381,7 +1381,7 @@ function apply(ctx) {
   //   ② <repoRoot>\logs\plugin-boot.log —— 兜底证据，路径由**代码位置**推出来
   // 2026-11-12 教训：配置被污染成临时目录时，①整个消失、连"我没加载"都看不出来；
   // 所以"这个进程加载了什么"这件事必须记在配置改不到的地方，并把可疑的配置值一起写下来。
-  const homeLooksRight = existsSync(join(CFG.herHome, 'dsh-home')) || existsSync(join(CFG.herHome, 'START.md'))
+  const homeLooksRight = existsSync(join(CFG.selfHome, 'dsh-home')) || existsSync(join(CFG.selfHome, 'START.md'))
   const bootRecord = {
     pkg: `${name}@${PKG_VERSION}`,
     pid: process.pid,
@@ -1389,10 +1389,10 @@ function apply(ctx) {
     // 从桌面快捷方式启动就是这样（2026-11-12 实测：他自己的 3080 那条痕迹写着 (unset)，害我怀疑了半天）。
     home: process.env.DSH_HOME ?? `(unset; 默认 ${join(homedir(), '.dsh')})`,
     cwd: process.cwd(),
-    herHome: CFG.herHome,
-    herPort: CFG.herPort,
+    selfHome: CFG.selfHome,
+    selfPort: CFG.selfPort,
     profile: process.env.DSH_PROFILE ?? '(unset)',
-    suspect: homeLooksRight ? undefined : `herHome 里既没有 START.md 也没有 dsh-home；配置可能指错了地方`,
+    suspect: homeLooksRight ? undefined : `selfHome 里既没有 START.md 也没有 dsh-home；配置可能指错了地方`,
   }
   bootLog({ note: 'boot', ...bootRecord })
   try {
@@ -1615,7 +1615,7 @@ function apply(ctx) {
     }
     // 家/端口要按「这条鱼自己」写（2026-11-13 12:38 发现：lee 的账写成 home=lil-whale、port=3082）。
     const ownRec = MEMBERS[self] ?? {}
-    runLog(self, 'started', `fmt=2 pid=${process.pid} member=${self} home=${ownRec.home ?? HER_HOME} role=${ownRec.role ?? (isMainProcess() ? 'watcher' : 'member')} prev-run=${prevText} port=${ownRec.port ?? CFG.herPort}`)
+    runLog(self, 'started', `fmt=2 pid=${process.pid} member=${self} home=${ownRec.home ?? SELF_HOME} role=${ownRec.role ?? (isMainProcess() ? 'watcher' : 'member')} prev-run=${prevText} port=${ownRec.port ?? CFG.selfPort}`)
     ctx.on('dispose', () => {
       const aliveSec = Math.round((Date.now() - startedAtMs) / 1000)
       runLog(self, 'stopped', `fmt=2 reason=dispose pid=${process.pid} lived=${aliveSec}s`)
@@ -2013,7 +2013,7 @@ function startHer(member) {
 }
 
 function planFileOf(member) {
-  return planFileOfCore(member, HER_HOME)
+  return planFileOfCore(member, SELF_HOME)
 }
 const PLAN_MAX = 3
 const planNotes = new Set()
@@ -2031,7 +2031,7 @@ function planDue(member, st, now, graceMin = 1) {
     st,
     now,
     graceMin,
-    herHome: HER_HOME,
+    homeRoot: SELF_HOME,
     maxItems: PLAN_MAX,
     onNote: (msg) => noteOnce(member, msg),
   })

@@ -16,8 +16,8 @@ export function todayKey(d) {
 }
 
 /** 这条鱼的计划表在哪：优先用名册里的 home，缺了退回调用方给的默认家。 */
-export function planFileOf(member, herHome) {
-  return join(member.home ?? herHome, 'plan', 'wake-plan.json')
+export function planFileOf(member, homeRoot) {
+  return join(member.home ?? homeRoot, 'plan', 'wake-plan.json')
 }
 
 /**
@@ -28,16 +28,16 @@ export function planFileOf(member, herHome) {
  * @param {object} opts.st 这条鱼的巡守账（planFired 记今天已推过的 id）
  * @param {Date}   opts.now
  * @param {number} [opts.graceMin=1] 允许迟到的分钟数（自执行宽 15 分钟，巡守窗口 2 分钟）
- * @param {string} opts.herHome 成员没有 home 时的默认家
+ * @param {string} opts.homeRoot 成员没有 home 时的默认家
  * @param {number} [opts.maxItems=3] 表最多认几条
  * @param {(msg: string) => void} [opts.onNote] 格式问题的留痕回调
  * @returns {{id: string, at: string, why: string}[]}
  */
-export function planDue({ member, st, now, graceMin = 1, herHome, maxItems = 3, onNote = () => {} }) {
+export function planDue({ member, st, now, graceMin = 1, homeRoot, maxItems = 3, onNote = () => {} }) {
   const note = (msg) => onNote(msg)
   let raw
   try {
-    raw = JSON.parse(readFileSync(planFileOf(member, herHome), 'utf8'))
+    raw = JSON.parse(readFileSync(planFileOf(member, homeRoot), 'utf8'))
   } catch (e) {
     if (e?.code !== 'ENOENT') note(`plan-unreadable ${e?.message ?? e}`)
     return []

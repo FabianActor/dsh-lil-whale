@@ -4,6 +4,13 @@
 > 它与两个 npm 包的版本（各自 `package.json` 里的 semver，如 `1.2.0`）是**两条线**：包版本只在功能或破坏性变化、发布时才动。
 > 编号从 r1 开始（第一稿就是 r1）。2026-11-13 之前这些号写作 `v1.0.NN`，本次统一改名，编号不变。
 
+## r76 — 2026-11-14 02:0x
+
+- **改**：配置键从单鱼时代的 `her*` / `whale*` 换成 `self*`（selfHome / selfDshHome / selfWaker / selfPort / selfProfile / selfCwd）；旧键仍能读（`LEGACY_KEYS` + `$Cfg.Her*` 别名），`install.ps1` 写新键并删旧键。
+- **改**：两份 `config.js`（宿主 + UI）合成同一份；三份配置与 example 换键（`_版本: 2`）；代码里 `CFG.her*`→`CFG.self*`、`HER_HOME`→`SELF_HOME`、`plan-core.js` 参数 `herHome`→`homeRoot`。
+- **文档**：新附录 A.69；`docs\打包.md` 配置表、`docs\安装流程详解.md`（键名 33 处 + §11 三条已修项复核）。
+- **验证**：三个 profile `--dump-config` 解析正常；`fish.ps1 list`、`doctor` 全过、`test-plan` 26/26、`release-check` 13/13。
+
 ## r75 — 2026-11-14 00:5x
 
 - **新**：`fish.ps1 acl-check` / `acl-repair`（沙箱通行证查/补，补完记 `pool\state\acl.log`）；`doctor.ps1` 第 8e 节报「通行证（鱼）」与「钥匙（鱼）」两行。

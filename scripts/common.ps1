@@ -23,41 +23,61 @@ function Get-WhaleConfig {
     catch { Write-Warning "配置读不了（$path）：$($_.Exception.Message)，先按默认布局跑" }
   }
 
-  # 默认布局：仓库的上一级放她的家
-  $herHome = Join-Path (Split-Path $script:WhaleRoot -Parent) 'lil-whale'
+  # 默认布局（鱼塘）：<pond>\app 是仓库，鱼在 <pond>\homes\<键>，共享区在 <pond>\pool。
+  $defaultHome = Join-Path (Join-Path (Split-Path $script:WhaleRoot -Parent) 'homes') 'whale'
 
-  # 配置里有的字段优先；没有的按默认推
+  # 配置里有的字段优先；没有的按默认推。
+  # 旧名字（her* / whale*）仍然认，新名字（self*）优先 —— 单鱼时代写的配置不用改也能跑。
   $pick = {
     param($name, $fallback)
     if ($raw -and $raw.PSObject.Properties.Name -contains $name -and $raw.$name) { $raw.$name } else { $fallback }
   }
+  $pickSelf = {
+    param($newName, $oldName, $fallback)
+    $v = & $pick $newName $null
+    if ($v) { return $v }
+    if ($oldName) { $v = & $pick $oldName $null; if ($v) { return $v } }
+    return $fallback
+  }
 
-  $herHome = & $pick 'herHome' $herHome
+  $selfHome = & $pickSelf 'selfHome' 'herHome' $defaultHome
+  $pondRoot = Split-Path (Split-Path $selfHome -Parent) -Parent
+  $poolDir  = & $pick 'poolDir' (Join-Path $pondRoot 'pool')
 
   [pscustomobject]@{
-    ConfigPath  = $path
-    ConfigFound = [bool]$raw
-    Root        = $script:WhaleRoot
-    HerHome     = $herHome
-    HerDshHome  = & $pick 'herDshHome' (Join-Path $herHome 'dsh-home')
-    PoolDir     = & $pick 'poolDir' (Join-Path (Split-Path $herHome -Parent) 'lil-whale-pool')
-  PoolState   = & $pick 'poolStateDir' (Join-Path (& $pick 'poolDir' (Join-Path (Split-Path $herHome -Parent) 'lil-whale-pool')) 'state')
-  GroupDir    = & $pick 'groupDir' (Join-Path (& $pick 'poolDir' (Join-Path (Split-Path $herHome -Parent) 'lil-whale-pool')) 'group')
-DmDir       = & $pick 'dmDir' (Join-Path (& $pick 'poolDir' (Join-Path (Split-Path $herHome -Parent) 'lil-whale-pool')) 'dm')
-    MembersFile = & $pick 'membersFile' (Join-Path (& $pick 'poolDir' (Join-Path (Split-Path $herHome -Parent) 'lil-whale-pool')) 'members.json')
-    HerWaker    = & $pick 'herWaker' (Join-Path $script:WhaleRoot 'scripts\wake-fish.ps1')
-    PwshExe     = & $pick 'pwshExe' 'pwsh.exe'
-    WakeMetrics = & $pick 'wakeMetrics' (Join-Path $script:WhaleRoot 'logs\wake-metrics.log')
-    WatchmanPid = & $pick 'watchmanPidFile' (Join-Path $herHome 'logs\watchman.pid')
-    LeeStartCwd = & $pick 'leeStartCwd' (Join-Path $env:USERPROFILE 'Desktop')
-    ChatCwd     = & $pick 'chatCwd' (Split-Path $script:WhaleRoot -Parent)
-    LeeCwd      = & $pick 'leeCwd' $script:WhaleRoot
-    WhaleCwd    = & $pick 'whaleCwd' $herHome
-    LeeHome     = & $pick 'leeHome' (Join-Path $HOME '.dsh')
-    LeeProfile  = & $pick 'leeProfile' 'web'
-    WhaleProfile= & $pick 'whaleProfile' 'whale'
-    HerPort     = & $pick 'herPort' 3082
-    LeePort     = & $pick 'leePort' 3080
+    ConfigPath   = $path
+    ConfigFound  = [bool]$raw
+    Root         = $script:WhaleRoot
+    # 新名字（多鱼）：这个进程服务的那条鱼。
+    SelfHome     = $selfHome
+    SelfDshHome  = & $pickSelf 'selfDshHome' 'herDshHome' (Join-Path $selfHome 'dsh-home')
+    SelfWaker    = & $pickSelf 'selfWaker' 'herWaker' (Join-Path $script:WhaleRoot 'scripts\wake-fish.ps1')
+    SelfPort     = [int](& $pickSelf 'selfPort' 'herPort' 3082)
+    SelfProfile  = & $pickSelf 'selfProfile' 'whaleProfile' 'whale'
+    SelfCwd      = & $pickSelf 'selfCwd' 'whaleCwd' $selfHome
+    # 共享区（在鱼的家之外）。
+    PoolDir      = $poolDir
+    PoolState    = & $pick 'poolStateDir' (Join-Path $poolDir 'state')
+    GroupDir     = & $pick 'groupDir' (Join-Path $poolDir 'group')
+    DmDir        = & $pick 'dmDir' (Join-Path $poolDir 'dm')
+    MembersFile  = & $pick 'membersFile' (Join-Path $poolDir 'members.json')
+    # 别的字段。
+    PwshExe      = & $pick 'pwshExe' 'pwsh.exe'
+    WakeMetrics  = & $pick 'wakeMetrics' (Join-Path $script:WhaleRoot 'logs\wake-metrics.log')
+    WatchmanPid  = & $pick 'watchmanPidFile' (Join-Path $poolDir 'state\watchman.pid')
+    LeeStartCwd  = & $pick 'leeStartCwd' (Join-Path $env:USERPROFILE 'Desktop')
+    ChatCwd      = & $pick 'chatCwd' (Split-Path $script:WhaleRoot -Parent)
+    LeeCwd       = & $pick 'leeCwd' $script:WhaleRoot
+    LeeHome      = & $pick 'leeHome' (Join-Path $HOME '.dsh')
+    LeeProfile   = & $pick 'leeProfile' 'web'
+    LeePort      = [int](& $pick 'leePort' 3080)
+    # 兼容别名：旧脚本还在用 Her* / Whale* 这些名字。
+    HerHome      = $selfHome
+    HerDshHome   = & $pickSelf 'selfDshHome' 'herDshHome' (Join-Path $selfHome 'dsh-home')
+    HerWaker     = & $pickSelf 'selfWaker' 'herWaker' (Join-Path $script:WhaleRoot 'scripts\wake-fish.ps1')
+    HerPort      = [int](& $pickSelf 'selfPort' 'herPort' 3082)
+    WhaleProfile = & $pickSelf 'selfProfile' 'whaleProfile' 'whale'
+    WhaleCwd     = & $pickSelf 'selfCwd' 'whaleCwd' $selfHome
   }
 }
 

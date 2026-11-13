@@ -212,7 +212,7 @@ if (-not $SkipParent) {
 }
 
 Step '5. 写配置'
-# 合并写，不是覆盖写：已有的字段（repoRoot / herWaker / pwshExe …）原样留着，
+# 合并写，不是覆盖写：已有的字段（repoRoot / selfWaker / pwshExe …）原样留着，
 # 否则在装好的机器上重跑一次 install，会把这份配置里手写的东西全丢掉。
 # 一条鱼一份配置：鱼塘里第一条（whale）用 lil-whale.config.json，其余用 lil-whale.config.<键>.json。
 $cfgName = 'lil-whale.config.json'
@@ -221,7 +221,8 @@ $cfgPath = if ($ConfigPath -ne '') { $ConfigPath } else { Join-Path $RepoRoot $c
 if ((Test-Path $cfgPath) -and -not $Force) {
   try {
     $existing = [System.IO.File]::ReadAllText($cfgPath) | ConvertFrom-Json -AsHashtable
-    $liveHome = [string]$existing['herHome']
+    $liveHome = [string]$existing['selfHome']
+    if ($liveHome -eq '') { $liveHome = [string]$existing['herHome'] }
     if ($liveHome -ne '' -and $liveHome -ne $Workspace) {
       Die "这份配置已经指向一个真实的家（$liveHome），而这次要写成 $Workspace" "确认要覆盖就加 -Force；只是想试装就加 -ConfigPath <临时文件>"
     }
@@ -240,11 +241,14 @@ if (Test-Path $cfgPath) {
 if (-not $cfg.Contains('_说明')) {
   $cfg['_说明'] = '这台机器上所有"会变的假设"集中在这里。代码和脚本都不许再写死绝对路径 —— 打包给别人时只改这一个文件（或用环境变量 LIL_WHALE_CONFIG 指向另一份）。字段含义见 docs/打包.md。'
 }
-$cfg['herHome'] = $Workspace
-$cfg['herDshHome'] = $DshHome
-$cfg['whaleProfile'] = $ChildProfile
+# 2026-11-14：键名从单鱼时代的 her*/whale* 改成 self*（每条鱼读的都是自己那份配置）。
+# 旧键在这里删掉，不留两份 —— 同一个值两个名字，早晚会打架；旧配置靠 config.js 的 LEGACY_KEYS 仍然能读。
+$cfg['selfHome'] = $Workspace
+$cfg['selfDshHome'] = $DshHome
+$cfg['selfProfile'] = $ChildProfile
 $cfg['leeProfile'] = $ParentProfile
-$cfg['herPort'] = $port
+$cfg['selfPort'] = $port
+foreach ($legacy in @('herHome','herDshHome','herWaker','herPort','whaleProfile','whaleCwd')) { $cfg.Remove($legacy) }
 $cfg['poolDir'] = $PoolRoot
 $cfg['poolStateDir'] = (Join-Path $PoolRoot 'state')
 $cfg['dmDir'] = (Join-Path $PoolRoot 'dm')

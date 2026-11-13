@@ -1,6 +1,6 @@
 # 小小肥鱼 · PRD
 
-> 状态：**r75（2026-11-14）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。 2026-11-13：**鱼塘布局落地**（一个根四层，A.55）、**无人值守成为默认**（A.45/A.54）、**计划表归每条鱼自己**（A.50）、**四个快捷方式实测通过**（A.56）；`docs\` 只留活跃文档，历史记录移入 `docs\archive\`。
+> 状态：**r76（2026-11-14）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。 2026-11-13：**鱼塘布局落地**（一个根四层，A.55）、**无人值守成为默认**（A.45/A.54）、**计划表归每条鱼自己**（A.50）、**四个快捷方式实测通过**（A.56）；`docs\` 只留活跃文档，历史记录移入 `docs\archive\`。
 > 版本号：这是**稿次** `rNN`（改一次 +1），不是包版本——两个 npm 包各自用 semver（当前 `1.2.1`），只在发布时才动。
 > 上游：[立项备忘](archive/小小肥鱼-立项备忘-2026-11-08.md)（**他的原话**，已冻结不改；三条硬要求已吸收进 §1）
 > 配套：[自主回合.md](自主回合.md)（G1 的上游能力，不是本 PRD 的验收项）
@@ -1609,3 +1609,22 @@ window.__ModuleLoader__.load({
 **已知缺口**：人从 UI 里改 key 不进 `keys.log`（账本只覆盖脚本路径），所以"哪次换的"查不到，只能看到"现在和上次记账不一致"。
 
 **判据**：①`keys.log` 任何一行都不含 key 值；②`key grant` 前后指纹都非空、且和两侧 `.credentials.yaml` 一致；③`doctor` 的「钥匙」行在没有账本记录时说"人自己填的，正常"而不是报错。
+
+---
+
+## 附录 A.69 配置键从「她的」改成「这条鱼的」（self*）
+
+**背景**：单鱼时代配置键叫 `herHome` / `herDshHome` / `herWaker` / `herPort` / `whaleProfile` / `whaleCwd`。
+第二条鱼出现后这些名字开始撒谎——fishball 的配置里 `whaleProfile` 只能填 `fishball`，读的人得先在心里翻译一遍；
+更要命的是代码里 `CFG.herHome` 到底是"她（第一条鱼）的家"还是"这个进程服务的那条鱼的家"，从名字上分不出来。
+
+**做法**：
+- 新键名：`selfHome` / `selfDshHome` / `selfWaker` / `selfPort` / `selfProfile` / `selfCwd`（`self` = 这个进程服务的那条鱼）。
+- `plugin/*/lib/config.js`：`DEFAULTS` 用新名；新增 `LEGACY_KEYS`（旧名 → 新名），`derive()` 先"抬旧名"（新名优先）再派生；输出同时挂旧名作**只读兼容别名**。UI 插件用同一份 `config.js`。
+- `scripts/common.ps1`：`$Cfg` 新增 `SelfHome/SelfDshHome/SelfWaker/SelfPort/SelfProfile/SelfCwd`（`$pickSelf` 先读新名、再读旧名、最后默认），并保留 `Her*/Whale*` 别名给旧脚本。
+- `scripts/install.ps1`：写新键，**并把旧键从配置里删掉**（同一个值两个名字，早晚会打架）；防呆检查先读 `selfHome`、读不到再读 `herHome`。
+- 三份配置 + `lil-whale.config.example.json` 换成新键（`_版本: 2`）；代码里 `CFG.her*`→`CFG.self*`、`HER_HOME`→`SELF_HOME`、`plan-core.js` 的参数 `herHome`→`homeRoot`。
+
+**判据**：①三份配置与 example 里没有旧键；②`Get-WhaleConfig` 的 `SelfHome/SelfPort` 与名册一致；③**只写了旧键的配置仍然能跑**（`LEGACY_KEYS` 抬名，实测过）；④三个 profile `--dump-config` 都能解析出两个包；⑤`fish.ps1 list`、`doctor`、`test-plan`（26/26）、`release-check` 全过。
+
+**教训**：**名字是判据的一部分**——"她的"和"这条鱼的"在多鱼世界不是一回事，读错名字的代价是"以为在改 A 其实改了 B"。兼容别名要写清是**别名**，并且由唯一的写入方（`install.ps1`）负责删旧键。
