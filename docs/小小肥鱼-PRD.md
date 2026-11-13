@@ -1,6 +1,6 @@
 # 小小肥鱼 · PRD
 
-> 状态：**草稿 v1.0.54（2026-11-13）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。
+> 状态：**草稿 v1.0.55（2026-11-13）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。
 > 上游：[立项备忘](archive/小小肥鱼-立项备忘-2026-11-08.md)（**他的原话**，已冻结不改；三条硬要求已吸收进 §1）
 > 配套：[自主回合.md](自主回合.md)（G1 的上游能力，不是本 PRD 的验收项）
 > 改动记录：[PRD-CHANGELOG.md](PRD-CHANGELOG.md) —— 每一版改了哪几处、为什么。本文只放当前结论。
@@ -1285,3 +1285,21 @@ lil-whale\state  → junction → pool\state
 **端口**：`pool\members.json` 里每条鱼的 `port` 必须唯一。三个地方守：`fish.ps1` 启动前查名册（重复直接 exit 1 并点名）、`install.ps1` 找空口时跳过"已被别人登记"的号（空着 ≠ 没登记）、`doctor.ps1` 的「端口登记」检查。判据：把两条鱼改成同一个口 → `fish.ps1 list` 直接报错，而不是"后起的静默起不来"。
 
 **token**：`pool\state\usage\<鱼>.log`，每次被叫醒记一行：时间 / `member` / `ctx`（叫醒那一刻的上下文大小）/ 会话 id。**只记账、不封顶**。已知局限：dsh 没在 agent 面上给"单轮输入/输出 token"，所以 `ctx` 回答的是"谁吃得多"，不是"这一轮花了多少"——等有累计用量接口再补，别把这个数当账单。
+
+## 附录 A.54 无人值守的会话必须由 session-controller 挂，不能走 agent-loop（2026-11-13）
+
+**现象**：无人值守起来的会话只有 `group_say` 和 `working_directory` 两个工具；preset 的工具一个都没挂上。小肥鱼在浏览器里开着的会话是正常的 32 个——差别不在 profile，在**谁来挂这段会话**。
+
+**两条挂载路径**：
+- `dsh-agent-loop` 的 config `agents: [{ id, resumeSessionId, cwd }]`：`persistence.open(id,'write')` 之后直接 `initializeAgent`，**不经过 session-controller**；preset 工具是在 session-controller 的 `composeAgent(presetId)` 里通过 `presets.mount(agentCtx, resolvedId)` 挂的，这条路整个绕过了它 ⇒ 只剩基础工具（2 个）。
+- session-controller 的 `ctx.get('sessionController').agents.resume(sessionId)`：走 `composeAgent` → `presets.mount` ⇒ 工具齐（32 个 preset 工具 + 2 个基础 = 34）。
+
+**判据**（会话日志里能直接看到）：
+- `developer/message` 的 `tool-registry` 事件：`tool-removal` 30 个 = 走了错的路；`tool-addition` 30 个 = 走对了。
+- `request/header.tools` 的条数**不能单独当判据**——它是"目录"，不是"这一轮实际发出去的手"。我一度拿它当实发清单，结论正好相反。
+
+**落地**：删 profile patch 里的 `agent-loop` 块（`scripts\disable-unattended.mjs`）；`fish.ps1` 的 `Ensure-Unattended` 改成**只清旧块、不再新增**；插件里 `scheduleOwnMount`/`ensureOwnMounted` 用 session-controller 挂，失败重试 3 次（6s / 20s / 45s），成功记 `note:session-mounted composed=<preset> toolCount=<n>`。
+
+**次要教训（她的，不是我们的）**：工具第 14 轮就加回来了，她又连报五轮"2 个"——因为她在念第 8 轮那条 `tool-removal`。判据是：**先伸手，抓空了再说抓空**；不要凭历史里的清单声明自己有什么。笃定的错比不确定的错难查，因为它看起来像结论。
+
+**未做**：`agent-loop` 这条路现在只是"起之前清掉"，不是"用不了"——要不要在插件里主动拒绝它，等真正多进程踩到再说。

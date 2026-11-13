@@ -294,28 +294,25 @@ function Show-List {
   Write-Host '用法：fish.ps1 up <名字|all> / down <名字|all> / doctor'
 }
 
-# ---------- 无人值守默认开 ----------
-# 新鱼第一次 up 时，把 profile patch 里的 agent-loop.resumeSessionId 补上（PRD A.45）。
-# 为什么放在 up 而不是 install：install 的时候还没有会话 id（会话要等用户说第一句话），
-# 而 up 的时候 pins 里已经有了；而且此刻进程还没起，改 patch 不会触发热重载。
+# ---------- 无人值守 ----------
+# 2026-11-13 15:3x 改：不再往 profile patch 里写 agent-loop。
+# 事故：agent-loop 直接 resume 会话、不经过 session-controller 的 composeAgent，
+# 于是 preset 的工具没挂上 —— 小鱼丸被叫醒后手里只剩 group_say 和 working_directory。
+# 现在由群插件在进程内调 sessionController.agents.resume(sessionId)（浏览器打开会话走的同一条路）。
+# 这里只做一件事：清掉旧 patch 里残留的 agent-loop 块（老版本装过的机器需要）。
 function Ensure-Unattended($member) {
   if (-not $member.DshHome -or -not $member.Profile) { return }
   $patch = Join-Path $member.DshHome ("profiles\{0}\cordis.patch.yml" -f $member.Profile)
   if (-not (Test-Path -LiteralPath $patch)) { return }
   $text = Get-Content -LiteralPath $patch -Raw -Encoding UTF8
-  if ($text -match 'agent-loop' -and $text -match 'resumeSessionId') { return }
-  $pinsPath = Join-Path $Cfg.GroupDir 'pins.json'
-  if (-not (Test-Path -LiteralPath $pinsPath)) { return }
-  try { $pins = Get-Content -LiteralPath $pinsPath -Raw -Encoding UTF8 | ConvertFrom-Json } catch { return }
-  $ids = @($pins.($member.Key) | Where-Object { $_ })
-  if ($ids.Count -lt 1) { return }
-  $script = Join-Path $PSScriptRoot 'enable-unattended.mjs'
+  if ($text -notmatch 'agent-loop') { return }
+  $script = Join-Path $PSScriptRoot 'disable-unattended.mjs'
   if (-not (Test-Path -LiteralPath $script)) { return }
   $out = & node $script --member $member.Key 2>&1
   if ($LASTEXITCODE -eq 0) {
-    Write-Host ("{0}：已补上无人值守（profile patch 的 agent-loop）。" -f $member.Label)
+    Write-Host ("{0}：清掉了旧的 agent-loop 块（会话改由插件挂载）。" -f $member.Label)
   } else {
-    Write-Host ("{0}：无人值守没配上 —— {1}" -f $member.Label, ($out -join ' '))
+    Write-Host ("{0}：旧 agent-loop 块没清掉 —— {1}" -f $member.Label, ($out -join ' '))
   }
 }
 

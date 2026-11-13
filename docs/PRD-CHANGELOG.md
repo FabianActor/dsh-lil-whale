@@ -1,3 +1,10 @@
+## v1.0.55（2026-11-13）
+
+- 修：无人值守会话的工具丢失——agent-loop 那条捷径绕开 session-controller，preset 工具没挂上；改成用 `sessionController.agents.resume` 挂，成功记 `session-mounted composed=… toolCount=…`。
+- 新增 `scripts\disable-unattended.mjs`；`fish.ps1` 的 `Ensure-Unattended` 只清旧块不再新增。
+- 异常退出报警补"活着不报"：报警前先看心跳与端口，活着只记 `crash-alive`。
+- PRD 新增附录 A.54（两条挂载路径的差别、判据、次要教训）。
+
 # 小小肥鱼 · PRD 改动记录
 
 > 本文件只记「哪一版改了哪几处、为什么改」。当前结论都在 [小小肥鱼-PRD.md](小小肥鱼-PRD.md) 里，那边不背历史。

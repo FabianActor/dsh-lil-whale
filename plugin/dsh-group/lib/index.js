@@ -397,6 +397,71 @@ function scheduleAutoStart(ctx) {
 }
 
 /** 只有巡守那条鱼巡守：成员进程不需要守自己。 */
+
+// ---------- 无人值守挂载（2026-11-13 15:2x） ----------
+// 事故：agent-loop 的 config 直接 resume 会话，**不经过 session-controller**，
+// 而 preset 的工具是在 session-controller 的 composeAgent 里挂上去的
+// ⇒ 无人值守的鱼被叫醒后手里只剩 group_say 和 working_directory（小鱼丸 15:18 亲口报的）。
+// 正确的路是浏览器打开会话走的那条：sessionController.agents.resume(sessionId)。
+// 它内部 composeAgent(presetId) 会 await presets.mount(agentCtx, id)，工具才会出现。
+// 这里只做"把自己挂上"，不碰别人的会话；失败只记账，不炸进程。
+let ownMountState = 'idle' // idle | mounting | mounted | failed
+let ownMountTries = 0
+
+function hasOwnAgent(ctx) {
+  if (isMainProcess()) return true
+  const own = ownMember()
+  const sessionId = pinnedSession(own)
+  if (!sessionId) return true
+  const agents = ctx.get('agents')
+  if (agents === undefined) return false
+  return agents.list().some((a) => sessionIdOf(a) === sessionId)
+}
+
+/**
+ * 懒挂载（2026-11-13 15:4x 改）。
+ *
+ * 之前是"启动 6 秒后挂"，实测挂上了但没有工具（composed=neutral，工具仍只有两个）：
+ * 那时 host 刚起来，preset 的工具注册表还没齐，挂出来的 agent 是空壳。
+ * 小肥鱼的热重载挂载（进程跑了一会儿才挂）却是全的（32 个工具）——
+ * 所以改成**第一次要叫醒时再挂**：等到真有事找她，host 早醒了。
+ */
+async function ensureOwnMounted(ctx) {
+  if (isMainProcess()) return true
+  if (ownMountState === 'mounted') return true
+  if (ownMountState === 'mounting') return false
+  // host 刚起来时 preset 的工具注册表还没齐：太早挂出来的是空壳（15:41 实测仍是 2 个工具）。
+  // 小肥鱼热重载那次（进程已跑 5 分钟）挂出来是 32 个 —— 所以先等它醒透。
+  if (Date.now() - BOOT_AT < 45000) return false
+  const own = ownMember()
+  const sessionId = pinnedSession(own)
+  if (!sessionId) return true
+  const controller = ctx.get('sessionController')
+  if (!controller?.agents?.resume) return false
+  ownMountState = 'mounting'
+  ownMountTries += 1
+  try {
+    const agent = await controller.agents.resume(sessionId)
+    const presets = ctx.get('agentPresets')
+    const composed = presets?.composedPreset?.(agent?.ctx) ?? null
+    let toolCount = null
+    try {
+      const view = ctx.get('tools')?.view?.(agent)
+      toolCount = view === undefined ? null : (view.visible?.size ?? view.registrations?.size ?? null)
+    } catch (error) {
+      toolCount = 'err:' + String(error?.message ?? error).slice(0, 60)
+    }
+    logLine({ note: 'session-mounted', member: own, session: sessionId, agent: agent?.id ?? null, composed, toolCount, try: ownMountTries, mode: 'lazy' })
+    ownMountState = 'mounted'
+    return true
+  } catch (error) {
+    const detail = String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 200)
+    logLine({ note: 'session-mount-failed', member: own, session: sessionId, try: ownMountTries, detail })
+    ownMountState = 'idle'
+    return false
+  }
+}
+
 function isMainProcess() {
   const raw = selfMemberKeyRaw()
   if (raw) {
@@ -694,6 +759,8 @@ const WAKE = {
   totalPerDay: 120,      // 全池今天加起来的上限（每条鱼各自还有 perHour/perDay）
   backlogTier: 8,        // 积压超过这个数，唤醒词换成"先看最后三条"
 }
+const BOOT_AT = Date.now() // 本进程起来多久了：太早挂载会挂出没有工具的空壳
+
 
 /**
  * 一个成员可以有多段会话同时"在群里"（一条鱼 ≠ 一个对话）。
@@ -1277,6 +1344,9 @@ function apply(ctx) {
     appendFileSync(join(GROUP_DIR, 'plugin.log'), JSON.stringify({ at: new Date().toISOString(), ...bootRecord }) + '\n', 'utf8')
   } catch {}
 
+  // 无人值守：成员进程把自己那段会话挂上（工具要经过 session-controller 才挂得上）
+  // 无人值守挂载改成懒的：见 ensureOwnMounted（第一次要叫醒时再挂）
+
   // 1. 发言：入队即返回，绝不等对方
   // 先等宿主包解析出来，再用宿主的 defineTool 注册 —— 这样参数/输出 schema 的校验在宿主手里，
   // 而不是"作者自己看着办"。解析不到才退回裸对象（实测宿主也认），并且必须留痕：
@@ -1610,6 +1680,11 @@ async function tick(ctx) {
   settleMarks() // 到期的"叫醒之后他有没有开口"先结算，再决定这一轮做什么
   if (!hostReady) void resolveHost()
 
+  if (!hasOwnAgent(ctx)) {
+    await ensureOwnMounted(ctx)
+    return
+  }
+
   const agents = ctx.get('agents')
   if (agents === undefined) return
 
@@ -1641,6 +1716,10 @@ async function tick(ctx) {
     for (const channel of channels) {
       const woke = handleChannel({ agent, member, seat: seatOfSession(sessionIdOf(agent)), channel, cursors, wakes })
       if (woke) {
+        try {
+          const v = ctx.get('tools')?.view?.(agent)
+          logLine({ note: 'wake-agent-tools', member, toolCount: v?.visible?.size ?? null })
+        } catch (error) { logLine({ note: 'wake-agent-tools', member, error: String(error?.message ?? error).slice(0, 80) }) }
         recordUsage(ctx, agent, member)
         break
       }
@@ -2199,7 +2278,7 @@ function lastUncleanOf(key) {
   } catch { return null }
 }
 
-function crashNotify() {
+async function crashNotify() {
   if (!readCrashNotifyEnabled()) return
   let seen = null
   try { seen = JSON.parse(readFileSync(CRASH_NOTIFIED_FILE, 'utf8')) } catch { seen = null }
@@ -2212,6 +2291,17 @@ function crashNotify() {
     seen[member.key] = at
     changed = true
     if (firstRun) continue // 第一次上线先记账，不补报历史
+    // 现在活着就不是"坏了"：他手动关窗重启也会留下 unclean，但鱼马上又起来了。
+    // 只在"没写 stopped 且现在没在跑"时报警。
+    let alive = false
+    try {
+      const hb = presenceAgeOf(member)
+      alive = hb !== null && hb <= WAKE_STALE_SEC && (await isPortOpen(member.port))
+    } catch { alive = false }
+    if (alive) {
+      watchmanLog('note', `why=crash-alive member=${member.key} at=${at}`)
+      continue
+    }
     try {
       say('lee', 'fabian', `巡守：${labelOf(member.key)} 上次没正常退出（最后记录 ${at}，没写 stopped）。它现在起没起来，鱼塘里能看到。`, 'group', 'watch')
       watchmanLog('note', `why=crash-notified member=${member.key} at=${at}`)
@@ -2253,7 +2343,7 @@ async function watchmanTick() {
       watchmanLog('error', `why=watch-member-failed to=${member.key} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)}`)
     }
   }
-  try { crashNotify() } catch { /* 报警失败不该炸巡守 */ }
+  try { await crashNotify() } catch { /* 报警失败不该炸巡守 */ }
 }
 
 export { name, inject, apply }
