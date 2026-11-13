@@ -1,6 +1,6 @@
 # 小小肥鱼 · PRD
 
-> 状态：**草稿 v1.0.44（2026-11-13）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。
+> 状态：**草稿 v1.0.45（2026-11-13）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。
 > 上游：[立项备忘](archive/小小肥鱼-立项备忘-2026-11-08.md)（**他的原话**，已冻结不改；三条硬要求已吸收进 §1）
 > 配套：[自主回合.md](自主回合.md)（G1 的上游能力，不是本 PRD 的验收项）
 > 改动记录：[PRD-CHANGELOG.md](PRD-CHANGELOG.md) —— 每一版改了哪几处、为什么。本文只放当前结论。
@@ -1121,4 +1121,29 @@ lil-whale\state  → junction → pool\state
 **判据（明早自己验）**：①`08:40` 的 `watchman.log` 里 `wake-try` 的 `hb-age` 是真实数字（不是 `none`），窗没开时 `deliver=push`；②推门后 30 秒内出现 `woke … trigger=push`；③`wake.log` 有对应的 `call` / `pushed-browser` / `awake` 行；④她本来就醒着时，只有 `wake-try … deliver=msg` + `woke … trigger=plan`，没有 `wake-push`。
 
 **未做（多鱼化）**：判据里成员仍写死 `'whale'`（`presenceAgeOf('whale')`、`startHer()`）；`fishball` 走不到这条账。等"计划递话多鱼化"一起做。
+
+## 附录 A.45 无人值守：host 启动就挂载会话（2026-11-13）
+
+**问题**：端口通 ≠ 窗开着。`dsh web` 的进程活着、HTTP 服务在跑，但**会话要等客户端打开才挂载 agent**；没有 agent，群插件的 tick 遍历 `agents.list()` 时找不到她，心跳没人写、叫醒也没人接。2026-11-13 08:40 的"她没醒"就是这层：3082 端口通着、心跳停在 `00:15:41`（上一轮进程留下的值），巡守按端口判"窗开着"，只递话没推门。
+
+**机制（dsh 自带，不用开浏览器）**：`dsh-agent-loop` 的插件配置有一项 `agents: [{ id, resumeSessionId, cwd, provider?, model? }]`（`dsh-agent-loop/lib/index.js` 的 `static Config`；`[Service.init]()` 里对带 `resumeSessionId` 的条目调 `resumeWith(...)`）。host 一启动就 resume 那段会话、把 agent 挂载起来；失败只写 `logger.warn`（`agent-loop/config-start-failed`），不炸 host。它挂在 profile 的 `- id: agent-loop` 行上，用 profile patch 覆盖 config 即可。
+
+**实测（小鱼丸，2026-11-13 09:4x）**：她的 profile patch 加 5 行（`id` / `resumeSessionId` / `cwd`）→ `dsh --profile fishball --port 3083 --no-open` 无窗口启动 → 心跳持续在写（`presence\fishball.json` 的 `at` 跟当前时间同步）→ 往群里发一条指名她的消息 → 她真的醒来、回了话（还自己纠正了一次）。全程没有任何浏览器窗口。
+
+**边界**：一段会话同一时刻只能有一个 writer。两个进程 resume 同一段会 `session/writer-held`。所以"开窗看"和"无人值守"目前是二选一；要同时，得先验共存，没验过就别说行。
+
+**2026-11-13 他拍板**：开窗和无人值守，选**无人值守**。
+
+**待做**：①`install.ps1` 生成 profile patch 时自动写这条（每条鱼"开机即挂载"）②`wake-whale.ps1` 的"开浏览器推门"退化成兜底（无人值守下不该触发）③鱼塘「打开」在鱼已无人值守运行时先提示"先休眠再打开"（同一段会话不能两个 writer）④多鱼化（判据里的成员仍写死 `'whale'`）。
+
+## 附录 A.46 在群里时不加未读；翻历史时只提示"底部有了新消息"（2026-11-13）
+
+他 2026-11-13 10:07 报的 bug：正看着群聊，收到新消息，tab 上还是加了 `群聊 (1)`，而且切走切回都不消失。规则改成三条：
+
+1. **人在群聊页里时，tab 不加数字**——已经在这个页面里，数字没有信息量（`tab !== 'group'` 才显示未读）。
+2. **在底部（贴底跟随）时不作提醒**——新消息直接出现在眼前，再提示一遍是噪音。
+3. **在翻历史时，在"回到底部"按钮左边写一句「底部有了新消息」**——这是唯一值得说的一件事：底下有东西，你没看见。
+
+配套：翻历史时**不替人清未读**（`markRead` 只在贴底时触发），否则那句提示会自己消失；"到底了没有"用消息列表最后一条 ts 判断，不用未读数（未读是服务器口径，可能包含别的窗口看过的）。
+
 

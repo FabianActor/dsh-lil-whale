@@ -934,13 +934,27 @@ function Bubble({ config, message, onMention, animate = false }) {
      * 圆用内嵌 SVG 画而不是 `border-radius`：这个壳上 `border-radius` 出过两次
      * "样式算对了、画出来还是圆角矩形"，改用 `<circle>` 之后一次就对了（见 PRD 附录 A.10/A.11）。
      */
-    function JumpToBottom({ onClick, rightInset }) {
+    function JumpToBottom({ onClick, rightInset, hint }) {
+      // hint：翻历史时底下来了新消息，就在按钮左边写一句（2026-11-13 他要的）。
+      // 不用红点、不改 tab 标题 —— 人在看群聊时不该被 "(1)" 提醒，只有"底下有东西"这一件事值得说。
       return h('div', {
         style: {
           position: 'absolute', left: 0, right: 0, bottom: 10, height: 0,
-          display: 'flex', justifyContent: 'flex-end', pointerEvents: 'none', zIndex: 8,
+          display: 'flex', justifyContent: 'flex-end', alignItems: 'center', pointerEvents: 'none', zIndex: 8,
         },
-      }, h('button', {
+      },
+      hint
+        ? h('span', {
+          style: {
+            marginTop: -34, marginRight: 8, height: 34, display: 'flex', alignItems: 'center',
+            padding: '0 10px', borderRadius: 999, fontSize: 12, whiteSpace: 'nowrap',
+            color: 'var(--dsw-alias-label-secondary, rgba(0,0,0,0.62))',
+            background: 'var(--dsw-alias-button-floating-fill, #ffffff)',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.10), 0 4px 12px rgba(0,0,0,0.10)',
+          },
+        }, hint)
+        : null,
+      h('button', {
         type: 'button',
         onClick,
         title: '回到底部',
@@ -1689,7 +1703,8 @@ function Bubble({ config, message, onMention, animate = false }) {
 
       // 看过 1.5 秒才算读过：让红点有出现的余地，也不至于一闪就没
       useEffect(() => {
-        if (tab !== 'group' || unread.group === 0) return
+        // 在底部才算"看见了"；翻历史时不要替人清未读，否则底下那句提示会自己消失。
+        if (tab !== 'group' || unread.group === 0 || !atBottom) return
         if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
         const timer = setTimeout(() => { void markRead('group').then(() => refresh()) }, 1500)
         return () => clearTimeout(timer)
@@ -1703,6 +1718,21 @@ function Bubble({ config, message, onMention, animate = false }) {
 
       // 贴底 / 翻历史 / 回到底部：跟私聊页共用一套（见 useFollowTail）。
       const { atBottom, measureBottom, jumpToBottom } = useFollowTail(scrollRef, [messages.length, tab, splash])
+      // 翻历史时底下来了新消息：只数"最后一条之后新增了几条"，回到底部就清零。
+      // 不用未读数（未读是服务器口径，可能包含别的窗口看过的，不能当"你还没看"的证据）。
+      const lastSeenTsRef = useRef('')
+      const [newBelow, setNewBelow] = useState(0)
+      useEffect(() => {
+        const last = messages.length > 0 ? String(messages[messages.length - 1]?.ts ?? '') : ''
+        if (last === lastSeenTsRef.current) return
+        const prev = lastSeenTsRef.current
+        lastSeenTsRef.current = last
+        if (prev === '' || tab !== 'group') return
+        if (atBottom) return
+        const delta = messages.filter((m) => String(m?.ts ?? '') > prev).length
+        if (delta > 0) setNewBelow((current) => current + delta)
+      }, [messages, atBottom, tab])
+      useEffect(() => { if (atBottom) setNewBelow(0) }, [atBottom])
       // 线一旦挂上来就要立刻量：只靠 scroll 事件的话，进页面时的第一帧量不到。
       useEffect(() => { measureHistory() })
 
@@ -1830,7 +1860,7 @@ function Bubble({ config, message, onMention, animate = false }) {
                 },
               },
                 item.key === 'group'
-                  ? (unread.group > 0 ? item.label + ' (' + unread.group + ')' : item.label)
+                  ? (tab !== 'group' && unread.group > 0 ? item.label + ' (' + unread.group + ')' : item.label)
                   : item.key === 'dm'
                     ? (dmTotal(unread) > 0 ? item.label + ' (' + dmTotal(unread) + ')' : item.label)
                     : item.label,
@@ -1930,6 +1960,7 @@ function Bubble({ config, message, onMention, animate = false }) {
           atBottom ? null : h(JumpToBottom, {
             onClick: jumpToBottom,
             rightInset: `calc(${(100 - widthPct) / 2}% + 10px)`,
+            hint: newBelow > 0 ? '底部有了新消息' : null,
           }),
         ),
         h('div', {
@@ -3036,7 +3067,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[lil-whale-group-ui] client build v26 · pond-fit:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[lil-whale-group-ui] client build v27 · group-unread:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('lil-whale-group-keyframes')) {
           const style = document.createElement('style')
