@@ -9,6 +9,7 @@
 - **唤醒总量封顶**：`WAKE.totalPerDay = 120`（每鱼 perHour 12 / perDay 60 不变），两条路都记 `deny=total-cap`。
 - 新增 **附录 A.50 计划表归每条鱼自己**（问题/两步改动/为什么不是 A/判据/没做）。
 - 顺手修两处"读法对不上"：①`wakeCountsOf()` 把 `state\wakes\<键>.json` 当平铺读（文件其实是 `{"<键>":{…}}`）⇒ `gate=pass(hour=0/12)` 一直是假的；②推门分支不写 `claim` ⇒ 鱼起来后自己的闹钟会在宽限期内再递一次（现在推门也先声明）。
+- **第四处 writer 守**：`scripts\wake-whale.ps1` 推门前查同 profile 已有进程（`Get-ProfileProcesses`），避免"端口没开、进程已在起"时再 spawn 一个。实测 `whale=1 fishball=1 nope=0`（PID 对得上）。
 - 验证：`planDue` 宽限 8 条用例全过（正好这一分钟 / 五分钟前 grace15 命中 / grace1 不命中 / 二十分钟前不补 / until 过期 / 没写 why / days 含今天）；`totalWakesToday()` 对真实 `state\wakes` 读出来是 7（lee 3 + whale 2 + fishball 2），改前是 0。
 
 ## v1.0.52（2026-11-13）

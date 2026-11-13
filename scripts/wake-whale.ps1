@@ -130,6 +130,19 @@ function PushBrowser([int]$p, [string]$why) {
   }
 }
 
+# 2026-11-13：推门前先看「同 profile 是不是已经有一个进程」。
+# 端口没开但进程已经在起（无人值守启动要几秒）时，再 spawn 一个就是两个 writer。
+# 这条守卫和 fish.ps1 的 Get-ProfileProcesses 是同一件事，放在两边是因为两条路都可能有调用者。
+function Get-ProfileProcesses([string]$prof) {
+  try {
+    $pattern = '--profile\s+' + [regex]::Escape($prof) + '(\s|$)'
+    return @(Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction Stop |
+      Where-Object { $_.CommandLine -match 'bin\.js' -and $_.CommandLine -match $pattern })
+  } catch {
+    return @()
+  }
+}
+
 $gap = LastGap $wakeLog
 $hb = HeartbeatAge
 $hbText = if ($null -eq $hb) { 'none' } else { ('{0}s' -f $hb) }
@@ -169,19 +182,25 @@ if ($open) {
   exit 1
 }
 
-try {
-  $parts = @("`$env:DSH_HOME='$dshHome'")
-  if ($cfgFile) { $parts += "`$env:LIL_WHALE_CONFIG='$cfgFile'" }
-  $parts += ("dsh --profile {0} --port {1} --no-open" -f $profile, $port)
-  $command = $parts -join '; '
-  Start-Process -FilePath 'pwsh' -ArgumentList '-NoLogo', '-NoProfile', '-Command', $command `
-    -WorkingDirectory $cwd -WindowStyle Hidden `
-    -RedirectStandardOutput $outLog -RedirectStandardError $errLog | Out-Null
-  Log ("spawned member={0} profile={1} port={2} why={3}" -f $Member, $profile, $port, $Why)
-} catch {
-  Log ("spawn-failed member={0} why={1} detail={2}" -f $Member, $Why, $_.Exception.Message)
-  Write-Output ("spawn-failed: " + $_.Exception.Message)
-  exit 1
+$existing = Get-ProfileProcesses $profile
+if ($existing.Count -gt 0) {
+  $pids = ($existing | ForEach-Object { [string]$_.ProcessId }) -join ','
+  Log ("spawn-skip member={0} profile={1} pid={2} -- 同 profile 已有进程，等它自己挂上" -f $Member, $profile, $pids)
+} else {
+  try {
+    $parts = @("`$env:DSH_HOME='$dshHome'")
+    if ($cfgFile) { $parts += "`$env:LIL_WHALE_CONFIG='$cfgFile'" }
+    $parts += ("dsh --profile {0} --port {1} --no-open" -f $profile, $port)
+    $command = $parts -join '; '
+    Start-Process -FilePath 'pwsh' -ArgumentList '-NoLogo', '-NoProfile', '-Command', $command `
+      -WorkingDirectory $cwd -WindowStyle Hidden `
+      -RedirectStandardOutput $outLog -RedirectStandardError $errLog | Out-Null
+    Log ("spawned member={0} profile={1} port={2} why={3}" -f $Member, $profile, $port, $Why)
+  } catch {
+    Log ("spawn-failed member={0} why={1} detail={2}" -f $Member, $Why, $_.Exception.Message)
+    Write-Output ("spawn-failed: " + $_.Exception.Message)
+    exit 1
+  }
 }
 
 for ($i = 0; $i -lt $WaitSeconds * 2; $i++) {

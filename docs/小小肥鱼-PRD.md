@@ -1254,4 +1254,6 @@ lil-whale\state  → junction → pool\state
 
 **没做**：`schedule.json`（dsh 自己的定时任务）仍只由巡守读——那条是 dsh 的数据，不是她写的表；多鱼后要不要每条鱼自己执行，等真有鱼用再说。
 
+**2026-11-13 13:0x 补第四处守**：`scripts\wake-whale.ps1` 推门前先查"同 profile 是不是已经有一个进程"（`Get-ProfileProcesses`，和 `fish.ps1` 同一个判据）。端口没开、但进程已经在起（无人值守启动要几秒）时再 spawn 一个，就是两个 writer——这条是 A.47 那三处守漏掉的一条路。
+
 **review 回应全文**：`docs\PRD-review-2026-11-13-回应.md`。
