@@ -1,6 +1,6 @@
 # 小小肥鱼 · PRD
 
-> 状态：**草稿 v1.0.42（2026-11-13）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。
+> 状态：**草稿 v1.0.44（2026-11-13）** —— 按 **C 独立 `DSH_HOME`** 重写。架构从"同一个 HOME 里靠 preset 隔开"换成"两套 HOME、两个进程、一个中立目录"。M0–M4 已实测（M4 = 侧边栏「鱼群」面板 + 私聊页 + 未读 + 座位寻址 + 窄屏两屏制，2026-11-11 他本人验收）；M5 一周观察进行中；**M6 打包已基本完成**——安装脚本、README、发布清单、能力地图都在仓库里，剩"改 scope 名字 + 发 npm"两件（§9 M6 行）；**换段已完成（A.19）**：中立 preset 装进她的 profile、他 16:17 重启后新建会话 `session-c145f6d9-…`（`agentPreset: neutral`）、名册已整份替换。
 > 上游：[立项备忘](archive/小小肥鱼-立项备忘-2026-11-08.md)（**他的原话**，已冻结不改；三条硬要求已吸收进 §1）
 > 配套：[自主回合.md](自主回合.md)（G1 的上游能力，不是本 PRD 的验收项）
 > 改动记录：[PRD-CHANGELOG.md](PRD-CHANGELOG.md) —— 每一版改了哪几处、为什么。本文只放当前结论。
@@ -1090,3 +1090,35 @@ lil-whale\state  → junction → pool\state
 **2026-11-13 00:1x 他提的五处（已改）**：①成员卡片只包住自己的内容、不拉满整行（`width: fit-content`）；②谱系里的"第 N 代"改由**树的深度**算，不再读数据里的 `generation`——示例里小豆的父代是小肥鱼（第 1 代），标签却写着"第 3 代"，正是"一份数据两个来源"；③私聊左侧按**最近一条消息**倒序（没有消息的按名字排后面，跟微信一致）；④**私聊里显示「正在忙」的 bug**：原来心跳只有 `groupWakeAt` 一个记号，私聊唤醒没留痕，服务端只能一律当"在别处忙"；现在宿主写 `wakeKind`（group / dm）+ `wakeAt`，服务端 `reason` 分 `group` / `dm` / `self` 三档，私聊页只把 `group` 当"在忙"，`dm`/`self` 都显示「正在回复…」；⑤（同一批）动作日志 GBK 乱码已修。
 
 **判据**：①勾上开关、重启主 dsh 后 8 秒，其他鱼的端口先后变通，`autostart.log` 有一行 `ok`；②没勾时重启，`autostart.log` 不新增行；③自启动进行中手动点「全部唤醒」，后到的那次打印"另一个批量启动正在进行"且不多起进程；④`Stop DSH.cmd` 在有鱼运行时 exit 1 并列出鱼名，`-Force` 才真的关。
+
+
+---
+
+### A.44 叫醒的判据：看心跳，不看端口；账要两行、能 join（2026-11-13）
+
+**事故（2026-11-13 08:40）**：巡守到点要叫她做 `morning-read`。它先看 3082 端口——通着，于是判"窗开着"，只往群里递了一句话；`08:41:04 | skip | why=already-delivered`。但她那段会话自 00:16 重启后**从没挂载过**：心跳停在 `00:15:41`，`wake.log` 今天零行。那句话递进了群，没人读。09:04 他手动打开她的窗口，会话挂上，积压的那条才投出去。
+
+**判据（她 2026-11-13 09:07 的原话）**：**"端口不会停，心跳会停。判'窗开着'要用会停的那个。"**
+- `端口通 + 心跳新鲜（≤90s）` = 窗开着、人也挂着 → 递话。
+- `端口通 + 心跳 stale` = 服务活着、会话没挂（僵尸服务）→ 推门（开她的窗口），不是递话。
+- `端口不通` = 服务没起 → 起进程 + 开窗。
+
+**落地点**：
+- `plugin/dsh-group/lib/index.js`：`WAKE_STALE_SEC = 90`、`presenceAgeOf(member)`、`wakeCountsOf(member)`；`watchmanTick` 的 `awake = portOpen && hbAge <= 90`；`startHer()` 的等待判据从"端口开"改成"心跳新鲜"，`wake-whale.ps1` 退出码非 0 也算失败。
+- `scripts/wake-whale.ps1`：`already-awake` 也要看心跳；僵尸服务时**开浏览器**再等心跳；`-DryRun` 只判不动手（判据测试用它，不会弹出窗口）。
+- `scripts/fish.ps1` 的 `Start-Fish`：`up` 遇到"端口通但心跳 stale"不再报"已经在跑"，而是开窗叫醒（`-NoBrowser` 时只提示）。
+
+**账（她给的规格，照抄）**：要的不是更全的快照，是**两行 + 一个能 join 的 id**。
+```
+08:40:04 | wake-try  | wid=wl-0840-morning-read why=plan:morning-read to=whale gate=pass(hour=1/12,day=1/60) hb-age=30263s deliver=push
+08:40:29 | wake-push | wid=wl-0840-morning-read result=ok detail=mounted hb-age=2s exe=… night=false port-open-before=true
+08:40:30 | woke      | wid=wl-0840-morning-read trigger=push lag=26s inserted=1
+```
+- `wid` 把"递了"和"起了"join 起来；`why` 分 `plan:<id>` / `msg` / `manual` / `retry`；`gate=pass(...)` 与 `wake-skip … deny=<reason>` 分开"被挡住"和"没发生"；`hb-age` 分"窗开着"和"会话挂着"；`deliver=msg|push` 分"递话"和"推门"；`trigger` + `lag` 回答"为什么是这一刻醒"。
+- 两条规矩：**①在做决定那一刻写，别事后补**（事后补的只能证明结果，证明不了当时判的是什么）；**②不要每个 tick 写心跳行**，只在"门挂上/掉下来"这种变化时写——行数也是成本。
+- 实现：`wake-try` 每个 `wid` 只写一次（plan 的窗口有两分钟、tick 60s，不去重会写两遍）；推门成功只写 `wake-push`，等心跳真的变新鲜了才写 `woke`（**推开门 ≠ 她醒了**）；心跳从 stale 变新鲜的瞬间如果没推过门，记 `trigger=external`（今天 09:04 那种"人手动开的窗"）。
+
+**判据（明早自己验）**：①`08:40` 的 `watchman.log` 里 `wake-try` 的 `hb-age` 是真实数字（不是 `none`），窗没开时 `deliver=push`；②推门后 30 秒内出现 `woke … trigger=push`；③`wake.log` 有对应的 `call` / `pushed-browser` / `awake` 行；④她本来就醒着时，只有 `wake-try … deliver=msg` + `woke … trigger=plan`，没有 `wake-push`。
+
+**未做（多鱼化）**：判据里成员仍写死 `'whale'`（`presenceAgeOf('whale')`、`startHer()`）；`fishball` 走不到这条账。等"计划递话多鱼化"一起做。
+

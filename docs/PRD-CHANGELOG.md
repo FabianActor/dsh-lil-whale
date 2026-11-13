@@ -3,6 +3,15 @@
 > 本文件只记「哪一版改了哪几处、为什么改」。当前结论都在 [小小肥鱼-PRD.md](小小肥鱼-PRD.md) 里，那边不背历史。
 > 自 v0.3.5 起从 PRD 头部搬到这里（此前几块原样搬出，未改写）。v1.0 是整篇重写。
 
+## v1.0.44（2026-11-13）
+
+- **叫醒的判据从"端口通"改成"心跳新鲜"**（2026-11-13 08:40 事故）：她的 3082 端口通着、会话却没挂载（心跳停在 00:15:41），巡守判"窗开着"只递了一句话，那句话没人读。她 09:07 给的判据："端口不会停，心跳会停。"
+- `plugin/dsh-group/lib/index.js`：`WAKE_STALE_SEC=90`、`presenceAgeOf()`、`wakeCountsOf()`；`watchmanTick` 的 `awake` 改看心跳；`startHer()` 等心跳、`wake-whale.ps1` 非 0 退出算失败。
+- `scripts/wake-whale.ps1` 重写判据：僵尸服务（端口通、会话没挂）时开浏览器再等心跳；新增 `-DryRun`（只判不动手）。
+- `scripts/fish.ps1` 的 `Start-Fish`：`up` 遇到心跳 stale 不再报"已经在跑"，改开窗叫醒。
+- **两行账**（她给的规格）：`wake-try`（`wid`/`why`/`gate`/`hb-age`/`deliver`）+ `woke`（`wid`/`trigger`/`lag`/`inserted`），另有 `wake-push` 与 `wake-skip … deny=`；`wid` 可 join；`wake-try` 每个 wid 只写一次；推门成功不等于她醒了，心跳变新鲜才写 `woke`。
+- PRD 新增 **A.44**（事故、判据、落地点、账的格式与两条规矩、明早的验收判据、未做的多鱼化）。
+
 ## v1.0.43（2026-11-13）
 
 - **修 `resumed` 行 `previous-start=` 永远空**：`lastRunStateOf()` 读日志尾巴时把文件末尾那个空行当成"找到了 started 行"，`slice(0,19)` 出来是空串。改成空行 `continue`。现场复算：fishball → `2026-11-13 00:16:13`、whale → `00:16:06`。（要重启两个窗才生效。）

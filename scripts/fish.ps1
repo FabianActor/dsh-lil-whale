@@ -149,6 +149,20 @@ function Get-Heartbeat($member) {
   } catch { return '?' }
 }
 
+# 2026-11-13 08:40 的教训：端口通不等于会话挂上了。
+# 会话要等浏览器连上来才挂载，所以"醒着没有"看心跳，不看端口。
+function Get-HeartbeatAgeSec($member) {
+  $file = Join-Path $Cfg.PoolState ("presence\{0}.json" -f $member.Key)
+  if (-not (Test-Path -LiteralPath $file)) { return $null }
+  try {
+    $j = Get-Content -LiteralPath $file -Raw -Encoding UTF8 | ConvertFrom-Json
+    if (-not $j.at) { return $null }
+    $ms = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() - [int64]$j.at
+    if ($ms -lt 0) { return 0 }
+    return [int]($ms / 1000)
+  } catch { return $null }
+}
+
 function Write-FishWindowLog($member, [string]$Event) {
   if (-not $member.Home) { return }
   $dir = Join-Path $member.Home 'logs'
@@ -212,9 +226,23 @@ function Show-List {
 function Start-Fish($member) {
   $port = Get-PortOf $member
   if (Test-Port $port) {
-    # 已经在跑就不再开一次浏览器：重复 `up` 会开出第二个一模一样的窗口，
-    # 看着像"一条鱼开了两个 webui"，其实是一条鱼、两扇窗（2026-11-12 他报的）。
-    Write-Host ("{0}：已经在跑（{1}）：{2}" -f $member.Label, $port, (Get-Url $member))
+    $hbAge = Get-HeartbeatAgeSec $member
+    if ($null -ne $hbAge -and $hbAge -le 90) {
+      # 已经在跑就不再开一次浏览器：重复 `up` 会开出第二个一模一样的窗口，
+      # 看着像"一条鱼开了两个 webui"，其实是一条鱼、两扇窗（2026-11-12 他报的）。
+      Write-Host ("{0}：已经在跑（{1}）：{2}" -f $member.Label, $port, (Get-Url $member))
+      return $true
+    }
+    # 端口通但心跳 stale = 服务活着、会话没挂（08:40 那天的样子）。
+    # 这时候"已经在跑"是假的：要开窗，会话才会挂上。
+    $hbText = if ($null -eq $hbAge) { '没有心跳' } else { "$hbAge 秒前" }
+    Write-Host ("{0}：进程在跑但会话没挂上（心跳：{1}）—— 开窗叫醒。" -f $member.Label, $hbText)
+    if (-not $NoBrowser) {
+      Start-Process (Get-Url $member) | Out-Null
+      Write-FishWindowLog $member 'open'
+    } else {
+      Write-Host '（-NoBrowser：只起服务，不开窗；要挂上会话得进鱼塘点「打开」）'
+    }
     return $true
   }
   if (-not $member.DshHome -or -not (Test-Path -LiteralPath $member.DshHome)) {

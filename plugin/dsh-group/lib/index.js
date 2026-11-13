@@ -217,7 +217,16 @@ function loadWatchState() {
   const day = new Date().toDateString()
   try {
     const raw = JSON.parse(readFileSync(WATCH_STATE_FILE, 'utf8'))
-    if (raw.day === day) return { day, wakes: Number(raw.wakes) || 0, fails: Number(raw.fails) || 0 }
+    if (raw.day === day) {
+      return {
+        day,
+        wakes: Number(raw.wakes) || 0,
+        fails: Number(raw.fails) || 0,
+        lastFresh: raw.lastFresh === true,
+        pendingWake: raw.pendingWake ?? null,
+        lastTry: raw.lastTry ?? null,
+      }
+    }
   } catch {}
   return { day, wakes: 0, fails: 0 }
 }
@@ -761,6 +770,35 @@ function cursorFileOf(member) {
 
 function wakesFileOf(member) {
   return join(POOL_STATE, 'wakes', `${member}.json`)
+}
+
+/**
+ * 2026-11-13 09:07 她给的判据：**判"窗开着"要用会停的那个。**
+ * 端口不会停，心跳会停 —— 08:40 那天就死在这格：3082 通着，心跳停在 00:15:41，
+ * 巡守以为她醒着，只递了一句话，没人读。
+ */
+const WAKE_STALE_SEC = 90
+
+function presenceAgeOf(member) {
+  try {
+    const file = join(PRESENCE_DIR, `${member}.json`)
+    if (!existsSync(file)) return null
+    const json = JSON.parse(readFileSync(file, 'utf8'))
+    const at = Number(json?.at)
+    if (!Number.isFinite(at) || at <= 0) return null
+    return Math.max(0, Math.round((Date.now() - at) / 1000))
+  } catch {
+    return null
+  }
+}
+
+function wakeCountsOf(member) {
+  try {
+    const json = JSON.parse(readFileSync(wakesFileOf(member), 'utf8'))
+    return { hour: Number(json?.hourCount) || 0, day: Number(json?.dayCount) || 0 }
+  } catch {
+    return { hour: 0, day: 0 }
+  }
 }
 
 function ensureParent(file) {
@@ -1703,11 +1741,18 @@ function startHer() {
       return done(false, `throw=${e?.message ?? e}`)
     }
     child.once('error', (e) => done(false, `spawn-error=${e?.code ?? e?.message ?? 'unknown'} exe=${exe}`))
-    // 判据只看端口：wake-whale.ps1 是包装脚本，可能因句柄继承迟迟不退出，退出码不代表结果
+    // 2026-11-13 08:40 的教训：端口通不等于她会醒 —— 会话要等浏览器连上来才挂载。
+    // 所以判据从"端口开"改成"心跳新鲜"，wake-whale.ps1 现在也是等心跳才退出。
     const startedAt = Date.now()
     const poll = async () => {
       if (settled) return
-      if (await isPortOpen(WATCH.port)) return done(true, `port-open exe=${exe} after=${Date.now() - startedAt}ms`)
+      if (child.exitCode !== null && child.exitCode !== 0) {
+        return done(false, `waker-exit=${child.exitCode} exe=${exe} after=${Date.now() - startedAt}ms`)
+      }
+      const age = presenceAgeOf('whale')
+      if (age !== null && age <= WAKE_STALE_SEC) {
+        return done(true, `mounted hb-age=${age}s exe=${exe} after=${Date.now() - startedAt}ms`)
+      }
       if (Date.now() - startedAt > 45000) return done(false, `timeout exe=${exe} exit=${child.exitCode ?? 'running'}`)
       setTimeout(poll, 500)
     }
@@ -1780,9 +1825,30 @@ async function watchmanTick() {
   const day = new Date().toDateString()
   if (watchState.day !== day) {
     const prev = watchState
-    watchState = { day, wakes: 0, fails: 0, planFired: {}, skipped: {} }
+    watchState = { day, wakes: 0, fails: 0, planFired: {}, skipped: {}, triedWid: '' }
     saveWatchState()
     watchmanLog('note', `why=new-day counter-reset carried-wakes=${prev.wakes ?? 0} pid=${process.pid}`)
+  }
+
+  // 门挂上/掉下来才记一行 —— 她 2026-11-13 09:07 说的：行数也是成本。
+  // 推了门之后等她挂上，才叫 "woke"；推门本身只算 "wake-push"。
+  const hbNow = presenceAgeOf('whale')
+  const freshNow = hbNow !== null && hbNow <= WAKE_STALE_SEC
+  if (watchState.lastFresh === false && freshNow) {
+    const pending = watchState.pendingWake
+    const lastTry = watchState.lastTry
+    const wid = pending?.wid ?? lastTry?.wid ?? 'none'
+    const at = pending?.at ?? lastTry?.at ?? Date.now()
+    watchmanLog(
+      'woke',
+      `wid=${wid} trigger=${pending ? (pending.pushed ? 'push' : 'external') : 'external'} lag=${Math.round((Date.now() - at) / 1000)}s inserted=${pending ? 1 : 0}`,
+    )
+    delete watchState.pendingWake
+    saveWatchState()
+  }
+  if (watchState.lastFresh !== freshNow) {
+    watchState.lastFresh = freshNow
+    saveWatchState()
   }
 
   const jobs = []
@@ -1790,7 +1856,7 @@ async function watchmanTick() {
     jobs.push({ key: t.id, tag: `task=${t.id} scheduled=${new Date(t.at).toISOString()}`, why: 'due-and-closed', from: 'schedule' })
   }
   for (const p of planDue(new Date())) {
-    jobs.push({ key: p.id, tag: `plan=${p.id} at=${p.at}`, why: 'plan', from: 'plan', itemWhy: p.why })
+    jobs.push({ key: p.id, tag: `plan=${p.id} at=${p.at}`, why: 'plan', from: 'plan', itemWhy: p.why, at: p.at })
   }
   if (jobs.length === 0) return
 
@@ -1805,34 +1871,91 @@ async function watchmanTick() {
       saveWatchState()
       watchmanLog('skip', `${why} ${job.tag}`)
     }
-    if (await isPortOpen(WATCH.port)) {
-      // 她已经醒着 → 不用推门，但 plan 条目不能就这么丢掉。
-      // 她 2026-11-10 说过：「plan 不是叫醒，是提醒一个活着的人去做事」——
-      // 推了没人接，比没人推还难查。所以醒着的时候改成"递一句话"，走群那条线让她自己看到。
-      if (job.from === 'plan') {
+    // 2026-11-13 09:07 她给的判据：端口通 + 心跳新鲜，才算"窗开着、人也挂着"。
+    // 端口通但心跳 stale = 服务活着、会话没挂 —— 那天只递话、没推门，就是这么来的。
+    const hbAge = presenceAgeOf('whale')
+    const portOpen = await isPortOpen(WATCH.port)
+    const awake = portOpen && hbAge !== null && hbAge <= WAKE_STALE_SEC
+
+    if (job.from === 'plan') {
+      const wid = `wl-${String(job.at ?? '').replace(':', '')}-${job.key}`
+      const counts = wakeCountsOf('whale')
+      const gate = `pass(hour=${counts.hour}/${WAKE.perHour},day=${counts.day}/${WAKE.perDay})`
+      const dueAt = Date.now()
+      watchState.lastTry = { wid, at: dueAt }
+      // 同一条 plan 的窗口有两分钟（tick 60s + 窗口 1 分钟），wake-try 每个 wid 只写一次。
+      const firstTry = watchState.triedWid !== wid
+      watchState.triedWid = wid
+      // 她要求"就在做决定那一刻写，别事后补"：事后补的只能证明结果，证明不了当时判的是什么。
+      if (firstTry) watchmanLog(
+        'wake-try',
+        `wid=${wid} why=plan:${job.key} to=whale gate=${gate} hb-age=${hbAge === null ? 'none' : `${hbAge}s`} deliver=${awake ? 'msg' : 'push'}`,
+      )
+
+      if (awake) {
         // "只递一次"走原子声明（见 claimPlanDelivery）。这里不再读 planFired ——
         // 那份内存快照谁都看不见谁，正是三条 deliver 的来源。
         if (!claimPlanDelivery(job.key)) {
+          watchmanLog('wake-skip', `wid=${wid} deny=already-delivered`)
           noteSkip('why=already-delivered')
           continue
         }
         const text = planDeliveryText(job)
         try {
           // s='watch'：机器发的话必须说明自己不是人亲口说的。
-          // 她 2026-11-12 指出：这三条现在长得就像大肥鱼说了三遍。
           say('lee', 'whale', text, 'group', 'watch')
-          watchmanLog('deliver', `why=plan ${job.tag}（窗开着，改递话）`)
-          // 递话也是一种叫醒（她的群 tailer 会因为这条新消息把她叫起来），所以同样记一笔。
-          // 不记的话，A7 的"15 分钟后回看"永远不会为早上这一条落数——
-          // 而那正是我们最想看的那一条。
+          watchmanLog('woke', `wid=${wid} trigger=plan lag=${Math.round((Date.now() - dueAt) / 1000)}s inserted=1`)
           markWake('whale', 'plan')
         } catch (error) {
-          // 递不进去就别说"递了"：原来这里 catch 空着，日志照样写 deliver，
-          // 于是"投递失败"和"投递成功"长得一模一样。
-          watchmanLog('error', `why=plan-deliver-failed detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)} ${job.tag}`)
+          watchmanLog(
+            'wake-skip',
+            `wid=${wid} why=deliver-failed detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)}`,
+          )
         }
         continue
       }
+
+      // 门没挂上：推门。端口通也算没醒 —— 这是今天新加的判据。
+      if (watchState.wakes >= WATCH.maxWakesPerDay) {
+        watchmanLog('wake-skip', `wid=${wid} deny=daily-cap wakes=${watchState.wakes}/${WATCH.maxWakesPerDay}`)
+        noteSkip(`why=daily-cap wakes=${watchState.wakes}`)
+        continue
+      }
+      if (watchState.fails >= WATCH.maxConsecutiveFailures) {
+        watchmanLog('wake-skip', `wid=${wid} deny=too-many-failures fails=${watchState.fails}`)
+        noteSkip(`why=too-many-failures fails=${watchState.fails}`)
+        continue
+      }
+      const night = withinQuietHours()
+      const res = await startHer()
+      if (res.ok) {
+        watchState.wakes += 1
+        watchState.fails = 0
+        watchState.pendingWake = { wid, at: dueAt, pushed: true }
+        saveWatchState()
+        watchmanLog(
+          'wake-push',
+          `wid=${wid} result=ok detail=${res.detail} night=${night} port-open-before=${portOpen}`,
+        )
+        markWake('whale', 'plan')
+        try {
+          say('lee', 'whale', planDeliveryText(job))
+          watchmanLog('deliver', `why=plan-after-wake ${job.tag}（窗是推开的，话已递进去）`)
+        } catch (error) {
+          watchmanLog(
+            'error',
+            `why=plan-deliver-failed detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)} ${job.tag}`,
+          )
+        }
+      } else {
+        watchState.fails += 1
+        saveWatchState()
+        watchmanLog('wake-skip', `wid=${wid} why=push-failed fails=${watchState.fails} detail=${res.detail}`)
+      }
+      continue
+    }
+
+    if (awake) {
       noteSkip('why=already-awake')
       continue
     }
