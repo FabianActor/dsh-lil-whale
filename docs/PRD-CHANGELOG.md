@@ -4,6 +4,11 @@
 > 它与两个 npm 包的版本（各自 `package.json` 里的 semver，如 `1.2.0`）是**两条线**：包版本只在功能或破坏性变化、发布时才动。
 > 编号从 r1 开始（第一稿就是 r1）。2026-11-13 之前这些号写作 `v1.0.NN`，本次统一改名，编号不变。
 
+## r93 — 2026-11-14 16:2x
+
+- **面板显示"上次被叫醒"**（他 16:2x 说"可以做了"）：宿主 `writeSleepStatus` 带 `lastForced`；UI 服务端 `sleepOf()` 透传并校验；客户端卡片在睡眠徽标后加「上次被叫醒 今天 16:21」（灰色小字，无 `lastForced` 不显示）；`client build v39 · wake-trace`。
+- 判据：`/pond/api/status` 的 `sleep.lastForced.at` = 状态文件里的值；活跃时也能看到；没有痕迹的鱼不显示。
+- 生效：宿主 + UI 服务端改动，**要重启 3080**；客户端刷新即生效。
 ## r92 — 2026-11-14 16:1x
 
 - **叫醒留痕（C 方案，他 16:11 定）**：`sleep-cli.mjs` 的 `wake` 在真叫醒时写 `lastForced: { at, by, reason }` 进 `pool\state\sleep\<键>.json`；`status` 输出该字段。**不主动给她发消息**——当时不打扰，事后查得到。

@@ -2603,6 +2603,19 @@ function Bubble({ config, message, onMention, animate = false }) {
     // 正在看的这扇窗自己拔了。页面里会写清楚为什么。
     const POND_POLL_MS = 4000
 
+    /** 面板上的时间戳：今天只写"今天 HH:MM"，更早写"月日 HH:MM"。与聊天那套 formatStamp 同一套口径。 */
+    const pondStamp = (iso) => {
+      const date = new Date(iso ?? '')
+      if (Number.isNaN(date.getTime())) return ''
+      const pad = (n) => String(n).padStart(2, '0')
+      const clock = `${pad(date.getHours())}:${pad(date.getMinutes())}`
+      const now = new Date()
+      const sameDay = date.getFullYear() === now.getFullYear()
+        && date.getMonth() === now.getMonth()
+        && date.getDate() === now.getDate()
+      return sameDay ? `今天 ${clock}` : `${date.getMonth() + 1}月${date.getDate()}日 ${clock}`
+    }
+
     const POND = {
       title: '鱼塘',
       subtitle: '看谁醒着，也在这里开关。',
@@ -2634,6 +2647,8 @@ function Bubble({ config, message, onMention, animate = false }) {
       sleepDnd: '勿扰',
       sleepActive: '活跃',
       sleepHint: '她自己设的作息；群/私聊不会叫醒她，计划到点也不叫。',
+      wakeForced: '上次被叫醒',
+      wakeForcedHint: '家长在鱼塘面板或命令行叫醒过她。只留痕、不打扰；记录在她自己的状态文件 pool\state\sleep\<键>.json 的 lastForced。',
       sleepUnknown: '',
       openHint: '打开她的 WebUI。无人值守时先休眠，否则会撞 writer。',
       openBlocked: '无人值守时不能直接开窗——一段会话只能一个 writer。先点「休眠」，再「打开」，看完点「回无人值守」。',
@@ -3031,6 +3046,16 @@ function Bubble({ config, message, onMention, animate = false }) {
                   : POND.sleepActive,
               )
               : null,
+            item.sleep?.lastForced?.at
+              ? h(
+                'span',
+                {
+                  title: POND.wakeForcedHint,
+                  style: { color: 'var(--dsw-alias-label-secondary, #6b7076)' },
+                },
+                `${POND.wakeForced} ${pondStamp(item.sleep.lastForced.at)}`,
+              )
+              : null,
             parentItem ? h('span', null, `父代 ${parentItem.name}`) : null,
           ),
           item.lastRun
@@ -3227,7 +3252,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v38 · rename-by-fish:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v39 · wake-trace:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')

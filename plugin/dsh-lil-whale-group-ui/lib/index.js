@@ -444,6 +444,13 @@ function sleepOf(key) {
       source: typeof entry.source === 'string' ? entry.source : 'unknown',
       untilAt: typeof entry.untilAt === 'string' ? entry.untilAt : null,
       label: typeof entry.label === 'string' ? entry.label : '',
+      lastForced: entry.lastForced && typeof entry.lastForced === 'object' && typeof entry.lastForced.at === 'string'
+        ? {
+          at: entry.lastForced.at,
+          by: typeof entry.lastForced.by === 'string' ? entry.lastForced.by : '',
+          reason: typeof entry.lastForced.reason === 'string' ? entry.lastForced.reason : '',
+        }
+        : null,
       ageMs,
     }
   } catch {

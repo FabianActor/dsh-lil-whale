@@ -320,14 +320,18 @@ function sleepStateOfMember(member, now = new Date()) {
     return { sleeping: false, source: 'watcher', untilAt: null }
   }
   const raw = readSleepStateOf(member)
-  return sleepStateOf(
-    {
-      oneOff: raw.oneOff ?? null,
-      awakeUntil: raw.awakeUntil ?? null,
-      preference: readSleepPrefOf(member),
-    },
-    now,
-  )
+  return {
+    ...sleepStateOf(
+      {
+        oneOff: raw.oneOff ?? null,
+        awakeUntil: raw.awakeUntil ?? null,
+        preference: readSleepPrefOf(member),
+      },
+      now,
+    ),
+    // 被家长强行叫醒的痕迹（C 方案）：只给面板/体检看，不参与"睡没睡"的判断。
+    lastForced: raw.lastForced && typeof raw.lastForced === 'object' ? raw.lastForced : null,
+  }
 }
 
 function isSleeping(member, now = new Date()) {
@@ -350,6 +354,7 @@ function writeSleepStatus(members = watchedMembers()) {
         source: st.source,
         untilAt: st.untilAt ?? null,
         label: sleepLabel(st),
+        lastForced: st.lastForced ?? null,
       }
     } catch {
       out.members[m.key] = { sleeping: false, source: 'unknown', untilAt: null, label: '' }
