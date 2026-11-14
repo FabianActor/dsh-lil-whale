@@ -60,6 +60,31 @@ param(
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'common.ps1')
 
+# ---------- 起停审计（2026-11-14）----------
+# 每次调用都记一行：谁调的（父进程名 + pid）、带的什么参数。
+# 起因：10:59:41 主 dsh 被强杀、同一秒又被 fish.ps1 起回来，账上查不出是谁下的手。
+# 审计自己出错不许影响主流程 —— 所以整段吞异常。
+try {
+  $auditDir = Join-Path $Cfg.PoolDir 'state'
+  if (Test-Path -LiteralPath $auditDir) {
+    $auditParent = ''
+    $auditPpid = ''
+    try {
+      $auditSelf = Get-CimInstance Win32_Process -Filter "ProcessId=$PID" -ErrorAction Stop
+      if ($auditSelf) {
+        $auditPpid = [string]$auditSelf.ParentProcessId
+        if ($auditPpid) {
+          $auditP = Get-CimInstance Win32_Process -Filter "ProcessId=$auditPpid" -ErrorAction SilentlyContinue
+          if ($auditP) { $auditParent = [string]$auditP.Name }
+        }
+      }
+    } catch { }
+    $auditArgs = @($PSBoundParameters.Keys | ForEach-Object { "$_=$($PSBoundParameters[$_])" }) -join ' '
+    $auditLine = '{0} | fish.ps1 | fmt=1 pid={1} ppid={2} parent={3} argv=[{4}]' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $PID, $auditPpid, $auditParent, $auditArgs
+    Add-Content -LiteralPath (Join-Path $auditDir 'fish.log') -Value $auditLine -Encoding utf8
+  }
+} catch { }
+
 if ($env:DSH_LAUNCH_NO_BROWSER -eq '1') { $NoBrowser = $true }
 
 # ---------- 名册 ----------

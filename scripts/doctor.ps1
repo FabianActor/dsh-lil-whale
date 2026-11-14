@@ -118,6 +118,19 @@ if (Test-Path -LiteralPath $pluginLog) {
   Add-Row '工具注册' 'WARN' 'group\plugin.log 不存在（可能还没发过言）'
 }
 
+  # 3b. 睡眠工具：裸 spec 少了 output.render 时会整组注册失败（2026-11-14 10:59 踩过：
+  #     "tool \"sleep\" must declare output { schema, render, presentationMeta? }"，
+  #     结果她的 sleep/wake_up 两个工具静悄悄地没有，只有 group_say 活着）。
+  $sleepOk = Select-String -LiteralPath $pluginLog -Pattern 'sleep-tools-registered' -SimpleMatch | Select-Object -Last 1
+  $sleepBad = Select-String -LiteralPath $pluginLog -Pattern 'sleep-tools-register-failed' -SimpleMatch | Select-Object -Last 1
+  if ($sleepBad -and (-not $sleepOk -or $sleepBad.LineNumber -gt $sleepOk.LineNumber)) {
+    Add-Row '睡眠工具' 'FAIL' ('plugin.log 里最近一次是注册失败：' + $sleepBad.Line.Trim()) 'NEXT: 看 index.js 里 sleep/wake_up 的 output 有没有 render；改完重启'
+  } elseif ($sleepOk) {
+    Add-Row '睡眠工具' 'OK' ('plugin.log 里有：' + $sleepOk.Line.Trim())
+  } else {
+    Add-Row '睡眠工具' 'WARN' 'plugin.log 里还没有 sleep-tools-registered（旧代码或还没重启）'
+  }
+
 # 4. 名册：群认会话不认名字；登记错了 = 叫错人
 $pinsFile = Join-Path $Cfg.GroupDir 'pins.json'
 if (Test-Path -LiteralPath $pinsFile) {

@@ -1746,6 +1746,16 @@ function apply(ctx) {
           },
         },
       },
+      // 回执：她一眼能看出"睡到几点"（宿主裸 spec 要求 output.render 是函数）。
+      render: (_args, value) => {
+        if (value.mode === 'preference') {
+          return [{ type: 'text', text: `好，以后每天 ${value.from} 睡到 ${value.to}。` }]
+        }
+        const d = new Date(value.untilAt)
+        const hh = String(d.getHours()).padStart(2, '0')
+        const mm = String(d.getMinutes()).padStart(2, '0')
+        return [{ type: 'text', text: `好，睡到 ${hh}:${mm}。这期间群消息和计划都不叫你（消息还在，醒了自己读）。` }]
+      },
       execute(args, exec) {
         const member = requirePinnedSelf(exec)
         const now = new Date()
@@ -1824,6 +1834,13 @@ function apply(ctx) {
           additionalProperties: false,
           properties: { awakeUntil: { type: 'string' } },
         },
+      },
+      // 回执：醒到几点。
+      render: (_args, value) => {
+        const d = new Date(value.awakeUntil)
+        const hh = String(d.getHours()).padStart(2, '0')
+        const mm = String(d.getMinutes()).padStart(2, '0')
+        return [{ type: 'text', text: `醒了，醒到 ${hh}:${mm}。` }]
       },
       execute(args, exec) {
         const member = requirePinnedSelf(exec)

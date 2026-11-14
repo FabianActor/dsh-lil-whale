@@ -4,6 +4,14 @@
 > 它与两个 npm 包的版本（各自 `package.json` 里的 semver，如 `1.2.0`）是**两条线**：包版本只在功能或破坏性变化、发布时才动。
 > 编号从 r1 开始（第一稿就是 r1）。2026-11-13 之前这些号写作 `v1.0.NN`，本次统一改名，编号不变。
 
+## r82 — 2026-11-14
+
+- **新增附录 A.74 起停要留调用者**：`fish.ps1` 每次调用记 `pool\state\fish.log`（pid / 父进程 / 参数），
+  起因是 10:59 主 dsh 被终止、谁杀的最后只能问人。
+- **新增附录 A.75 工具注册失败必须被体检抓到**：`sleep`/`wake_up` 因裸 spec 缺 `output.render`
+  整组注册失败；补 render，`doctor.ps1` 新增 3b 睡眠工具检查。
+- 状态行 r81 → r82。
+
 ## r81 — 2026-11-14 10:3x
 
 - **新增** 附录 A.73「睡觉：她自己关窗，家长能叫醒」：`sleep-core.js`（40 个行为测试）、`sleep`/`wake_up` 工具、`fish.ps1 wake`、面板「叫醒」+ 勿扰/活跃徽标、`pool\state\sleep-status.json`、`sleep.log`。
