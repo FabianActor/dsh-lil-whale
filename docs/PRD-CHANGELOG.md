@@ -4,6 +4,13 @@
 > 它与两个 npm 包的版本（各自 `package.json` 里的 semver，如 `1.2.0`）是**两条线**：包版本只在功能或破坏性变化、发布时才动。
 > 编号从 r1 开始（第一稿就是 r1）。2026-11-13 之前这些号写作 `v1.0.NN`，本次统一改名，编号不变。
 
+## r96 — 2026-11-14 17:4x
+
+- **投递文案不替她认领**：`intentDeliveryText` 从「你自己写的条件成立了」改成「你的表里有一条条件成立了」，末行改成「这条不是谁在提醒你，是 `plan\wake-on.json` 里的一条条件」；`test-intent.mjs` 加反例断言（文案里不许出现"你自己写的"）。
+- **`wake-try` 统一行形状**：intent 行补 `kind=intent` / `hb-age=` / `deliver=msg`，plan 行补 `kind=plan`。
+- 两个包 **1.4.0 → 1.4.1**（生效要等下次重启；主 dsh 的巡守进程里还是 1.4.0）。
+- PRD **r96** + A.87 补记。起因：她验收时抓到"投递文案替她认领了一条她没写的条件"。
+
 ## r95 — 2026-11-14 17:2x
 
 - **她自己写下的条件（wake-on / intent）**：新增 `plugin\dsh-lil-whale-group\lib\intent-core.js`（纯逻辑）+ `scripts\test-intent.mjs`（24 用例）+ 巡守侧探测（`intentTick`，只在 `watchOne` 里）；三种 kind：`pending` / `text-appears` / `file-changed`；状态 `pool\state\wake-on\<键>.json`、全局额度 `_global.json`；投递走 `say(..., "group", "watch")`，睡眠期间天然扣住；日志 `trigger=intent` / `wid=wl-<HHMM>-<id>` / `at=` / `lag=`。

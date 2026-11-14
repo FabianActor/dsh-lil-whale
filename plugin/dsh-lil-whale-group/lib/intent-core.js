@@ -206,11 +206,11 @@ function yesterdayKey(now) {
 /** 递给她的话。s='watch' 那层在 say() 里标，正文写清"这是你自己写的条件"。 */
 export function intentDeliveryText(spec, evidence) {
   return [
-    `你自己写的条件成立了：\`${spec.id}\`（${spec.why}）。`,
+    `你的表里有一条条件成立了：\`${spec.id}\`（${spec.why}）。`,
     '',
     `证据：${evidence || '（没取到证据）'}`,
     '',
-    '这条不是谁在提醒你，是你自己写的表上说"它成立就告诉我一声"。做不做你定。',
+    '这条不是谁在提醒你，是 `plan\\wake-on.json` 里的一条条件。做不做你定。',
   ].join('\n')
 }
 

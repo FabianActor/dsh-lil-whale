@@ -2792,9 +2792,12 @@ async function intentTick(member, st, now) {
     if (!claimPlanDelivery(member, `intent-${spec.id}-${seq}`)) continue
     const wid = `wl-${hhmmOf(now)}-${spec.id}`
     const counts = wakeCountsOf(member.key)
+    // 2026-11-14 小肥鱼：同一条账里 wake-try 有两种行形状（plan 有 hb-age/deliver、intent 有 at），
+    // 读账的人得先猜这是哪一款。现在统一带 kind=plan|intent，intent 行也补 hb-age/deliver。
+    const hbAge = presenceAgeOf(member.key)
     watchmanLog(
       'wake-try',
-      `wid=${wid} why=intent:${spec.id} to=${member.key} gate=pass(hour=${counts.hour}/${WAKE.perHour},day=${counts.day}/${WAKE.perDay}) at=${s.firstTrueAt}`,
+      `wid=${wid} kind=intent why=intent:${spec.id} to=${member.key} gate=pass(hour=${counts.hour}/${WAKE.perHour},day=${counts.day}/${WAKE.perDay}) hb-age=${hbAge === null ? 'none' : `${hbAge}s`} deliver=msg at=${s.firstTrueAt}`,
     )
     try {
       say('lee', member.key, intentDeliveryText(spec, probe.evidence), 'group', 'watch')
@@ -2911,7 +2914,7 @@ async function watchOne(member, st) {
       // 她要求"就在做决定那一刻写，别事后补"：事后补的只能证明结果，证明不了当时判的是什么。
       if (firstTry) watchmanLog(
         'wake-try',
-        `wid=${wid} why=plan:${job.key} to=${member.key} gate=${gate} hb-age=${hbAge === null ? 'none' : `${hbAge}s`} deliver=${awake ? 'msg' : 'push'} at=${job.at ?? '?'}`,
+        `wid=${wid} kind=plan why=plan:${job.key} to=${member.key} gate=${gate} hb-age=${hbAge === null ? 'none' : `${hbAge}s`} deliver=${awake ? 'msg' : 'push'} at=${job.at ?? '?'}`,
       )
 
       const totalNow = totalWakesToday()

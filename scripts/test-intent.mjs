@@ -207,12 +207,13 @@ t('file-changed：第一次只记基线不触发；变了才触发；没变不�
   assert.equal(probeFileChanged({ current: a, baseline: a }).hit, false)
 })
 
-t('递话文本带 id / why / 证据，并说明"这是你自己写的条件"', () => {
+t('递话文本带 id / why / 证据，并说清是"你的表里的一条条件"（不是替她认领）', () => {
   const text = intentDeliveryText({ id: 'watch-x', why: '等它出结论' }, '文件变了：12 B')
   assert.match(text, /watch-x/)
   assert.match(text, /等它出结论/)
   assert.match(text, /文件变了：12 B/)
-  assert.match(text, /你自己写的/)
+  assert.match(text, /你的表里/)
+  assert.equal(/你自己写的/.test(text), false)
 })
 
 console.log(`合计：${pass + fail} 项，PASS ${pass}，FAIL ${fail}`)
