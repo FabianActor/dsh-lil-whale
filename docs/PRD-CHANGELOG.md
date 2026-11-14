@@ -4,6 +4,13 @@
 > 它与两个 npm 包的版本（各自 `package.json` 里的 semver，如 `1.2.0`）是**两条线**：包版本只在功能或破坏性变化、发布时才动。
 > 编号从 r1 开始（第一稿就是 r1）。2026-11-13 之前这些号写作 `v1.0.NN`，本次统一改名，编号不变。
 
+## r101 — 2026-11-14 18:1x
+
+- **`wake-try` 的 `at=` 统一本地钟**：新增 `localStampOf()`，plan 与 intent 两种行都写 `YYYY-MM-DD HH:MM:SS`（plan 用 `dueAt`、intent 用 `firstTrueAt`；算不出来写 `?`）。起因：她指出"同一台机器上不该有两种钟"，同一条账里行首本地、`at=` 是 UTC。
+- **README 增「她自己定的叫醒」一节**：`wake-plan.json`（到点）+ `wake-on.json`（条件），三种 kind、边界、额度、账本与体检入口。
+- 两个包 **1.5.3 → 1.5.4**。
+- PRD **r101** + A.87 补记 2。
+
 ## r100 — 2026-11-14 18:1x
 
 - **名册自检的口径与钟**：`roster-audit.log` 改 `fmt=2`——加 `scope=fish` 与 `exclude=`（人 / 家不在 homes 下的巡守），时间从 UTC 改本地（和 watchman/fish/sleep 三本账一致）。起因：她指出"3/2/3 三个数看着不相等，结论却是 ok"，以及"同一台机器上不该有两种钟"。

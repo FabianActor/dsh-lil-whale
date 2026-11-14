@@ -778,6 +778,16 @@ function bumpOwnError() {
 /** 一行一次：时间 | 结果 | 为什么（格式是她 19:07 定的）。 */
 /** 她 2026-11-10：error 行每 5 秒刷一次，会把 gap 压成 5s —— 所以 error 单独记连击数。 */
 let errorStreak = 0
+// 账本里的时间一律本地时间，和行首、和 watchman.log/fish.log/sleep.log 同一个钟。
+// 2026-11-14 小肥鱼："同一台机器上不该有两种钟"——她先是在 roster-audit 上抓到的，
+// 同一条账里的 wake-try 也犯着同样的错：行首本地，at= 却是 UTC。
+function localStampOf(value) {
+  const d = value instanceof Date ? value : new Date(Number(value))
+  if (Number.isNaN(d.getTime())) return '?'
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
 function watchmanLog(result, why) {
   try {
     mkdirSync(dirname(WATCHMAN_LOG), { recursive: true })
@@ -2797,7 +2807,7 @@ async function intentTick(member, st, now) {
     const hbAge = presenceAgeOf(member.key)
     watchmanLog(
       'wake-try',
-      `wid=${wid} kind=intent why=intent:${spec.id} to=${member.key} gate=pass(hour=${counts.hour}/${WAKE.perHour},day=${counts.day}/${WAKE.perDay}) hb-age=${hbAge === null ? 'none' : `${hbAge}s`} deliver=msg at=${s.firstTrueAt}`,
+      `wid=${wid} kind=intent why=intent:${spec.id} to=${member.key} gate=pass(hour=${counts.hour}/${WAKE.perHour},day=${counts.day}/${WAKE.perDay}) hb-age=${hbAge === null ? 'none' : `${hbAge}s`} deliver=msg at=${localStampOf(s.firstTrueAt)}`,
     )
     try {
       say('lee', member.key, intentDeliveryText(spec, probe.evidence), 'group', 'watch')
@@ -2914,7 +2924,7 @@ async function watchOne(member, st) {
       // 她要求"就在做决定那一刻写，别事后补"：事后补的只能证明结果，证明不了当时判的是什么。
       if (firstTry) watchmanLog(
         'wake-try',
-        `wid=${wid} kind=plan why=plan:${job.key} to=${member.key} gate=${gate} hb-age=${hbAge === null ? 'none' : `${hbAge}s`} deliver=${awake ? 'msg' : 'push'} at=${job.at ?? '?'}`,
+        `wid=${wid} kind=plan why=plan:${job.key} to=${member.key} gate=${gate} hb-age=${hbAge === null ? 'none' : `${hbAge}s`} deliver=${awake ? 'msg' : 'push'} at=${dueAt === null ? '?' : localStampOf(dueAt)}`,
       )
 
       const totalNow = totalWakesToday()
