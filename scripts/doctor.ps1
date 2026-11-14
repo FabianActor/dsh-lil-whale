@@ -1,4 +1,4 @@
-﻿#requires -Version 7.0
+#requires -Version 7.0
 # doctor.ps1 -- 一条鱼还活着吗？
 #
 # 用法：
@@ -503,6 +503,7 @@ if (Test-Path -LiteralPath $Cfg.MembersFile) {
             $candidates += [string]$_.home
             if ([string]$_.home -match '默认\s+([^)]+)') { $candidates += $Matches[1] }
           }
+          if ($_.selfHome) { $candidates += [string]$_.selfHome }
           if ($_.herHome) { $candidates += [string]$_.herHome }
           foreach ($c in $candidates) { if (([string]$c).TrimEnd('\') -ieq $wantHome) { return $true } }
           return $false
