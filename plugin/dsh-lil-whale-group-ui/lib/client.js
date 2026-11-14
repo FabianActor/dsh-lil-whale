@@ -1142,6 +1142,9 @@ function Bubble({ config, message, onMention, animate = false }) {
       const animateRef = useRef(false)
       const pickedOnceRef = useRef(false)
       const peerRef = useRef(null)
+      // 输入法选字期间（拼音还没上屏）不落草稿：那时 value 里是 "xiaofei" 这种拼音字母，
+      // 存进 localStorage 就是一份假的草稿。（和设置页 ComposingTextInput 同一类病。）
+      const composingRef = useRef(false)
       const [text, setText] = useState('')
       const [sending, setSending] = useState(false)
       // setError 必须先声明再传下去：`const` 有暂时性死区，先用到后声明是 ReferenceError，
@@ -1466,7 +1469,12 @@ function Bubble({ config, message, onMention, animate = false }) {
             value: text,
             onChange: (event) => {
               setText(event.target.value)
-              if (activePeer !== null) writeDraft(dmDraftKeyOf(activePeer), event.target.value)
+              if (activePeer !== null && !composingRef.current) writeDraft(dmDraftKeyOf(activePeer), event.target.value)
+            },
+            onCompositionStart: () => { composingRef.current = true },
+            onCompositionEnd: (event) => {
+              composingRef.current = false
+              if (activePeer !== null) writeDraft(dmDraftKeyOf(activePeer), event.currentTarget.value)
             },
             onPaste: (event) => {
               const items = event.clipboardData?.items
@@ -1617,6 +1625,8 @@ function Bubble({ config, message, onMention, animate = false }) {
       const [config, setConfig] = useState(DEFAULT_CONFIG)
       const animateRef = useRef(false)
       const pickedOnceRef = useRef(false)
+      // 同 DmPage：输入法选字期间不落草稿（那时 value 里是拼音字母）。
+      const composingRef = useRef(false)
       const [messages, setMessages] = useState([])
       const [text, setText] = useState(() => readDraft(GROUP_DRAFT_KEY))
       const [to, setTo] = useState('all')
@@ -1626,7 +1636,8 @@ function Bubble({ config, message, onMention, animate = false }) {
       const { pendingImage, setPendingImage, imageBusy, attachImage, fileRef } = useImageAttach(setError)
       // 群聊草稿：改一个字就存，切走 / 刷新 / 重新进页面都还在。
       // 发出去以后 text 变空串，这里顺手把草稿删掉（见 writeDraft 的空值分支）。
-      useEffect(() => { writeDraft(GROUP_DRAFT_KEY, text) }, [text])
+      // 输入法选字期间不写：那时 text 里是 "xiaofei"，存下去就是一份假草稿。
+      useEffect(() => { if (!composingRef.current) writeDraft(GROUP_DRAFT_KEY, text) }, [text])
       const [presence, setPresence] = useState({})
       const [seats, setSeats] = useState([])
       const [pickerOpen, setPickerOpen] = useState(false)
@@ -2117,6 +2128,11 @@ function Bubble({ config, message, onMention, animate = false }) {
                 ref: inputRef,
                 value: text,
                 onChange: (event) => setText(event.target.value),
+                onCompositionStart: () => { composingRef.current = true },
+                onCompositionEnd: (event) => {
+                  composingRef.current = false
+                  writeDraft(GROUP_DRAFT_KEY, event.currentTarget.value)
+                },
                 onPaste: (event) => {
                   const items = event.clipboardData?.items
                   if (!items) return
@@ -3200,7 +3216,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v33 · avatar-ime:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v34 · ime-drafts:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')
