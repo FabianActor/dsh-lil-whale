@@ -19,6 +19,7 @@
 #   pwsh -File fish.ps1 new -Key <键> -Name <名字> -Parent whale   养一条新鱼（查重 → 建家 → 进名册 → 记 birth）
 #   pwsh -File fish.ps1 acl-check [whale|all]   查沙箱通行证（文件工具能写、pwsh 不能写 = 缺它）
 #   pwsh -File fish.ps1 acl-repair [whale|all]  补沙箱通行证（补完记 pool\state\acl.log）
+#   pwsh -File fish.ps1 wake <名字|all>         家长强行叫醒（睡眠窗里也叫得醒；记 sleep.log）
 #   pwsh -File fish.ps1 help
 #
 # 选项：-Window（开窗起；默认无人值守） -NoBrowser（强制不开） -BrowserMainOnly（只给主 dsh 开窗） -Yes（不停下来问）
@@ -307,10 +308,22 @@ function Exit-UpLock {
 
 # ---------- list ----------
 function Show-List {
+  # 睡眠状态只有一份汇总（巡守每 60 秒写 pool\state\sleep-status.json）——这里只读，不自己算。
+  $sleepStatus = $null
+  try {
+    $sleepFile = Join-Path $Cfg.PoolState 'sleep-status.json'
+    if (Test-Path -LiteralPath $sleepFile) { $sleepStatus = Get-Content -LiteralPath $sleepFile -Raw -Encoding UTF8 | ConvertFrom-Json }
+  } catch { $sleepStatus = $null }
   $rows = @()
   foreach ($m in ($MEMBERS.Values | Where-Object { $_.Kind -eq 'fish' })) {
     $fishPort = Get-PortOf $m
     $up = Test-Port $fishPort
+    $sleepLabel = '-'
+    if ($sleepStatus -and $sleepStatus.members -and $sleepStatus.members.PSObject.Properties.Name -contains $m.Key) {
+      $entry = $sleepStatus.members.($m.Key)
+      if ($entry.sleeping) { $sleepLabel = if ($entry.label) { "勿扰（$($entry.label)）" } else { '勿扰' } }
+      else { $sleepLabel = '活跃' }
+    }
     $rows += [pscustomobject]@{
       '名字' = $m.Label
       '键'   = $m.Key
@@ -318,13 +331,14 @@ function Show-List {
       '状态' = if ($up) { '在跑' } else { '没开' }
       '心跳' = if ($up) { Get-Heartbeat $m } else { '-' }
       '模式' = if ($up) { $md = Get-Mode $m; if ($md) { $md.mode } else { '?' } } else { '-' }
+      '睡眠' = $sleepLabel
       '角色' = $m.Role
       '家'   = $m.Home
     }
   }
   $rows | Format-Table -AutoSize | Out-String | Write-Host
   Write-Host ("名册：{0}" -f $(if ($Cfg.MembersFile) { $Cfg.MembersFile } else { Join-Path $Cfg.PoolDir 'members.json' }))
-  Write-Host '用法：fish.ps1 up <名字|all> / down <名字|all> / doctor'
+  Write-Host '用法：fish.ps1 up <名字|all> / down <名字|all> / wake <名字> / doctor'
 }
 
 # ---------- 无人值守 ----------
@@ -579,6 +593,7 @@ fish.ps1 -- 鱼群唯一的入口
   pwsh -File fish.ps1 restore whale    回无人值守（无窗起，会话由 host 自己挂上）
   pwsh -File fish.ps1 acl-check [whale|all]   查沙箱通行证（文件工具能写、pwsh 不能写 = 缺它）
   pwsh -File fish.ps1 acl-repair [whale|all]  补沙箱通行证（补完记 pool\state\acl.log）
+  pwsh -File fish.ps1 wake <名字|all>         家长强行叫醒（睡眠窗里也叫得醒；记 sleep.log）
   pwsh -File fish.ps1 help
 
 选项：-NoBrowser -Window -BrowserMainOnly -Console -Yes -By <谁> -Why <为什么> -Port <n>
@@ -940,6 +955,28 @@ function Invoke-AclCmd([string]$action, [string]$name) {
   return $ok
 }
 
+# ---------- 强行叫醒（PRD A.73） ----------
+# 她可以自己睡（工具 sleep），但上级家长有权利把她叫醒。
+# 判断窗口/跨午夜/优先级全在 sleep-core.js 一份实现里，这里只调 sleep-cli.mjs，不自己算。
+function Invoke-Wake([string]$name) {
+  $members = @(Resolve-Targets $name | Where-Object { $_.Kind -eq 'fish' -and $_.Role -ne 'watcher' })
+  if ($members.Count -eq 0) { Write-Host 'xx 没有可叫醒的鱼。'; return $false }
+  $ok = $true
+  foreach ($m in $members) {
+    $out = & node (Join-Path $PSScriptRoot 'sleep-cli.mjs') wake $m.Key 'fish.ps1' 2>&1
+    if ($LASTEXITCODE -eq 0) {
+      $parsed = $null
+      try { $parsed = ($out -join '') | ConvertFrom-Json } catch { $parsed = $null }
+      $label = if ($parsed -and $parsed.label) { $parsed.label } else { '已叫醒' }
+      Write-Host ("{0}：{1}" -f $m.Label, $label)
+    } else {
+      Write-Host ("xx {0}：叫醒失败 —— {1}" -f $m.Label, ($out -join ' '))
+      $ok = $false
+    }
+  }
+  return $ok
+}
+
 # ---------- 分发 ----------
 $ok = $true
 $locked = $false
@@ -971,6 +1008,7 @@ try {
     'key'    { if (-not (Invoke-KeyCmd $Name $Key)) { $ok = $false } }
     'acl-check'  { if (-not (Invoke-AclCmd 'check' $Name)) { $ok = $false } }
     'acl-repair' { if (-not (Invoke-AclCmd 'repair' $Name)) { $ok = $false } }
+    'wake'       { if (-not (Invoke-Wake $Name)) { $ok = $false } }
     'maintain' { if (-not (Invoke-Maintain $Name)) { $ok = $false } }
     'restore'  { if (-not (Invoke-Restore $Name)) { $ok = $false } }
     'unattended' { if (-not (Invoke-Restore $Name)) { $ok = $false } }

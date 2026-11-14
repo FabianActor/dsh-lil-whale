@@ -62,6 +62,8 @@ pwsh -File scripts\fish.ps1 acl-check / acl-repair <鱼|all>  # 沙箱通行证�
 | `doctor.ps1` | `fish.ps1 doctor`、鱼塘「检修」、`release-check.ps1` |
 | `verify-pending.ps1` | 重启后验收：runs 账按鱼写 / 自己的闹钟 / gate 读数 / 归属 B 与全局 120 / 自启动开关 / 鱼塘接口 / 模式账 |
 | `test-plan.mjs` | 计划表与唤醒额度的行为测试（26 用例，真 import 真代码） |
+| `test-sleep.mjs` | 睡眠窗口/跨午夜/优先级的行测试（40 用例，真 import 真代码） |
+| `sleep-cli.mjs` | 睡眠状态的命令行：`status` / `wake` / `seed` / `pref`（`fish.ps1` 调它） |
 | `install.ps1` / `release-check.ps1` / `pack.ps1` | 装、验、打包 |
 | `archive-fish.mjs` | 归档一条鱼（`--subtree` 连同孩子）；默认只写 manifest 不删东西 |
 | `gen-family.mjs` | 从 `pool\family.json` + 名册生成 `docs\谱系.md`（`--seed` 补节点） |

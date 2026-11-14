@@ -452,6 +452,30 @@ function modeOf(key) {
   }
 }
 
+/**
+ * 这条鱼此刻在不在睡（PRD A.73）。数据只有一份：巡守每 60 秒写 `pool\state\sleep-status.json`。
+ * 面板不自己算窗口（跨午夜、一次性睡眠、家长叫醒的优先级只有 sleep-core.js 一份实现）。
+ */
+function sleepOf(key) {
+  const file = join(POOL_STATE, 'sleep-status.json')
+  try {
+    const raw = JSON.parse(readFileSync(file, 'utf8'))
+    const entry = raw?.members?.[key]
+    if (!entry) return null
+    const updatedAt = typeof raw?.updatedAt === 'string' ? raw.updatedAt : null
+    const ageMs = updatedAt ? Date.now() - Date.parse(updatedAt) : null
+    return {
+      sleeping: entry.sleeping === true,
+      source: typeof entry.source === 'string' ? entry.source : 'unknown',
+      untilAt: typeof entry.untilAt === 'string' ? entry.untilAt : null,
+      label: typeof entry.label === 'string' ? entry.label : '',
+      ageMs,
+    }
+  } catch {
+    return null
+  }
+}
+
 /** 端口开没开：连得上就是开着。连不上不代表"进程死了"，只代表这扇门没开。 */
 function tcpOpen(port, timeoutMs = POND_TCP_TIMEOUT_MS) {
   return new Promise((resolve) => {
@@ -627,6 +651,7 @@ async function pondStatus() {
       heartbeat: presence,
       heartbeatAgeMs: presence?.ageMs ?? null,
       mode: modeOf(key),
+      sleep: sleepOf(key),
       canManage: member?.role !== 'watcher',
       url: portOpen ? pondUrlOf(member) : null,
     })
@@ -1368,6 +1393,11 @@ export function apply(ctx) {
           // 回无人值守：关掉窗那份，无窗起，会话由 host 自己挂上（A.45）。
           return runPwshScript(FISH_PS1, ['restore', target])
         }
+        if (act === 'wake') {
+          // 家长强行叫醒（A.73）：她可以自己睡，但上级有权利把她叫醒。
+          // 窗口/跨午夜判断在 sleep-core.js 一份实现里，这里只转给 fish.ps1。
+          return runPwshScript(FISH_PS1, ['wake', target])
+        }
         return { code: -1, timedOut: false, seconds: 0, output: `unknown-action ${act}` }
       }
 
@@ -1392,7 +1422,7 @@ export function apply(ctx) {
         return
       }
 
-      if (!['up', 'down', 'maintain', 'restore'].includes(action)) {
+      if (!['up', 'down', 'maintain', 'restore', 'wake'].includes(action)) {
         sendJson(res, 400, { error: 'unknown-action', action })
         return
       }

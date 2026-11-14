@@ -121,6 +121,14 @@ if ($root) {
     else { Ok '计划逻辑' '行为测试全过（test-plan.mjs）' }
   } else { Fail '计划逻辑' 'scripts\test-plan.mjs 不在包里' }
 
+  # ── 4c. 睡眠逻辑行为测试（2026-11-14）────────────────────────────────
+  $sleepTest = Join-Path $pkg 'scripts\test-sleep.mjs'
+  if (Test-Path $sleepTest) {
+    $sleepOut = & node $sleepTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '睡眠逻辑' (($sleepOut | Select-Object -Last 2) -join ' / ') }
+    else { Ok '睡眠逻辑' '行为测试全过（test-sleep.mjs）' }
+  } else { Fail '睡眠逻辑' 'scripts\test-sleep.mjs 不在包里' }
+
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {

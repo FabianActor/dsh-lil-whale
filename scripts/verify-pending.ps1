@@ -76,6 +76,17 @@ if (Test-Path -LiteralPath $planTest) {
   Add-Row '计划逻辑（行为测试）' 'FAIL' 'scripts\test-plan.mjs 不见了'
 }
 
+# 4b) 睡眠逻辑（行为测试，2026-11-14 加）：窗口/跨午夜/优先级算错一次，
+# 表现就是"她半夜被叫醒"或"该醒的时候还在睡"—— 两种都很难从日志里看出来。
+$sleepTest = Join-Path $repo 'scripts\test-sleep.mjs'
+if (Test-Path -LiteralPath $sleepTest) {
+  $sleepOut = & node $sleepTest 2>&1
+  $sleepOk = ($LASTEXITCODE -eq 0)
+  Add-Row '睡眠逻辑（行为测试）' $(if ($sleepOk) { 'PASS' } else { 'FAIL' }) (($sleepOut | Select-Object -Last 1))
+} else {
+  Add-Row '睡眠逻辑（行为测试）' 'FAIL' 'scripts\test-sleep.mjs 不见了'
+}
+
 # 5) 自启动开关
 $settings = Join-Path $Cfg.PoolState 'settings.json'
 if (Test-Path -LiteralPath $settings) {

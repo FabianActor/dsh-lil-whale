@@ -460,6 +460,16 @@ if (Test-Path -LiteralPath $genFamily) {
 $planPath = Join-Path $Workspace 'plan\wake-plan.json'
 if (-not (Test-Path $planPath)) { Write-Utf8NoBom $planPath "[]`n"; Ok 'plan\wake-plan.json（空的：她现在没有任何固定日程）' }
 
+# 睡眠作息（PRD A.73）：默认 00:00–08:00，她可以自己改；家长可以强行叫醒。
+# 判断逻辑只在 sleep-core.js 一份实现里 —— 这里只负责种文件，不自己算窗口。
+$sleepCli = Join-Path $RepoRoot 'scripts\sleep-cli.mjs'
+$sleepSeedKey = $childMember
+if ((Test-Path -LiteralPath $sleepCli) -and $sleepSeedKey) {
+  $seedOut = & node $sleepCli seed $sleepSeedKey 2>&1
+  if ($LASTEXITCODE -eq 0) { Ok 'plan\sleep.json（默认 00:00–08:00；她能自己改，家长能强行叫醒）' }
+  else { Warn "plan\sleep.json 没种上：$($seedOut | Select-Object -Last 2)" }
+}
+
 Step '7. 验一遍'
 try {
   $env:DSH_HOME = $DshHome

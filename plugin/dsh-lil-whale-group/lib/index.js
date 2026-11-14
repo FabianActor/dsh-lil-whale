@@ -24,6 +24,15 @@ import {
   parseWakeCounts,
   sumWakesToday,
 } from './plan-core.js'
+import {
+  sleepStateOf,
+  sleepLabel,
+  parseHm,
+  forceAwakeUntil,
+  windowFor,
+  DEFAULT_SLEEP_FROM,
+  DEFAULT_SLEEP_TO,
+} from './sleep-core.js'
 
 // 这个包是用 link: 挂进 profile 的，它的真实路径在项目里，walk-up 找不到宿主的
 // @deepseek-ai/* 依赖（会 ERR_MODULE_NOT_FOUND，整个插件加载失败、工具静默消失）。
@@ -169,6 +178,117 @@ function runLog(member, result, why) {
   } catch {
     // 记账写不进去不能把插件打死
   }
+}
+
+// ---------- 睡觉（2026-11-14 他拍板：2.1 自己关窗 / 自己睡） ----------
+//
+// 两件事分开存：
+//   - 偏好（每天几点到几点睡）在她自己的家：`<鱼的家>\plan\sleep.json` —— 那是她的作息表。
+//   - 一次性睡眠 / 家长强制叫醒在共享区：`pool\state\sleep\<键>.json` —— 巡守和面板要读。
+// 判据放在 `sleep-core.js`（纯函数、有 40 个行为测试）：窗口、跨午夜、优先级、坏形状都只算一次。
+const SLEEP_DIR = join(POOL_STATE, 'sleep')
+const SLEEP_STATUS_FILE = join(POOL_STATE, 'sleep-status.json')
+const SLEEP_LOG = join(POOL_STATE, 'sleep.log')
+
+function sleepLog(result, why) {
+  try {
+    mkdirSync(POOL_STATE, { recursive: true })
+    appendFileSync(SLEEP_LOG, `${runStamp()} | ${result} | ${why}\n`, 'utf8')
+  } catch {}
+}
+
+/** 成员的家：名册里有就用名册，没有就按鱼塘布局推。 */
+function homeOf(member) {
+  const m = MEMBERS[member]
+  if (m?.home) return m.home
+  if (member === ownMember()) return SELF_HOME
+  return join(dirname(dirname(POOL_STATE)), 'homes', member)
+}
+
+function sleepPrefFileOf(member) {
+  return join(homeOf(member), 'plan', 'sleep.json')
+}
+
+function sleepStateFileOf(member) {
+  return join(SLEEP_DIR, `${member}.json`)
+}
+
+function readSleepPrefOf(member) {
+  try {
+    return JSON.parse(readFileSync(sleepPrefFileOf(member), 'utf8'))
+  } catch {
+    return null
+  }
+}
+
+function readSleepStateOf(member) {
+  try {
+    return JSON.parse(readFileSync(sleepStateFileOf(member), 'utf8'))
+  } catch {
+    return {}
+  }
+}
+
+function writeSleepStateOf(member, state) {
+  mkdirSync(SLEEP_DIR, { recursive: true })
+  writeJson(sleepStateFileOf(member), { ...state, updatedAt: new Date().toISOString() })
+}
+
+/** 这条鱼此刻的睡眠状态（见 sleep-core.js 的优先级：强制叫醒 > 一次性 > 每日偏好）。 */
+function sleepStateOfMember(member, now = new Date()) {
+  // 巡守（主 dsh）不睡：它就是那扇窗，关掉它等于把正在用的界面拔了。
+  if ((MEMBERS[member]?.role ?? 'member') === 'watcher') {
+    return { sleeping: false, source: 'watcher', untilAt: null }
+  }
+  const raw = readSleepStateOf(member)
+  return sleepStateOf(
+    {
+      oneOff: raw.oneOff ?? null,
+      awakeUntil: raw.awakeUntil ?? null,
+      preference: readSleepPrefOf(member),
+    },
+    now,
+  )
+}
+
+function isSleeping(member, now = new Date()) {
+  return sleepStateOfMember(member, now).sleeping
+}
+
+/**
+ * 给面板看的汇总：只有巡守那个进程写，UI 只读这一个文件。
+ * 为什么不让 UI 自己算：窗口/跨午夜/优先级只有一份实现（sleep-core.js），
+ * 面板再算一遍就成了第二个渲染器 —— A.23 的教训（同一个投影两个写者会打架）。
+ */
+function writeSleepStatus(members = watchedMembers()) {
+  const now = new Date()
+  const out = { updatedAt: now.toISOString(), members: {} }
+  for (const m of members) {
+    try {
+      const st = sleepStateOfMember(m.key, now)
+      out.members[m.key] = {
+        sleeping: st.sleeping === true,
+        source: st.source,
+        untilAt: st.untilAt ?? null,
+        label: sleepLabel(st),
+      }
+    } catch {
+      out.members[m.key] = { sleeping: false, source: 'unknown', untilAt: null, label: '' }
+    }
+  }
+  try {
+    writeJson(SLEEP_STATUS_FILE, out)
+  } catch {}
+  return out
+}
+
+/** 被睡眠挡住的消息：10 分钟记一行，不刷屏（她 2026-11-13 说的"行数也是成本"）。 */
+const sleepHoldLoggedAt = new Map()
+function noteSleepHold(member, pending, seen, total) {
+  const last = sleepHoldLoggedAt.get(member) ?? 0
+  if (Date.now() - last < 10 * 60_000) return
+  sleepHoldLoggedAt.set(member, Date.now())
+  sleepLog('sleep-hold', `member=${member} pending=${pending} cursor=${seen}/${total}（消息在文件里，游标不动）`)
 }
 
 /** 上一轮是"正常收尾"还是"没写 stopped 就没了"。读尾巴 8KB 找最后一条 started/stopped。 */
@@ -1359,7 +1479,9 @@ function gate(member, wakes) {
   const state = wakes[member] ?? { lastWakeAt: 0, hourStart: 0, hourCount: 0, dayStart: '', dayCount: 0 }
   const now = Date.now()
 
-  if (withinQuietHours()) return 'quiet-hours'
+  // 2026-11-14：全局静默段（00:00–08:00 一刀切）退成"每条鱼自己的默认睡眠窗"。
+  // 她能不能被叫醒，现在由她自己家 `plan\sleep.json` 的偏好 + 一次性睡眠 + 家长强制叫醒决定。
+  if (isSleeping(member)) return 'sleep'
   if (now - state.lastWakeAt < WAKE.cooldownSec * 1000) return 'cooldown'
   if (state.hourCount >= WAKE.perHour && now - state.hourStart < 3600_000) return 'hour-cap'
   if (state.dayCount >= WAKE.perDay && state.dayStart === new Date().toDateString()) return 'day-cap'
@@ -1568,6 +1690,162 @@ function apply(ctx) {
     logLine({ note: 'group_say-registered', via: hostOk && defineTool !== null ? 'host' : 'raw' })
   }
 
+  // 2. 睡觉：自己决定什么时候睡（2026-11-14 他拍板 2.1）。
+  // 只对自己有效；睡下之后群/私聊消息不叫醒（消息在文件里，游标不动），计划到点也不叫。
+  // 家长要叫醒她走 `fish.ps1 wake <键>`（那才是"上级家长强行停止睡眠"）。
+  function registerSleepTools(hostOk) {
+    if (!hostOk || defineTool === null) {
+      logLine({ note: 'sleep-tools-raw-spec', reason: 'defineTool-unresolved' })
+    }
+    const buildTool = hostOk && defineTool !== null ? defineTool : (options) => options
+    const requirePinnedSelf = (exec) => {
+      const member = memberOf(exec.agent)
+      const sid = sessionIdOf(exec.agent)
+      if (member === null || !pinnedSessions(member).includes(sid)) {
+        throw new Error(
+          '这段会话不在群里。群只认 pins.json 里登记过的会话（一个人可以登记多段）。' +
+          '要在这里用睡觉工具，把这段会话的 id 写进 pins.json 就行。',
+        )
+      }
+      return member
+    }
+    ctx.tools.register(buildTool({
+      name: 'sleep',
+      description: '决定自己睡一会儿。睡下之后：群消息和私聊不会叫醒你（消息还在文件里，醒了自己读）；计划表到点也不叫你。一次最多 12 小时，每天最多 14 小时——不能永久睡，家长随时可以叫醒你。三种用法：minutes（睡几分钟）/ until（睡到几点）/ from+to（设成每天几点到几点睡）。',
+      parameters: {
+        minutes: {
+          type: 'number',
+          description: '睡多少分钟（一次性）。和 until / from+to 三选一。',
+        },
+        until: {
+          type: 'string',
+          description: '睡到几点（HH:MM，一次性）。已经过了今天这个点就指明天。',
+        },
+        from: {
+          type: 'string',
+          description: '每天从几点开始睡（HH:MM）。必须和 to 一起给。',
+        },
+        to: {
+          type: 'string',
+          description: '每天睡到几点（HH:MM）。可以跨午夜，比如 from:"23:00", to:"07:30"。',
+        },
+        reason: {
+          type: 'string',
+          description: '为什么睡（可选，会记进 sleep.log，给以后看）',
+        },
+      },
+      output: {
+        schema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            mode: { type: 'string' },
+            untilAt: { type: 'string' },
+            from: { type: 'string' },
+            to: { type: 'string' },
+          },
+        },
+      },
+      execute(args, exec) {
+        const member = requirePinnedSelf(exec)
+        const now = new Date()
+        const hasFrom = typeof args.from === 'string' && args.from.trim() !== ''
+        const hasTo = typeof args.to === 'string' && args.to.trim() !== ''
+        if (hasFrom || hasTo) {
+          if (!hasFrom || !hasTo) {
+            throw new Error('设"每天几点到几点睡"要 from 和 to 一起给，例如 from:"23:00", to:"07:30"。')
+          }
+          const fromHm = parseHm(args.from)
+          const toHm = parseHm(args.to)
+          if (fromHm === null || toHm === null) throw new Error('时间要写成 HH:MM（24 小时制），例如 "23:00"。')
+          if (fromHm === toHm) throw new Error('from 和 to 不能一样——那是"睡 0 分钟"。')
+          const duration = toHm > fromHm ? toHm - fromHm : 24 * 60 - fromHm + toHm
+          if (duration > 14 * 60) throw new Error('一天最多睡 14 小时（他 2026-11-14 定的：不能永久睡）。')
+          const file = sleepPrefFileOf(member)
+          mkdirSync(dirname(file), { recursive: true })
+          writeJson(file, {
+            from: args.from.trim(),
+            to: args.to.trim(),
+            enabled: true,
+            updatedAt: now.toISOString(),
+            by: member,
+          })
+          sleepLog('sleep-pref', `member=${member} from=${args.from.trim()} to=${args.to.trim()} reason=${String(args.reason ?? '').replace(/\s+/g, ' ').slice(0, 80)}`)
+          return { mode: 'preference', from: args.from.trim(), to: args.to.trim(), untilAt: '' }
+        }
+        let toAt = null
+        let how = ''
+        if (typeof args.minutes === 'number' && Number.isFinite(args.minutes)) {
+          const n = Math.round(args.minutes)
+          if (n <= 0) throw new Error('minutes 要给正数。')
+          if (n > 720) throw new Error('一次最多睡 12 小时（720 分钟）。')
+          toAt = new Date(now.getTime() + n * 60_000)
+          how = `睡 ${n} 分钟`
+        } else if (typeof args.until === 'string' && args.until.trim() !== '') {
+          const hm = parseHm(args.until)
+          if (hm === null) throw new Error('until 要写成 HH:MM，例如 "07:30"。')
+          const t = new Date(now)
+          t.setHours(0, 0, 0, 0)
+          t.setMinutes(hm)
+          if (t.getTime() <= now.getTime()) t.setDate(t.getDate() + 1)
+          if (t.getTime() - now.getTime() > 12 * 3600_000) throw new Error('一次最多睡 12 小时。')
+          toAt = t
+          how = `睡到 ${args.until.trim()}`
+        } else {
+          throw new Error('要说清睡多久：minutes（睡几分钟）/ until（睡到几点）/ from+to（每天几点到几点睡）。')
+        }
+        const state = readSleepStateOf(member)
+        state.oneOff = {
+          fromAt: now.toISOString(),
+          toAt: toAt.toISOString(),
+          reason: String(args.reason ?? '').replace(/\s+/g, ' ').slice(0, 120),
+        }
+        // 主动睡下要覆盖之前的"强制叫醒"：否则家长叫醒过一次之后，她整夜都睡不回去。
+        state.awakeUntil = null
+        state.forcedBy = ''
+        writeSleepStateOf(member, state)
+        sleepLog('sleep-once', `member=${member} ${how} to=${toAt.toISOString()} reason=${state.oneOff.reason}`)
+        return { mode: 'one-off', untilAt: toAt.toISOString(), from: '', to: '' }
+      },
+      presentCall: (args) => ({
+        card: 'generic',
+        title: typeof args.minutes === 'number' ? `睡 ${args.minutes} 分钟` : '睡一会儿',
+        kind: 'other',
+        rawInput: args,
+      }),
+    }))
+    ctx.tools.register(buildTool({
+      name: 'wake_up',
+      description: '把自己叫醒（结束这次睡眠）。如果现在本来就在睡眠窗里，会醒到本窗结束；不在窗里则给两小时清醒时间。家长也可以从鱼塘面板或 fish.ps1 wake 叫醒你。',
+      parameters: {},
+      output: {
+        schema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: { awakeUntil: { type: 'string' } },
+        },
+      },
+      execute(args, exec) {
+        const member = requirePinnedSelf(exec)
+        const now = new Date()
+        const pref = readSleepPrefOf(member)
+        const preference = pref && typeof pref === 'object'
+          ? pref
+          : { from: DEFAULT_SLEEP_FROM, to: DEFAULT_SLEEP_TO, enabled: true }
+        const until = forceAwakeUntil(preference, now)
+        const state = readSleepStateOf(member)
+        state.oneOff = null
+        state.awakeUntil = until
+        state.forcedBy = member
+        writeSleepStateOf(member, state)
+        sleepLog('sleep-clear', `member=${member} awakeUntil=${until} by=self`)
+        return { awakeUntil: until }
+      },
+      presentCall: () => ({ card: 'generic', title: '把自己叫醒', kind: 'other', rawInput: {} }),
+    }))
+    logLine({ note: 'sleep-tools-registered', via: hostOk && defineTool !== null ? 'host' : 'raw' })
+  }
+
   // 宿主包是异步装进来的：解析完了再注册（通常几十毫秒，远早于第一个 turn）。
   // 失败也要注册一次裸对象，否则这个进程里就永远没有 group_say。
   // 2026-11-12：注册必须**同步**。小鲸鱼报了 `unknown tool "group_say"`，
@@ -1579,6 +1857,11 @@ function apply(ctx) {
     registerGroupSay(defineTool !== null)
   } catch (error) {
     logLine({ note: 'group_say-register-failed', error: String(error?.message ?? error) })
+  }
+  try {
+    registerSleepTools(defineTool !== null)
+  } catch (error) {
+    logLine({ note: 'sleep-tools-register-failed', error: String(error?.message ?? error) })
   }
   void resolveHost().catch((error) => {
     logLine({ note: 'host-resolve-failed', error: String(error?.message ?? error) })
@@ -1875,7 +2158,12 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
   if (!quietEnough && !waitedEnough) return false
 
   const blocked = gate(member, wakes)
-  if (blocked !== null) return false // 被闸挡住：不告警、不补发、游标不动
+  if (blocked !== null) {
+    // 睡眠挡的是"叫醒"，不是"送达"：消息还在文件里，游标不动，醒了照常读。
+    // 留一行痕迹，否则"她睡着没被叫"和"消息丢了"在日志里长得一样。
+    if (blocked === 'sleep') noteSleepHold(member, incoming.length, sharedSeen, lines.length)
+    return false // 被闸挡住：不告警、不补发、游标不动
+  }
 
   const who = incoming.map((record) => labelOf(record.from)).join('、')
   // 预览截断必须自己说出来（2026-11-12，小肥鱼）：她只看到 `> You` 就断了，
@@ -2072,6 +2360,7 @@ const planDeliveryText = planDeliveryTextCore
  * claim 文件（一天一条）保证自执行和巡守那边不会各递一次。
  */
 const SELF_PLAN_GRACE_MIN = 15
+const selfPlanSleepLoggedAt = new Map()
 
 function selfPlanTick() {
   if (isMainProcess()) return
@@ -2079,6 +2368,15 @@ function selfPlanTick() {
   const member = MEMBERS[self]
   if (!member || member.role === 'watcher') return
   const now = new Date()
+  // 睡着的时候自己的表也照旧走，只是不叫醒：醒了再看还来不来得及（宽限 15 分钟）。
+  if (isSleeping(self, now)) {
+    const last = selfPlanSleepLoggedAt.get(self) ?? 0
+    if (Date.now() - last > 30 * 60_000) {
+      selfPlanSleepLoggedAt.set(self, Date.now())
+      watchmanLog('wake-skip', `to=${self} deny=sleep（睡着，表上的点不叫）`)
+    }
+    return
+  }
   let due = []
   try {
     due = planDue(member, { planFired: {} }, now, SELF_PLAN_GRACE_MIN)
@@ -2152,6 +2450,11 @@ async function watchOne(member, st) {
       st.skipped[skipKey] = true
       saveWatchState()
       watchmanLog('skip', `${why} ${job.tag}`)
+    }
+    // 睡着的时候不推门、不递话：计划到点了也不叫醒（醒来后不补发，账里记 why=sleep）。
+    if (isSleeping(member.key)) {
+      noteSkip('why=sleep')
+      continue
     }
     // 2026-11-13 09:07 她给的判据：端口通 + 心跳新鲜，才算"窗开着、人也挂着"。
     // 端口通但心跳 stale = 服务活着、会话没挂 —— 那天只递话、没推门，就是这么来的。
@@ -2391,6 +2694,8 @@ async function watchmanTick() {
     }
   }
   try { await crashNotify() } catch { /* 报警失败不该炸巡守 */ }
+  // 面板只读这一份汇总：睡眠判断只有 sleep-core.js 一处实现（A.23）。
+  try { writeSleepStatus() } catch { /* 面板显示失败不该炸巡守 */ }
 }
 
 export { name, inject, apply }

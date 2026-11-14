@@ -2640,6 +2640,13 @@ function Bubble({ config, message, onMention, animate = false }) {
       upHint: '无窗起，会话由 host 自己挂上（无人值守）',
       down: '休眠',
       open: '打开',
+      // 睡觉（2026-11-14，PRD A.73）：她自己决定睡，家长能强行叫醒。
+      wake: '叫醒',
+      wakeHint: '她自己在睡。叫醒会让她醒到本窗结束（记 pool\\state\\sleep.log）。',
+      sleepDnd: '勿扰',
+      sleepActive: '活跃',
+      sleepHint: '她自己设的作息；群/私聊不会叫醒她，计划到点也不叫。',
+      sleepUnknown: '',
       openHint: '打开她的 WebUI。无人值守时先休眠，否则会撞 writer。',
       openBlocked: '无人值守时不能直接开窗——一段会话只能一个 writer。先点「休眠」，再「打开」，看完点「回无人值守」。',
       running: '在跑',
@@ -3027,6 +3034,15 @@ function Bubble({ config, message, onMention, animate = false }) {
             h('span', null, item.portOpen ? POND.running : POND.stopped),
             h('span', null, `${POND.heartbeat} ${hbText}`),
             h('span', { title: item.mode?.at ?? '' }, `${POND.modeLabel} ${POND.modeText(item.mode)}`),
+            item.sleep
+              ? h(
+                'span',
+                { style: { color: item.sleep.sleeping ? 'var(--dsw-alias-brand-primary, #4c8dff)' : 'inherit' }, title: POND.sleepHint },
+                item.sleep.sleeping
+                  ? `${POND.sleepDnd}${item.sleep.label ? ` · ${item.sleep.label}` : ''}`
+                  : POND.sleepActive,
+              )
+              : null,
             parentItem ? h('span', null, `父代 ${parentItem.name}`) : null,
           ),
           item.lastRun
@@ -3080,6 +3096,13 @@ function Bubble({ config, message, onMention, animate = false }) {
                       { onClick: () => act('maintain', item.key), disabled: !canSwitch, style: pondButtonStyle(false), title: POND.maintainHint },
                       busy === `maintain:${item.key}` ? '…' : POND.maintain,
                     ),
+                  item.sleep?.sleeping
+                    ? h(
+                      'button',
+                      { onClick: () => act('wake', item.key), disabled: busyAny, style: pondButtonStyle(false), title: POND.wakeHint },
+                      busy === `wake:${item.key}` ? '…' : POND.wake,
+                    )
+                    : null,
                   h(
                     'button',
                     { onClick: () => act('down', item.key), disabled: !canDown, style: pondButtonStyle(false), title: running ? POND.downHint : POND.downClosed },
@@ -3216,7 +3239,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v34 · ime-drafts:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v35 · sleep:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')
