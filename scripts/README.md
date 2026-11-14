@@ -63,7 +63,7 @@ pwsh -File scripts\fish.ps1 acl-check / acl-repair <鱼|all>  # 沙箱通行证�
 | `doctor.ps1` | `fish.ps1 doctor`、鱼塘「检修」、`release-check.ps1` |
 | `verify-pending.ps1` | 重启后验收：runs 账按鱼写 / 自己的闹钟 / gate 读数 / 归属 B 与全局 120 / 自启动开关 / 鱼塘接口 / 模式账 |
 | `test-plan.mjs` | 计划表与唤醒额度的行为测试（26 用例，真 import 真代码） |
-| `test-sleep.mjs` | 睡眠窗口/跨午夜/优先级的行测试（50 用例，真 import 真代码） |
+| `test-sleep.mjs` | 睡眠窗口/跨午夜/优先级 + 面板汇总的行测试（65 用例，真 import 真代码） |
 | `test-rename.mjs` | 改名的行为测试（27 用例：名字清洗、重名、曾用名、24h 冷却） |
 | `test-intent.mjs` | 她自己写的条件（wake-on）行为测试（24 用例：三种 kind、路径白名单、冷却/额度/伪装日程） |
 | `rotate-logs.mjs` | 日志轮转：>1 MB 切一份、同类留 3 份（巡守每小时跑一次） |

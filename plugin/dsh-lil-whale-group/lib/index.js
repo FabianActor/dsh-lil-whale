@@ -32,6 +32,7 @@ import {
   windowFor,
   DEFAULT_SLEEP_FROM,
   DEFAULT_SLEEP_TO, normalizeSleepArgs } from './sleep-core.js'
+import { refreshSleepStatus } from './sleep-status.js'
 import { cleanName, nameTaken, historyAfterRename, canRename, renameAnnouncement, NAME_MAX } from './rename-core.js'
 import {
   parseIntents,
@@ -365,27 +366,14 @@ function isSleeping(member, now = new Date()) {
  * 为什么不让 UI 自己算：窗口/跨午夜/优先级只有一份实现（sleep-core.js），
  * 面板再算一遍就成了第二个渲染器 —— A.23 的教训（同一个投影两个写者会打架）。
  */
-function writeSleepStatus(members = watchedMembers()) {
-  const now = new Date()
-  const out = { updatedAt: now.toISOString(), members: {} }
-  for (const m of members) {
-    try {
-      const st = sleepStateOfMember(m.key, now)
-      out.members[m.key] = {
-        sleeping: st.sleeping === true,
-        source: st.source,
-        untilAt: st.untilAt ?? null,
-        label: sleepLabel(st),
-        lastForced: st.lastForced ?? null,
-      }
-    } catch {
-      out.members[m.key] = { sleeping: false, source: 'unknown', untilAt: null, label: '' }
-    }
-  }
+function writeSleepStatus() {
+  // 计算与写盘都在 sleep-status.js 里：sleep-cli.mjs 的 wake 分支也调同一个函数，
+  // 所以"被叫醒之后面板还写着勿扰"最多活到下一次 tick 的问题从两头一起消失。
   try {
-    writeJson(SLEEP_STATUS_FILE, out)
-  } catch {}
-  return out
+    return refreshSleepStatus({ membersFile: CFG.membersFile, poolStateDir: POOL_STATE })
+  } catch {
+    return null
+  }
 }
 
 /** 被睡眠挡住的消息：10 分钟记一行，不刷屏（她 2026-11-13 说的"行数也是成本"）。 */

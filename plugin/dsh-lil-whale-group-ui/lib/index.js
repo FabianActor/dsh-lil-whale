@@ -1380,7 +1380,8 @@ export function apply(ctx) {
         if (act === 'wake') {
           // 家长强行叫醒（A.73）：她可以自己睡，但上级有权利把她叫醒。
           // 窗口/跨午夜判断在 sleep-core.js 一份实现里，这里只转给 fish.ps1。
-          return runPwshScript(FISH_PS1, ['wake', target])
+          // -By/-Why：面板上按的，账本要能回答"谁按的、为什么"（小肥鱼 2026-11-15 提的第三处）。
+          return runPwshScript(FISH_PS1, ['wake', target, '-By', 'fabian', '-Why', '面板「叫醒」'])
         }
         return { code: -1, timedOut: false, seconds: 0, output: `unknown-action ${act}` }
       }

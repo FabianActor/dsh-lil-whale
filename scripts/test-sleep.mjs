@@ -6,8 +6,12 @@
 // 两种都很难在日志里看出来。所以把判断抽到 `sleep-core.js`，这里直接跑真代码。
 //
 // 用法：node scripts/test-sleep.mjs      退出码 0 = 全过，1 = 有失败。
-// 纯函数，不碰文件。
+// 纯函数为主；最后一段"汇总视图写盘"在临时目录里真跑一次，不碰真池子。
 
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { refreshSleepStatus } from '../plugin/dsh-lil-whale-group/lib/sleep-status.js'
 import {
   parseHm,
   windowFor,
@@ -18,6 +22,7 @@ import {
   DEFAULT_SLEEP_TO,
   normalizeSleepArgs,
 } from '../plugin/dsh-lil-whale-group/lib/sleep-core.js'
+import { buildSleepStatus } from '../plugin/dsh-lil-whale-group/lib/sleep-status.js'
 
 let pass = 0
 let fail = 0
@@ -153,6 +158,108 @@ check('sleepLabel 空 → 空串', sleepLabel({}), '')
   const { numOf } = normalizeSleepArgs({})
   check('归一化：numOf("") 不算数字', numOf(''), null)
   check('归一化：numOf(NaN)', numOf(NaN), null)
+}
+
+// ---- buildSleepStatus（面板读的那份汇总；2026-11-15 加） ----
+// 为什么测它：她抓到"被叫醒后 sleep-status 还写着睡"——汇总视图错了，
+// 面板和体检就一起说谎。这里只测纯计算，不碰文件。
+{
+  const now = at('2026-11-15T03:00:00+08:00')
+  const members = {
+    lee: { kind: 'fish', role: 'watcher', home: 'X:/lee' },
+    whale: { kind: 'fish', home: 'X:/whale' },
+    fabian: { kind: 'human' },
+  }
+  const out = buildSleepStatus({ members, prefOf: () => null, stateOf: () => ({}), now })
+  check('汇总：巡守不出现', Object.keys(out.members).includes('lee'), false)
+  check('汇总：人不出现', Object.keys(out.members).includes('fabian'), false)
+  check('汇总：默认窗里在睡', out.members.whale.sleeping, true)
+  check('汇总：默认窗来源 preference', out.members.whale.source, 'preference')
+}
+{
+  const now = at('2026-11-15T03:00:00+08:00')
+  const members = { whale: { kind: 'fish', home: 'X:/whale' } }
+  const stateOf = () => ({
+    oneOff: { fromAt: '2026-11-15T02:00:00+08:00', toAt: '2026-11-15T05:00:00+08:00', reason: '测试' },
+  })
+  const out = buildSleepStatus({ members, prefOf: () => null, stateOf, now })
+  check('汇总：一次性睡眠 source one-off', out.members.whale.source, 'one-off')
+}
+{
+  const now = at('2026-11-15T03:00:00+08:00')
+  const members = { whale: { kind: 'fish', home: 'X:/whale' } }
+  const stateOf = () => ({
+    awakeUntil: '2026-11-15T08:00:00+08:00',
+    lastForced: { at: '2026-11-15T00:01:47.000Z', by: 'fabian', reason: '面板「叫醒」' },
+  })
+  const out = buildSleepStatus({ members, prefOf: () => null, stateOf, now })
+  check('汇总：被叫醒后 sleeping=false', out.members.whale.sleeping, false)
+  check('汇总：被叫醒后 source forced-awake', out.members.whale.source, 'forced-awake')
+  check('汇总：lastForced 原样带出', out.members.whale.lastForced.by, 'fabian')
+}
+{
+  const now = at('2026-11-15T03:00:00+08:00')
+  const members = { whale: { kind: 'fish', home: 'X:/whale' } }
+  const stateOf = () => {
+    throw new Error('读坏了')
+  }
+  const out = buildSleepStatus({ members, prefOf: () => null, stateOf, now })
+  check('汇总：状态读坏不炸，按偏好算', out.members.whale.sleeping, true)
+}
+{
+  const now = at('2026-11-15T03:00:00+08:00')
+  const members = { whale: { kind: 'fish', home: 'X:/whale' } }
+  const out = buildSleepStatus({
+    members,
+    prefOf: () => ({ from: '00:00', to: '08:00', enabled: false }),
+    stateOf: () => ({}),
+    now,
+  })
+  check('汇总：偏好关掉就是醒着', out.members.whale.sleeping, false)
+}
+
+// ---- refreshSleepStatus（真写盘；临时目录，不碰真池子） ----
+// 为什么连写盘也测：她抓到的那处不一致，就发生在"改了状态但没刷纸"的那一下。
+{
+  const root = mkdtempSync(join(tmpdir(), 'llw-status-'))
+  const stateDir = join(root, 'pool', 'state')
+  const home = join(root, 'homes', 'whale')
+  mkdirSync(join(stateDir, 'sleep'), { recursive: true })
+  mkdirSync(join(home, 'plan'), { recursive: true })
+  const membersFile = join(root, 'pool', 'members.json')
+  writeFileSync(
+    membersFile,
+    JSON.stringify({
+      members: {
+        lee: { kind: 'fish', role: 'watcher', home: join(root, 'homes', 'lee') },
+        whale: { kind: 'fish', home },
+        fabian: { kind: 'human' },
+      },
+    }),
+  )
+  writeFileSync(join(home, 'plan', 'sleep.json'), JSON.stringify({ from: '00:00', to: '08:00', enabled: true }))
+  const now = at('2026-11-15T03:00:00+08:00')
+  writeFileSync(
+    join(stateDir, 'sleep', 'whale.json'),
+    JSON.stringify({ oneOff: { fromAt: '2026-11-15T02:00:00+08:00', toAt: '2026-11-15T05:00:00+08:00' } }),
+  )
+  let out = refreshSleepStatus({ membersFile, poolStateDir: stateDir, now })
+  check('写盘：睡着时汇总说在睡', out.members.whale.sleeping, true)
+  writeFileSync(
+    join(stateDir, 'sleep', 'whale.json'),
+    JSON.stringify({
+      oneOff: null,
+      awakeUntil: '2026-11-15T08:00:00+08:00',
+      lastForced: { at: '2026-11-15T00:01:47.000Z', by: 'fabian', reason: '面板「叫醒」' },
+    }),
+  )
+  out = refreshSleepStatus({ membersFile, poolStateDir: stateDir, now })
+  check('写盘：叫醒后立刻说醒着', out.members.whale.sleeping, false)
+  check('写盘：by 与 reason 分开', out.members.whale.lastForced.reason, '面板「叫醒」')
+  const disk = JSON.parse(readFileSync(join(stateDir, 'sleep-status.json'), 'utf8'))
+  check('写盘：文件里也是醒着', disk.members.whale.sleeping, false)
+  check('写盘：巡守不进汇总', Object.keys(disk.members).includes('lee'), false)
+  rmSync(root, { recursive: true, force: true })
 }
 
 console.log(`\n合计：${pass + fail} 项，PASS ${pass}，FAIL ${fail}`)

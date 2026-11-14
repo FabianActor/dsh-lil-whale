@@ -23,6 +23,7 @@ import {
   DEFAULT_SLEEP_FROM,
   DEFAULT_SLEEP_TO,
 } from '../plugin/dsh-lil-whale-group/lib/sleep-core.js'
+import { refreshSleepStatus } from '../plugin/dsh-lil-whale-group/lib/sleep-status.js'
 
 const CFG = config()
 const POOL_STATE = CFG.poolStateDir
@@ -97,12 +98,21 @@ if (command === 'status') {
   console.log(JSON.stringify(statusOf(key)))
 } else if (command === 'wake') {
   ensureMember(key)
-  const reason = rest.join(' ').trim()
+  // 谁按的、为什么按：两个字段分开记（小肥鱼 2026-11-15 说"reason=fish.ps1 等于没写原因"）。
+  const flags = {}
+  const words = []
+  for (const a of rest) {
+    const m = String(a).match(/^--([a-z]+)=(.*)$/)
+    if (m) flags[m[1]] = m[2]
+    else words.push(a)
+  }
+  const by = (flags.by || 'fish.ps1').trim().slice(0, 40) || 'fish.ps1'
+  const reason = (flags.why ?? words.join(' ')).trim().slice(0, 80) || '未写原因'
   const pref = readJson(prefFileOf(key))
   const preference = pref && typeof pref === 'object' ? pref : { from: DEFAULT_SLEEP_FROM, to: DEFAULT_SLEEP_TO, enabled: true }
   const before = statusOf(key)
   if (!before.sleeping) {
-    sleepLog('sleep-noop', `member=${key} why=not-sleeping by=fish.ps1`)
+    sleepLog('sleep-noop', `member=${key} why=not-sleeping by=${by} reason=${reason}`)
     console.log(JSON.stringify({ key, changed: false, message: '没在睡，不用叫醒' }))
   } else {
     const raw = readJson(stateFileOf(key)) ?? {}
@@ -113,14 +123,18 @@ if (command === 'status') {
       ...raw,
       oneOff: null,
       awakeUntil: until,
-      forcedBy: 'fish.ps1',
+      forcedBy: by,
       // 痕迹留在她的状态里（C 方案）：她下次醒来查这一行就知道"被叫醒过"，
       // 但当时不会有任何消息打扰她。
-      lastForced: { at: nowIso, by: 'fish.ps1', reason: reason.slice(0, 80) },
+      lastForced: { at: nowIso, by, reason },
       updatedAt: nowIso,
     }
     writeJson(stateFileOf(key), next)
-    sleepLog('sleep-forced', `member=${key} awakeUntil=${until ?? ''} by=fish.ps1 reason=${reason.slice(0, 80)}`)
+    sleepLog('sleep-forced', `member=${key} awakeUntil=${until ?? ''} by=${by} reason=${reason}`)
+    // 改状态的人顺手把派生视图刷了：否则面板最长 60 秒还写着"勿扰"（小肥鱼抓到的第一处不一致）。
+    try {
+      refreshSleepStatus({ membersFile: CFG.membersFile, poolStateDir: POOL_STATE })
+    } catch {}
     console.log(JSON.stringify({
       key,
       changed: true,
