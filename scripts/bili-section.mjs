@@ -76,16 +76,6 @@ export function biliSectionOf(opts) {
   }
   lines.push('');
   lines.push(
-    '**今天可以不想看**：醒来先 ' + BT + 'roll({ reason })' + BT +
-      '。骰子说 ' + BT + 'skip=true' + BT + '，就写一行"今天不想看"、别碰 B站；骰子说可以看，看多少由你自己定。',
-  );
-  lines.push('');
-  lines.push(
-    '**看完往哪儿写**：两本。' + BT + 'notes\\给主人的信.md' + BT + ' 是给他看的，可以挑着说；' +
-      BT + 'notes\\<日期>.md' + BT + ' 是给你自己的，原样写。',
-  );
-  lines.push('');
-  lines.push(
     '**别人家不能盯**：另一条鱼的家默认不许监听。想知道她那边的事，合法办法是让她发消息告诉你——她的产出、她的发现，都算她的话。',
   );
   lines.push('');

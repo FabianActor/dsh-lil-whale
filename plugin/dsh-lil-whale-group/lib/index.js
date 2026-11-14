@@ -12,7 +12,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, write
 import { join, dirname } from 'node:path'
 import { homedir } from 'node:os'
 import { pathToFileURL, fileURLToPath } from 'node:url'
-import { randomUUID, createHash, randomInt } from 'node:crypto'
+import { randomUUID, createHash } from 'node:crypto'
 import { spawn, execFileSync } from 'node:child_process'
 import { connect } from 'node:net'
 import { config } from './config.js'
@@ -45,9 +45,6 @@ import {
   looksLikeSchedule,
   pathAllowed,
   INTENT_GRACE_MIN,
-  INTENT_GLOBAL_PER_DAY,
-  globalCapFor,
-  rollSkip,
 } from './intent-core.js'
 
 // 这个包是用 link: 挂进 profile 的，它的真实路径在项目里，walk-up 找不到宿主的
@@ -2050,48 +2047,6 @@ function apply(ctx) {
   }
 
 
-  // 2026-11-14：「今天可以不想看」——骰子由机制掷，她只能读结果。
-  function registerRollTool(hostOk) {
-    const buildTool = hostOk && defineTool !== null ? defineTool : (spec) => spec
-    ctx.tools.register(buildTool({
-      name: 'roll',
-      description:
-        '掷一次骰子，看看这一轮要不要去看外面（B站）。机制掷的，不是你自己挑的：skip=true 就写一行"今天不想看"，别调 B站 工具。',
-      parameters: {
-        type: 'object',
-        properties: { reason: { type: 'string', description: '为什么掷（一句话，写进账本）' } },
-      },
-      output: {
-        schema: { type: 'object', properties: { value: { type: 'number' }, skip: { type: 'boolean' } } },
-        render: (_args, value) => [
-          {
-            type: 'text',
-            text: value?.skip
-              ? '骰子说：今天可以不看。写一行"不想看"就够了，明天再说。'
-              : '骰子说：可以看。看多少由你自己定。',
-          },
-        ],
-      },
-      execute: async (args) => {
-        const member = ownMember()
-        const value = randomInt(0, 10000) / 10000
-        const rate = Number(CFG.biliSkipRate ?? 0.3)
-        const skip = rollSkip(rate, value)
-        try {
-          appendFileSync(
-            join(POOL_STATE, 'rolls.log'),
-            `${localStampOf(new Date())} | roll | fmt=1 member=${member.key} reason=${String(args?.reason ?? '').slice(0, 80)} value=${value.toFixed(4)} skip=${skip}\n`,
-            'utf8',
-          )
-        } catch (error) {
-          logLine({ note: 'roll-log-failed', why: String(error?.message ?? error) })
-        }
-        return { value, skip }
-      },
-    }))
-    logLine({ note: 'roll-tool-registered', via: hostOk && defineTool !== null ? 'host' : 'raw' })
-  }
-
   // 宿主包是异步装进来的：解析完了再注册（通常几十毫秒，远早于第一个 turn）。
   // 失败也要注册一次裸对象，否则这个进程里就永远没有 group_say。
   // 2026-11-12：注册必须**同步**。小鲸鱼报了 `unknown tool "group_say"`，
@@ -2107,7 +2062,6 @@ function apply(ctx) {
   try {
     registerSleepTools(defineTool !== null)
   registerRenameTool(defineTool !== null)
-  registerRollTool(defineTool !== null)
   } catch (error) {
     logLine({ note: 'sleep-tools-register-failed', error: String(error?.message ?? error) })
   }
@@ -2672,34 +2626,6 @@ function writeIntentState(member, state) {
   }
 }
 
-function lastSpokeAtOf(memberKey) {
-  try {
-    const lines = readFileSync(MESSAGES, 'utf8').split('\n')
-    for (let i = lines.length - 1; i >= 0; i -= 1) {
-      const line = lines[i].trim()
-      if (!line || !line.includes('"from":"' + memberKey + '"')) continue
-      try {
-        const row = JSON.parse(line)
-        if (row?.from !== memberKey) continue
-        const ts = Date.parse(String(row?.ts ?? ''))
-        if (Number.isFinite(ts)) return ts
-      } catch {
-        continue
-      }
-    }
-  } catch {
-    return null
-  }
-  return null
-}
-
-function silentDaysOf(memberKey, now) {
-  const last = lastSpokeAtOf(memberKey)
-  if (last === null) return 0
-  const days = (now.getTime() - last) / 86400000
-  return days > 0 ? days : 0
-}
-
 function readIntentGlobal() {
   const raw = readJson(INTENT_GLOBAL_FILE, {})
   return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
@@ -2870,13 +2796,7 @@ async function intentTick(member, st, now) {
       dirty = true
       continue
     }
-    const silentDays = silentDaysOf(member.key, now)
-    const globalCap = globalCapFor(silentDays)
-    if (globalCap < INTENT_GLOBAL_PER_DAY && s.decayLoggedDay !== todayKey(now)) {
-      s.decayLoggedDay = todayKey(now)
-      watchmanLog('note', `intent-quota-decay silent-days=${silentDays.toFixed(1)} cap=${globalCap}`)
-    }
-    const cap = capOk(s, spec, now, readIntentGlobal(), globalCap)
+    const cap = capOk(s, spec, now, readIntentGlobal())
     if (!cap.ok) {
       noteOnce(member, `wake-skip why=${cap.why} intent=${spec.id}`)
       continue

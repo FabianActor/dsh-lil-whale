@@ -36,7 +36,7 @@ function opt(name, fallback) {
 const cfg = readConfig();
 const patchArg = opt('patch', null);
 const profile = opt('profile', cfg.whaleProfile || 'whale');
-const dshHome = opt('home', cfg.herDshHome || process.env.DSH_HOME);
+const dshHome = opt('home', cfg.selfDshHome || cfg.herDshHome || process.env.DSH_HOME);
 const wantDefault = flag('default');
 const dryRun = flag('dry-run');
 // 2026-11-14：可选给这条鱼挂一只"只读看 B站"的眼睛（MCP）。
@@ -119,10 +119,10 @@ function biliEyeBlock(member) {
   const tools = [
     'bili_search', 'bili_video_info', 'bili_subtitle', 'bili_comments', 'bili_danmaku', 'bili_frames', 'bili_cover',
     'bili_hot_videos', 'bili_rank', 'bili_weekly_hot', 'bili_recommend', 'bili_video_zones', 'bili_hot_buzzwords',
-    'bili_user_info', 'bili_user_videos', 'watchlist_add', 'watchlist_list', 'watchlist_check',
+    'bili_user_info', 'bili_user_videos',
   ].join(',');
   return [
-    '# 只读的 B站 眼睛：18 个工具，没有评论/点赞/私信/登录。',
+    '# 只读的 B站 眼睛：15 个工具，没有评论/点赞/私信/登录。',
     '# 每条鱼一个 MCP 子进程；cookie 在 pool\\mcp\\bili\\bili_credential.json（共用同一个号）。',
     '- insert:',
     '    - id: mcp-bili-readonly',
