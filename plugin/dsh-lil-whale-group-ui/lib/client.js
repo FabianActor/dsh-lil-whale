@@ -4,7 +4,7 @@
  * 侧边栏顶部一个图标，点开是主面板里的一页：三条鱼的群，
  * 有名字、有内容、有时间、有头像（默认是名字首字，可在设置里改）。
  *
- * 另有一页设置（设置 → 小小肥鱼）：侧边栏名称、三个头像的文字与颜色、显示名。
+ * 另有一页设置（设置 → 小小肥鱼）：侧边栏名称、三个头像的文字与颜色。（显示名不在这里改：A.82）
  *
  * 数据全部来自宿主那几条路由（/group/api/messages、/group/api/send、
  * /group/api/config、/group/api/presence），不在浏览器里直接读文件。
@@ -29,7 +29,7 @@ window.__ModuleLoader__.load({
     const WIDTH_MIN = 30
     const WIDTH_MAX = 92
 
-    // 显示名兜底（真正的值在 ui-config.json 的 names 里，可在设置里改）
+    // 显示名兜底（真正的值在名册里；名字只能由她自己改，A.82）
     const NAMES = { lee: '大肥鱼', whale: '小肥鱼', fabian: 'Fabian' }
 
     const DEFAULT_CONFIG = {
@@ -2296,7 +2296,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       )
     }
 
-    /** 设置页：侧边栏名称 / 三个头像 / 三个显示名。 */
+    /** 设置页：侧边栏名称 / 三个头像。（显示名不在这里改：A.82） */
     // 设置分组卡片：必须住在模块作用域。
     // 写在 SettingsPage 里面的话，每次 setConfig 重渲染都会造出一个新的函数引用，
     // React 把它当成「换了一个组件」⇒ 整棵子树卸载重挂，输入框每敲一个字就失焦。
@@ -2458,7 +2458,7 @@ function Bubble({ config, message, onMention, animate = false }) {
 
         // 名字 / 头像讲的是同一件事：这一位在群里长什么样。
         // （座位名那一组 2026-11-12 拿掉了：椅子已撤，界面不该再留一个空的入口。）
-        h(SettingsSection, { title: '成员', hint: '此处修改名称仅修改显示效果，无法修改 ta 的自我认知。若想让 ta 改名请试着直接和 ta 聊聊？' },
+        h(SettingsSection, { title: '成员', hint: '名字是她的称呼，只能由她自己改——让她在会话里调 rename。这里只改头像。' },
           Object.keys(config?.names ?? NAMES).map((member, index) => {
             const avatar = avatarOf(config, member)
             return h('div', {
@@ -2470,15 +2470,8 @@ function Bubble({ config, message, onMention, animate = false }) {
             },
               h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
                 h(Avatar, { config, member, size: 32 }),
-                h(ComposingTextInput, {
-                  value: config.names?.[member] ?? NAMES[member] ?? '',
-                  limit: 16,
-                  onCommit: (text) => patch((next) => {
-                    next.names = { ...(next.names ?? {}) }
-                    next.names[member] = text
-                  }),
-                  style: inputStyle,
-                }),
+                h('span', { style: { fontSize: 14, color: 'var(--dsw-alias-label-primary)' } },
+                  config.names?.[member] ?? NAMES[member] ?? member),
               ),
 
               h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, paddingLeft: 42, flexWrap: 'wrap' } },
@@ -3234,7 +3227,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v37 · dm-unread-stamp:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v38 · rename-by-fish:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')

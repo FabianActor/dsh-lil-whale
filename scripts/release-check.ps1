@@ -129,6 +129,14 @@ if ($root) {
     else { Ok '睡眠逻辑' '行为测试全过（test-sleep.mjs）' }
   } else { Fail '睡眠逻辑' 'scripts\test-sleep.mjs 不在包里' }
 
+      # ── 4d. 改名逻辑行为测试（2026-11-14，A.82）──────────────────────────
+      $renameTest = Join-Path $pkg 'scripts\test-rename.mjs'
+      if (Test-Path $renameTest) {
+        $renameOut = & node $renameTest 2>&1
+        if ($LASTEXITCODE -ne 0) { Fail '改名逻辑' (($renameOut | Select-Object -Last 2) -join ' / ') }
+        else { Ok '改名逻辑' '行为测试全过（test-rename.mjs）' }
+      } else { Fail '改名逻辑' 'scripts\test-rename.mjs 不在包里' }
+
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {

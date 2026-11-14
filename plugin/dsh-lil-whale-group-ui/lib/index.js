@@ -229,7 +229,7 @@ function readConfig() {
   // 2026-11-13 18:5x 修：显示名的真源是 `pool\members.json` 的 `name`，不是
   // `ui-config.json` 的 `names`。以前这里是 `normalizeName(raw?.names?.[key], LABEL[key])`，
   // 于是名册改了名、面板还念旧名字（现场：名册 lee=大肥鱼，面板 lee=Leea，两个真源漂了
-  // 一天多也没人报错）。现在这里只读名册；设置页改名会写回名册（见 writeMemberName）。
+  // 一天多也没人报错）。现在这里只读名册；改名不在这里（A.82：名字只能由她自己改）。
   for (const key of Object.keys(MEMBERS)) {
     names[key] = LABEL[key] ?? key
     avatars[key] = normalizeAvatar(raw?.avatars?.[key], defaultAvatarOf(key))
@@ -292,47 +292,6 @@ function writeConfig(config) {
  * 为什么不在 ui-config.json 里存名字：那会让"她叫什么"有两个真源。名册是数据、
  * 面板是显示层——显示层可以缓存，但不能自己记一个名字。
  */
-function writeMemberName(key, name) {
-  const file = config().membersFile || join(config().poolDir || join(GROUP_DIR, '..'), 'members.json')
-  if (!existsSync(file)) return { ok: false, why: 'members-file-missing' }
-  let json
-  try {
-    json = JSON.parse(readFileSync(file, 'utf8'))
-  } catch {
-    return { ok: false, why: 'members-unreadable' }
-  }
-  const member = json?.members?.[key]
-  if (!member) return { ok: false, why: 'unknown-member' }
-  if (member.name === name) return { ok: true, changed: false }
-  // 改名要自己记历史（A.79）：投影是"当时的纸"，改名后历史行必须还能按当时的名字复现。
-  // 否则下一次重建会把整本历史都判成"说不清的差异"，群.md 就写不进去了。
-  const oldName = typeof member.name === 'string' && member.name !== '' ? member.name : null
-  if (oldName !== null) {
-    const nowIso = new Date().toISOString()
-    const history = Array.isArray(member.nameHistory) ? member.nameHistory.filter((x) => x && typeof x === 'object') : []
-    const last = history.length > 0 ? history[history.length - 1] : null
-    if (last && !last.until) {
-      last.until = nowIso
-      if (!last.name) last.name = oldName
-    } else {
-      history.push({ name: oldName, until: nowIso })
-    }
-    history.push({ name })
-    member.nameHistory = history
-  }
-  member.name = name
-  json.updatedAt = new Date().toISOString()
-  const tmp = file + '.tmp-' + process.pid
-  try {
-    writeFileSync(tmp, JSON.stringify(json, null, 2) + '\n', 'utf8')
-    renameSync(tmp, file)
-  } catch (error) {
-    return { ok: false, why: 'write-failed', detail: String(error?.message ?? error) }
-  }
-  if (MEMBERS[key]) MEMBERS[key].name = name
-  LABEL[key] = name
-  return { ok: true, changed: true }
-}
 
 function readUiRead() {
   try {
@@ -800,13 +759,15 @@ export function apply(ctx) {
       for (const key of Object.keys(MEMBERS)) {
         next.names[key] = normalizeName(payload?.names?.[key], LABEL[key] ?? key)
         next.avatars[key] = normalizeAvatar(payload?.avatars?.[key], defaultAvatarOf(key))
-        // 名字不是显示层的东西：改了要写回名册（A.25/A.36 的同一条：真源只有一个）。
+        // 名字不是设置页能改的（2026-11-14 他定的规矩，A.82）：名字是称呼，属于她；
+        // 只有她自己在会话里调 rename 才能改，设置页只改头像。这里拒绝，不留后门。
         if (next.names[key] !== (LABEL[key] ?? key)) {
-          const renamed = writeMemberName(key, next.names[key])
-          if (!renamed.ok) {
-            sendJson(res, 500, { error: 'rename-failed', member: key, why: renamed.why ?? 'unknown', detail: renamed.detail ?? null })
-            return
-          }
+          sendJson(res, 403, {
+            error: 'rename-by-fish-only',
+            member: key,
+            hint: '名字只能由她自己改：在会话里让她调 rename。设置页只改头像。',
+          })
+          return
         }
       }
       try {

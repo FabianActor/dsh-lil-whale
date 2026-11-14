@@ -4,6 +4,13 @@
 > 它与两个 npm 包的版本（各自 `package.json` 里的 semver，如 `1.2.0`）是**两条线**：包版本只在功能或破坏性变化、发布时才动。
 > 编号从 r1 开始（第一稿就是 r1）。2026-11-13 之前这些号写作 `v1.0.NN`，本次统一改名，编号不变。
 
+## r91 — 2026-11-14 15:4x
+
+- **改名只剩一条路**（他 15:32 定的规矩，A.82）：设置页删掉三个"显示名"输入、只留头像；`/group/api/config` 对 names 变更返回 **403 `rename-by-fish-only`**；宿主新增 `rename` 工具（她自己调）→ 写名册 `nameHistory` + `pool\state\names.log` + 群里自动播报。
+- 新增 `plugin\dsh-lil-whale-group\lib\rename-core.js`（纯逻辑）+ `scripts\test-rename.mjs`（27 用例）；`verify-pending` 4d、`release-check` 4d 接线。
+- 删 `writeMemberName`（UI 服务端唯一写名入口）；宿主 `renameMember` 修掉一处不存在的 `LABEL[...]`。
+- `templates\环境.md.tpl` 加「名字」一节；两条鱼 `环境.md` 重生成；`client build v38 · rename-by-fish`。
+
 ## r90 — 2026-11-14 15:2x
 
 - A.79 补记：**改名要自己记历史**——`writeMemberName` 改名前把旧名 + `until` 压进 `nameHistory`。

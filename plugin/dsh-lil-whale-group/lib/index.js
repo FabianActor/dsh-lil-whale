@@ -32,6 +32,7 @@ import {
   windowFor,
   DEFAULT_SLEEP_FROM,
   DEFAULT_SLEEP_TO, normalizeSleepArgs } from './sleep-core.js'
+import { cleanName, nameTaken, historyAfterRename, canRename, renameAnnouncement, NAME_MAX } from './rename-core.js'
 
 // 这个包是用 link: 挂进 profile 的，它的真实路径在项目里，walk-up 找不到宿主的
 // @deepseek-ai/* 依赖（会 ERR_MODULE_NOT_FOUND，整个插件加载失败、工具静默消失）。
@@ -188,12 +189,91 @@ function runLog(member, result, why) {
 const SLEEP_DIR = join(POOL_STATE, 'sleep')
 const SLEEP_STATUS_FILE = join(POOL_STATE, 'sleep-status.json')
 const SLEEP_LOG = join(POOL_STATE, 'sleep.log')
+// 改名账本（2026-11-14 他定的规矩）：名字只能由她自己改，每一次都要留一行。
+const NAMES_LOG = join(POOL_STATE, 'names.log')
 
 function sleepLog(result, why) {
   try {
     mkdirSync(POOL_STATE, { recursive: true })
     appendFileSync(SLEEP_LOG, `${runStamp()} | ${result} | ${why}\n`, 'utf8')
   } catch {}
+}
+
+// ---------- 改名（A.82） ----------
+
+function namesLogLine(text) {
+  try {
+    mkdirSync(POOL_STATE, { recursive: true })
+    appendFileSync(NAMES_LOG, text + '\n', 'utf8')
+  } catch {}
+}
+
+/** 上一次改名是什么时候（读 names.log 末尾，找 member=<key> 的行）。 */
+function lastRenameAtOf(memberKey) {
+  try {
+    if (!existsSync(NAMES_LOG)) return null
+    const lines = readFileSync(NAMES_LOG, 'utf8').split('\n')
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i]
+      if (!line.trim()) continue
+      if (!line.includes(' | rename | ')) continue
+      if (!line.includes('member=' + memberKey + ' ')) continue
+      return line.slice(0, 19).replace(' ', 'T') + ':00.000Z'
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 改自己名字。唯一的入口是 rename 工具（她自己在会话里调）。
+ * 返回 { ok, from, to } 或 { ok:false, why }。
+ */
+function renameMember(memberKey, rawName, reason) {
+  const me = MEMBERS[memberKey]
+  if (!me) return { ok: false, why: 'unknown-member' }
+  const to = cleanName(rawName)
+  if (to === null) return { ok: false, why: 'bad-name', hint: '名字要非空、不超过 ' + NAME_MAX + ' 个字（emoji 算一个）。' }
+  const from = String(me.name ?? me.label ?? memberKey)
+  if (to === from) return { ok: false, why: 'same-name', hint: '这就是现在的名字。' }
+  const others = Object.entries(MEMBERS)
+    .filter(([key]) => key !== memberKey)
+    .map(([, m]) => String(m?.name ?? m?.label ?? ''))
+  if (nameTaken(to, others)) return { ok: false, why: 'name-taken', hint: '已经有人叫这个名字了，换一个。' }
+  const nowIso = new Date().toISOString()
+  const gate = canRename(lastRenameAtOf(memberKey), nowIso)
+  if (!gate.ok) return { ok: false, why: 'too-soon', retryAt: gate.retryAt, hint: '24 小时最多改一次。' }
+
+  const file = CFG.membersFile
+  if (!file || !existsSync(file)) return { ok: false, why: 'members-file-missing' }
+  let roster
+  try {
+    roster = JSON.parse(readFileSync(file, 'utf8'))
+  } catch {
+    return { ok: false, why: 'members-unreadable' }
+  }
+  const entry = roster?.members?.[memberKey]
+  if (!entry) return { ok: false, why: 'member-not-in-roster' }
+  entry.nameHistory = historyAfterRename(entry.nameHistory, from, to, nowIso)
+  entry.name = to
+  roster.updatedAt = nowIso
+  try {
+    writeJson(file, roster)
+  } catch (error) {
+    return { ok: false, why: 'write-failed', detail: String(error?.message ?? error) }
+  }
+
+  // 进程里的缓存也要立刻跟着变，否则同一条消息里还是旧称呼。
+  if (MEMBERS[memberKey]) {
+    MEMBERS[memberKey].name = to
+    MEMBERS[memberKey].label = to
+  }
+  const stampText = nowIso.slice(0, 19).replace('T', ' ')
+  const reasonText = String(reason ?? '').replace(/\s+/g, ' ').slice(0, 80)
+  namesLogLine(`${stampText} | rename | fmt=1 member=${memberKey} from=${from} to=${to} reason=${reasonText} by=self`)
+  logLine({ note: 'renamed', member: memberKey, from, to })
+  return { ok: true, from, to }
 }
 
 /** 成员的家：名册里有就用名册，没有就按鱼塘布局推。 */
@@ -1254,7 +1334,7 @@ function labelOf(who) {
 // `s` 平时是发信人的会话 id（session-…）；不是会话 id 的值，说明这句不是某一轮人说的
 // （守夜/巡守按表发的），投影里必须写出来 —— 否则"人说的"和"表说的"在纸上长得一样。
 // 她 2026-11-12 早上撞过这个坑：三条 morning-read 递话看起来像大肥鱼说了三遍。
-const S_DISPLAY = { watch: '巡守' }
+const S_DISPLAY = { watch: '巡守', rename: '改名' }
 
 function provenanceOf(s) {
   // 只给"已知的机器来源"加标注：s 平时是座位 id（如 ae4daa）或会话 id，那些不该加；
@@ -1892,6 +1972,44 @@ function apply(ctx) {
     logLine({ note: 'sleep-tools-registered', via: hostOk && defineTool !== null ? 'host' : 'raw' })
   }
 
+  function registerRenameTool(hostOk) {
+    const buildTool = hostOk && defineTool !== null ? defineTool : (spec) => spec
+    ctx.tools.register(buildTool({
+      name: 'rename',
+      description:
+        '给自己改一个名字（称呼）。id 永远不变；24 小时内最多改一次；改完群里会自动说一句。想清楚再改。',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: '新名字（1–' + NAME_MAX + ' 个字，中英都行）' },
+          reason: { type: 'string', description: '为什么改（会写进账本，不给人看）' },
+        },
+        required: ['name'],
+      },
+      output: {
+        schema: { type: 'object', properties: { changed: { type: 'boolean' }, from: { type: 'string' }, to: { type: 'string' } } },
+        render: (_args, value) => [{ type: 'text', text: value?.changed ? '改好了：以后叫「' + value.to + '」。' : '这次没改。' }],
+      },
+      execute: async (args) => {
+        const member = ownMember()
+        const result = renameMember(member, args?.name, args?.reason)
+        if (!result.ok) {
+          const hint = result.hint ? '（' + result.hint + '）' : ''
+          throw new Error('没改成：' + result.why + hint)
+        }
+        // 自动播报：称呼变了，别人得知道（他 2026-11-14 点头要的）。
+        try {
+          say(member, 'all', renameAnnouncement(result.from, result.to), 'group', 'rename')
+        } catch (error) {
+          logLine({ note: 'rename-announce-failed', why: String(error?.message ?? error) })
+        }
+        return { changed: true, from: result.from, to: result.to }
+      },
+    }))
+    logLine({ note: 'rename-tool-registered', via: hostOk && defineTool !== null ? 'host' : 'raw' })
+  }
+
+
   // 宿主包是异步装进来的：解析完了再注册（通常几十毫秒，远早于第一个 turn）。
   // 失败也要注册一次裸对象，否则这个进程里就永远没有 group_say。
   // 2026-11-12：注册必须**同步**。小鲸鱼报了 `unknown tool "group_say"`，
@@ -1906,6 +2024,7 @@ function apply(ctx) {
   }
   try {
     registerSleepTools(defineTool !== null)
+  registerRenameTool(defineTool !== null)
   } catch (error) {
     logLine({ note: 'sleep-tools-register-failed', error: String(error?.message ?? error) })
   }
