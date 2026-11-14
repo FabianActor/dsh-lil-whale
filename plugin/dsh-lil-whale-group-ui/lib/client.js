@@ -273,7 +273,64 @@ window.__ModuleLoader__.load({
           }),
         )
       }
-      return h('div', { onContextMenu, title, style: box }, avatar.text)
+      // 文字可以空着（2026-11-14 他说"输入框无法清空"）：空的时候退回名字首字，
+      // 而不是把输入框里刚删掉的那个字又填回去。
+      const shown = avatar.text || ([...nameOf(config, member)][0] ?? '?')
+      return h('div', { onContextMenu, title, style: box }, shown)
+    }
+
+    /**
+     * 带输入法保护的输入框。
+     *
+     * 不能直接拿配置里的字符串当受控值：中文输入法在**选字之前**就已经往输入框里
+     * 塞拼音字母（"fei"），受控值每敲一下就重渲染一次，拼音还没上屏就被
+     * `maxLength` / `slice` 截成 "f" 提交了（2026-11-14 他报的头像 bug）。
+     *
+     * 所以：输入过程中用本地 draft，`compositionstart` → `compositionend` 之间
+     * **只改 draft、不提交**；上屏（compositionend）或失焦时才收成 `limit` 个码位交给外面。
+     * 头像那个"清空后又跳回来"是另一半原因（服务端把空串当没填），两边一起修。
+     */
+    function ComposingTextInput({ value, limit = 0, trim = true, onCommit, style, title }) {
+      const [draft, setDraft] = useState(value ?? '')
+      const composingRef = useRef(false)
+      const focusedRef = useRef(false)
+      // 外面改了（例如另一个窗口同步过来）才回填；正在输入时不抢用户的光标。
+      useEffect(() => {
+        if (composingRef.current || focusedRef.current) return
+        setDraft(value ?? '')
+      }, [value])
+      const clean = (raw) => {
+        let text = String(raw ?? '')
+        if (trim) text = text.trim()
+        if (limit > 0) text = Array.from(text).slice(0, limit).join('')
+        return text
+      }
+      const commit = (raw) => {
+        const text = clean(raw)
+        setDraft(text)
+        onCommit(text)
+      }
+      return h('input', {
+        value: draft,
+        title,
+        onFocus: () => { focusedRef.current = true },
+        onBlur: (event) => {
+          focusedRef.current = false
+          commit(event.currentTarget.value)
+        },
+        onCompositionStart: () => { composingRef.current = true },
+        onCompositionEnd: (event) => {
+          composingRef.current = false
+          commit(event.currentTarget.value)
+        },
+        onChange: (event) => {
+          const raw = event.target.value
+          // 输入法还在选字：只更新 draft，别截断、别提交（截断就是那个 "小f" 的来源）。
+          if (composingRef.current) { setDraft(raw); return }
+          commit(raw)
+        },
+        style,
+      })
     }
     /**
      * dsh 自己的 Markdown 渲染器，来自浏览器静态模块表（`@deepseek-ai/dsh-client-ui-primitives`）。
@@ -2379,10 +2436,10 @@ function Bubble({ config, message, onMention, animate = false }) {
 
         h(SettingsSection, { title: '侧边栏标题' },
           h('div', { style: rowStyle },
-            h('input', {
+            h(ComposingTextInput, {
               value: config.panelLabel ?? '',
-              maxLength: 12,
-              onChange: (event) => patch((next) => { next.panelLabel = event.target.value }),
+              limit: 12,
+              onCommit: (text) => patch((next) => { next.panelLabel = text }),
               style: inputStyle,
             }),
           ),
@@ -2402,12 +2459,12 @@ function Bubble({ config, message, onMention, animate = false }) {
             },
               h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
                 h(Avatar, { config, member, size: 32 }),
-                h('input', {
+                h(ComposingTextInput, {
                   value: config.names?.[member] ?? NAMES[member] ?? '',
-                  maxLength: 16,
-                  onChange: (event) => patch((next) => {
+                  limit: 16,
+                  onCommit: (text) => patch((next) => {
                     next.names = { ...(next.names ?? {}) }
-                    next.names[member] = event.target.value
+                    next.names[member] = text
                   }),
                   style: inputStyle,
                 }),
@@ -2415,13 +2472,13 @@ function Bubble({ config, message, onMention, animate = false }) {
 
               h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, paddingLeft: 42, flexWrap: 'wrap' } },
                 h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', width: 48, flex: '0 0 auto' } }, '头像'),
-                h('input', {
+                h(ComposingTextInput, {
                   value: avatar.text,
-                  maxLength: 2,
+                  limit: 2,
                   title: '文字 1–2 个（也可以是 emoji）',
-                  onChange: (event) => patch((next) => {
+                  onCommit: (text) => patch((next) => {
                     next.avatars = { ...(next.avatars ?? {}) }
-                    next.avatars[member] = { ...(next.avatars?.[member] ?? {}), text: event.target.value }
+                    next.avatars[member] = { ...(next.avatars?.[member] ?? {}), text }
                   }),
                   style: { ...inputStyle, flex: '0 0 52px', minWidth: 52, textAlign: 'center' },
                 }),
@@ -3143,7 +3200,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v32 · memo-list:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v33 · avatar-ime:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')

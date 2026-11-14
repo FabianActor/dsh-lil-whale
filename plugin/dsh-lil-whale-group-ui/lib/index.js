@@ -272,7 +272,9 @@ function normalizeAvatar(value, fallback) {
   const image = typeof value?.image === 'string' && Object.hasOwn(AVATAR_TYPES, value.image) ? value.image : ''
   const version = Number.isFinite(value?.version) ? Math.trunc(value.version) : 0
   return {
-    text: text || fallback.text,
+    // 空字符串是合法值（2026-11-14：他要把输入框清空；以前 `text || fallback.text`
+    // 会把刚删掉的字又填回去，看起来像"删不掉"）。空着时前端退回名字首字显示。
+    text,
     tint: tint || fallback.tint,
     image,
     version: image ? version : 0,
