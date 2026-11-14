@@ -207,6 +207,31 @@ t('file-changed：第一次只记基线不触发；变了才触发；没变不�
   assert.equal(probeFileChanged({ current: a, baseline: a }).hit, false)
 })
 
+t('at= 记的是"事情发生的那一刻"：file-changed 用 mtime', () => {
+  const a = { size: 10, mtimeMs: 1000, hash: 'h1' }
+  const changed = probeFileChanged({ current: { size: 11, mtimeMs: 2000, hash: 'h2' }, baseline: a })
+  assert.equal(changed.hit, true)
+  assert.equal(changed.atMs, 2000)
+  // 没变的时候不给 atMs：没有"发生"，就别编一个时刻
+  assert.equal(probeFileChanged({ current: a, baseline: a }).atMs, undefined)
+})
+
+t('at= 记的是"事情发生的那一刻"：pending 用让它成立的那条消息的 ts', () => {
+  const entries = [
+    { from: 'fishball', text: '第一条', ts: '2026-11-14T02:00:00.000Z' },
+    { from: 'fishball', text: '第二条', ts: '2026-11-14T02:05:00.000Z' },
+  ]
+  const r = probePending({ entries, ownKey: 'whale' })
+  assert.equal(r.hit, true)
+  assert.equal(r.atMs, Date.parse('2026-11-14T02:05:00.000Z'))
+})
+
+t('at= 记的是"事情发生的那一刻"：text-appears 用调用方给的文件 mtime', () => {
+  const r = probeTextAppears({ content: 'a\n结论\n', offset: 0, spec: { match: '结论' }, atMs: 1234 })
+  assert.equal(r.hit, true)
+  assert.equal(r.atMs, 1234)
+})
+
 t('递话文本带 id / why / 证据，并说清是"你的表里的一条条件"（不是替她认领）', () => {
   const text = intentDeliveryText({ id: 'watch-x', why: '等它出结论' }, '文件变了：12 B')
   assert.match(text, /watch-x/)

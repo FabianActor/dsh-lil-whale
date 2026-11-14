@@ -2709,7 +2709,7 @@ function probeOneIntent(member, spec, s, now) {
     if (spec.kind === 'pending') {
       const entries = readMessageEntriesSince(intentCursorOf(member))
       const r = probePending({ entries, ownKey: member.key, from: spec.from, minCount: spec.minCount })
-      return { hit: r.hit, evidence: r.evidence, patch: null }
+      return { hit: r.hit, evidence: r.evidence, atMs: r.atMs ?? null, patch: null }
     }
     const resolved = resolveIntentPath(spec, member)
     if (!resolved.ok) {
@@ -2722,12 +2722,13 @@ function probeOneIntent(member, spec, s, now) {
     }
     if (spec.kind === 'text-appears') {
       const content = readFileSync(resolved.file, 'utf8')
-      const r = probeTextAppears({ content, offset: s.offset ?? 0, spec })
-      return { hit: r.hit, evidence: r.evidence, patch: { offset: r.nextOffset ?? content.length } }
+      const st = statSync(resolved.file)
+      const r = probeTextAppears({ content, offset: s.offset ?? 0, spec, atMs: st.mtimeMs })
+      return { hit: r.hit, evidence: r.evidence, atMs: r.atMs ?? null, patch: { offset: r.nextOffset ?? content.length } }
     }
     const current = baselineOfPath(resolved.file)
     const r = probeFileChanged({ current, baseline: s.baseline ?? null })
-    return { hit: r.hit, evidence: r.evidence, patch: { baseline: r.baseline } }
+    return { hit: r.hit, evidence: r.evidence, atMs: r.atMs ?? null, patch: { baseline: r.baseline } }
   } catch (error) {
     noteOnce(member, `intent-probe-failed id=${spec.id} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 100)}`)
     return { hit: false }
@@ -2778,6 +2779,12 @@ async function intentTick(member, st, now) {
       s.firstTrueAt = now.toISOString()
       dirty = true
     }
+    // at= 记"事情发生的那一刻"，不是"巡守看见的那一刻"（她 2026-11-14 18:20：
+    // 两者最多差一拍，取看见的话 lag 永远≈0，又变成"看起来没延迟"）。
+    if (probe.atMs && Number.isFinite(Number(probe.atMs))) {
+      s.happenedAt = new Date(Number(probe.atMs)).toISOString()
+      dirty = true
+    }
     if (isSleeping(member.key, now)) {
       noteOnce(member, `wake-skip why=sleep intent=${spec.id}（条件成立了，先记着）`)
       continue
@@ -2807,11 +2814,14 @@ async function intentTick(member, st, now) {
     const hbAge = presenceAgeOf(member.key)
     watchmanLog(
       'wake-try',
-      `wid=${wid} kind=intent why=intent:${spec.id} to=${member.key} gate=pass(hour=${counts.hour}/${WAKE.perHour},day=${counts.day}/${WAKE.perDay}) hb-age=${hbAge === null ? 'none' : `${hbAge}s`} deliver=msg at=${localStampOf(s.firstTrueAt)}`,
+      `wid=${wid} kind=intent why=intent:${spec.id} to=${member.key} gate=pass(hour=${counts.hour}/${WAKE.perHour},day=${counts.day}/${WAKE.perDay}) hb-age=${hbAge === null ? 'none' : `${hbAge}s`} deliver=msg at=${localStampOf(s.happenedAt ?? s.firstTrueAt)}`,
     )
     try {
       say('lee', member.key, intentDeliveryText(spec, probe.evidence), 'group', 'watch')
-      watchmanLog('woke', `wid=${wid} trigger=intent lag=${Math.round(ageMs / 1000)}s inserted=1`)
+      // lag = 发现比发生晚了多少（事情发生的时刻 → 递出去的时刻），不是"决定→插入"。
+      const happenedMs = Date.parse(String(s.happenedAt ?? s.firstTrueAt ?? ''))
+      const lagSec = Number.isFinite(happenedMs) ? Math.max(0, Math.round((now.getTime() - happenedMs) / 1000)) : null
+      watchmanLog('woke', `wid=${wid} trigger=intent lag=${lagSec === null ? 'lag-unknown' : `${lagSec}s`} inserted=1`)
       markWake(member.key, 'intent')
     } catch (error) {
       watchmanLog('wake-skip', `wid=${wid} why=intent-deliver-failed detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 100)}`)
@@ -2825,6 +2835,7 @@ async function intentTick(member, st, now) {
     s.lastMinuteDay = schedule.day
     s.minuteStreak = schedule.streak
     delete s.firstTrueAt
+    delete s.happenedAt
     if (spec.each === 'once') s.done = true
     if (schedule.isScheduleLike) {
       noteOnce(member, `intent-looks-like-schedule id=${spec.id} minute=${schedule.minute} streak=${schedule.streak}`)
@@ -3105,6 +3116,9 @@ function rosterNonFishKeys() {
   }
 }
 
+// 账本格式：fmt=1（2026-11-14 18:15 之前）的时间戳是 UTC，只有计数；
+// fmt=2 起时间戳改本地（和 watchman/fish/sleep 同钟），并带 scope=fish / exclude= 两个口径字段。
+// 两版会长期并存：读账的人先看 fmt 再决定怎么读时间（docs\账本.md）。
 function auditRoster(now = new Date()) {
   if (Date.now() - lastRosterAuditAt < ROSTER_AUDIT_EVERY_MS) return
   lastRosterAuditAt = Date.now()

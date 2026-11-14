@@ -227,9 +227,12 @@ export function probePending({ entries, ownKey, from = null, minCount = 1 }) {
   if (hits.length < Math.max(1, minCount)) return { hit: false, count: hits.length }
   const last = hits[hits.length - 1]
   const preview = String(last?.text ?? '').replace(/\s+/g, ' ').slice(0, 120)
+  // atMs = 让它成立的那条消息的时间（"事情发生的那一刻"，不是"巡守看见的那一刻"）。
+  const atMs = Number.isFinite(Date.parse(String(last?.ts ?? ''))) ? Date.parse(String(last.ts)) : null
   return {
     hit: true,
     count: hits.length,
+    atMs,
     evidence: `有 ${hits.length} 条还没进你窗口的话；最后一条来自 ${last?.from ?? '?'}：${preview}`,
   }
 }
@@ -238,7 +241,7 @@ export function probePending({ entries, ownKey, from = null, minCount = 1 }) {
  * text-appears：某个文件里出现了某句话（从上次读到的位置往后找，不追溯）。
  * @returns {{hit: boolean, evidence?: string, nextOffset?: number}}
  */
-export function probeTextAppears({ content, offset = 0, spec }) {
+export function probeTextAppears({ content, offset = 0, spec, atMs = null }) {
   const text = String(content ?? '')
   const start = Math.max(0, Math.min(Number(offset) || 0, text.length))
   const slice = text.slice(start)
@@ -262,6 +265,7 @@ export function probeTextAppears({ content, offset = 0, spec }) {
   const line = slice.slice(lineStart, lineEnd < 0 ? undefined : lineEnd).trim().slice(0, 200)
   return {
     hit: true,
+    atMs,
     evidence: `文件里出现了「${matched.slice(0, 60)}」：${line}`,
     nextOffset: start + index + matched.length,
   }
@@ -283,6 +287,7 @@ export function probeFileChanged({ current, baseline }) {
   if (!changed) return { hit: false, baseline }
   return {
     hit: true,
+    atMs: Number(current.mtimeMs),
     evidence: `文件变了：${current.size} B，最后写于 ${new Date(current.mtimeMs).toISOString()}`,
     baseline: current,
   }
