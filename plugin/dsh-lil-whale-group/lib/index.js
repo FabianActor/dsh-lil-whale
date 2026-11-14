@@ -3085,6 +3085,16 @@ function rosterFishEntries() {
   }
 }
 
+function rosterNonFishKeys() {
+  try {
+    const roster = JSON.parse(readFileSync(CFG.membersFile, 'utf8'))
+    const members = roster?.members ?? {}
+    return Object.entries(members).filter(([, m]) => m && m.kind !== 'fish').map(([key]) => key)
+  } catch {
+    return [] // 读不了时这一项就空着，不猜
+  }
+}
+
 function auditRoster(now = new Date()) {
   if (Date.now() - lastRosterAuditAt < ROSTER_AUDIT_EVERY_MS) return
   lastRosterAuditAt = Date.now()
@@ -3112,12 +3122,21 @@ function auditRoster(now = new Date()) {
   if (homeWithoutRoster.length) problems.push(`only-in-homes=${homeWithoutRoster.join(',')}`)
   if (rosterWithoutHome.length) problems.push(`only-in-members=${rosterWithoutHome.join(',')}`)
   if (pinWithoutRoster.length) problems.push(`only-in-pins=${pinWithoutRoster.join(',')}`)
-  const counts = `members=${rosterAll.size} homes=${homes.size} pins=${pinKeys.length}`
+  // 口径写在同一行（她 2026-11-14 18:08 咬的那一口：3/2/3 三个数看着不相等，结论却是 ok，
+  // 读的人只能信 ok 或者以为漏了）。scope=fish：members 只数鱼；exclude 点名被排除的两种：
+  // 人（不在 homes、也不该在）、巡守（是鱼，但家不在 homes\\ 下）。
+  const humanKeys = rosterNonFishKeys()
+  const outsidePondHomed = entries.filter(([, m]) => m.role === 'watcher').map(([key]) => key)
+  const exclude = [...humanKeys.map((k) => `${k}(human)`), ...outsidePondHomed.map((k) => `${k}(home-outside-pond)`)]
+  const counts = `members=${rosterAll.size} homes=${homes.size} pins=${pinKeys.length} scope=fish${exclude.length ? ' exclude=' + exclude.join(',') : ''}`
+  // 时间用本地时间、和 watchman.log 同一个钟（她 2026-11-14 18:08：同一台机器上不该有两种钟）。
+  const pad = (n) => String(n).padStart(2, '0')
+  const ts = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
   // 每次跑都写一行（2026-11-14 小肥鱼：文件不存在只说明"还没跑过"，不说明"跑了没问题"——
   // 要让"没跑"和"跑了没问题"在纸上长得不一样）。
   const line = problems.length
-    ? `${now.toISOString()} | roster-mismatch | fmt=1 ${counts} ${problems.join(' ')}`
-    : `${now.toISOString()} | roster-audit | fmt=1 ${counts} ok`
+    ? `${ts} | roster-mismatch | fmt=2 ${counts} ${problems.join(' ')}`
+    : `${ts} | roster-audit | fmt=2 ${counts} ok`
   try {
     appendFileSync(ROSTER_AUDIT_LOG, `${line}\n`)
   } catch { /* 日志写不了不该炸巡守 */ }
