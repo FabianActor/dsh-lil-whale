@@ -79,7 +79,7 @@ if ($Cfg.MembersFile -and (Test-Path -LiteralPath $Cfg.MembersFile)) {
 if (Test-Port $watcherPort) {
   Add-Row '主 dsh 端口' 'OK' ("127.0.0.1:{0} 通" -f $watcherPort)
 } else {
-  Add-Row '主 dsh 端口' 'FAIL' ("127.0.0.1:{0} 不通" -f $watcherPort) 'NEXT: 启动主 dsh：scripts\bin\Run DSH.cmd'
+  Add-Row '主 dsh 端口' 'FAIL' ("127.0.0.1:{0} 不通" -f $watcherPort) 'NEXT: 起鱼塘：pwsh -File scripts\fish.ps1 up all -BrowserMainOnly'
 }
 
 if ($IncludeLee) {

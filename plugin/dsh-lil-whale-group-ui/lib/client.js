@@ -2667,8 +2667,8 @@ function Bubble({ config, message, onMention, animate = false }) {
       demoOn: '看一个大家族的示例',
       demoOff: '回到真实鱼塘',
       demoHint: '谱系示例：模拟的名册，不会启动或关闭任何进程。',
-      autoStartLabel: '主 dsh 启动时自动唤醒所有鱼',
-      autoStartHint: '下次启动主 dsh 生效：巡守起来 8 秒后按名册逐条唤醒，不开浏览器窗。',
+      autoStartLabel: '起主 dsh 时把鱼也带起来',
+      autoStartHint: '下次启动主 dsh 生效：巡守起来 8 秒后按名册逐条唤醒，不开浏览器窗。关掉＝只起巡守（空鱼塘，调试用）——鱼活不过主进程，没有「鱼自己单独活着」这个选项。',
       autoStartFailed: '开关没保存：',
       generation: (n) => (n <= 0 ? '根' : `第 ${n} 代`),
       modeText: (mode) => {
@@ -3239,7 +3239,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v35 · sleep:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v36 · pond-entry:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')

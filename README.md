@@ -245,30 +245,20 @@ pwsh -File scripts\fish.ps1 doctor       # 体检
 
 命令行还是同一套：`pwsh -File scripts\fish.ps1 up <鱼|all>`。鱼塘只是它的界面，不是另一套逻辑。
 
-## 自启动与四个快捷方式
+## 起停：只有一个开关
 
-鱼塘工具栏有一个勾选框：**「主 dsh 启动时自动唤醒所有鱼」**（默认关）。勾上以后，主 dsh 起来 8 秒会按名册把其他鱼逐个唤醒——只弹出主 dsh 的 WebUI，其他鱼在后台起、不开窗。开关存在 `pool\state\settings.json`（数据，不是配置），改完**下次启动主 dsh 生效**。
-
-**推荐直接跑脚本，别用桌面副本**：这个仓库改得勤，桌面副本是"复制那一刻的快照"，脚本更新它不会跟着变。两个不会过时的入口：
+**鱼活不过主进程**：主 dsh 一停，Windows 会把它作业对象里的子进程一起收掉，鱼跟着停。所以「重启 dsh」＝「重启整个鱼塘」，没有「鱼自己单独活着」这回事。完整说明见 [起停.md](起停.md)。
 
 ```powershell
-pwsh -File scripts\fish.ps1 up all -BrowserMainOnly   # 起全部，只给主 dsh 开窗
-pwsh -File scripts\fish.ps1 down all -Yes             # 全停（先鱼后主）
+pwsh -File scripts\fish.ps1 up all -BrowserMainOnly   # 起鱼塘：主 dsh 开窗，其余鱼后台
+pwsh -File scripts\fish.ps1 down all -Yes             # 停鱼塘：先鱼后主，每条写 stopped
 ```
 
-想双击就去 `scripts\bin\` 里双击——那里的 `.cmd` 永远是最新的；拷到桌面就等于冻结了当时那份。
+想双击就去 `scripts\bin\` 里双击（`Run All Whales.cmd` / `Stop All Whales.cmd`）——那里的 `.cmd` 永远是最新的；拷到桌面就等于冻结了当时那份。
 
-| 快捷方式 | 做什么 |
-|---|---|
-| `Run DSH.cmd` | 启动主 dsh；已经在跑就直接帮你把 WebUI 打开 |
-| `Run All Whales.cmd` | 启动所有鱼：主 dsh 起来并开窗，其余鱼在后台起 |
-| `Stop All Whales.cmd` | 关闭所有鱼，**包括主 dsh**（先关小鱼，最后关主 dsh） |
-| `Stop DSH.cmd` | 只关主 dsh，**还在跑的小鱼继续跑**（要连鱼一起关：`Stop All Whales.cmd`） |
+鱼塘工具栏有一个勾选框：**「起主 dsh 时把鱼也带起来」**（默认开，存在 `pool\state\settings.json` 的 `autoStartFish`）。勾上：起主 dsh 就等于起鱼塘；关掉：只起巡守（空鱼塘），调试用。改完**下次启动主 dsh 生效**。
 
-**不做"关 dsh 时自动关鱼"**：关 dsh 只能从命令行或窗口关，插件拿不到"我马上要退了"这个可靠时刻；硬做会变成"有时关了、有时没关"，比不做更坏。
-
-**自启动和手动「全部唤醒」会不会打架？** 不会。两边都走同一条 `fish.ps1 up all`：它幂等（端口通就跳过），而且批量启动有一把锁（`pool\state\up-all.lock`，3 分钟自动过期）——第二个启动看到锁就退出，不会出现一条鱼两个进程。
-
+原来的 `Run DSH.cmd` / `Stop DSH.cmd` 已经删掉：它们和上面两条在效果上没有区别（鱼跟着 dsh 起停），留着只会让人以为鱼能单独活。
 ## 说明书过期了怎么办
 
 每条鱼家里有一份 `环境.md`（"这个环境里有什么"：名册、工具、路径、叫醒参数）。它是**生成的**，不是手写的：
@@ -311,7 +301,7 @@ pwsh -File scripts\release-check.ps1
 
 - M0–M4 已通过：出生、插件探针、跨进程通路、唤醒阀门、人类入口（群面板 + 私聊）
 - M5 观察中：一周数据（她说不说话、被叫醒后回不回、定时推门准不准）
-- 2026-11-13 完成：**鱼塘布局**（一个根四层）、**无人值守成为默认**（进程起来即挂载会话，不需要浏览器窗）、**计划表归每条鱼自己**（主 dsh 关着她的闹钟也响）、**鱼塘页**（谱系树 + 一键全开/全关 + 检修/回无人值守）、**四个快捷方式**（实测通过：先鱼后主、只开主窗、停主不带走鱼）、`doctor` / `verify-pending` / `release-check` 三套自检。
+- 2026-11-13 完成：**鱼塘布局**（一个根四层）、**无人值守成为默认**（进程起来即挂载会话，不需要浏览器窗）、**计划表归每条鱼自己**（主 dsh 关着她的闹钟也响）、**鱼塘页**（谱系树 + 一键全开/全关 + 检修/回无人值守）、**起停**（一个开关：起主 dsh 就把鱼带起来；鱼活不过主进程）、`doctor` / `verify-pending` / `release-check` 三套自检。
 - M6 收尾中：配置抽离、包改名、安装脚本、种子文件模板、manifest 字段、发布清单都已就绪；剩**发布当天**的两件：npm scope 改名 `@fabianactor/dsh-lil-whale-group(-ui)`、`npm publish`（见 `docs/发布.md`）。
 
 进度和每一条「为什么这样定」都在 `docs/` 里，包括踩过的坑。

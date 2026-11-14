@@ -399,7 +399,7 @@ function Start-Fish($member) {
   if ($member.Role -ne 'watcher') {
     $main = Get-MainFish
     if ($main -and -not (Test-Port (Get-PortOf $main))) {
-      Write-Host ("主 dsh 没在跑（{0} 不通）—— 先启动主 dsh（scripts\bin\Run DSH.cmd），再开小鱼。" -f (Get-PortOf $main))
+      Write-Host ("主 dsh 没在跑（{0} 不通）—— 先起鱼塘（pwsh -File scripts\fish.ps1 up all -BrowserMainOnly），再开小鱼。" -f (Get-PortOf $main))
       return $false
     }
   }
@@ -605,12 +605,12 @@ fish.ps1 -- 鱼群唯一的入口
   pwsh -File fish.ps1 list
   pwsh -File fish.ps1 up whale         开一条（默认无人值守：无窗，会话由 host 自己挂上）
   pwsh -File fish.ps1 up whale -Window 开一条，并且打开它的浏览器窗
-  pwsh -File fish.ps1 up all           全开（小鱼无人值守，只有主 dsh 开窗）
+  pwsh -File fish.ps1 up all           起整个鱼塘（主 dsh 开窗，小鱼无人值守）
   pwsh -File fish.ps1 up all -BrowserMainOnly  同上（兼容旧写法）
   pwsh -File fish.ps1 down whale       停一条
-  pwsh -File fish.ps1 down all -Yes    全停（含主 dsh）
-  pwsh -File fish.ps1 up-main          启动主 dsh（已在跑就打开它的 WebUI）
-  pwsh -File fish.ps1 down-main        关闭主 dsh（还在跑的小鱼继续跑）
+  pwsh -File fish.ps1 down all -Yes    停整个鱼塘（先鱼后主）
+  pwsh -File fish.ps1 up-main          只起主 dsh（鱼由它 8 秒后自己带起来；勾选关掉＝空鱼塘，调试用）
+  pwsh -File fish.ps1 down-main        停整个鱼塘（鱼活不过主进程；先鱼后主，账本写 stopped）
   pwsh -File fish.ps1 doctor           体检
   pwsh -File fish.ps1 new -Key <键> -Name <名字> -Parent whale   养一条新鱼（查重 → 建家 → 进名册 → 记 birth）
   pwsh -File fish.ps1 refresh whale    重新生成环境.md（模板/名册/工具变了以后）
@@ -1038,6 +1038,7 @@ try {
     'restore'  { if (-not (Invoke-Restore $Name)) { $ok = $false } }
     'unattended' { if (-not (Invoke-Restore $Name)) { $ok = $false } }
     'up-main' {
+      # 只起主 dsh。鱼由巡守起来 8 秒后自己带起来（鱼塘里那个勾选；关掉就是空鱼塘，调试用）。
       $m = Get-MainFish
       if (-not $m) { throw '名册里没有巡守那条鱼（lee）' }
       $wasRunning = Test-Port (Get-PortOf $m)
@@ -1047,24 +1048,15 @@ try {
         Start-Process (Get-Url $m) | Out-Null
         Write-Host '已经开着，帮你把 WebUI 打开了。'
       }
+      Write-Host '巡守起来 8 秒后会把鱼带起来（鱼塘里「起主 dsh 时把鱼也带起来」勾选关掉的话不会带）。'
     }
     'down-main' {
-      # 只关主 dsh，小鱼继续跑（Fabian 2026-11-13 12:24：缺的正是这个方式）。
-      # 以前这里会拒绝并要求 -Force，但用户没有地方敲 -Force —— 那就等于没有这条路。
-      $m = Get-MainFish
-      if (-not $m) { throw '名册里没有巡守那条鱼（role=watcher）—— 检查 pool\members.json' }
-      $runningFish = @($MEMBERS.Values | Where-Object {
-        $_.Kind -eq 'fish' -and $_.Role -ne 'watcher' -and (Test-Port (Get-PortOf $_))
-      })
-      if ($runningFish.Count -gt 0) {
-        Write-Host ('注意：还有 {0} 条鱼在跑（{1}），这次只关主 dsh，它们继续跑。' -f $runningFish.Count, (($runningFish | ForEach-Object { $_.Label }) -join '、'))
-        Write-Host '要连鱼一起关：scripts\bin\Stop All Whales.cmd（或鱼塘里点「全部休眠」）。'
-      }
-      # 用户点的是快捷方式（或鱼塘按钮）——那一下就是确认，不要再弹 Read-Host。
-      # 2026-11-13 17:59 实测：down-main 没传 -Yes，Stop-Fish 在非交互里 Read-Host 拿到空串就"没停"，
-      # 结果 Stop DSH.cmd 双击后什么都没发生（窗口里只有一句"注意…"，看起来像失败又不像）。
-      $Yes = $true
-      if (-not (Stop-Fish $m)) { $ok = $false }
+      # 2026-11-14 起：鱼活不过主进程（它们在主 dsh 的作业对象里，主进程一死 Windows 把整棵树收掉）。
+      # 所以"只关主 dsh"实际上就是"关整个鱼塘"——但如果直接杀主进程，鱼会被 job 带走、账本记成 unclean。
+      # 那就先把鱼正常停掉（写 stopped），最后再停主 dsh。这样"重启 dsh"不再留下假崩溃。
+      Write-Host '鱼活不过主进程（它们在主 dsh 的作业对象里），所以这次会停整个鱼塘：先停鱼、最后停主 dsh。'
+      Write-Host '只想起主 dsh 不要鱼：up-main（空鱼塘）；只想停某一条：down <名字> -Yes。'
+      if (-not (Invoke-Down 'all')) { $ok = $false }
     }
     'doctor' { $ok = Invoke-Doctor }
     'help'   { Show-Help }
