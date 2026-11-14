@@ -1746,7 +1746,7 @@ sleep-tools-register-failed: tool "sleep" must declare output { schema, render, 
 我抄的时候漏了 `render`，只写了 `schema`。失败是**抛异常后吞掉**的（否则会拖垮整个插件），
 于是"工具没有"这件事在界面上和"工具在但没用"长得一模一样。
 
-**修法**：两个工具补 `render`（返回一句人话回执）；`scripts\doctor.ps1` 新增 **3b 睡眠工具**：
+**修法**：两个工具补 `render`（返回一句人话回执）——**而且必须补在 `output` 里面**：第一版补在 `output` 外面，宿主照样拒（同一个错误信息），第二次才过；`scripts\doctor.ps1` 新增 **3b 睡眠工具**：
 在 `pool\group\plugin.log` 里比较最近一次 `sleep-tools-registered` 与 `sleep-tools-register-failed`
 的行号，失败在后就 FAIL，没有记录就 WARN。
 
