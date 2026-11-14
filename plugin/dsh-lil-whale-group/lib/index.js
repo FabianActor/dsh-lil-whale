@@ -2291,6 +2291,9 @@ async function tick(ctx) {
  * 处理一条通道：有没有新消息、要不要叫醒。
  * 返回 true 表示这一轮叫醒了一次（游标已推进）。
  */
+// 夹游标只留痕一次，免得每 60 秒刷一行。
+const clampLogged = new Set()
+
 function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
   const lines = readLinesOf(channel.file)
   if (lines.length === 0) return false
@@ -2299,8 +2302,19 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
   // - `member`：叫"这个人"的消息，两把椅子共用一份游标 ⇒ 一句话只叫醒一次（谁空谁应）。
   // - `member@seat`：指名给某一座位的消息，各座位一份游标 ⇒ 不会被另一把椅子吃掉。
   const seatKey = seat === '' ? member : `${member}@${seat}`
-  const sharedSeen = cursorOf(cursors, member, channel.key)
-  const seatSeen = cursorOf(cursors, seatKey, channel.key)
+  // 2026-11-14 22:5x：游标可能比文件还靠前 —— 文件被重写过（行数变少），而 writeCursors 的
+  // "只许前进"合并会把旧值锁住。那样新消息会被当成"已经读过"，永远不叫醒（Fabian 22:37 的
+  // 私信就是这么丢的：dm 游标停在第 14 行，而消息正好是第 14 行）。
+  // 判据：读的时候把游标夹到 lines.length 以内；真夹了要留痕 —— 错的时候跟对的时候不能长得一样。
+  const sharedSeenStored = cursorOf(cursors, member, channel.key)
+  const seatSeenStored = cursorOf(cursors, seatKey, channel.key)
+  const sharedSeen = Math.min(sharedSeenStored, lines.length)
+  const seatSeen = Math.min(seatSeenStored, lines.length)
+  const clampKey = `${member}:${channel.key}`
+  if ((sharedSeenStored > lines.length || seatSeenStored > lines.length) && !clampLogged.has(clampKey)) {
+    clampLogged.add(clampKey)
+    logLine({ note: 'cursor-clamped', member, channel: channel.key, shared: sharedSeenStored, seat: seatSeenStored, lines: lines.length })
+  }
 
   const incoming = []
   // 记下"最后递出去的那条"在文件里的绝对行号（1 基）。小肥鱼 2026-11-12 的判据：

@@ -1,4 +1,4 @@
-#requires -Version 7.0
+﻿#requires -Version 7.0
 # doctor.ps1 -- 一条鱼还活着吗？
 #
 # 用法：
@@ -193,6 +193,40 @@ if (Test-Path -LiteralPath $pluginLog) {
     Add-Row '名册与家' 'WARN' ('自检跑不了：' + $_.Exception.Message)
   }
 
+  # 3f. 游标不能比文件还靠前（2026-11-14 22:5x，Fabian 的私信没叫醒她）
+  # 判据：游标 > 行数 ⇒ 那条消息会被当成"已经读过"，永远不叫醒。行数取真源文件。
+  $groupFile = Join-Path $Cfg.GroupDir 'messages.jsonl'
+  $dmDir = Join-Path $Cfg.PoolDir 'dm'
+  $cursorDir = Join-Path $Cfg.PoolState 'cursors'
+  $cursorBad = @()
+  $cursorChecked = 0
+  if (Test-Path -LiteralPath $cursorDir) {
+    foreach ($cf in Get-ChildItem -LiteralPath $cursorDir -File -Filter '*.json') {
+      $key = $cf.BaseName
+      $data = $null
+      try { $data = Get-Content -LiteralPath $cf.FullName -Raw -Encoding utf8 | ConvertFrom-Json } catch { continue }
+      $box = $data.$key
+      if ($null -eq $box) { continue }
+      foreach ($prop in $box.PSObject.Properties) {
+        $channelKey = $prop.Name
+        $seen = [long]$prop.Value
+        $file = $null
+        if ($channelKey -eq 'group') { $file = $groupFile }
+        elseif ($channelKey -like 'dm:*') { $file = Join-Path $dmDir ($channelKey.Substring(3) + '.jsonl') }
+        if ($null -eq $file -or -not (Test-Path -LiteralPath $file)) { continue }
+        $count = @(Get-Content -LiteralPath $file -Encoding utf8 | Where-Object { $_.Trim() -ne '' }).Count
+        $cursorChecked += 1
+        if ($seen -gt $count) { $cursorBad += "$key/$channelKey=$seen>行数$count" }
+      }
+    }
+  }
+  if ($cursorBad.Count -gt 0) {
+    Add-Row '游标' 'FAIL' ($cursorBad -join '；') 'NEXT: 游标比文件靠前，新消息会被当成已读——把它退回到行数（2026-11-14 私信事故）'
+  } elseif ($cursorChecked -gt 0) {
+    Add-Row '游标' 'OK' ("$cursorChecked 个通道都不超过行数")
+  } else {
+    Add-Row '游标' 'WARN' '没有可检查的游标文件' 'NEXT: 跑一次 fish.ps1 list 看进程是否起来'
+  }
   # 3e. 名册自检的账：文件不存在 = 还没跑过，不是"跑了没问题"（2026-11-14，小肥鱼）
   $auditLog = Join-Path $Cfg.PoolState 'roster-audit.log'
   if (Test-Path -LiteralPath $auditLog) {
