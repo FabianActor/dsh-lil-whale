@@ -45,6 +45,34 @@ function loadLabel() {
 }
 const LABEL = loadLabel()
 
+// 改名史（A.79）：投影是"当时的纸"，历史行要写当时的名字。
+// 名册里 `nameHistory: [{ name, until }]`，until 是这个名字用到什么时候（ISO）；
+// 没有 until 的那条是当前名字。没有 nameHistory 的成员永远用当前名。
+const HISTORY = (() => {
+  const out = {}
+  try {
+    const file = config().membersFile
+    if (!file || !existsSync(file)) return out
+    const roster = JSON.parse(readFileSync(file, 'utf8'))?.members ?? {}
+    for (const [key, member] of Object.entries(roster ?? {})) {
+      if (Array.isArray(member?.nameHistory) && member.nameHistory.length > 0) out[key] = member.nameHistory
+    }
+  } catch {}
+  return out
+})()
+
+/** 这条记录发生的时候，这个人叫什么。 */
+function labelAt(key, iso) {
+  const history = HISTORY[key]
+  if (!Array.isArray(history) || history.length === 0) return LABEL[key] ?? key
+  const t = Date.parse(String(iso ?? ''))
+  for (const item of history) {
+    if (!item?.until) return String(item?.name ?? LABEL[key] ?? key)
+    if (!Number.isNaN(t) && t < Date.parse(item.until)) return String(item?.name ?? key)
+  }
+  return LABEL[key] ?? key
+}
+
 // 机器发的话要自己说出来（同 plugin/dsh-lil-whale-group/lib/index.js 的 provenanceOf）。
 // `s` 平时是会话 id；不是会话 id 的值说明这句不是某一轮人说的。
 const S_DISPLAY = { watch: '巡守' }
@@ -87,13 +115,13 @@ function blockOf(record) {
   const text = typeof record?.text === 'string' ? record.text.trim() : ''
   const image = record?.image !== null && typeof record?.image === 'object' ? record.image : null
   if (text === '' && image === null) return ''
-  const who = LABEL[String(record?.from ?? '')] ?? String(record?.from ?? '?')
+  const who = labelAt(String(record?.from ?? ''), record?.ts)
   // 来源标注：机器发的（s 不是会话 id）要在纸上写出来，否则和人说的长得一样。
   const origin = provenanceOf(record?.s)
   // 收信人：2026-11-12 19:46 起的投影格式，只有指名（to 是某个成员）才写箭头。
   // 不写箭头 = 公开（to:"all"）；读记录的人靠这个分辨"这条在对谁说话"。
   const to = String(record?.to ?? '')
-  const toLabel = to !== '' && to !== 'all' ? ` → ${LABEL[to] ?? to}` : ''
+  const toLabel = to !== '' && to !== 'all' ? ` → ${labelAt(to, record?.ts)}` : ''
   // 带图的记录也要重建出来 —— 2026-11-12 现场：只有图没有字的消息被这里整条跳过，
   // 于是 群.md 里有那行、重建结果里没有，对不上就成了"说不清的差异"。
   const body = image === null
@@ -151,7 +179,7 @@ function hunksOf(ops) {
  * 归类一处差异。规则只有一条目标：**每一处都能说出它是怎么来的**。
  * 现在已知的只有一类化石——旧渲染器把"没有正文的记录"渲染成了 `undefined`。
  */
-function classify(hunk, a) {
+function classify(hunk, a, b) {
   const removed = hunk.del.map((i) => a[i])
   // 旧渲染器把"没有正文的记录"整块渲染成表头 + 空行 + `undefined`；重建会跳过整块，
   // 所以这一处会同时少掉 `undefined` 和它上面那行表头。
@@ -162,6 +190,43 @@ function classify(hunk, a) {
       known: true,
       why: `旧渲染器的化石：有 ${emptyText.length} 条记录没有正文（ts=${emptyText.map((r) => r.ts).join(', ')}），` +
         '当时被渲染成 `undefined`；重建跳过整块，所以这里少了它和它那行表头。',
+    }
+  }
+  // 改名漂移：投影是"当时的纸"，但写它的人用的是进程启动时缓存的旧显示名。
+  // 只差标题里的名字（时间、来源标注、箭头都一样）时，这一处是可解释的。
+  const headerOf = (line) => /^\*\*(.+?) · (.+?)(（[^）]*）)?( → .+?)?\*\*$/.exec(line);
+  const shapeOf = (line) => {
+    const m = headerOf(line);
+    if (m === null) return null;
+    return `**${m[1]} · <name>${m[3] ?? ''}${m[4] ? ' → <name>' : ''}**`;
+  };
+  if (removed.length > 0 && hunk.ins.length === removed.length) {
+    const insLines = hunk.ins.map((i) => b[i]);
+    const shaped = removed.map(shapeOf);
+    if (shaped.every((x) => x !== null) && insLines.map(shapeOf).every((x, i) => x === shaped[i])) {
+      return {
+        known: true,
+        why: '改名漂移：只差标题里的显示名（时间/来源/箭头都一致）——写它的人用了进程里缓存的旧名字。',
+      };
+    }
+  }
+  // 新增记录还没投影：纯插入，且每段表头的时间戳在 jsonl 里都有对应记录。
+  if (removed.length === 0 && hunk.ins.length > 0) {
+    const insLines = hunk.ins.map((i) => b[i]);
+    const headers = [];
+    let cur = null;
+    for (const line of insLines) {
+      const m = headerOf(line);
+      if (m !== null) {
+        cur = { ts: m[1] };
+        headers.push(cur);
+        continue;
+      }
+      cur = null;
+    }
+    const allKnown = headers.length > 0 && headers.every((h) => records.some((r) => stampOf(String(r.ts ?? '')) === h.ts));
+    if (allKnown) {
+      return { known: true, why: `新增记录还没投影：${headers.length} 段的时间戳在 jsonl 里都有对应记录。` };
     }
   }
   return { known: false, why: '未归类：这不一定是错，但还没人能说出它怎么来的。' }
@@ -187,7 +252,7 @@ if (!existsSync(READABLE)) {
   console.log(`现有 ${a.length} 行 / 重建 ${b.length} 行 / 差异 ${hunks.length} 处`)
 
   hunks.forEach((hunk, index) => {
-    const verdict = classify(hunk, a)
+    const verdict = classify(hunk, a, b)
     const where = hunk.aStart === null ? `重建第 ${(hunk.bStart ?? 0) + 1} 行` : `现有第 ${hunk.aStart + 1} 行`
     console.log(`\n[差异 ${index + 1}] ${where}（-${hunk.del.length} +${hunk.ins.length}）`)
     for (const i of hunk.del.slice(0, 3)) console.log(`  现有: ${String(a[i]).slice(0, 90)}`)
@@ -227,7 +292,7 @@ if (existsSync(DM_DIR)) {
       const text = typeof record?.text === 'string' ? record.text.trim() : ''
       const image = record?.image !== null && typeof record?.image === 'object' ? record.image : null
       if (text === '' && image === null) return ''
-      const who = LABEL[String(record?.from ?? '')] ?? String(record?.from ?? '?')
+      const who = labelAt(String(record?.from ?? ''), record?.ts)
       const body = image === null
         ? text
         : `（图片 images/${image.month}/${image.id}.${image.ext}）${text === '' ? '' : `\n\n${text}`}`
