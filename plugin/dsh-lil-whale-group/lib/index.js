@@ -2814,7 +2814,7 @@ async function intentTick(member, st, now) {
     const hbAge = presenceAgeOf(member.key)
     watchmanLog(
       'wake-try',
-      `wid=${wid} kind=intent why=intent:${spec.id} to=${member.key} gate=pass(hour=${counts.hour}/${WAKE.perHour},day=${counts.day}/${WAKE.perDay}) hb-age=${hbAge === null ? 'none' : `${hbAge}s`} deliver=msg at=${localStampOf(s.happenedAt ?? s.firstTrueAt)}`,
+      `wid=${wid} kind=intent why=intent:${spec.id} to=${member.key} gate=pass(hour=${counts.hour}/${WAKE.perHour},day=${counts.day}/${WAKE.perDay}) hb-age=${hbAge === null ? 'none' : `${hbAge}s`} deliver=msg at=${localStampOf(s.happenedAt ?? s.firstTrueAt)} atfmt=2`,
     )
     try {
       say('lee', member.key, intentDeliveryText(spec, probe.evidence), 'group', 'watch')
@@ -2935,7 +2935,7 @@ async function watchOne(member, st) {
       // 她要求"就在做决定那一刻写，别事后补"：事后补的只能证明结果，证明不了当时判的是什么。
       if (firstTry) watchmanLog(
         'wake-try',
-        `wid=${wid} kind=plan why=plan:${job.key} to=${member.key} gate=${gate} hb-age=${hbAge === null ? 'none' : `${hbAge}s`} deliver=${awake ? 'msg' : 'push'} at=${dueAt === null ? '?' : localStampOf(dueAt)}`,
+        `wid=${wid} kind=plan why=plan:${job.key} to=${member.key} gate=${gate} hb-age=${hbAge === null ? 'none' : `${hbAge}s`} deliver=${awake ? 'msg' : 'push'} at=${dueAt === null ? '?' : localStampOf(dueAt)} atfmt=2`,
       )
 
       const totalNow = totalWakesToday()
