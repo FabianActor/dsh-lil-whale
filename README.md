@@ -338,6 +338,7 @@ pwsh -File scripts\release-check.ps1
 | 谁是谁的爹 | [`docs/谱系.md`](docs/谱系.md)（生成的） |
 | 每一版改了什么、为什么 | [`docs/PRD-CHANGELOG.md`](docs/PRD-CHANGELOG.md) |
 | 账本有哪些、每一版 `fmt` 是什么意思 | [`docs/账本.md`](docs/账本.md) |
+| 自主触发做到哪了（给外部读者的一页现状） | [`docs/自主触发-现状-2026-11-14.md`](docs/自主触发-现状-2026-11-14.md) |
 
 历史记录（观察、交接演练、review 意见）在 `docs\archive\`，不删——它们是证据。待办只有一页：`docs\待办.md`（只放没做完的）。
 
