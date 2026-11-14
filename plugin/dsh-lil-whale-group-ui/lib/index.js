@@ -304,6 +304,22 @@ function writeMemberName(key, name) {
   const member = json?.members?.[key]
   if (!member) return { ok: false, why: 'unknown-member' }
   if (member.name === name) return { ok: true, changed: false }
+  // 改名要自己记历史（A.79）：投影是"当时的纸"，改名后历史行必须还能按当时的名字复现。
+  // 否则下一次重建会把整本历史都判成"说不清的差异"，群.md 就写不进去了。
+  const oldName = typeof member.name === 'string' && member.name !== '' ? member.name : null
+  if (oldName !== null) {
+    const nowIso = new Date().toISOString()
+    const history = Array.isArray(member.nameHistory) ? member.nameHistory.filter((x) => x && typeof x === 'object') : []
+    const last = history.length > 0 ? history[history.length - 1] : null
+    if (last && !last.until) {
+      last.until = nowIso
+      if (!last.name) last.name = oldName
+    } else {
+      history.push({ name: oldName, until: nowIso })
+    }
+    history.push({ name })
+    member.nameHistory = history
+  }
   member.name = name
   json.updatedAt = new Date().toISOString()
   const tmp = file + '.tmp-' + process.pid
