@@ -148,3 +148,30 @@ export function forceAwakeUntil(preference, now = new Date()) {
   }
   return new Date(now.getTime() + 2 * 3600_000).toISOString()
 }
+
+
+/**
+ * 把工具参数归一化成对象，并给出"这个值是不是数字"的读取器。
+ *
+ * 2026-11-14 小肥鱼实测 `sleep(minutes: 1)` 被当成没给：裸 spec 注册路径下
+ * `parameters` 原样交给模型（不是合法 JSON Schema），模型可能把 1 发成字符串 "1"。
+ * 归一化放在这里，是因为它需要被"跑"——她那边已经复现不到了（schema 修好后她发出来就是数字），
+ * 只能靠内部测试留证据（A.77 / A.78）。
+ */
+export function normalizeSleepArgs(rawArgs) {
+  let args = rawArgs;
+  if (typeof args === 'string') {
+    try {
+      args = JSON.parse(args);
+    } catch {
+      args = {};
+    }
+  }
+  if (args === null || typeof args !== 'object' || Array.isArray(args)) args = {};
+  const numOf = (v) => {
+    if (typeof v === 'number' && Number.isFinite(v)) return v;
+    if (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))) return Number(v);
+    return null;
+  };
+  return { args, numOf };
+}

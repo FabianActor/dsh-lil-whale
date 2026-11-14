@@ -16,6 +16,7 @@ import {
   forceAwakeUntil,
   DEFAULT_SLEEP_FROM,
   DEFAULT_SLEEP_TO,
+  normalizeSleepArgs,
 } from '../plugin/dsh-lil-whale-group/lib/sleep-core.js'
 
 let pass = 0
@@ -122,6 +123,36 @@ check('sleepLabel 空 → 空串', sleepLabel({}), '')
 {
   const until = forceAwakeUntil(prefDefault, at('2026-11-14T09:00:00+08:00'))
   check('窗外的强制叫醒给两小时', Date.parse(until), Date.parse('2026-11-14T11:00:00+08:00'))
+}
+
+// 参数归一化（2026-11-14 小肥鱼复测：她那边已经复现不到"字符串 1"，只能靠这里留证据）
+{
+  const { args, numOf } = normalizeSleepArgs({ minutes: 1 })
+  check('归一化：对象原样', args.minutes, 1)
+  check('归一化：数字 1', numOf(args.minutes), 1)
+}
+{
+  const { args, numOf } = normalizeSleepArgs({ minutes: '1' })
+  check('归一化：字符串 "1" 也收', numOf(args.minutes), 1)
+}
+{
+  const { args, numOf } = normalizeSleepArgs('{"minutes":"3"}')
+  check('归一化：整个 args 是 JSON 字符串', numOf(args.minutes), 3)
+}
+{
+  const { args, numOf } = normalizeSleepArgs('不是 JSON')
+  check('归一化：坏 JSON → 空对象', args, {})
+  check('归一化：坏 JSON 下 numOf(undefined)', numOf(args.minutes), null)
+}
+{
+  const { args, numOf } = normalizeSleepArgs(null)
+  check('归一化：null → 空对象', args, {})
+  check('归一化：numOf("abc")', numOf('abc'), null)
+}
+{
+  const { numOf } = normalizeSleepArgs({})
+  check('归一化：numOf("") 不算数字', numOf(''), null)
+  check('归一化：numOf(NaN)', numOf(NaN), null)
 }
 
 console.log(`\n合计：${pass + fail} 项，PASS ${pass}，FAIL ${fail}`)

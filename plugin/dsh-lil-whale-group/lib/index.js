@@ -31,8 +31,7 @@ import {
   forceAwakeUntil,
   windowFor,
   DEFAULT_SLEEP_FROM,
-  DEFAULT_SLEEP_TO,
-} from './sleep-core.js'
+  DEFAULT_SLEEP_TO, normalizeSleepArgs } from './sleep-core.js'
 
 // 这个包是用 link: 挂进 profile 的，它的真实路径在项目里，walk-up 找不到宿主的
 // @deepseek-ai/* 依赖（会 ERR_MODULE_NOT_FOUND，整个插件加载失败、工具静默消失）。
@@ -1766,14 +1765,7 @@ function apply(ctx) {
         // 根因：裸 spec 路径下 parameters 原样交给模型（不是合法 JSON Schema），
         // `minutes` 没有可依赖的类型约束，模型可能把它发成字符串 "1"；原来只认 typeof === 'number'。
         // 这里统一归一化：字符串先按 JSON 解析，数字/数字字符串都收。
-        let args = rawArgs
-        if (typeof args === 'string') { try { args = JSON.parse(args) } catch { args = {} } }
-        args ??= {}
-        const numOf = (v) => {
-          if (typeof v === 'number' && Number.isFinite(v)) return v
-          if (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))) return Number(v)
-          return null
-        }
+        const { args, numOf } = normalizeSleepArgs(rawArgs)
         const hasFrom = typeof args.from === 'string' && args.from.trim() !== ''
         const hasTo = typeof args.to === 'string' && args.to.trim() !== ''
         if (hasFrom || hasTo) {
@@ -1795,6 +1787,7 @@ function apply(ctx) {
             updatedAt: now.toISOString(),
             by: member,
           })
+          try { writeSleepStatus() } catch {}
           sleepLog('sleep-pref', `member=${member} from=${args.from.trim()} to=${args.to.trim()} reason=${String(args.reason ?? '').replace(/\s+/g, ' ').slice(0, 80)}`)
           return { mode: 'preference', from: args.from.trim(), to: args.to.trim(), untilAt: '' }
         }
@@ -1853,7 +1846,11 @@ function apply(ctx) {
         // 回执：只有真叫醒了才说"醒到几点"；本来就没在睡就直说（同样必须在 output 里面）。
         render: (_args, value) => {
           if (!value.changed) return [{ type: 'text', text: '你现在没在睡，不用叫醒。' }]
-          const d = new Date(value.awakeUntil)
+          // 2026-11-14 小肥鱼复测抓到 NaN:NaN：一次性睡眠清掉后没有"作息窗结束时刻"，
+          // untilAt 是 null，格式化就成了 NaN:NaN。拿不到确定时刻就不许渲染时刻。
+          const stamp = Date.parse(String(value.awakeUntil ?? ''))
+          if (Number.isNaN(stamp)) return [{ type: 'text', text: '醒了。今天这一轮不会再按作息睡，明天照旧。' }]
+          const d = new Date(stamp)
           const hh = String(d.getHours()).padStart(2, '0')
           const mm = String(d.getMinutes()).padStart(2, '0')
           return [{ type: 'text', text: `醒了。今天这一轮不会再按作息睡（到 ${hh}:${mm}），明天照旧。` }]
@@ -1881,6 +1878,9 @@ function apply(ctx) {
         state.awakeUntil = until
         state.forcedBy = member
         writeSleepStateOf(member, state)
+        // 她是"镜子"的根源：状态文件由巡守每 tick 重写，工具改了状态后不刷它，最多落后一分钟。
+        // 改状态的人顺手刷一次，读的人就不用等下一拍。
+        try { writeSleepStatus() } catch {}
         sleepLog('sleep-clear', `member=${member} awakeUntil=${until ?? ''} by=self`)
         return { awakeUntil: until ?? '', changed: true }
       },
@@ -2509,15 +2509,26 @@ async function watchOne(member, st) {
       const wid = `wl-${String(job.at ?? '').replace(':', '')}-${job.key}`
       const counts = wakeCountsOf(member.key)
       const gate = `pass(hour=${counts.hour}/${WAKE.perHour},day=${counts.day}/${WAKE.perDay})`
-      const dueAt = Date.now()
-      st.lastTry = { wid, at: dueAt }
+      // 2026-11-14 小肥鱼：`lag=0s` 是误导——它原来量的是"决定→插入"，不是"到点→投递"。
+      // 她提这个字段时没写清是哪一段（自己埋的歧义）。现在 `lag` 一律指"到点→投递"：
+      // 到点时刻从 job.at（HH:MM）算回来；算不出来（坏形状）才退回"现在"，并在账上标 `lag-unknown`。
+      const dueAt = (() => {
+        const m = /^(\d{1,2}):(\d{2})$/.exec(String(job.at ?? ''));
+        if (!m) return null;
+        const d = new Date();
+        d.setHours(Number(m[1]), Number(m[2]), 0, 0);
+        // 计划表里的点是"今天的 HH:MM"；如果算出来比现在晚 12 小时以上，那它其实是昨天的点。
+        if (d.getTime() > Date.now() + 12 * 3600_000) d.setDate(d.getDate() - 1);
+        return d.getTime();
+      })();
+      st.lastTry = { wid, at: Date.now() }
       // 同一条 plan 的窗口有两分钟（tick 60s + 窗口 1 分钟），wake-try 每个 wid 只写一次。
       const firstTry = st.triedWid !== wid
       st.triedWid = wid
       // 她要求"就在做决定那一刻写，别事后补"：事后补的只能证明结果，证明不了当时判的是什么。
       if (firstTry) watchmanLog(
         'wake-try',
-        `wid=${wid} why=plan:${job.key} to=${member.key} gate=${gate} hb-age=${hbAge === null ? 'none' : `${hbAge}s`} deliver=${awake ? 'msg' : 'push'}`,
+        `wid=${wid} why=plan:${job.key} to=${member.key} gate=${gate} hb-age=${hbAge === null ? 'none' : `${hbAge}s`} deliver=${awake ? 'msg' : 'push'} at=${job.at ?? '?'}`,
       )
 
       const totalNow = totalWakesToday()
@@ -2539,7 +2550,12 @@ async function watchOne(member, st) {
         try {
           // s='watch'：机器发的话必须说明自己不是人亲口说的。
           say('lee', member.key, text, 'group', 'watch')
-          watchmanLog('woke', `wid=${wid} trigger=plan lag=${Math.round((Date.now() - dueAt) / 1000)}s inserted=1`)
+          watchmanLog(
+            'woke',
+            dueAt === null
+              ? `wid=${wid} trigger=plan lag-unknown inserted=1`
+              : `wid=${wid} trigger=plan lag=${Math.round((Date.now() - dueAt) / 1000)}s inserted=1`,
+          )
           markWake(member.key, 'plan')
         } catch (error) {
           watchmanLog(
