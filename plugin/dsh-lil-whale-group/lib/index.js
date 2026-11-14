@@ -158,7 +158,9 @@ const WAKES = join(GROUP_DIR, 'wake-state.json')
 const WATCH = {
   intervalMs: 60_000,
   port: CFG.selfPort,
-  maxWakesPerDay: 8,
+  // 巡守推门（计划 / 条件）的上限：这是"它替她推门"的次数，不是聊天。
+  // 2026-11-15 从 8 提到 24，让一天里多次条件触发不用抢额度。
+  maxWakesPerDay: numSetting(CFG.watch?.maxWakesPerDay, 24),
   maxConsecutiveFailures: 3,
 }
 const SELF_HOME = CFG.selfHome
@@ -1025,16 +1027,26 @@ function watchedMembers() {
 // 现在留空 —— 会话名由 pins/名册决定，不在这里写死（安装流程详解 §11-g）。
 const CONVERSATIONS = {}
 
+// 闸的数值可以从 lil-whale.config.json 的 `wake` / `watch` 覆盖（2026-11-15 他的要求：
+// 聊天热的时候别让闸把场子聊冷）。默认值比旧值宽得多，但一个都没取消——
+// 闸是用来防跑飞的，不是用来防聊天的。睡不睡由鱼自己决定（`plan\sleep.json`），不在这里。
+function numSetting(value, fallback) {
+  const n = Number(value)
+  return Number.isFinite(n) && n >= 0 ? n : fallback
+}
+
 const WAKE = {
   intervalMs: 1000,      // 扫得勤一点，debounce 才有分辨率
   quietMs: 3000,         // 最后一条之后再安静这么久才发车（她的提议）
   maxWaitMs: 10000,      // 一直在来也不能一直憋着
   quietFromHour: 0,     // 他 2026-11-09 定：静默段 00:00–08:00（原 02:00）
   quietToHour: 8,
-  cooldownSec: 60,
-  perHour: 12,
-  perDay: 60,
-  totalPerDay: 120,      // 全池今天加起来的上限（每条鱼各自还有 perHour/perDay）
+  // 2026-11-15：聊天路径的三条闸放宽（旧值 60 / 12 / 60 / 120）。
+  // 现场：三个人连着聊，十几分钟就把"每小时 12 次"撞满了，消息被扣到下一小时。
+  cooldownSec: numSetting(CFG.wake?.cooldownSec, 15),
+  perHour: numSetting(CFG.wake?.perHour, 40),
+  perDay: numSetting(CFG.wake?.perDay, 200),
+  totalPerDay: numSetting(CFG.wake?.totalPerDay, 400),  // 全池今天加起来的上限（每条鱼各自还有 perHour/perDay）
   backlogTier: 8,        // 积压超过这个数，唤醒词换成"先看最后三条"
 }
 const BOOT_AT = Date.now() // 本进程起来多久了：太早挂载会挂出没有工具的空壳
@@ -1401,9 +1413,20 @@ function dmReadableOf(a, b) {
 }
 
 /** 可读投影里怎么表示"这条带图"。群和私聊同一套写法，读的人不用记两种。 */
-function readableBodyOf(text, image) {
-  if (image === null) return text
-  return `（图片 images/${image.month}/${image.id}.${image.ext}）${text === '' ? '' : `\n\n${text}`}`
+/** 把 image / images 两种形状归一成一个数组（多图 2026-11-15 起）。 */
+function normalizeImageList(image, images) {
+  const list = []
+  for (const item of [image, ...(Array.isArray(images) ? images : (images ? [images] : []))]) {
+    if (item !== null && typeof item === 'object') list.push(item)
+  }
+  return list
+}
+
+function readableBodyOf(text, images) {
+  const list = normalizeImageList(null, images)
+  if (list.length === 0) return text
+  const marks = list.map((image) => `（图片 images/${image.month}/${image.id}.${image.ext}）`).join('\n')
+  return `${marks}${text === '' ? '' : `\n\n${text}`}`
 }
 
 /**
@@ -1478,11 +1501,12 @@ function imagePathOf(image) {
   return candidates.find((p) => existsSync(p)) ?? null
 }
 
-function sayPrivate(from, to, text, image = null) {
+function sayPrivate(from, to, text, image = null, images = null) {
   mkdirSync(DM_DIR, { recursive: true })
+  const list = normalizeImageList(image, images)
   const record = {
     ts: new Date().toISOString(), from, to, text, kind: 'dm', channel: 'dm',
-    ...(image === null ? {} : { image }),
+    ...(list.length === 0 ? {} : (list.length === 1 ? { image: list[0] } : { images: list })),
   }
   appendFileSync(dmFileOf(from, to), JSON.stringify(record) + '\n', 'utf8')
   // 可读投影：先落 jsonl 再写 .md（顺序和群一样）。两份都在同一个目录里，
@@ -1492,39 +1516,40 @@ function sayPrivate(from, to, text, image = null) {
   if (!existsSync(readable)) {
     writeFileSync(readable, `# 私聊 · ${labelOf(x)} / ${labelOf(y)}\n\n`, 'utf8')
   }
-  appendFileSync(readable, `**${stamp()} · ${labelOf(from)}**\n\n${readableBodyOf(text, image)}\n\n`, 'utf8')
+  appendFileSync(readable, `**${stamp()} · ${labelOf(from)}**\n\n${readableBodyOf(text, list)}\n\n`, 'utf8')
   return record
 }
 
-function say(from, to, text, channel = 'group', s = '', toSeat = '', image = null) {
+function say(from, to, text, channel = 'group', s = '', toSeat = '', image = null, images = null) {
   ensureDir()
+  const list = normalizeImageList(image, images)
   // 只追加的文件删不掉一行，所以空正文绝不能落盘。
   // 现场（2026-11-11 16:23）：一条没有 text 的记录进了 messages.jsonl，
   // 在 群.md 里显示成 undefined —— 一个空对象，读起来却像一句话。
   const body = typeof text === 'string' ? text.trim() : ''
   // 一条消息至少要有一件东西：一段话或一张图。两个都空，仍然是"空消息"。
-  if (body === '' && image === null) throw new Error('群消息不能没有内容（text 和 image 都是空的，拒绝写入）')
+  if (body === '' && list.length === 0) throw new Error('群消息不能没有内容（text 和 image 都是空的，拒绝写入）')
   // 2026-11-12 20:20 改：以前 `to === 'fabian'` 也算私聊，于是"在群里对 Fabian 说"这条路不存在了
   // （Fabian 当场指出）。现在两个维度分开：
   //   to      = 这句话在**哪间屋**里（群里公开 / 只有两个人看见）
   //   channel = 屋里还有没有别人（group 默认 / dm 只有对象一个人）
   // 所以 `to:"fabian"` + 默认 group = 群里公开对他说；私聊要显式 `channel:"dm"`。
   const isDm = channel === 'dm'
-  if (isDm) return { ...sayPrivate(from, to, body, image), channel: 'dm' }
+  if (isDm) return { ...sayPrivate(from, to, body, null, list), channel: 'dm' }
   const record = {
     ts: new Date().toISOString(), from, to, text: body, kind: 'say', channel: 'group',
     ...(s === '' ? {} : { s }),
     // 指名某一座位（同一个人的第二段会话）：只有那一段会被叫醒。
     // 不加这个字段 = 叫"这个人"，谁空谁应（仍然只叫一次）。
     ...(toSeat === '' ? {} : { toSeat }),
-    // 图片（可选）：只记定位信息，字节在 images\ 下。
-    ...(image === null ? {} : { image }),
+    // 图片（可选）：只记定位信息，字节在 images\ 下。1 张写 image、多张写 images。
+    ...(list.length === 0 ? {} : (list.length === 1 ? { image: list[0] } : { images: list })),
   }
   appendFileSync(MESSAGES, JSON.stringify(record) + '\n', 'utf8')
   // 投影里带上收信人：指名和公开在纸上必须长得不一样，否则读记录的人学不到"可以指名"。
   // 2026-11-12 19:46 起：`**时间 · 谁 → 收信人**`，只有指名（to 是某个成员）才写箭头。
   const toLabel = to !== '' && to !== 'all' ? ` → ${labelOf(to)}` : ''
-  appendFileSync(READABLE, `**${stamp()} · ${labelOf(from)}${provenanceOf(s)}${toLabel}**\n\n${readableBodyOf(body, image)}\n\n`, 'utf8')
+  appendFileSync(READABLE, `**${stamp()} · ${labelOf(from)}${provenanceOf(s)}${toLabel}**\n\n${readableBodyOf(body, list)}\n\n`, 'utf8')
   return { ...record, channel: 'group' }
 }
 
@@ -2374,7 +2399,8 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
   // 而"截断的引文"和"完整的引文"看起来一样 —— 被截的那条她没法核，只能说"收到"。
   const PREVIEW_MAX = 120
   const previewOf = (record) => {
-    const body = `${record.image ? '（图片）' : ''}${record.text}`
+    const hasImage = record.image || (Array.isArray(record.images) && record.images.length > 0)
+  const body = `${hasImage ? '（图片）' : ''}${record.text}`
     return body.length > PREVIEW_MAX ? `${body.slice(0, PREVIEW_MAX)}…（已截断，全文在群文件里）` : body
   }
   const preview = incoming

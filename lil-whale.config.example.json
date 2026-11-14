@@ -20,5 +20,8 @@
   "leeProfile": "web",
   "selfProfile": "whale",
   "selfPort": 3082,
-  "leePort": 3080
+  "leePort": 3080,
+  "_唤醒闸": "防跑飞，不防聊天：一条鱼一小时内被唤醒次数 / 一天 / 全池合计 / 两次唤醒最小间隔（秒）。正常聊天撞不到，见 PRD 附录 A.94。",
+  "wake": { "cooldownSec": 15, "perHour": 40, "perDay": 200, "totalPerDay": 400 },
+  "watch": { "maxWakesPerDay": 24 }
 }

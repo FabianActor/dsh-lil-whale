@@ -126,6 +126,19 @@ function storeImageDataUrl(dataUrl) {
  * 没有图返回 null；指针无效抛错，错误码 unknown-image。
  * 两处（群发 / 私聊）共用，别各写一份——各写一份就会各漂各的。
  */
+/** 多图（2026-11-15）：payload.images 可以是数组，也可以传单张 payload.image。 */
+function imageFieldsOf(rawImages) {
+  const list = Array.isArray(rawImages) ? rawImages : (rawImages ? [rawImages] : [])
+  return list.map((rawImage) => imageFieldOf(rawImage)).filter(Boolean)
+}
+
+/** 投影正文：和宿主 readableBodyOf 逐字一致（重建器靠这个对 0 差异）。 */
+function readableBodyWithImages(text, images) {
+  if (!Array.isArray(images) || images.length === 0) return text
+  const marks = images.map((image) => `（图片 images/${image.month}/${image.id}.${image.ext}）`).join('\n')
+  return `${marks}${text === '' ? '' : `\n\n${text}`}`
+}
+
 function imageFieldOf(rawImage) {
   if (!rawImage || typeof rawImage !== 'object') return null
   const found = imagePathOf(rawImage.id, rawImage.ext, rawImage.path, rawImage.algo)
@@ -347,6 +360,7 @@ function readMessages(file = MESSAGES) {
         ...(record.channel ? { channel: record.channel } : {}),
         ...(record.toSeat ? { toSeat: record.toSeat } : {}),
         ...(record.image ? { image: record.image } : {}),
+        ...(Array.isArray(record.images) && record.images.length > 0 ? { images: record.images } : {}),
       })
     } catch {
       // 半截行（另一个进程正在写）——跳过，下一次轮询就整了
@@ -1067,15 +1081,16 @@ export function apply(ctx) {
       }
       const text = typeof payload?.text === 'string' ? payload.text.trim() : ''
       const to = payload?.to
-      // 图片（可选）：{ id, ext, bytes, month, path }，由 /group/api/image 先上传拿到。
-      let image = null
+      // 图片（可选，最多 4 张）：[{ id, ext, bytes, month, path }]，由 /group/api/image 先上传拿到。
+      // 2026-11-15：面板支持多图；记录里 1 张仍写 image、多张写 images（老读者不受影响）。
+      let images = []
       try {
-        image = imageFieldOf(payload?.image)
+        images = imageFieldsOf(payload?.images ?? payload?.image)
       } catch (error) {
         sendJson(res, 400, { error: 'unknown-image', detail: String(error?.message ?? error) })
         return
       }
-      if (!text && image === null) {
+      if (!text && images.length === 0) {
         sendJson(res, 400, { error: 'empty-message', detail: '至少要有文字或一张图片' })
         return
       }
@@ -1093,7 +1108,7 @@ export function apply(ctx) {
       const record = {
         ts: now.toISOString(), from: HUMAN_ID, to, text, kind: 'say', s: 'ui',
         ...(toSeat === '' ? {} : { toSeat }),
-        ...(image === null ? {} : { image }),
+        ...(images.length === 0 ? {} : (images.length === 1 ? { image: images[0] } : { images })),
       }
       try {
         // 宿主 say() 会先 ensureDir；面板这条路以前没建目录，group 被清掉后第一条消息 500。
@@ -1101,9 +1116,7 @@ export function apply(ctx) {
         appendFileSync(MESSAGES, JSON.stringify(record) + '\n', 'utf8')
         // 投影格式必须和宿主 say() 逐字一致（2026-11-12 19:46 起：指名时写「时间 · 谁 → 收信人」）。
         // 收信人写在投影里，是为了让"读记录"的人知道这条是在对谁说话——不写，指名和公开在纸上一样。
-        const body = image === null
-          ? text
-          : `（图片 images/${image.month}/${image.id}.${image.ext}）${text === '' ? '' : `\n\n${text}`}`
+        const body = readableBodyWithImages(text, images)
         const toLabel = to !== '' && to !== 'all' ? ` → ${LABEL[to] ?? to}` : ''
         appendFileSync(READABLE, `**${stamp(now)} · ${LABEL[HUMAN_ID] ?? HUMAN_ID}${toLabel}**\n\n${body}\n\n`, 'utf8')
       } catch (error) {
@@ -1151,15 +1164,15 @@ export function apply(ctx) {
         return
       }
       const text = typeof payload?.text === 'string' ? payload.text.trim() : ''
-      // 私聊一样能带图：字节和群聊共用 images\ 目录（同一张图两边只存一份）。
-      let image = null
+      // 私聊一样能带图（最多 4 张）：字节和群聊共用 images\ 目录（同一张图两边只存一份）。
+      let images = []
       try {
-        image = imageFieldOf(payload?.image)
+        images = imageFieldsOf(payload?.images ?? payload?.image)
       } catch (error) {
         sendJson(res, 400, { error: 'unknown-image', detail: String(error?.message ?? error) })
         return
       }
-      if (!text && image === null) {
+      if (!text && images.length === 0) {
         sendJson(res, 400, { error: 'empty-message', detail: '至少要有文字或一张图片' })
         return
       }
@@ -1171,7 +1184,7 @@ export function apply(ctx) {
       const now = new Date()
       const record = {
         ts: now.toISOString(), from: HUMAN_ID, to: peer, text, kind: 'dm', channel: 'dm',
-        ...(image === null ? {} : { image }),
+        ...(images.length === 0 ? {} : (images.length === 1 ? { image: images[0] } : { images })),
       }
       try {
         mkdirSync(DM_DIR, { recursive: true })
@@ -1183,9 +1196,7 @@ export function apply(ctx) {
           const [x, y] = [HUMAN_ID, peer].sort()
           appendFileSync(readable, `# 私聊 · ${LABEL[x] ?? x} / ${LABEL[y] ?? y}\n\n`, 'utf8')
         }
-        const dmBody = image === null
-          ? text
-          : `（图片 images/${image.month}/${image.id}.${image.ext}）${text === '' ? '' : `\n\n${text}`}`
+        const dmBody = readableBodyWithImages(text, images)
         appendFileSync(readable, `**${stamp(now)} · ${LABEL[HUMAN_ID] ?? HUMAN_ID}**\n\n${dmBody}\n\n`, 'utf8')
       } catch (error) {
         sendJson(res, 500, { error: 'write-failed', detail: String(error?.message ?? error) })

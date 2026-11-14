@@ -1,6 +1,6 @@
 {
   "name": "@fabianactor/dsh-lil-whale-group-ui",
-  "version": "1.6.3",
+  "version": "1.6.4",
   "private": true,
   "type": "module",
   "description": "群聊页面：侧边栏一个图标，点开是三条鱼的群（读写 lil-whale\\group\\messages.jsonl）",

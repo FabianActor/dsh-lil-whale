@@ -600,12 +600,30 @@ const imageUrlOf = (image) => {
   if (typeof image.algo === 'string' && image.algo !== '') params.set('algo', image.algo)
   return `/group/api/image?${params.toString()}`
 }
+// 换行：Enter 发送，Shift+Enter 换行。手动插入而不是靠浏览器默认——
+// 受控 textarea 上默认行为在部分输入法/组合状态下会被吃掉，这里只做一件事，不猜。
+function growTextarea(el) {
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${Math.min(el.scrollHeight, 220)}px`
+}
+function insertNewline(el, value, setValue) {
+  const start = el.selectionStart ?? value.length
+  const end = el.selectionEnd ?? start
+  const next = `${value.slice(0, start)}\n${value.slice(end)}`
+  setValue(next)
+  requestAnimationFrame(() => {
+    el.selectionStart = el.selectionEnd = start + 1
+    growTextarea(el)
+  })
+}
 function Bubble({ config, message, onMention, animate = false }) {
       // 只在挂载时决定「要不要动画」：否则后续每次重渲染都会让老消息重新弹一遍。
       const animateOnMount = useRef(animate).current
       // 点图片打开官方看图器（大图、点外面关）。
-      const [preview, setPreview] = useState(false)
-      const imageSrc = message.image ? imageUrlOf(message.image) : null
+      const [previewIndex, setPreviewIndex] = useState(-1)
+      const images = Array.isArray(message.images) ? message.images : (message.image ? [message.image] : [])
+      const imageSrcs = images.map((image) => imageUrlOf(image))
       const humanId = config?.humanId ?? 'fabian'
   const mine = message.from === humanId
       const who = nameOf(config, message.from, message.s)
@@ -653,28 +671,27 @@ function Bubble({ config, message, onMention, animate = false }) {
               animation: animateOnMount ? 'dshGroupRise 240ms cubic-bezier(.2,.8,.2,1) both' : undefined,
             },
               },
-              message.image
-                ? h('img', {
-                  src: imageSrc,
-                  alt: '图片',
-                  loading: 'lazy',
-                  onClick: () => setPreview(true),
-                  style: {
-                    display: 'block', maxWidth: 260, maxHeight: 260,
-                    borderRadius: 'var(--dsw-radius-md, 8px)', cursor: 'zoom-in',
-                    marginBottom: message.text ? 6 : 0,
-                  },
-                })
-                : null,
+              imageSrcs.map((src, index) => h('img', {
+                key: `img-${index}`,
+                src,
+                alt: '图片',
+                loading: 'lazy',
+                onClick: () => setPreviewIndex(index),
+                style: {
+                  display: 'block', maxWidth: 260, maxHeight: 260,
+                  borderRadius: 'var(--dsw-radius-md, 8px)', cursor: 'zoom-in',
+                  marginBottom: message.text || index < imageSrcs.length - 1 ? 6 : 0,
+                },
+              })),
               message.text ? h(SafeMarkdown, { text: message.text }) : null),
         )),
         // 看图器挂在气泡外面：它是 portal 到 body 的，放哪都一样，但放在气泡里会让气泡多一层嵌套。
-        preview && imageSrc
+        previewIndex >= 0 && imageSrcs[previewIndex]
           ? h(ImageLightbox, {
-            src: imageSrc,
+            src: imageSrcs[previewIndex],
             alt: '图片',
             labels: { dialog: '图片', close: '关闭' },
-            onClose: () => setPreview(false),
+            onClose: () => setPreviewIndex(-1),
           })
           : null,
       )
@@ -920,29 +937,45 @@ function Bubble({ config, message, onMention, animate = false }) {
      * 群聊和私聊共用：只收图片、限 8 MB，超了直接说清楚，不静默丢掉。
      * 返回 { pendingImage, setPendingImage, imageBusy, attachImage, fileRef }。
      */
+    // 一条消息最多带几张图：多图是为了"一次说完一件事"，不是图库。
+    const MAX_IMAGES = 4
     function useImageAttach(setError) {
-      const [pendingImage, setPendingImage] = useState(null)
+      const [pendingImages, setPendingImages] = useState([])
       const [imageBusy, setImageBusy] = useState(false)
       const fileRef = useRef(null)
-      const attachImage = useCallback(async (file) => {
-        if (!file) return
-        if (!/^image\//.test(file.type)) {
-          setError('只能发图片（png / jpg / webp / gif）')
-          return
+      const pendingRef = useRef([])
+      useEffect(() => { pendingRef.current = pendingImages }, [pendingImages])
+      // files 可以是 File、FileList 或数组：选图 / 粘贴 / 拖入三条路最后都走这里。
+      const attachImages = useCallback(async (files) => {
+        const list = files instanceof File ? [files] : Array.from(files ?? []).filter(Boolean)
+        if (list.length === 0) return
+        for (const file of list) {
+          if (!/^image\//.test(file.type)) {
+            setError('只能发图片（png / jpg / webp / gif）')
+            return
+          }
+          if (file.size > 8 * 1024 * 1024) {
+            setError(`图片太大：${(file.size / 1048576).toFixed(1)} MB，上限 8 MB`)
+            return
+          }
         }
-        if (file.size > 8 * 1024 * 1024) {
-          setError(`图片太大：${(file.size / 1048576).toFixed(1)} MB，上限 8 MB`)
+        const room = MAX_IMAGES - pendingRef.current.length
+        if (list.length > room) {
+          setError(`一条消息最多带 ${MAX_IMAGES} 张图（还能加 ${Math.max(room, 0)} 张）`)
           return
         }
         setImageBusy(true)
         try {
-          const dataUrl = await new Promise((resolve, reject) => {
-            const reader = new FileReader()
-            reader.onload = () => resolve(String(reader.result ?? ''))
-            reader.onerror = () => reject(new Error('这张图读不出来'))
-            reader.readAsDataURL(file)
-          })
-          setPendingImage(dataUrl)
+          const urls = []
+          for (const file of list) {
+            urls.push(await new Promise((resolve, reject) => {
+              const reader = new FileReader()
+              reader.onload = () => resolve(String(reader.result ?? ''))
+              reader.onerror = () => reject(new Error('这张图读不出来'))
+              reader.readAsDataURL(file)
+            }))
+          }
+          setPendingImages((current) => [...current, ...urls])
           setError(null)
         } catch (e) {
           setError(String(e?.message ?? e))
@@ -950,7 +983,7 @@ function Bubble({ config, message, onMention, animate = false }) {
           setImageBusy(false)
         }
       }, [setError])
-      return { pendingImage, setPendingImage, imageBusy, attachImage, fileRef }
+      return { pendingImages, setPendingImages, imageBusy, attachImages, fileRef }
     }
 
     function useFollowTail(scrollRef, deps) {
@@ -1151,7 +1184,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       // 整页白屏（2026-11-12 他报的 bug：私聊页面白屏）。
       const [error, setError] = useState(null)
       // 私聊一样能发图：和群聊共用 useImageAttach，只是发出去的地址不同。
-      const { pendingImage, setPendingImage, imageBusy, attachImage, fileRef } = useImageAttach(setError)
+      const { pendingImages, setPendingImages, imageBusy, attachImages, fileRef } = useImageAttach(setError)
       // 切到谁，就把他/她那段没写完的草稿捞回来（每个人一份，存在这台机器上）。
       useEffect(() => {
         if (activePeer === null) return
@@ -1273,29 +1306,29 @@ function Bubble({ config, message, onMention, animate = false }) {
 
       const submit = useCallback(async () => {
         const value = text.trim()
-        if ((value === '' && pendingImage === null) || sending || activePeer === null) return
+        if ((value === '' && pendingImages.length === 0) || sending || activePeer === null) return
         setSending(true)
         try {
-          let image = null
-          if (pendingImage !== null) {
+          const images = []
+          for (const dataUrl of pendingImages) {
             const uploaded = await fetch('/group/api/image', {
               method: 'POST',
               headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ dataUrl: pendingImage }),
+              body: JSON.stringify({ dataUrl }),
             })
             const result = await uploaded.json().catch(() => null)
             if (!uploaded.ok) throw new Error(result?.detail ?? `图片上传失败 HTTP ${uploaded.status}`)
-            image = result?.image ?? null
+            if (result?.image) images.push(result.image)
           }
           const response = await fetch('/group/api/dm', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ peer: activePeer, text: value, ...(image === null ? {} : { image }) }),
+            body: JSON.stringify({ peer: activePeer, text: value, ...(images.length === 0 ? {} : { images }) }),
           })
           if (!response.ok) throw new Error(`HTTP ${response.status}`)
           setText('')
           writeDraft(dmDraftKeyOf(activePeer), '')
-          setPendingImage(null)
+          setPendingImages([])
           await loadMessages()
           await loadContacts()
         } catch (e) {
@@ -1303,7 +1336,7 @@ function Bubble({ config, message, onMention, animate = false }) {
         } finally {
           setSending(false)
         }
-      }, [text, sending, activePeer, loadMessages, loadContacts, pendingImage])
+      }, [text, sending, activePeer, loadMessages, loadContacts, pendingImages.length])
 
       const contactList = contacts.length === 0
         ? h('div', { style: { padding: '16px 14px', fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } }, '还没有能私下说话的人。')
@@ -1439,23 +1472,24 @@ function Bubble({ config, message, onMention, animate = false }) {
             gap: 10, padding: '10px 12px 8px',
           },
         },
-          pendingImage !== null
-            ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
-              h('img', {
-                src: pendingImage,
-                alt: '待发送的图片',
-                style: { maxHeight: 72, maxWidth: 120, borderRadius: 8, display: 'block' },
-              }),
-              h('button', {
-                onClick: () => setPendingImage(null),
-                title: '去掉这张图',
-                style: {
-                  width: 20, height: 20, borderRadius: '50%', border: 'none',
-                  background: 'var(--dsw-alias-bg-layer-3, rgba(0,0,0,0.06))',
-                  color: 'var(--dsw-alias-label-tertiary)', fontSize: 13, lineHeight: 1,
-                  padding: 0, cursor: 'pointer', display: 'grid', placeItems: 'center',
-                },
-              }, '×'),
+          pendingImages.length > 0
+            ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
+              ...pendingImages.map((src, index) => h('div', { key: `pending-${index}`, style: { position: 'relative' } },
+                h('img', {
+                  src,
+                  alt: '待发送的图片',
+                  style: { maxHeight: 72, maxWidth: 120, borderRadius: 8, display: 'block' },
+                }),
+                h('button', {
+                  onClick: () => setPendingImages((current) => current.filter((_, i) => i !== index)),
+                  title: '去掉这张图',
+                  style: {
+                    position: 'absolute', top: -6, right: -6,
+                    width: 20, height: 20, borderRadius: '50%', border: 'none',
+                    background: 'rgba(0,0,0,0.72)', color: '#fff', fontSize: 13, lineHeight: 1,
+                    padding: 0, cursor: 'pointer', display: 'grid', placeItems: 'center',
+                  },
+                }, '×'))),
               h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } },
                 imageBusy ? '读取中…' : '只有你们两个看得见'))
             : null,
@@ -1464,6 +1498,7 @@ function Bubble({ config, message, onMention, animate = false }) {
             value: text,
             onChange: (event) => {
               setText(event.target.value)
+              growTextarea(event.currentTarget)
               if (activePeer !== null && !composingRef.current) writeDraft(dmDraftKeyOf(activePeer), event.target.value)
             },
             onCompositionStart: () => { composingRef.current = true },
@@ -1477,7 +1512,7 @@ function Bubble({ config, message, onMention, animate = false }) {
               for (const item of Array.from(items)) {
                 if (item.kind === 'file' && /^image\//.test(item.type)) {
                   event.preventDefault()
-                  void attachImage(item.getAsFile())
+                  void attachImages(item.getAsFile())
                   return
                 }
               }
@@ -1486,12 +1521,17 @@ function Bubble({ config, message, onMention, animate = false }) {
               if (Array.from(event.dataTransfer?.types ?? []).includes('Files')) event.preventDefault()
             },
             onDrop: (event) => {
-              const file = event.dataTransfer?.files?.[0]
-              if (!file) return
+              const files = event.dataTransfer?.files
+              if (!files || files.length === 0) return
               event.preventDefault()
-              void attachImage(file)
+              void attachImages(files)
             },
             onKeyDown: (event) => {
+              if (event.key === 'Enter' && event.shiftKey) {
+                event.preventDefault()
+                insertNewline(event.currentTarget, text, setText)
+                return
+              }
               if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault()
                 void submit()
@@ -1534,23 +1574,24 @@ function Bubble({ config, message, onMention, animate = false }) {
               ref: fileRef,
               type: 'file',
               accept: 'image/png,image/jpeg,image/webp,image/gif',
+                  multiple: true,
               style: { display: 'none' },
               onChange: (event) => {
-                const file = event.target.files?.[0]
+                const files = event.target.files
                 event.target.value = ''
-                void attachImage(file)
+                void attachImages(files)
               },
             }),
             h('div', { style: { flex: 1, fontSize: 11, color: 'var(--dsw-alias-label-caption)' } }, '不进群记录，只有你们两个看得见'),
             h('button', {
               onClick: () => { void submit() },
-              disabled: sending || (text.trim() === '' && pendingImage === null),
+              disabled: sending || (text.trim() === '' && pendingImages.length === 0),
               title: t.send,
               style: {
                 flex: '0 0 32px', width: 32, height: 32, padding: 0, border: 'none',
                 background: 'transparent', position: 'relative',
-                cursor: sending || (text.trim() === '' && pendingImage === null) ? 'not-allowed' : 'pointer',
-                opacity: sending || (text.trim() === '' && pendingImage === null) ? 0.4 : 1,
+                cursor: sending || (text.trim() === '' && pendingImages.length === 0) ? 'not-allowed' : 'pointer',
+                opacity: sending || (text.trim() === '' && pendingImages.length === 0) ? 0.4 : 1,
                 display: 'grid', placeItems: 'center',
               },
             },
@@ -1628,7 +1669,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       const [error, setError] = useState(null)
       const [sending, setSending] = useState(false)
       // 待发送的图（data URL）。上传在 submit 里做，这里只存"用户选了哪张"。
-      const { pendingImage, setPendingImage, imageBusy, attachImage, fileRef } = useImageAttach(setError)
+      const { pendingImages, setPendingImages, imageBusy, attachImages, fileRef } = useImageAttach(setError)
       // 群聊草稿：改一个字就存，切走 / 刷新 / 重新进页面都还在。
       // 发出去以后 text 变空串，这里顺手把草稿删掉（见 writeDraft 的空值分支）。
       // 输入法选字期间不写：那时 text 里是 "xiaofei"，存下去就是一份假草稿。
@@ -1817,29 +1858,29 @@ function Bubble({ config, message, onMention, animate = false }) {
       }, [])
       const submit = useCallback(async () => {
         const value = text.trim()
-        if ((value === '' && pendingImage === null) || sending) return
+        if ((value === '' && pendingImages.length === 0) || sending) return
         setSending(true)
         try {
           // 图先落盘拿到 id/x/ext，消息里只记定位信息（字节不进 jsonl）。
-          let image = null
-          if (pendingImage !== null) {
+          const images = []
+          for (const dataUrl of pendingImages) {
             const uploaded = await fetch('/group/api/image', {
               method: 'POST',
               headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ dataUrl: pendingImage }),
+              body: JSON.stringify({ dataUrl }),
             })
             const result = await uploaded.json().catch(() => null)
             if (!uploaded.ok) throw new Error(result?.detail ?? `图片上传失败 HTTP ${uploaded.status}`)
-            image = result?.image ?? null
+            if (result?.image) images.push(result.image)
           }
           const { base, seat } = splitTarget(to)
           const endpoint = tab === 'dm' ? '/group/api/dm' : '/group/api/send'
           const body = tab === 'dm'
-            ? { text: value, ...(image === null ? {} : { image }) }
+            ? { text: value, ...(images.length === 0 ? {} : { images }) }
             : {
               to: base, text: value,
               ...(seat === '' ? {} : { toSeat: seat }),
-              ...(image === null ? {} : { image }),
+              ...(images.length === 0 ? {} : { images }),
             }
           const response = await fetch(endpoint, {
             method: 'POST',
@@ -1848,14 +1889,14 @@ function Bubble({ config, message, onMention, animate = false }) {
           })
           if (!response.ok) throw new Error(`HTTP ${response.status}`)
           setText('')
-          setPendingImage(null)
+          setPendingImages([])
           await refresh()
         } catch (e) {
           setError(String(e?.message ?? e))
         } finally {
           setSending(false)
         }
-      }, [text, to, sending, refresh, tab, pendingImage])
+      }, [text, to, sending, refresh, tab, pendingImages.length])
 
       // 两档忙：正在回这一段 / 在别处忙。群聊与私聊同一套文案。
       // 名单从配置（名册）来 —— 写死 lee/whale 时，新鱼的"正在忙"永远不会显示（A.32 同一个病）。
@@ -2099,30 +2140,31 @@ function Bubble({ config, message, onMention, animate = false }) {
                         display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
                       },
                     }, '×'))),
-              pendingImage !== null
-                ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
-                  h('img', {
-                    src: pendingImage,
-                    alt: '待发送的图片',
-                    style: { maxHeight: 72, maxWidth: 120, borderRadius: 8, display: 'block' },
-                  }),
-                  h('button', {
-                    onClick: () => setPendingImage(null),
-                    title: '去掉这张图',
-                    style: {
-                      width: 20, height: 20, borderRadius: '50%', border: 'none',
-                      background: 'var(--dsw-alias-bg-layer-3, rgba(0,0,0,0.06))',
-                      color: 'var(--dsw-alias-label-tertiary)', fontSize: 13, lineHeight: 1,
-                      padding: 0, cursor: 'pointer', display: 'grid', placeItems: 'center',
-                    },
-                  }, '×'),
+              pendingImages.length > 0
+                ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
+                  ...pendingImages.map((src, index) => h('div', { key: `pending-${index}`, style: { position: 'relative' } },
+                    h('img', {
+                      src,
+                      alt: '待发送的图片',
+                      style: { maxHeight: 72, maxWidth: 120, borderRadius: 8, display: 'block' },
+                    }),
+                    h('button', {
+                      onClick: () => setPendingImages((current) => current.filter((_, i) => i !== index)),
+                      title: '去掉这张图',
+                      style: {
+                        position: 'absolute', top: -6, right: -6,
+                        width: 20, height: 20, borderRadius: '50%', border: 'none',
+                        background: 'rgba(0,0,0,0.72)', color: '#fff', fontSize: 13, lineHeight: 1,
+                        padding: 0, cursor: 'pointer', display: 'grid', placeItems: 'center',
+                      },
+                    }, '×'))),
                   h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } },
                     imageBusy ? '读取中…' : '发出去就进群，删不掉'))
                 : null,
               h('textarea', {
                 ref: inputRef,
                 value: text,
-                onChange: (event) => setText(event.target.value),
+                onChange: (event) => { setText(event.target.value); growTextarea(event.currentTarget) },
                 onCompositionStart: () => { composingRef.current = true },
                 onCompositionEnd: (event) => {
                   composingRef.current = false
@@ -2134,7 +2176,7 @@ function Bubble({ config, message, onMention, animate = false }) {
                   for (const item of Array.from(items)) {
                     if (item.kind === 'file' && /^image\//.test(item.type)) {
                       event.preventDefault()
-                      void attachImage(item.getAsFile())
+                      void attachImages(item.getAsFile())
                       return
                     }
                   }
@@ -2143,12 +2185,17 @@ function Bubble({ config, message, onMention, animate = false }) {
                   if (Array.from(event.dataTransfer?.types ?? []).includes('Files')) event.preventDefault()
                 },
                 onDrop: (event) => {
-                  const file = event.dataTransfer?.files?.[0]
-                  if (!file) return
+                  const files = event.dataTransfer?.files
+                  if (!files || files.length === 0) return
                   event.preventDefault()
-                  void attachImage(file)
+                  void attachImages(files)
                 },
                 onKeyDown: (event) => {
+                  if (event.key === 'Enter' && event.shiftKey) {
+                    event.preventDefault()
+                    insertNewline(event.currentTarget, text, setText)
+                    return
+                  }
                   if (event.key === 'Enter' && !event.shiftKey) {
                     event.preventDefault()
                     void submit()
@@ -2207,24 +2254,25 @@ function Bubble({ config, message, onMention, animate = false }) {
                   ref: fileRef,
                   type: 'file',
                   accept: 'image/png,image/jpeg,image/webp,image/gif',
+                  multiple: true,
                   style: { display: 'none' },
                   onChange: (event) => {
-                    const file = event.target.files?.[0]
+                    const files = event.target.files
                     event.target.value = ''
-                    void attachImage(file)
+                    void attachImages(files)
                   },
                 }),
                 h('div', { style: { flex: 1, fontSize: 11, color: 'var(--dsw-alias-label-caption)' } },
                   to === 'all' ? t.groupOnly : t.toOne(targetName(config, to))),
                 h('button', {
                   onClick: () => { void submit() },
-                  disabled: sending || (text.trim() === '' && pendingImage === null),
+                  disabled: sending || (text.trim() === '' && pendingImages.length === 0),
                   title: t.send,
                   style: {
                     flex: '0 0 32px', width: 32, height: 32, padding: 0, border: 'none',
                     background: 'transparent', position: 'relative',
-                    cursor: sending || (text.trim() === '' && pendingImage === null) ? 'not-allowed' : 'pointer',
-                    opacity: sending || (text.trim() === '' && pendingImage === null) ? 0.4 : 1,
+                    cursor: sending || (text.trim() === '' && pendingImages.length === 0) ? 'not-allowed' : 'pointer',
+                    opacity: sending || (text.trim() === '' && pendingImages.length === 0) ? 0.4 : 1,
                     display: 'grid', placeItems: 'center', transition: 'opacity 120ms ease',
                   },
                 },
@@ -3263,7 +3311,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v41 · pond-pending:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v42 · multiline-multi-image:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')

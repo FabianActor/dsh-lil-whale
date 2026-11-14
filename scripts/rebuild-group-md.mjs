@@ -104,17 +104,27 @@ for (const line of raw.split('\n')) {
 }
 
 // 没有正文、也没有图的记录不参与重建：写进正文就等于编一句话，那比缺一段更糟。
+// 多图（2026-11-15）：记录里 1 张是 image、多张是 images。
+const imageListOf = (record) => {
+  const list = []
+  if (record?.image !== null && typeof record?.image === 'object') list.push(record.image)
+  if (Array.isArray(record?.images)) {
+    for (const item of record.images) {
+      if (item !== null && typeof item === 'object') list.push(item)
+    }
+  }
+  return list
+}
 const hasBody = (record) => {
   const text = typeof record?.text === 'string' ? record.text.trim() : ''
-  const image = record?.image !== null && typeof record?.image === 'object'
-  return text !== '' || image
+  return text !== '' || imageListOf(record).length > 0
 }
 const emptyText = records.filter((r) => !hasBody(r))
 
 function blockOf(record) {
   const text = typeof record?.text === 'string' ? record.text.trim() : ''
-  const image = record?.image !== null && typeof record?.image === 'object' ? record.image : null
-  if (text === '' && image === null) return ''
+  const images = imageListOf(record)
+  if (text === '' && images.length === 0) return ''
   const who = labelAt(String(record?.from ?? ''), record?.ts)
   // 来源标注：机器发的（s 不是会话 id）要在纸上写出来，否则和人说的长得一样。
   const origin = provenanceOf(record?.s)
@@ -124,9 +134,9 @@ function blockOf(record) {
   const toLabel = to !== '' && to !== 'all' ? ` → ${labelAt(to, record?.ts)}` : ''
   // 带图的记录也要重建出来 —— 2026-11-12 现场：只有图没有字的消息被这里整条跳过，
   // 于是 群.md 里有那行、重建结果里没有，对不上就成了"说不清的差异"。
-  const body = image === null
+  const body = images.length === 0
     ? text
-    : `（图片 images/${image.month}/${image.id}.${image.ext}）${text === '' ? '' : `\n\n${text}`}`
+    : `${images.map((image) => `（图片 images/${image.month}/${image.id}.${image.ext}）`).join('\n')}${text === '' ? '' : `\n\n${text}`}`
   return `**${stampOf(String(record?.ts ?? ''))} · ${who}${origin}${toLabel}**\n\n${body}\n`
 }
 
@@ -290,12 +300,12 @@ if (existsSync(DM_DIR)) {
     }
     const dmBlocks = dmRecords.map((record) => {
       const text = typeof record?.text === 'string' ? record.text.trim() : ''
-      const image = record?.image !== null && typeof record?.image === 'object' ? record.image : null
-      if (text === '' && image === null) return ''
+      const images = imageListOf(record)
+      if (text === '' && images.length === 0) return ''
       const who = labelAt(String(record?.from ?? ''), record?.ts)
-      const body = image === null
+      const body = images.length === 0
         ? text
-        : `（图片 images/${image.month}/${image.id}.${image.ext}）${text === '' ? '' : `\n\n${text}`}`
+        : `${images.map((image) => `（图片 images/${image.month}/${image.id}.${image.ext}）`).join('\n')}${text === '' ? '' : `\n\n${text}`}`
       return `**${stampOf(String(record?.ts ?? ''))} · ${who}**\n\n${body}\n`
     }).filter(Boolean)
     const dmRebuilt = `# 私聊 · ${LABEL[x] ?? x} / ${LABEL[y] ?? y}\n\n` + dmBlocks.join('\n')

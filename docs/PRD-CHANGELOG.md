@@ -4,6 +4,13 @@
 > 它与两个 npm 包的版本（各自 `package.json` 里的 semver，如 `1.2.0`）是**两条线**：包版本只在功能或破坏性变化、发布时才动。
 > 编号从 r1 开始（第一稿就是 r1）。2026-11-13 之前这些号写作 `v1.0.NN`，本次统一改名，编号不变。
 
+## r110（2026-11-15 00:3x）
+
+- 新增 **附录 A.94 所有的闸：默认值要抬到"正常聊天永远撞不到"**：起因（小鱼丸一小时 12 次撞 `perHour`、消息扣住不丢、00:50:53 松开）、十道闸的改前/改后表、为什么留、三条判据、教训。
+- `plugin/dsh-lil-whale-group/lib/index.js`：`WAKE` 从 `CFG.wake` 读（cooldownSec 60→15、perHour 12→40、perDay 60→200、totalPerDay 120→400）；`WATCH.maxWakesPerDay` 从 `CFG.watch` 读（8→24）；新增 `numSetting()`。
+- 界面两修（`client build v42 · multiline-multi-image`）：Shift+Enter 换行 + 自增高；多图最多 4 张（选图/粘贴/拖入/缩略图/逐张删），记录 1 张写 `image`、多张写 `images`；宿主、UI 路由、重建器三处同改。
+- `lil-whale.config.example.json` 与 `docs\打包.md` 补 `wake` / `watch` 两段；两包 1.6.3→1.6.4。
+
 ## r109（2026-11-15 00:1x）
 
 - 修小肥鱼抓到的三处不一致：`fish.ps1 wake` 写账但不刷 `sleep-status.json`、同一时刻两个"醒到几点"、`reason` 等于脚本名。抽出 `sleep-status.js`（巡守与 `sleep-cli` 共用同一个渲染器），`wake` 改完状态立刻刷新；`fish.ps1 wake` 加 `-By`/`-Why`，面板叫醒带"谁按的、为什么"。`test-sleep` 50→60。A.93。
