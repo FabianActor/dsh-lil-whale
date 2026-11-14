@@ -1243,15 +1243,19 @@ function Bubble({ config, message, onMention, animate = false }) {
         return () => clearInterval(timer)
       }, [loadContacts, loadMessages])
 
-      // 打开这一段、页面在前台、停 1.5 秒，才算读过
+      // 打开这一段、页面在前台、停 1.5 秒，才算读过。
+      // 2026-11-14 Fabian 报：停在私聊页收到消息，红点不消失、要重进才清。
+      // 根因是依赖只有 activePeer —— 新消息只更新 unread，没有第二次 markRead。
+      // 现在把"这个对端未读数"也放进依赖：停在页面上每收到一条，都会重新走一次"停 1.5 秒 → 标读"。
+      const activeUnread = Number(unread?.dm?.[activePeer]) || 0
       useEffect(() => {
-        if (activePeer === null) return
+        if (activePeer === null || activeUnread === 0) return
         if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
         const timer = setTimeout(() => {
           void markRead('dm', activePeer).then(() => loadUnread().then((counts) => { if (counts) setUnread(counts) }))
         }, 1500)
         return () => clearTimeout(timer)
-      }, [activePeer])
+      }, [activePeer, activeUnread])
 
       // 贴底/翻历史：跟群聊共用一套（见 useFollowTail 的说明）。
       // 早先这里是 `bottom.scrollIntoView({block:'end'})`：它会连外层容器一起滚，
@@ -1301,15 +1305,6 @@ function Bubble({ config, message, onMention, animate = false }) {
         }
       }, [text, sending, activePeer, loadMessages, loadContacts, pendingImage])
 
-      const shortTime = (ts) => {
-        const date = new Date(ts ?? '')
-        if (Number.isNaN(date.getTime())) return ''
-        const pad = (n) => String(n).padStart(2, '0')
-        return date.toDateString() === new Date().toDateString()
-          ? `${pad(date.getHours())}:${pad(date.getMinutes())}`
-          : `${date.getMonth() + 1}/${date.getDate()}`
-      }
-
       const contactList = contacts.length === 0
         ? h('div', { style: { padding: '16px 14px', fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } }, '还没有能私下说话的人。')
         : contacts.map((contact) => {
@@ -1344,7 +1339,7 @@ function Bubble({ config, message, onMention, animate = false }) {
                       },
                     }, String(unread.dm[contact.peer]))
                   : null,
-                h('span', { style: { marginLeft: 'auto', fontSize: 11, color: 'var(--dsw-alias-label-caption)' } }, shortTime(contact.last?.ts))),
+                h('span', { style: { marginLeft: 'auto', fontSize: 11, color: 'var(--dsw-alias-label-caption)' } }, formatStamp(contact.last?.ts))),
               h('div', {
                 style: {
                   fontSize: 12, color: 'var(--dsw-alias-label-tertiary)',
@@ -3239,7 +3234,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v36 · pond-entry:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v37 · dm-unread-stamp:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')
