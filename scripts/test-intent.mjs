@@ -21,6 +21,8 @@ import {
   probeFileChanged,
   INTENT_MAX,
   INTENT_GLOBAL_PER_DAY,
+  globalCapFor,
+  rollSkip,
 } from '../plugin/dsh-lil-whale-group/lib/intent-core.js'
 
 let pass = 0
@@ -241,6 +243,30 @@ t('递话文本带 id / why / 证据，并说清是"你的表里的一条条件"
   assert.equal(/你自己写的/.test(text), false)
 })
 
+t('沉默衰减：3 天没说话 → 全池上限 3；6 天 → 0；2.9 天 → 6', () => {
+  assert.equal(globalCapFor(0), INTENT_GLOBAL_PER_DAY)
+  assert.equal(globalCapFor(2.9), INTENT_GLOBAL_PER_DAY)
+  assert.equal(globalCapFor(3), 3)
+  assert.equal(globalCapFor(5.9), 3)
+  assert.equal(globalCapFor(6), 0)
+})
+
+t('沉默衰减的上限真的能卡住投递：cap=0 时 capOk 不过', () => {
+  const state = { dayStart: '2026-11-14', count: 0 }
+  const spec = { id: 'x', maxPerDay: 2 }
+  const now = new Date('2026-11-14T10:00:00+08:00')
+  const r = capOk(state, spec, now, { day: '2026-11-14', count: 0 }, 0)
+  assert.equal(r.ok, false)
+})
+
+t('rollSkip：0.3 时 0.1 跳、0.5 不跳；坏 rate 不跳', () => {
+  assert.equal(rollSkip(0.3, 0.1), true)
+  assert.equal(rollSkip(0.3, 0.5), false)
+  assert.equal(rollSkip(0.3, 0.3), false)
+  assert.equal(rollSkip(Number.NaN, 0.1), false)
+  assert.equal(rollSkip(-1, 0.1), false)
+  assert.equal(rollSkip(2, 0.1), true)
+})
 console.log(`合计：${pass + fail} 项，PASS ${pass}，FAIL ${fail}`)
 if (fail > 0) {
   for (const f of failures) console.log(`  ✗ ${f}`)

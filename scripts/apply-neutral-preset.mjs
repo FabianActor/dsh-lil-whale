@@ -39,6 +39,10 @@ const profile = opt('profile', cfg.whaleProfile || 'whale');
 const dshHome = opt('home', cfg.herDshHome || process.env.DSH_HOME);
 const wantDefault = flag('default');
 const dryRun = flag('dry-run');
+// 2026-11-14：可选给这条鱼挂一只"只读看 B站"的眼睛（MCP）。
+// 为什么由生成器产出：这段以前是手写进 patch 的，而 apply 重跑会切掉标记之后整段 ⇒
+// 手写的那份会在某次重跑里悄悄消失。放进生成器，重跑等于重建，不会丢。
+const withBili = opt('with-bili', null);
 
 if (!patchArg) {
   console.error('缺 --patch：给我 profile 的 cordis.patch.yml 路径。');
@@ -106,6 +110,42 @@ const base = markerAt >= 0 ? `${text.slice(0, markerAt).replace(/\n+$/, '')}\n` 
 const hasPreset = /^\s*-\s*id:\s*preset-neutral\s*$/m.test(base);
 const hasDefaultNeutral = /^\s*default:\s*neutral\s*$/m.test(base);
 
+// ---- 1b) 可选：只读 B站 MCP 眼睛（--with-bili <鱼键>）----
+function biliEyeBlock(member) {
+  const pondRoot = path.resolve(cfg.poolDir || path.join(repoRoot, '..', 'pool'), '..');
+  const poolDir = cfg.poolDir || path.join(pondRoot, 'pool');
+  const stateDir = cfg.poolStateDir || path.join(poolDir, 'state');
+  const py = cfg.biliPython || path.join(process.env.USERPROFILE || '', '.dsh', 'bili-duty', '.venv', 'Scripts', 'python.exe');
+  const tools = [
+    'bili_search', 'bili_video_info', 'bili_subtitle', 'bili_comments', 'bili_danmaku', 'bili_frames', 'bili_cover',
+    'bili_hot_videos', 'bili_rank', 'bili_weekly_hot', 'bili_recommend', 'bili_video_zones', 'bili_hot_buzzwords',
+    'bili_user_info', 'bili_user_videos', 'watchlist_add', 'watchlist_list', 'watchlist_check',
+  ].join(',');
+  return [
+    '# 只读的 B站 眼睛：18 个工具，没有评论/点赞/私信/登录。',
+    '# 每条鱼一个 MCP 子进程；cookie 在 pool\\mcp\\bili\\bili_credential.json（共用同一个号）。',
+    '- insert:',
+    '    - id: mcp-bili-readonly',
+    "      name: '@deepseek-ai/dsh-mcp-client'",
+    '      config:',
+    '        transport: stdio',
+    '        serverName: bili',
+    `        command: '${py}'`,
+    '        args:',
+    `          - '${path.join(poolDir, 'mcp', 'bili', 'mcp_server.py')}'`,
+    `        cwd: '${path.join(poolDir, 'mcp', 'bili')}'`,
+    '        env:',
+    `          BILI_MCP_TOOLS: '${tools}'`,
+    `          BILI_MEMBER: '${member}'`,
+    `          BILI_STATE_DIR: '${path.join(stateDir, 'bili')}'`,
+    `          BILI_DUTY_HOME: '${path.join(pondRoot, 'homes', member, 'bili')}'`,
+    "          BILI_QUOTA_PER_DAY: '80'",
+    "          PYTHONIOENCODING: 'utf-8'",
+    "          PYTHONUTF8: '1'",
+    '        failOnStartupError: false',
+  ].join('\n');
+}
+
 const additions = [];
 if (!hasPreset) additions.push(insertBlock);
 if (wantDefault && !hasDefaultNeutral) {
@@ -117,6 +157,8 @@ if (wantDefault && !hasDefaultNeutral) {
     '    default: neutral',
   ].join('\n'));
 }
+
+if (withBili) additions.push(biliEyeBlock(withBili));
 
 if (additions.length === 0) {
   console.log('已经装过了：patch 里既有 preset-neutral' + (wantDefault ? '、默认也已是 neutral' : '') + '。什么都没改。');

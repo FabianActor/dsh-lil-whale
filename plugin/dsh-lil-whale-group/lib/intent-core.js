@@ -23,6 +23,25 @@ export const INTENT_COOLDOWN_MIN_DEFAULT = 30
 /** 睡醒后还愿意补投的分钟数：醒来超过这个时间，那句"条件成立了"就过期了。 */
 export const INTENT_GRACE_MIN = 15
 
+// 沉默衰减（2026-11-14）：连着几天没主动说话，素材类额度自己往下走。
+// 6 → 3 → 0；但闹钟（plan）和日记不归它管，照旧。
+export const SILENCE_DECAY_DAYS = 3
+export function globalCapFor(silentDays) {
+  const d = Number(silentDays) || 0
+  if (d >= SILENCE_DECAY_DAYS * 2) return 0
+  if (d >= SILENCE_DECAY_DAYS) return 3
+  return INTENT_GLOBAL_PER_DAY
+}
+
+// 「今天可以不想看」：机制掷骰子，她只能读结果（不能自己挑）。
+// rate = 想跳过的概率；rand ∈ [0,1)。纯函数，方便测。
+export function rollSkip(rate, rand) {
+  const r = Number(rate)
+  const x = Number(rand)
+  if (!Number.isFinite(r) || !Number.isFinite(x)) return false
+  return x < Math.max(0, Math.min(1, r))
+}
+
 export function todayKey(d) {
   const p = (n) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
@@ -177,13 +196,14 @@ export function cooldownOk(state, spec, now) {
 }
 
 /** 额度：单条每天 maxPerDay，全池每天 INTENT_GLOBAL_PER_DAY。 */
-export function capOk(state, spec, now, global = { day: '', count: 0 }) {
+export function capOk(state, spec, now, global = { day: '', count: 0 }, globalCap = INTENT_GLOBAL_PER_DAY) {
   const today = todayKey(now)
   const own = state?.dayStart === today ? Number(state?.count) || 0 : 0
   if (own >= spec.maxPerDay) return { ok: false, why: `intent-day-cap own=${own}/${spec.maxPerDay}` }
   const g = global?.day === today ? Number(global.count) || 0 : 0
-  if (g >= INTENT_GLOBAL_PER_DAY) return { ok: false, why: `intent-global-cap ${g}/${INTENT_GLOBAL_PER_DAY}` }
-  return { ok: true, own, global: g }
+  const cap = Number.isFinite(Number(globalCap)) ? Number(globalCap) : INTENT_GLOBAL_PER_DAY
+  if (g >= cap) return { ok: false, why: `intent-global-cap ${g}/${cap}` }
+  return { ok: true, own, global: g, globalCap: cap }
 }
 
 /**
