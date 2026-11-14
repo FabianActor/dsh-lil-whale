@@ -7,7 +7,7 @@
 //
 // 用法：
 //   node scripts/sleep-cli.mjs status <键>          打印这条鱼此刻的睡眠状态（JSON）
-//   node scripts/sleep-cli.mjs wake <键> [原因...]  家长强行叫醒：醒到本窗结束（窗外给两小时）
+//   node scripts/sleep-cli.mjs wake <键> [原因...]  家长强行叫醒：只在真睡着时动状态（醒到本窗结束）
 //   node scripts/sleep-cli.mjs seed <键>            给新鱼种一份默认作息（已有就不动）
 //   node scripts/sleep-cli.mjs pref <键> <from> <to> 设置每日作息
 // 退出码：0 成功；2 参数/名册问题（fish.ps1 会把 stderr 原样打出来）。
@@ -98,18 +98,30 @@ if (command === 'status') {
   const reason = rest.join(' ').trim()
   const pref = readJson(prefFileOf(key))
   const preference = pref && typeof pref === 'object' ? pref : { from: DEFAULT_SLEEP_FROM, to: DEFAULT_SLEEP_TO, enabled: true }
-  const until = forceAwakeUntil(preference, new Date())
-  const raw = readJson(stateFileOf(key)) ?? {}
-  const next = {
-    ...raw,
-    oneOff: null,
-    awakeUntil: until,
-    forcedBy: 'fish.ps1',
-    updatedAt: new Date().toISOString(),
+  const before = statusOf(key)
+  if (!before.sleeping) {
+    sleepLog('sleep-noop', `member=${key} why=not-sleeping by=fish.ps1`)
+    console.log(JSON.stringify({ key, changed: false, message: '没在睡，不用叫醒' }))
+  } else {
+    const raw = readJson(stateFileOf(key)) ?? {}
+    const afterClear = sleepStateOf({ oneOff: null, awakeUntil: null, preference }, new Date())
+    const until = afterClear.sleeping ? forceAwakeUntil(preference, new Date()) : null
+    const next = {
+      ...raw,
+      oneOff: null,
+      awakeUntil: until,
+      forcedBy: 'fish.ps1',
+      updatedAt: new Date().toISOString(),
+    }
+    writeJson(stateFileOf(key), next)
+    sleepLog('sleep-forced', `member=${key} awakeUntil=${until ?? ''} by=fish.ps1 reason=${reason.slice(0, 80)}`)
+    console.log(JSON.stringify({
+      key,
+      changed: true,
+      awakeUntil: until,
+      label: until ? `醒到 ${new Date(until).toTimeString().slice(0, 5)}` : '醒了',
+    }))
   }
-  writeJson(stateFileOf(key), next)
-  sleepLog('sleep-forced', `member=${key} awakeUntil=${until} by=fish.ps1 reason=${reason.slice(0, 80)}`)
-  console.log(JSON.stringify({ key, awakeUntil: until, label: `醒到 ${new Date(until).toTimeString().slice(0, 5)}` }))
 } else if (command === 'seed') {
   ensureMember(key)
   const file = prefFileOf(key)

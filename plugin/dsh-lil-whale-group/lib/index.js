@@ -1842,20 +1842,21 @@ function apply(ctx) {
     }))
     ctx.tools.register(buildTool({
       name: 'wake_up',
-      description: '把自己叫醒（结束这次睡眠）。如果现在本来就在睡眠窗里，会醒到本窗结束；不在窗里则给两小时清醒时间。家长也可以从鱼塘面板或 fish.ps1 wake 叫醒你。',
+      description: '把自己叫醒（结束这次睡眠）。只在真的睡着时有用：清掉这次的一次性睡眠，并且今天这一轮不再按作息睡（醒到本窗结束）；本来就没在睡则什么都不做。家长也可以从鱼塘面板或 fish.ps1 wake 叫醒你。',
       parameters: {},
       output: {
         schema: {
           type: 'object',
           additionalProperties: false,
-          properties: { awakeUntil: { type: 'string' } },
+          properties: { awakeUntil: { type: 'string' }, changed: { type: 'boolean' } },
         },
-        // 回执：醒到几点（同样必须在 output 里面）。
+        // 回执：只有真叫醒了才说"醒到几点"；本来就没在睡就直说（同样必须在 output 里面）。
         render: (_args, value) => {
+          if (!value.changed) return [{ type: 'text', text: '你现在没在睡，不用叫醒。' }]
           const d = new Date(value.awakeUntil)
           const hh = String(d.getHours()).padStart(2, '0')
           const mm = String(d.getMinutes()).padStart(2, '0')
-          return [{ type: 'text', text: `醒了，醒到 ${hh}:${mm}。` }]
+          return [{ type: 'text', text: `醒了。今天这一轮不会再按作息睡（到 ${hh}:${mm}），明天照旧。` }]
         },
       },
       execute(args, exec) {
@@ -1865,14 +1866,23 @@ function apply(ctx) {
         const preference = pref && typeof pref === 'object'
           ? pref
           : { from: DEFAULT_SLEEP_FROM, to: DEFAULT_SLEEP_TO, enabled: true }
-        const until = forceAwakeUntil(preference, now)
+        // 2026-11-14 他问："wake_up 本该是唤醒然后醒到一个时间点吗？"
+        // 不是。原来不管在不在睡都写两小时清醒窗，于是她在窗外叫一声也回"醒到 14:06"——那是假动作。
+        // 现在：真睡着才动状态；清掉一次性睡眠后若还在作息窗里，才需要"醒到本窗结束"。
+        const before = sleepStateOfMember(member, now)
+        if (!before.sleeping) {
+          sleepLog('sleep-noop', `member=${member} why=not-sleeping by=self`)
+          return { awakeUntil: '', changed: false }
+        }
         const state = readSleepStateOf(member)
         state.oneOff = null
+        const afterClear = sleepStateOf({ oneOff: null, awakeUntil: null, preference }, now)
+        const until = afterClear.sleeping ? forceAwakeUntil(preference, now) : null
         state.awakeUntil = until
         state.forcedBy = member
         writeSleepStateOf(member, state)
-        sleepLog('sleep-clear', `member=${member} awakeUntil=${until} by=self`)
-        return { awakeUntil: until }
+        sleepLog('sleep-clear', `member=${member} awakeUntil=${until ?? ''} by=self`)
+        return { awakeUntil: until ?? '', changed: true }
       },
       presentCall: () => ({ card: 'generic', title: '把自己叫醒', kind: 'other', rawInput: {} }),
     }))
