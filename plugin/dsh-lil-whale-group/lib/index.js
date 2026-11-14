@@ -3108,15 +3108,16 @@ function auditRoster(now = new Date()) {
   const homeWithoutRoster = [...homes].filter((k) => !rosterAll.has(k))
   const rosterWithoutHome = [...rosterHomed].filter((k) => !homes.has(k))
   const pinWithoutRoster = [...pinKeys].filter((k) => !rosterAll.has(k))
-  if (homeWithoutRoster.length) problems.push(`home-without-roster=${homeWithoutRoster.join(',')}`)
-  if (rosterWithoutHome.length) problems.push(`roster-without-home=${rosterWithoutHome.join(',')}`)
-  if (pinWithoutRoster.length) problems.push(`pin-without-roster=${pinWithoutRoster.join(',')}`)
-  const counts = `roster=${rosterAll.size} homes=${homes.size} pins=${pinKeys.length}`
+  // 差集，不是条数：三份都是 3 的那天也可能不是同三个（她 2026-11-14 17:47 提的）。
+  if (homeWithoutRoster.length) problems.push(`only-in-homes=${homeWithoutRoster.join(',')}`)
+  if (rosterWithoutHome.length) problems.push(`only-in-members=${rosterWithoutHome.join(',')}`)
+  if (pinWithoutRoster.length) problems.push(`only-in-pins=${pinWithoutRoster.join(',')}`)
+  const counts = `members=${rosterAll.size} homes=${homes.size} pins=${pinKeys.length}`
   // 每次跑都写一行（2026-11-14 小肥鱼：文件不存在只说明"还没跑过"，不说明"跑了没问题"——
   // 要让"没跑"和"跑了没问题"在纸上长得不一样）。
   const line = problems.length
     ? `${now.toISOString()} | roster-mismatch | fmt=1 ${counts} ${problems.join(' ')}`
-    : `${now.toISOString()} | roster-audit | fmt=1 ok ${counts}`
+    : `${now.toISOString()} | roster-audit | fmt=1 ${counts} ok`
   try {
     appendFileSync(ROSTER_AUDIT_LOG, `${line}\n`)
   } catch { /* 日志写不了不该炸巡守 */ }
