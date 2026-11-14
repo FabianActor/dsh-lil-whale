@@ -84,7 +84,9 @@ function statusOf(key) {
   const raw = readJson(stateFileOf(key)) ?? {}
   const pref = readJson(prefFileOf(key))
   const st = sleepStateOf({ oneOff: raw.oneOff ?? null, awakeUntil: raw.awakeUntil ?? null, preference: pref }, new Date())
-  return { key, ...st, label: sleepLabel(st) }
+  // lastForced（2026-11-14 他选的 C 方案）：被家长强行叫醒时留一笔，谁、什么时候、为什么。
+  // 不主动给她发消息——只把痕迹留在她自己的状态里，她查得到。
+  return { key, ...st, label: sleepLabel(st), lastForced: raw.lastForced ?? null }
 }
 
 const [command, key, ...rest] = process.argv.slice(2)
@@ -106,12 +108,16 @@ if (command === 'status') {
     const raw = readJson(stateFileOf(key)) ?? {}
     const afterClear = sleepStateOf({ oneOff: null, awakeUntil: null, preference }, new Date())
     const until = afterClear.sleeping ? forceAwakeUntil(preference, new Date()) : null
+    const nowIso = new Date().toISOString()
     const next = {
       ...raw,
       oneOff: null,
       awakeUntil: until,
       forcedBy: 'fish.ps1',
-      updatedAt: new Date().toISOString(),
+      // 痕迹留在她的状态里（C 方案）：她下次醒来查这一行就知道"被叫醒过"，
+      // 但当时不会有任何消息打扰她。
+      lastForced: { at: nowIso, by: 'fish.ps1', reason: reason.slice(0, 80) },
+      updatedAt: nowIso,
     }
     writeJson(stateFileOf(key), next)
     sleepLog('sleep-forced', `member=${key} awakeUntil=${until ?? ''} by=fish.ps1 reason=${reason.slice(0, 80)}`)
@@ -120,6 +126,7 @@ if (command === 'status') {
       changed: true,
       awakeUntil: until,
       label: until ? `醒到 ${new Date(until).toTimeString().slice(0, 5)}` : '醒了',
+      lastForced: next.lastForced,
     }))
   }
 } else if (command === 'seed') {

@@ -4,6 +4,11 @@
 > 它与两个 npm 包的版本（各自 `package.json` 里的 semver，如 `1.2.0`）是**两条线**：包版本只在功能或破坏性变化、发布时才动。
 > 编号从 r1 开始（第一稿就是 r1）。2026-11-13 之前这些号写作 `v1.0.NN`，本次统一改名，编号不变。
 
+## r92 — 2026-11-14 16:1x
+
+- **叫醒留痕（C 方案，他 16:11 定）**：`sleep-cli.mjs` 的 `wake` 在真叫醒时写 `lastForced: { at, by, reason }` 进 `pool\state\sleep\<键>.json`；`status` 输出该字段。**不主动给她发消息**——当时不打扰，事后查得到。
+- `templates\环境.md.tpl` 的「睡觉」一节补一句"被叫醒不会有消息，痕迹在 lastForced"；两条鱼 `环境.md` 重生成（`lastForced` 在 L160）。
+- 判据：`node scripts\sleep-cli.mjs status <键>` 能看到 lastForced；群里不新增消息。
 ## r91 — 2026-11-14 15:4x
 
 - **改名只剩一条路**（他 15:32 定的规矩，A.82）：设置页删掉三个"显示名"输入、只留头像；`/group/api/config` 对 names 变更返回 **403 `rename-by-fish-only`**；宿主新增 `rename` 工具（她自己调）→ 写名册 `nameHistory` + `pool\state\names.log` + 群里自动播报。
