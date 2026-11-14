@@ -547,6 +547,17 @@ window.__ModuleLoader__.load({
       footnotes: '脚注',
     }
 
+    /**
+     * Markdown 把「单个换行」当空格（CommonMark 的软换行），于是用户在输入框里敲的回车，
+     * 发出来就粘成一行 —— 2026-11-15 Fabian 报的"输入框能换行、发送后格式错了"。
+     * 行尾补两个空格 = 硬换行；代码块（```）里不补，那会变成代码里的尾随空格。
+     */
+    const withHardBreaks = (text) => {
+      const raw = String(text ?? '').replace(/\r\n/g, '\n')
+      if (raw.includes('```')) return raw
+      return raw.replace(/([^\n])\n(?!\n)/g, '$1  \n')
+    }
+
     class SafeMarkdown extends React.Component {
       constructor(props) {
         super(props)
@@ -563,7 +574,7 @@ window.__ModuleLoader__.load({
 
       render() {
         if (this.state.failed || !MarkdownText) return h(MarkdownBody, { text: this.props.text })
-        return h(MarkdownText, { text: this.props.text, labels: MARKDOWN_LABELS })
+        return h(MarkdownText, { text: withHardBreaks(this.props.text), labels: MARKDOWN_LABELS })
       }
     }
 
@@ -3311,7 +3322,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v42 · multiline-multi-image:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v43 · hard-breaks:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')
