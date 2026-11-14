@@ -1823,6 +1823,9 @@ function apply(ctx) {
         state.awakeUntil = null
         state.forcedBy = ''
         writeSleepStateOf(member, state)
+        // 2026-11-14 15:0x 小肥鱼第二次实测：一次性睡下后 8 秒，sleep-status.json 还是 false。
+        // 因为"改状态后顺手刷镜子"只写进了 from+to 分支和 wake_up，漏了这一支。
+        try { writeSleepStatus() } catch {}
         sleepLog('sleep-once', `member=${member} ${how} to=${toAt.toISOString()} reason=${state.oneOff.reason}`)
         return { mode: 'one-off', untilAt: toAt.toISOString(), from: '', to: '' }
       },
