@@ -159,6 +159,40 @@ if (Test-Path -LiteralPath $pluginLog) {
       # 名册读不了由别处报，这里不重复
     }
   }
+  # 3d. 名册 vs 家 vs pins：谁会被巡守遍历到，谁只是"家还在"（2026-11-14，小肥鱼的刺）
+  try {
+    $rosterFish = @()
+    if ($Cfg.MembersFile -and (Test-Path -LiteralPath $Cfg.MembersFile)) {
+      $mjR = Get-Content -LiteralPath $Cfg.MembersFile -Raw -Encoding utf8 | ConvertFrom-Json
+      $rosterFish = @($mjR.members.PSObject.Properties | Where-Object { $_.Value.kind -eq 'fish' } | ForEach-Object { $_.Name })
+    }
+    $homesDir3 = Join-Path $Cfg.PoolDir '..\homes'
+    $homeKeys = @()
+    if (Test-Path -LiteralPath $homesDir3) {
+      $homeKeys = @(Get-ChildItem -LiteralPath $homesDir3 -Directory | ForEach-Object { $_.Name })
+    }
+    $pinsFile3 = Join-Path $Cfg.GroupDir 'pins.json'
+    $pinKeys = @()
+    if (Test-Path -LiteralPath $pinsFile3) {
+      $pinKeys = @((Get-Content -LiteralPath $pinsFile3 -Raw -Encoding utf8 | ConvertFrom-Json).PSObject.Properties.Name)
+    }
+    $rosterHomed = @($mjR.members.PSObject.Properties | Where-Object { $_.Value.kind -eq 'fish' -and $_.Value.role -ne 'watcher' } | ForEach-Object { $_.Name })
+    $homeWithoutRoster = @($homeKeys | Where-Object { $rosterFish -notcontains $_ })
+    $rosterWithoutHome = @($rosterHomed | Where-Object { $homeKeys -notcontains $_ })
+    $pinWithoutRoster = @($pinKeys | Where-Object { $rosterFish -notcontains $_ })
+    if ($homeWithoutRoster.Count -gt 0) {
+      Add-Row '名册与家' 'FAIL' ('家里有但名册没有：' + ($homeWithoutRoster -join '、') + ' —— 这条鱼不会被巡守遍历到，也不会收到条件提醒') 'NEXT: 要么加回名册（members-add.mjs），要么归档（archive-fish.mjs）'
+    } elseif ($rosterWithoutHome.Count -gt 0) {
+      Add-Row '名册与家' 'FAIL' ('名册有但家里没有：' + ($rosterWithoutHome -join '、')) 'NEXT: 名册那条是坏的；修名册或恢复家'
+    } elseif ($pinWithoutRoster.Count -gt 0) {
+      Add-Row '名册与家' 'WARN' ('pins.json 里有名册外的键：' + ($pinWithoutRoster -join '、')) 'NEXT: 旧会话残留；确认后从 pins 里删'
+    } else {
+      Add-Row '名册与家' 'OK' ('名册 ' + $rosterFish.Count + ' 条、家 ' + $homeKeys.Count + ' 个、pins ' + $pinKeys.Count + ' 个，对得上')
+    }
+  } catch {
+    Add-Row '名册与家' 'WARN' ('自检跑不了：' + $_.Exception.Message)
+  }
+
 # 4. 名册：群认会话不认名字；登记错了 = 叫错人
 $pinsFile = Join-Path $Cfg.GroupDir 'pins.json'
 if (Test-Path -LiteralPath $pinsFile) {

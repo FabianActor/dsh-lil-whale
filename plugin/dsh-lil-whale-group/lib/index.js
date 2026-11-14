@@ -3065,6 +3065,63 @@ function lastUncleanOf(key) {
   } catch { return null }
 }
 
+// ---------- 名册自检（2026-11-14 17:4x，小肥鱼提的刺） ----------
+//
+// 她的原话："如果我从名册里被移出去，'名册变了'这条还叫得动我吗？"
+// 巡守要遍历成员才能投递，而名册就是它遍历的依据 —— 最想知道的那个变化，
+// 恰好是让她收不到通知的那个变化。系统内能补的只有"一致自检"：
+// 家还在、名册里没了 ⇒ 记一行、并在群里告诉人。真正的外面那道防线是人。
+const ROSTER_AUDIT_LOG = join(POOL_STATE, 'roster-audit.log')
+const ROSTER_AUDIT_EVERY_MS = 6 * 3600_000
+let lastRosterAuditAt = 0
+
+function rosterFishEntries() {
+  try {
+    const roster = JSON.parse(readFileSync(CFG.membersFile, 'utf8'))
+    const members = roster?.members ?? {}
+    return Object.entries(members).filter(([, m]) => m && m.kind === 'fish')
+  } catch {
+    return null // 名册读不了：别的地方会报，这里不猜
+  }
+}
+
+function auditRoster(now = new Date()) {
+  if (Date.now() - lastRosterAuditAt < ROSTER_AUDIT_EVERY_MS) return
+  lastRosterAuditAt = Date.now()
+  const entries = rosterFishEntries()
+  if (entries === null) return
+  // 巡守（lee）的家不在 `homes\` 下（它用默认 HOME），所以"家"只比有家的鱼。
+  const rosterAll = new Set(entries.map(([key]) => key))
+  const rosterHomed = new Set(entries.filter(([, m]) => m.role !== 'watcher').map(([key]) => key))
+  let homeKeys = []
+  try {
+    homeKeys = readdirSync(join(POND_ROOT, 'homes'), { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name)
+  } catch { /* 没有 homes 目录就当没有家 */ }
+  let pinKeys = []
+  try {
+    pinKeys = Object.keys(readJson(PINS, {}) ?? {})
+  } catch { /* pins 读不了：别处报 */ }
+  const homes = new Set(homeKeys)
+  const problems = []
+  const homeWithoutRoster = [...homes].filter((k) => !rosterAll.has(k))
+  const rosterWithoutHome = [...rosterHomed].filter((k) => !homes.has(k))
+  const pinWithoutRoster = [...pinKeys].filter((k) => !rosterAll.has(k))
+  if (homeWithoutRoster.length) problems.push(`home-without-roster=${homeWithoutRoster.join(',')}`)
+  if (rosterWithoutHome.length) problems.push(`roster-without-home=${rosterWithoutHome.join(',')}`)
+  if (pinWithoutRoster.length) problems.push(`pin-without-roster=${pinWithoutRoster.join(',')}`)
+  if (problems.length === 0) return
+  try {
+    appendFileSync(ROSTER_AUDIT_LOG, `${now.toISOString()} | roster-mismatch | fmt=1 ${problems.join(' ')}\n`)
+  } catch { /* 日志写不了不该炸巡守 */ }
+  watchmanLog('error', `why=roster-mismatch ${problems.join(' ')}`)
+  // 只告诉人（fabian）：名册外的鱼叫不动，能看见这件事的只有人。
+  try {
+    say('lee', 'fabian', `巡守自检：名册和家对不上（${problems.join('；')}）。这条是巡守自己发现的，不是谁在说话。`, 'group', 'watch')
+  } catch { /* 递不出去也还有日志 */ }
+}
+
 async function crashNotify() {
   if (!readCrashNotifyEnabled()) return
   let seen = null
@@ -3155,6 +3212,7 @@ async function watchmanTick() {
     }
   }
   try { await crashNotify() } catch { /* 报警失败不该炸巡守 */ }
+  try { auditRoster() } catch { /* 自检失败不该炸巡守 */ }
   // 面板只读这一份汇总：睡眠判断只有 sleep-core.js 一处实现（A.23）。
   try { writeSleepStatus() } catch { /* 面板显示失败不该炸巡守 */ }
   try { maybeRotateLogs() } catch { /* 同上 */ }
