@@ -358,11 +358,31 @@ function selfMemberKeyRaw() {
   return null
 }
 
-/** 认不出自己时退回老规矩：不在她的家里 = 巡守那条。 */
+/**
+ * 认不出自己时：先从家的路径里取键（<鱼塘>\homes\<键>\dsh-home），再退回老规矩。
+ *
+ * 2026-11-14 扫描：兜底名册（MEMBERS_FALLBACK）只有 lee / whale —— 第二条鱼之后，
+ * 名册一旦读不到，小鱼丸会把自己认成 whale，心跳、错误计数、游标全写进 whale 的账。
+ * 身份不能靠"家路径里有没有 lil-whale"猜：路径里带键就取键，取不到才用老规矩，并且留痕。
+ */
+let ownMemberNoteLogged = false
 function ownMember() {
   const raw = selfMemberKeyRaw()
   if (raw) return raw
-  return !(process.env.DSH_HOME ?? '').toLowerCase().includes('lil-whale') ? 'lee' : 'whale'
+  const home = (process.env.DSH_HOME ?? '').replace(/[\\/]+$/, '')
+  const byPath = home.match(/[\\/]homes[\\/]([a-z0-9-]+)[\\/]dsh-home$/i)
+  if (byPath) {
+    if (!ownMemberNoteLogged) {
+      ownMemberNoteLogged = true
+      try { logLine({ note: 'own-member-by-path', member: byPath[1] }) } catch {}
+    }
+    return byPath[1]
+  }
+  if (!ownMemberNoteLogged) {
+    ownMemberNoteLogged = true
+    try { logLine({ note: 'own-member-guess', home: home.slice(-100) }) } catch {}
+  }
+  return home.toLowerCase().includes('lil-whale') ? 'whale' : 'lee'
 }
 
 /** 对端 = 我的爹；根节点（lee）没有爹，退回另一条鱼。 */

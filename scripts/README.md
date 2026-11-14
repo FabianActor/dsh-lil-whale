@@ -39,6 +39,11 @@ pwsh -File scripts\fish.ps1 up   <鱼|all>        # 起；默认无人值守（�
 pwsh -File scripts\fish.ps1 down <鱼|all> [-Yes] [-Force]
 pwsh -File scripts\fish.ps1 up-main / down-main  # 主 dsh（down-main 有鱼在跑会拒绝）
 pwsh -File scripts\fish.ps1 doctor | refresh <鱼|all>
+pwsh -File scripts\fish.ps1 maintain / restore <鱼>   # 检修：先停无人值守、开一扇窗；看完关窗再 restore
+pwsh -File scripts\fish.ps1 new -Key <键> -Name <名字> -Parent <父辈键> [-DryRun]   # 养一条新鱼（只由人跑）
+pwsh -File scripts\fish.ps1 key grant -Key <孩子键> -From <家长键>                 # 给钥匙（只由人跑，PRD A.65）
+pwsh -File scripts\fish.ps1 key revoke -Key <孩子键>                               # 停用那份钥匙
+pwsh -File scripts\fish.ps1 acl-check / acl-repair <鱼|all>  # 沙箱通行证自检 / 补齐（PRD A.67）
 ```
 
 `launch.ps1` / `stop.ps1` / `start-whale.ps1` / `watchman.ps1` 已在 2026-11-13 归档到 `archive\legacy-scripts-2026-11-13\`——同一个动作只留一个入口，新东西请直接写 `fish.ps1`。
@@ -58,6 +63,13 @@ pwsh -File scripts\fish.ps1 doctor | refresh <鱼|all>
 | `verify-pending.ps1` | 重启后验收：runs 账按鱼写 / 自己的闹钟 / gate 读数 / 归属 B 与全局 120 / 自启动开关 / 鱼塘接口 / 模式账 |
 | `test-plan.mjs` | 计划表与唤醒额度的行为测试（26 用例，真 import 真代码） |
 | `install.ps1` / `release-check.ps1` / `pack.ps1` | 装、验、打包 |
+| `archive-fish.mjs` | 归档一条鱼（`--subtree` 连同孩子）；默认只写 manifest 不删东西 |
+| `gen-family.mjs` | 从 `pool\family.json` + 名册生成 `docs\谱系.md`（`--seed` 补节点） |
+| `members-add.mjs` | `install.ps1` 往名册里加成员（整份原子替换） |
+| `pins.mjs` | 整份替换 `pins.json`（哪段会话算谁） |
+| `render-env.mjs` / `tools-from-profile.mjs` | 渲染 `环境.md` / 从 `--dump-config` 数真实工具 |
+| `rebuild-group-md.mjs` | 从 `messages.jsonl` 重建 `群.md` 与私聊可读版（`--write` 才写） |
+| `migrate-*.mjs` | 一次性迁移（pool / pond / scope / profile 改名）；头部的坑先看 |
 
 ## 日志在哪
 

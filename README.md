@@ -79,6 +79,25 @@ pwsh -File scripts\install.ps1
    - 她的写进 `group\pins.json` 的 `whale` 数组，你的写进 `lee` 数组
    - （装的时候用 `-ChildSessionId` / `-ParentSessionId` 也能直接写）
 
+## 再养一条鱼（可选）
+
+一条鱼也能过。想再养一条，**加鱼不改代码**，只是往名册里加一个成员：
+
+```powershell
+# 1) 先看它要做什么（不建任何东西）
+pwsh -File scripts\fish.ps1 new -Key xiaoxing -Name 小星星 -Parent whale -DryRun
+
+# 2) 真要建：去掉 -DryRun。它会建家、装 profile、进名册、记 births.log
+pwsh -File scripts\fish.ps1 new -Key xiaoxing -Name 小星星 -Parent whale
+```
+
+- **键**：小写字母开头，只能小写字母/数字/短横线，2–16 位（Windows 不区分大小写，大写会撞）。
+- **名字**：中英文都行，16 个字以内；群里靠它认人。
+- **API key 只有两种来法，都由你决定**（PRD 附录 A.65）：在她自己的网页里填，或者你明确说"继承某条鱼的"——
+  `pwsh -File scripts\fish.ps1 key grant -Key xiaoxing -From whale`（花的是 whale 的额度；回收用 `key revoke`）。
+- 新鱼出生后还要三步：`fish.ps1 maintain <键>` 开窗填 key → 群里说第一句话 → `fish.ps1 restore <键>` 回无人值守。
+- 实验鱼（`status: experiment`）也能当家长，但归档时会连同孩子一起归档（`archive-fish.mjs --subtree`）。
+
 ## 重启后先跑这个
 
 ```powershell
