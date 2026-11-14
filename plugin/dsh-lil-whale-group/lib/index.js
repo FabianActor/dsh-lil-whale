@@ -1759,9 +1759,21 @@ function apply(ctx) {
           return [{ type: 'text', text: `好，睡到 ${hh}:${mm}。这期间群消息和计划都不叫你（消息还在，醒了自己读）。` }]
         },
       },
-      execute(args, exec) {
+      execute(rawArgs, exec) {
         const member = requirePinnedSelf(exec)
         const now = new Date()
+        // 2026-11-14 小肥鱼实测：`sleep(minutes: 1)` 被当成"没给 minutes"。
+        // 根因：裸 spec 路径下 parameters 原样交给模型（不是合法 JSON Schema），
+        // `minutes` 没有可依赖的类型约束，模型可能把它发成字符串 "1"；原来只认 typeof === 'number'。
+        // 这里统一归一化：字符串先按 JSON 解析，数字/数字字符串都收。
+        let args = rawArgs
+        if (typeof args === 'string') { try { args = JSON.parse(args) } catch { args = {} } }
+        args ??= {}
+        const numOf = (v) => {
+          if (typeof v === 'number' && Number.isFinite(v)) return v
+          if (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))) return Number(v)
+          return null
+        }
         const hasFrom = typeof args.from === 'string' && args.from.trim() !== ''
         const hasTo = typeof args.to === 'string' && args.to.trim() !== ''
         if (hasFrom || hasTo) {
@@ -1788,8 +1800,9 @@ function apply(ctx) {
         }
         let toAt = null
         let how = ''
-        if (typeof args.minutes === 'number' && Number.isFinite(args.minutes)) {
-          const n = Math.round(args.minutes)
+        const minutesNum = numOf(args.minutes)
+        if (minutesNum !== null) {
+          const n = Math.round(minutesNum)
           if (n <= 0) throw new Error('minutes 要给正数。')
           if (n > 720) throw new Error('一次最多睡 12 小时（720 分钟）。')
           toAt = new Date(now.getTime() + n * 60_000)
@@ -1822,7 +1835,7 @@ function apply(ctx) {
       },
       presentCall: (args) => ({
         card: 'generic',
-        title: typeof args.minutes === 'number' ? `睡 ${args.minutes} 分钟` : '睡一会儿',
+        title: numOf(args.minutes) !== null ? `睡 ${numOf(args.minutes)} 分钟` : '睡一会儿',
         kind: 'other',
         rawInput: args,
       }),
