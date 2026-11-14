@@ -14,7 +14,7 @@
 #   pwsh -File fish.ps1 restore whale      回无人值守：无窗起（会话由 host 自己挂上）
 #   pwsh -File fish.ps1 down all -Yes      全停（含主 dsh；Stop All Whales.cmd 用）
 #   pwsh -File fish.ps1 up-main            启动主 dsh（快捷方式用；已在跑就直接开浏览器）
-#   pwsh -File fish.ps1 down-main          关闭主 dsh（还在跑的小鱼继续跑）
+#   pwsh -File fish.ps1 down-main          停整个鱼塘（鱼活不过主进程；先鱼后主，账本写 stopped）
 #   pwsh -File fish.ps1 doctor             体检（现在只对配置里那条鱼）
 #   pwsh -File fish.ps1 new -Key <键> -Name <名字> -Parent whale   养一条新鱼（查重 → 建家 → 进名册 → 记 birth）
 #   pwsh -File fish.ps1 acl-check [whale|all]   查沙箱通行证（文件工具能写、pwsh 不能写 = 缺它）
