@@ -24,6 +24,8 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { biliSectionOf } from './bili-section.mjs'
+
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(HERE, '..')
 
@@ -232,6 +234,7 @@ const values = {
   TEMPLATE_SHA: templateSha,
   GENERATED_AT: generatedAt,
   DEPLOY_DATE: deployDate,
+  BILI_SECTION: biliSectionOf({ dshHome: me?.dshHome || join(workspace, "dsh-home"), profile: args.profile }),
 }
 
 let rendered = template

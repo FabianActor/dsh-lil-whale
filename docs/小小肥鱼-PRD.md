@@ -2146,7 +2146,7 @@ sleep-tools-register-failed: tool "sleep" must declare output { schema, render, 
 - **今天可以不想看**：工具 `roll({reason})` 由机制掷骰（`crypto.randomInt`），`skip=true` 就写一行、不调 B站；账本 `pool\state\rolls.log`。
 - **沉默衰减**：连续 N 天没主动说话 → 素材类全池额度 6/天 → 3 → 0（`intent-quota-decay silent-days=… cap=…`）；闹钟与日记不受影响。
 - **两本日记**：`notes\给主人的信.md` 可以有滤镜；`notes\<日期>.md` 是给自己的，原样。
-- **挂载走生成器**：`apply-neutral-preset.mjs --with-bili whale` 生成，不再手写进 patch（手写的块会被 apply 重跑切掉——fishball 的旧块就是那个雷，已记账不动）。
+- **挂载走生成器**：`apply-neutral-preset.mjs --with-bili whale` 生成，不再手写进 patch（手写的块会被 apply 重跑切掉——fishball 的旧块就是那个雷，已记账不动）。**`环境.md` 的这一节也按真实白名单生成**（`scripts\bili-section.mjs` 读 profile patch 的 `BILI_MCP_TOOLS`）——2026-11-14 曾写死"18 个 + 追更三件"，fishball 那边其实是 21 个、没有追更、有探索本。
 - **别人家不能盯**：`pathAllowed` 对 `homes\<别人>` 一律拒；合法办法是让对方发消息。
 
 **没做**：`duty_*` 探索本工具只给 fishball（那是她这次实验的产出格式，不是 whale 的职责）；fishball 整体不动（她已进工作流，且会归档）。

@@ -8,7 +8,7 @@
 
 - **给 whale 装了一只只读的眼睛（B站）**：上游 `bilibili-mcp` 服务端再挂一份，白名单 18 个只读工具（无发评论/点赞/私信/登录）；水表 80 次/天 + `ledger.jsonl`；追更三工具（`watchlist_*`，why 必填、上限 5、同 UP 10 分钟一次）；挂载改由 `apply-neutral-preset.mjs --with-bili` 生成（不再手写进 patch）。fishball 不动。
 - **三条"生活"设计**：`roll({reason})` 今天可以不想看（机制掷骰，账本 `rolls.log`）；沉默衰减（连续 3 天没说话 → 素材额度 3/天，6 天 → 0，闹钟日记照旧）；两本日记（`给主人的信.md` / `<日期>.md`）。
-- `环境.md` 新增「看外面（B站，只读）」一节；`docs\账本.md` 补 `rolls.log` 与 `bili\ledger.jsonl` 两行。
+- `环境.md` 新增「看外面（B站，只读）」一节，**按每条鱼真实白名单生成**（`scripts\bili-section.mjs`）；`docs\账本.md` 补 `rolls.log` 与 `bili\ledger.jsonl` 两行。
 - 两包 1.5.5 → **1.6.0**；PRD **r104** + **A.90**。
 
 ## r103 — 2026-11-14 18:3x
