@@ -33,7 +33,7 @@ winget install --id Microsoft.PowerShell -e
 
 ## 装
 
-默认是**一个鱼塘根**（`lil-whale\`）：仓库在 `app\`、共享区在 `pool\`、每条鱼的家在 `homes\<键>\`、权限修复记录在 `pool\state\acl\`。把仓库 clone 到 `app\` 里，安装器就按这个结构放东西：
+默认是**一个鱼塘根**（`lil-whale\`）：仓库在 `app\`、共享区在 `pool\`、每条鱼的家在 `homes\<键>\`、旧的权限修复备份在 `pool\archive\acl-backups-20261107-09\`。把仓库 clone 到 `app\` 里，安装器就按这个结构放东西：
 
 ```powershell
 git clone https://github.com/FabianActor/dsh-lil-whale.git D:\WorkSpace\lil-whale\app
@@ -159,7 +159,7 @@ pwsh -File scripts\doctor.ps1 -IncludeLee  # 连你的窗一起看
 lil-whale/                      鱼塘根（不在 git 里；装第二条鱼时这里长出新的一层）
   app/                          工程（这个仓库）
      docs/                       活跃文档（PRD、安装流程详解、出生流程、发布、打包、能力地图、判据、谱系）
-     docs/archive/               历史记录（旧待办、观察、交接演练、review 意见）——只归档不删
+     docs/archive/               历史记录（观察、交接演练、review 意见）——归档不删；旧待办页已删，只留 docs/待办.md
     plugin/dsh-lil-whale-group/           宿主半边：群发言工具 + 跨进程唤醒（她的 profile 也装）
     plugin/dsh-lil-whale-group-ui/        浏览器半边：群聊面板、设置页、HTTP 路由（只你的 profile 装）
     scripts/                    安装、启动器（fish）、巡守（原守夜）、体检、重建器、名册、谱系、迁移、打包
@@ -295,7 +295,7 @@ pwsh -File scripts\release-check.ps1
 | 谁是谁的爹 | [`docs/谱系.md`](docs/谱系.md)（生成的） |
 | 每一版改了什么、为什么 | [`docs/PRD-CHANGELOG.md`](docs/PRD-CHANGELOG.md) |
 
-历史记录（旧待办、观察、交接演练、review 意见）在 `docs\archive\`，不删——它们是证据。
+历史记录（观察、交接演练、review 意见）在 `docs\archive\`，不删——它们是证据。待办只有一页：`docs\待办.md`（只放没做完的）。
 
 ## 状态
 

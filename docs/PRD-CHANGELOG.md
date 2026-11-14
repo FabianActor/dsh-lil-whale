@@ -4,6 +4,13 @@
 > 它与两个 npm 包的版本（各自 `package.json` 里的 semver，如 `1.2.0`）是**两条线**：包版本只在功能或破坏性变化、发布时才动。
 > 编号从 r1 开始（第一稿就是 r1）。2026-11-13 之前这些号写作 `v1.0.NN`，本次统一改名，编号不变。
 
+## r94 — 2026-11-14 16:5x
+
+- **日志轮转**（他 16:39 批的）：新增 `scripts\rotate-logs.mjs`（> 1 MB 切一份、同类留 3 份、`--dry-run`）；巡守每小时起一次（`maybeRotateLogs()`，独立进程、失败不炸巡守）；PRD A.86。
+- **四堆备份归档**：删 `pool\group\群.md.bak-20261112-194734`（280 KB 派生文件）；`shortcut-tests` / 旧 ACL 备份 / 15 份 profile `.bak` 移进 `pool\archive\`（profile 每类留最近 2 份）。
+- **待办合并**：删按天页（11-12 / 11-13 / 11-14），只留 `docs\待办.md`（只放没做完的）；README / 出生流程 / PRD 里的旧待办路径与 ACL 备份位置同步改口。
+- **`~\.dsh\profiles` 清理**：24 个 `.bak`（194 KB）收进 `~\.dsh\backups\20261114-profile-baks\`（留一条退路，随时可删）。
+- **`scripts\README.md` 同步现状**：入口从四个改两个（`Run DSH.cmd` / `Stop DSH.cmd` 已删）、`down-main` 语义改成"先鱼后主"、补 `test-rename.mjs` / `rotate-logs.mjs` 两行、`test-sleep` 40→50 用例、巡守日志实际路径改成 `<第一条鱼的家>\logs\watchman.log`、`HER_WAKER` → `selfWaker`。
 ## r93 — 2026-11-14 16:2x
 
 - **面板显示"上次被叫醒"**（他 16:2x 说"可以做了"）：宿主 `writeSleepStatus` 带 `lastForced`；UI 服务端 `sleepOf()` 透传并校验；客户端卡片在睡眠徽标后加「上次被叫醒 今天 16:21」（灰色小字，无 `lastForced` 不显示）；`client build v39 · wake-trace`。

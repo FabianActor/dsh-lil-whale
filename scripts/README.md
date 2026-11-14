@@ -6,12 +6,13 @@
 
 双击 `bin\` 里的 `.cmd` 就行。文件名一律英文（中文名进 cmd 会被 GBK 读错），内容也一律纯 ASCII；中文只出现在 `.ps1` 里，`.ps1` 一律 UTF-8 **带 BOM**。
 
-## 四个入口（2026-11-13 从九个收成四个）
+## 两个入口（2026-11-14 从四个收成两个）
 
 | 启动 | 停 |
 | --- | --- |
-| `Run DSH.cmd` —— 起主 dsh；已经在跑就直接打开它的 WebUI | `Stop DSH.cmd` —— 只关主 dsh；还在跑的小鱼继续跑 |
-| `Run All Whales.cmd` —— 起所有鱼（主 dsh 开窗、其余后台） | `Stop All Whales.cmd` —— 关所有鱼（**含主 dsh**） |
+| `Run All Whales.cmd` —— 起整个鱼塘（主 dsh 开窗、其余后台） | `Stop All Whales.cmd` —— 关整个鱼塘（先鱼后主） |
+
+> 2026-11-14 删了 `Run DSH.cmd` / `Stop DSH.cmd`：鱼活不过主进程（PRD A.76），"只起主 dsh"就是空鱼塘，和 `Run All Whales.cmd` 已经不是两件事。要调试空鱼塘用 `pwsh -File scripts\fish.ps1 up-main`。
 
 **为什么从九个删到四个**（删了 `Run DSH-Check` / `Run All Whales-Check` / `Run lil whale-Check` / `Stop lil whale` / `Run lil whale`）：
 
@@ -37,7 +38,7 @@
 pwsh -File scripts\fish.ps1 list                 # 名册 + 端口 + 心跳
 pwsh -File scripts\fish.ps1 up   <鱼|all>        # 起；默认无人值守（无窗）；all 有锁，防重复启动
 pwsh -File scripts\fish.ps1 down <鱼|all> [-Yes] [-Force]
-pwsh -File scripts\fish.ps1 up-main / down-main  # 主 dsh（down-main 有鱼在跑会拒绝）
+pwsh -File scripts\fish.ps1 up-main / down-main  # 主 dsh（down-main 先把鱼停掉再停主：鱼活不过主进程）
 pwsh -File scripts\fish.ps1 doctor | refresh <鱼|all>
 pwsh -File scripts\fish.ps1 maintain / restore <鱼>   # 检修：先停无人值守、开一扇窗；看完关窗再 restore
 pwsh -File scripts\fish.ps1 new -Key <键> -Name <名字> -Parent <父辈键> [-DryRun]   # 养一条新鱼（只由人跑）
@@ -58,11 +59,13 @@ pwsh -File scripts\fish.ps1 acl-check / acl-repair <鱼|all>  # 沙箱通行证�
 | 文件 | 谁调它 |
 | --- | --- |
 | `fish.ps1` | 人 + 鱼塘（`/pond/api/action`）+ 巡守自启动（`up all -NoBrowser`） |
-| `wake-fish.ps1` | `dsh-lil-whale-group` 插件的巡守定时器（`HER_WAKER`）：每 60 秒看一次，按名册逐条鱼判断；`-Member <键>` 指定叫谁 |
+| `wake-fish.ps1` | `dsh-lil-whale-group` 插件的巡守定时器（`selfWaker`）：每 60 秒看一次，按名册逐条鱼判断；`-Member <键>` 指定叫谁 |
 | `doctor.ps1` | `fish.ps1 doctor`、鱼塘「检修」、`release-check.ps1` |
 | `verify-pending.ps1` | 重启后验收：runs 账按鱼写 / 自己的闹钟 / gate 读数 / 归属 B 与全局 120 / 自启动开关 / 鱼塘接口 / 模式账 |
 | `test-plan.mjs` | 计划表与唤醒额度的行为测试（26 用例，真 import 真代码） |
-| `test-sleep.mjs` | 睡眠窗口/跨午夜/优先级的行测试（40 用例，真 import 真代码） |
+| `test-sleep.mjs` | 睡眠窗口/跨午夜/优先级的行测试（50 用例，真 import 真代码） |
+| `test-rename.mjs` | 改名的行为测试（27 用例：名字清洗、重名、曾用名、24h 冷却） |
+| `rotate-logs.mjs` | 日志轮转：>1 MB 切一份、同类留 3 份（巡守每小时跑一次） |
 | `sleep-cli.mjs` | 睡眠状态的命令行：`status` / `wake` / `seed` / `pref`（`fish.ps1` 调它） |
 | `install.ps1` / `release-check.ps1` / `pack.ps1` | 装、验、打包 |
 | `archive-fish.mjs` | 归档一条鱼（`--subtree` 连同孩子）；默认只写 manifest 不删东西 |
@@ -80,7 +83,7 @@ pwsh -File scripts\fish.ps1 acl-check / acl-repair <鱼|all>  # 沙箱通行证�
 | 大肥鱼 | `<你的 dsh 家>\logs\web-latest.log` / `.err.log` |
 | 小肥鱼 | `<小肥鱼的家>\dsh-home\logs\web-latest.log` / `.err.log` |
 | 每条鱼的起停账 | `pool\state\runs\<成员>.log` |
-| 巡守（插件版） | `pool\state\watchman.log`（多鱼化后每行带 `to=<键>`） |
+| 巡守（插件版） | `<第一条鱼的家>\logs\watchman.log`（多鱼化后每行带 `to=<键>`；2026-11-14 核过实际路径） |
 
 ## 旧脚本去哪了
 

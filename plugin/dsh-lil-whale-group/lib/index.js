@@ -2850,6 +2850,22 @@ async function crashNotify() {
   }
 }
 
+// 日志轮转：每小时最多一次，起一个独立进程去切（A.86）。
+let lastLogRotateAt = 0
+function maybeRotateLogs() {
+  const now = Date.now()
+  if (now - lastLogRotateAt < 3600_000) return
+  lastLogRotateAt = now
+  try {
+    const script = join(CFG.repoRoot, 'scripts', 'rotate-logs.mjs')
+    if (!existsSync(script)) return
+    const child = spawn(process.execPath, [script], { detached: true, stdio: 'ignore', windowsHide: true })
+    child.unref()
+  } catch {
+    /* 轮转失败不该炸巡守 */
+  }
+}
+
 async function watchmanTick() {
   const day = new Date().toDateString()
   if (watchState.day !== day) {
@@ -2882,6 +2898,7 @@ async function watchmanTick() {
   try { await crashNotify() } catch { /* 报警失败不该炸巡守 */ }
   // 面板只读这一份汇总：睡眠判断只有 sleep-core.js 一处实现（A.23）。
   try { writeSleepStatus() } catch { /* 面板显示失败不该炸巡守 */ }
+  try { maybeRotateLogs() } catch { /* 同上 */ }
 }
 
 export { name, inject, apply }
