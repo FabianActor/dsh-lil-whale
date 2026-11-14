@@ -3111,10 +3111,16 @@ function auditRoster(now = new Date()) {
   if (homeWithoutRoster.length) problems.push(`home-without-roster=${homeWithoutRoster.join(',')}`)
   if (rosterWithoutHome.length) problems.push(`roster-without-home=${rosterWithoutHome.join(',')}`)
   if (pinWithoutRoster.length) problems.push(`pin-without-roster=${pinWithoutRoster.join(',')}`)
-  if (problems.length === 0) return
+  const counts = `roster=${rosterAll.size} homes=${homes.size} pins=${pinKeys.length}`
+  // 每次跑都写一行（2026-11-14 小肥鱼：文件不存在只说明"还没跑过"，不说明"跑了没问题"——
+  // 要让"没跑"和"跑了没问题"在纸上长得不一样）。
+  const line = problems.length
+    ? `${now.toISOString()} | roster-mismatch | fmt=1 ${counts} ${problems.join(' ')}`
+    : `${now.toISOString()} | roster-audit | fmt=1 ok ${counts}`
   try {
-    appendFileSync(ROSTER_AUDIT_LOG, `${now.toISOString()} | roster-mismatch | fmt=1 ${problems.join(' ')}\n`)
+    appendFileSync(ROSTER_AUDIT_LOG, `${line}\n`)
   } catch { /* 日志写不了不该炸巡守 */ }
+  if (problems.length === 0) return
   watchmanLog('error', `why=roster-mismatch ${problems.join(' ')}`)
   // 只告诉人（fabian）：名册外的鱼叫不动，能看见这件事的只有人。
   try {

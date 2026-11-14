@@ -193,6 +193,19 @@ if (Test-Path -LiteralPath $pluginLog) {
     Add-Row '名册与家' 'WARN' ('自检跑不了：' + $_.Exception.Message)
   }
 
+  # 3e. 名册自检的账：文件不存在 = 还没跑过，不是"跑了没问题"（2026-11-14，小肥鱼）
+  $auditLog = Join-Path $Cfg.PoolState 'roster-audit.log'
+  if (Test-Path -LiteralPath $auditLog) {
+    $lastAudit = (Get-Content -LiteralPath $auditLog -Tail 1 -Encoding utf8)
+    if ($lastAudit -match 'roster-mismatch') {
+      Add-Row '名册自检' 'FAIL' ('最近一次对不上：' + $lastAudit.Trim()) 'NEXT: 看 pool\state\roster-audit.log'
+    } else {
+      Add-Row '名册自检' 'OK' ('最近一次：' + $lastAudit.Trim())
+    }
+  } else {
+    Add-Row '名册自检' 'WARN' 'roster-audit.log 不存在——只说明还没跑过（1.5.x 未进进程？），不说明没问题' 'NEXT: 重启 3080 后等第一拍'
+  }
+
 # 4. 名册：群认会话不认名字；登记错了 = 叫错人
 $pinsFile = Join-Path $Cfg.GroupDir 'pins.json'
 if (Test-Path -LiteralPath $pinsFile) {
