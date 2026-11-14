@@ -33,6 +33,19 @@ import {
   DEFAULT_SLEEP_FROM,
   DEFAULT_SLEEP_TO, normalizeSleepArgs } from './sleep-core.js'
 import { cleanName, nameTaken, historyAfterRename, canRename, renameAnnouncement, NAME_MAX } from './rename-core.js'
+import {
+  parseIntents,
+  intentDeliveryText,
+  probePending,
+  probeTextAppears,
+  probeFileChanged,
+  inTimeWindow,
+  cooldownOk,
+  capOk,
+  looksLikeSchedule,
+  pathAllowed,
+  INTENT_GRACE_MIN,
+} from './intent-core.js'
 
 // 这个包是用 link: 挂进 profile 的，它的真实路径在项目里，walk-up 找不到宿主的
 // @deepseek-ai/* 依赖（会 ERR_MODULE_NOT_FOUND，整个插件加载失败、工具静默消失）。
@@ -191,6 +204,15 @@ const SLEEP_STATUS_FILE = join(POOL_STATE, 'sleep-status.json')
 const SLEEP_LOG = join(POOL_STATE, 'sleep.log')
 // 改名账本（2026-11-14 他定的规矩）：名字只能由她自己改，每一次都要留一行。
 const NAMES_LOG = join(POOL_STATE, 'names.log')
+// ---------- 她自己写下的条件（wake-on / intent，2026-11-14 实现） ----------
+// 第三种触发源：不是闹钟到点，也不是谁叫她，而是"她自己写下的条件成立了"。
+// 只由巡守探测（单一写者）：她的进程继续只管 plan —— 两个 prober 写同一份状态，
+// 就是 lost update 的老面孔（PRD A.28/A.30/A.36 同族）。
+// 边界：默认只监听家外（pool\ 与 app\docs\）；自家要 insideHome:true；别人家一律不许
+// （合法做法是对方发消息告诉她，她再用 pending 等）。
+const INTENT_DIR = join(POOL_STATE, 'wake-on')
+const INTENT_GLOBAL_FILE = join(INTENT_DIR, '_global.json')
+const POND_ROOT = dirname(CFG.poolDir)
 
 function sleepLog(result, why) {
   try {
@@ -2572,6 +2594,233 @@ function selfPlanTick() {
   }
 }
 
+function intentFileOf(member) {
+  return join(member.home ?? SELF_HOME, 'plan', 'wake-on.json')
+}
+
+function intentStateFileOf(member) {
+  return join(INTENT_DIR, `${member.key}.json`)
+}
+
+function readIntentState(member) {
+  const raw = readJson(intentStateFileOf(member), {})
+  return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
+}
+
+function writeIntentState(member, state) {
+  try {
+    mkdirSync(INTENT_DIR, { recursive: true })
+    writeJson(intentStateFileOf(member), state)
+  } catch (error) {
+    watchmanLog('error', `why=intent-state-write-failed to=${member.key} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 100)}`)
+  }
+}
+
+function readIntentGlobal() {
+  const raw = readJson(INTENT_GLOBAL_FILE, {})
+  return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
+}
+
+function bumpIntentGlobal(now) {
+  const today = todayKey(now)
+  const g = readIntentGlobal()
+  const count = g.day === today ? Number(g.count) || 0 : 0
+  try {
+    mkdirSync(INTENT_DIR, { recursive: true })
+    writeJson(INTENT_GLOBAL_FILE, { day: today, count: count + 1, updatedAt: now.toISOString() })
+  } catch {
+    // 全局额度记不上就少收一层闸，不炸 tick
+  }
+}
+
+/** 读游标之后的新消息（只解析，不投递）。 */
+function readMessageEntriesSince(cursor) {
+  const lines = readLinesOf(MESSAGES)
+  const start = Math.max(0, Number(cursor) || 0)
+  const out = []
+  for (const raw of lines.slice(start)) {
+    try {
+      const r = JSON.parse(raw)
+      if (!r || typeof r !== 'object') continue
+      out.push({ from: String(r.from ?? ''), text: String(r.text ?? ''), ts: r.ts, channel: String(r.channel ?? '') })
+    } catch {
+      // 半截行不算消息（同 settleMarks 的规矩）
+    }
+  }
+  return out
+}
+
+function intentCursorOf(member) {
+  const cursors = readCursors(member.key)
+  const own = cursors?.[member.key]
+  return Number(own?.group) || 0
+}
+
+function sha256OfFile(file) {
+  return createHash('sha256').update(readFileSync(file)).digest('hex').slice(0, 16)
+}
+
+/** 文件/目录的基线（大小 + 最后写时间 + 指纹）。目录按"名字:大小:时间"拼起来再哈希。 */
+function baselineOfPath(target) {
+  const st = statSync(target)
+  if (!st.isDirectory()) {
+    return { size: st.size, mtimeMs: st.mtimeMs, hash: sha256OfFile(target) }
+  }
+  const parts = []
+  let size = 0
+  let mtimeMs = st.mtimeMs
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name)
+      if (entry.isDirectory()) {
+        walk(full)
+        continue
+      }
+      const s = statSync(full)
+      size += s.size
+      mtimeMs = Math.max(mtimeMs, s.mtimeMs)
+      parts.push(`${entry.name}:${s.size}:${Math.round(s.mtimeMs)}`)
+    }
+  }
+  walk(target)
+  parts.sort()
+  return { size, mtimeMs, hash: createHash('sha256').update(parts.join('|')).digest('hex').slice(0, 16) }
+}
+
+function resolveIntentPath(spec, member) {
+  const allowed = pathAllowed(spec.path, { insideHome: spec.insideHome, ownKey: member.key })
+  if (!allowed.ok) return { ok: false, why: allowed.why }
+  return { ok: true, file: join(POND_ROOT, allowed.rel) }
+}
+
+/** 探一条条件。返回 {hit, evidence, patch}；patch 是要写回状态的东西（偏移/基线）。 */
+function probeOneIntent(member, spec, s, now) {
+  try {
+    if (spec.kind === 'pending') {
+      const entries = readMessageEntriesSince(intentCursorOf(member))
+      const r = probePending({ entries, ownKey: member.key, from: spec.from, minCount: spec.minCount })
+      return { hit: r.hit, evidence: r.evidence, patch: null }
+    }
+    const resolved = resolveIntentPath(spec, member)
+    if (!resolved.ok) {
+      noteOnce(member, `intent-path-rejected id=${spec.id} why=${resolved.why}`)
+      return { hit: false }
+    }
+    if (!existsSync(resolved.file)) {
+      noteOnce(member, `intent-path-missing id=${spec.id}`)
+      return { hit: false }
+    }
+    if (spec.kind === 'text-appears') {
+      const content = readFileSync(resolved.file, 'utf8')
+      const r = probeTextAppears({ content, offset: s.offset ?? 0, spec })
+      return { hit: r.hit, evidence: r.evidence, patch: { offset: r.nextOffset ?? content.length } }
+    }
+    const current = baselineOfPath(resolved.file)
+    const r = probeFileChanged({ current, baseline: s.baseline ?? null })
+    return { hit: r.hit, evidence: r.evidence, patch: { baseline: r.baseline } }
+  } catch (error) {
+    noteOnce(member, `intent-probe-failed id=${spec.id} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 100)}`)
+    return { hit: false }
+  }
+}
+
+function hhmmOf(now) {
+  const p = (n) => String(n).padStart(2, '0')
+  return `${p(now.getHours())}${p(now.getMinutes())}`
+}
+
+/**
+ * 巡守侧的探测：读她自己的 `plan\wake-on.json`，条件成立就递一句（s=watch）。
+ * 睡着时不叫、只记着；醒来 15 分钟内还成立就补投，超过就算了（intent-stale）。
+ */
+async function intentTick(member, st, now) {
+  const file = intentFileOf(member)
+  if (!existsSync(file)) return
+  let raw
+  try {
+    raw = JSON.parse(readFileSync(file, 'utf8'))
+  } catch (error) {
+    noteOnce(member, `intent-unreadable ${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 80)}`)
+    return
+  }
+  const { list, notes } = parseIntents(raw)
+  for (const note of notes) noteOnce(member, note)
+  if (list.length === 0) return
+  const state = readIntentState(member)
+  const today = todayKey(now)
+  let dirty = false
+  for (const spec of list) {
+    const s = state[spec.id] && typeof state[spec.id] === 'object' ? state[spec.id] : {}
+    state[spec.id] = s
+    if (spec.each === 'once' && s.done) continue
+    if (spec.until && String(spec.until) < today) {
+      noteOnce(member, `intent-expired id=${spec.id} until=${spec.until}`)
+      continue
+    }
+    if (!inTimeWindow(spec, now)) continue
+    const probe = probeOneIntent(member, spec, s, now)
+    if (probe.patch) {
+      for (const [key, value] of Object.entries(probe.patch)) s[key] = value
+      dirty = true
+    }
+    if (!probe.hit) continue
+    if (!s.firstTrueAt) {
+      s.firstTrueAt = now.toISOString()
+      dirty = true
+    }
+    if (isSleeping(member.key, now)) {
+      noteOnce(member, `wake-skip why=sleep intent=${spec.id}（条件成立了，先记着）`)
+      continue
+    }
+    const ageMs = now.getTime() - Date.parse(s.firstTrueAt)
+    if (!Number.isFinite(ageMs) || ageMs > INTENT_GRACE_MIN * 60_000) {
+      noteOnce(member, `wake-skip why=intent-stale intent=${spec.id}`)
+      delete s.firstTrueAt
+      dirty = true
+      continue
+    }
+    const cap = capOk(s, spec, now, readIntentGlobal())
+    if (!cap.ok) {
+      noteOnce(member, `wake-skip why=${cap.why} intent=${spec.id}`)
+      continue
+    }
+    if (!cooldownOk(s, spec, now)) {
+      noteOnce(member, `wake-skip why=intent-cooldown intent=${spec.id}`)
+      continue
+    }
+    const seq = Number(s.count) || 0
+    if (!claimPlanDelivery(member, `intent-${spec.id}-${seq}`)) continue
+    const wid = `wl-${hhmmOf(now)}-${spec.id}`
+    const counts = wakeCountsOf(member.key)
+    watchmanLog(
+      'wake-try',
+      `wid=${wid} why=intent:${spec.id} to=${member.key} gate=pass(hour=${counts.hour}/${WAKE.perHour},day=${counts.day}/${WAKE.perDay}) at=${s.firstTrueAt}`,
+    )
+    try {
+      say('lee', member.key, intentDeliveryText(spec, probe.evidence), 'group', 'watch')
+      watchmanLog('woke', `wid=${wid} trigger=intent lag=${Math.round(ageMs / 1000)}s inserted=1`)
+      markWake(member.key, 'intent')
+    } catch (error) {
+      watchmanLog('wake-skip', `wid=${wid} why=intent-deliver-failed detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 100)}`)
+      continue
+    }
+    const schedule = looksLikeSchedule(s, now)
+    s.dayStart = today
+    s.count = (Number(s.count) || 0) + 1
+    s.lastDeliveredAt = now.toISOString()
+    s.lastMinute = schedule.minute
+    s.lastMinuteDay = schedule.day
+    s.minuteStreak = schedule.streak
+    delete s.firstTrueAt
+    if (spec.each === 'once') s.done = true
+    if (schedule.isScheduleLike) {
+      noteOnce(member, `intent-looks-like-schedule id=${spec.id} minute=${schedule.minute} streak=${schedule.streak}`)
+    }
+    bumpIntentGlobal(now)
+    dirty = true
+  }
+  if (dirty) writeIntentState(member, state)
+}
 async function watchOne(member, st) {
   const now = Date.now()
   // 门挂上/掉下来才记一行 —— 她 2026-11-13 09:07 说的：行数也是成本。
@@ -2607,6 +2856,13 @@ async function watchOne(member, st) {
   }
   for (const p of planDue(member, st, new Date())) {
     jobs.push({ key: p.id, tag: `plan=${p.id} at=${p.at}`, why: 'plan', from: 'plan', itemWhy: p.why, at: p.at })
+  }
+  // 第三种触发源：她自己写下的条件（只由巡守探测）。放在 jobs 判空之前 ——
+  // 没有到点的计划，不代表没有成立的条件。
+  try {
+    await intentTick(member, st, new Date())
+  } catch (error) {
+    watchmanLog('error', `why=intent-tick-failed to=${member.key} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)}`)
   }
   if (jobs.length === 0) return
 

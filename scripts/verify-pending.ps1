@@ -98,6 +98,17 @@ if (Test-Path -LiteralPath $renameTest) {
   Add-Row '改名逻辑（行为测试）' 'FAIL' 'scripts\test-rename.mjs 不见了'
 }
 
+# 4e) 她自己写的条件（wake-on）行为测试，2026-11-14 加。
+# 三种 kind、路径白名单、冷却、额度、伪装日程 —— 任何一条算错，
+# 表现都是"永远不触发"或者"在盯着别人家"，两种都不会自己报警。
+$intentTest = Join-Path $repo 'scripts\test-intent.mjs'
+if (Test-Path -LiteralPath $intentTest) {
+  $intentOut = & node $intentTest 2>&1
+  $intentOk = ($LASTEXITCODE -eq 0)
+  Add-Row '条件逻辑（行为测试）' $(if ($intentOk) { 'PASS' } else { 'FAIL' }) (($intentOut | Select-Object -Last 1))
+} else {
+  Add-Row '条件逻辑（行为测试）' 'FAIL' 'scripts\test-intent.mjs 不见了'
+}
 # 5) 自启动开关
 $settings = Join-Path $Cfg.PoolState 'settings.json'
 if (Test-Path -LiteralPath $settings) {

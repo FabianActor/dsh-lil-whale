@@ -4,6 +4,13 @@
 > 它与两个 npm 包的版本（各自 `package.json` 里的 semver，如 `1.2.0`）是**两条线**：包版本只在功能或破坏性变化、发布时才动。
 > 编号从 r1 开始（第一稿就是 r1）。2026-11-13 之前这些号写作 `v1.0.NN`，本次统一改名，编号不变。
 
+## r95 — 2026-11-14 17:2x
+
+- **她自己写下的条件（wake-on / intent）**：新增 `plugin\dsh-lil-whale-group\lib\intent-core.js`（纯逻辑）+ `scripts\test-intent.mjs`（24 用例）+ 巡守侧探测（`intentTick`，只在 `watchOne` 里）；三种 kind：`pending` / `text-appears` / `file-changed`；状态 `pool\state\wake-on\<键>.json`、全局额度 `_global.json`；投递走 `say(..., "group", "watch")`，睡眠期间天然扣住；日志 `trigger=intent` / `wid=wl-<HHMM>-<id>` / `at=` / `lag=`。
+- **评审改掉四处**：只由巡守探测（单一写者）；`unread`→`pending`；别人家不许监听（合法做法 = 对方发消息告诉她）；证据快照就是那条消息本身，不另存。
+- **接线**：`doctor.ps1` 3c（wake-on.json 形状）、`verify-pending.ps1` 4e、`release-check.ps1` 4e；`templates\环境.md.tpl` 加「你自己写的条件」一节并 `fish.ps1 refresh all` 重生成两条鱼；两个包 **1.3.0 → 1.4.0**。
+- PRD **r95** + **A.87 她自己写下的条件**。
+
 ## r94 — 2026-11-14 16:5x
 
 - **日志轮转**（他 16:39 批的）：新增 `scripts\rotate-logs.mjs`（> 1 MB 切一份、同类留 3 份、`--dry-run`）；巡守每小时起一次（`maybeRotateLogs()`，独立进程、失败不炸巡守）；PRD A.86。

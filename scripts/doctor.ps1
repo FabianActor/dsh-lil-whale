@@ -131,6 +131,34 @@ if (Test-Path -LiteralPath $pluginLog) {
     Add-Row '睡眠工具' 'WARN' 'plugin.log 里还没有 sleep-tools-registered（旧代码或还没重启）'
   }
 
+  # 3c. 她自己的条件（wake-on）：形状坏了就永远不会触发；"没触发"和"没写"在纸上一样。
+  if ($Cfg.MembersFile -and (Test-Path -LiteralPath $Cfg.MembersFile)) {
+    try {
+      $mjOn = Get-Content -LiteralPath $Cfg.MembersFile -Raw -Encoding utf8 | ConvertFrom-Json
+      foreach ($p in $mjOn.members.PSObject.Properties) {
+        if ($p.Value.role -eq 'watcher' -or $p.Value.kind -ne 'fish') { continue }
+        if (-not $p.Value.home) { continue }
+        $wakeOn = Join-Path $p.Value.home 'plan\wake-on.json'
+        if (-not (Test-Path -LiteralPath $wakeOn)) { continue }
+        $onLabel = $p.Value.name
+        try {
+          $raw = Get-Content -LiteralPath $wakeOn -Raw -Encoding utf8 | ConvertFrom-Json
+          $list = if ($raw -is [array]) { @($raw) } elseif ($null -ne $raw.items) { @($raw.items) } else { $null }
+          if ($null -eq $list) {
+            Add-Row ('条件（' + $onLabel + '）') 'FAIL' 'wake-on.json 形状不对（要数组或 {items:[...]}）' 'NEXT: 让她改写成数组'
+          } else {
+            $bad = @($list | Where-Object { -not $_.why -or -not $_.kind })
+            if ($bad.Count -gt 0) { Add-Row ('条件（' + $onLabel + '）') 'WARN' ('有 ' + $bad.Count + ' 条缺 why/kind，不会触发') }
+            else { Add-Row ('条件（' + $onLabel + '）') 'OK' ($list.Count.ToString() + ' 条，形状正常') }
+          }
+        } catch {
+          Add-Row ('条件（' + $onLabel + '）') 'FAIL' ('wake-on.json 读不了：' + $_.Exception.Message)
+        }
+      }
+    } catch {
+      # 名册读不了由别处报，这里不重复
+    }
+  }
 # 4. 名册：群认会话不认名字；登记错了 = 叫错人
 $pinsFile = Join-Path $Cfg.GroupDir 'pins.json'
 if (Test-Path -LiteralPath $pinsFile) {
