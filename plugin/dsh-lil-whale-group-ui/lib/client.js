@@ -2641,6 +2641,8 @@ function Bubble({ config, message, onMention, animate = false }) {
       upHint: '无窗起，会话由 host 自己挂上（无人值守）',
       down: '休眠',
       open: '打开 WebUI',
+      pending: '处理中…',
+      pendingHint: '正在执行（比如检修要先停再起，中间有十几秒没有进程）。等命令行起来，这中间不要点别的。',
       // 睡觉（2026-11-14，PRD A.73）：她自己决定睡，家长能强行叫醒。
       wake: '叫醒',
       wakeHint: '她自己在睡。叫醒会让她醒到本窗结束（记 pool\\state\\sleep.log）。',
@@ -3077,10 +3079,24 @@ function Bubble({ config, message, onMention, animate = false }) {
               const windowMode = item.mode?.mode === 'window'
               const busyThis = busyAny
               const sleeping = !!item.sleep?.sleeping
+              // 动作在飞的时候不要露"唤醒"（他 2026-11-14 23:23 的观察）：
+              // 检修是先停再起，中间有十几秒"进程不在"，卡片会短暂显示只有「唤醒」——
+              // 用户此时什么都不该点，只需要等命令行起来。所以执行期间只画一个灰着的「处理中…」。
+              const pendingThis = busy !== null && (
+                busy === `up:${item.key}` || busy === `maintain:${item.key}`
+                || busy === `restore:${item.key}` || busy === `down:${item.key}`
+                || busy === `wake:${item.key}` || busy === 'up-all' || busy === 'down-all'
+              )
               // 只画当下能点的按钮（他 2026-11-14 23:15 的第②条要求）：
               // 一个永远灰着的按钮，和一个坏了的按钮，在纸上长得一样 —— 不该出现的就别画。
               const buttons = []
-              if (!running) {
+              if (pendingThis) {
+                buttons.push(h(
+                  'button',
+                  { disabled: true, style: pondButtonStyle(false), title: POND.pendingHint },
+                  POND.pending,
+                ))
+              } else if (!running) {
                 buttons.push(h(
                   'button',
                   { onClick: () => act('up', item.key), disabled: busyThis, style: pondButtonStyle(true), title: POND.upHint },
@@ -3247,7 +3263,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v40 · pond-buttons:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v41 · pond-pending:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')
