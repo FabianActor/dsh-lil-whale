@@ -2640,7 +2640,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       openBlockedShort: '无人值守：先休眠，再打开',
       upHint: '无窗起，会话由 host 自己挂上（无人值守）',
       down: '休眠',
-      open: '打开',
+      open: '打开 WebUI',
       // 睡觉（2026-11-14，PRD A.73）：她自己决定睡，家长能强行叫醒。
       wake: '叫醒',
       wakeHint: '她自己在睡。叫醒会让她醒到本窗结束（记 pool\\state\\sleep.log）。',
@@ -2650,8 +2650,8 @@ function Bubble({ config, message, onMention, animate = false }) {
       wakeForced: '上次被叫醒',
       wakeForcedHint: '家长在鱼塘面板或命令行叫醒过她。只留痕、不打扰；记录在她自己的状态文件 pool\state\sleep\<键>.json 的 lastForced。',
       sleepUnknown: '',
-      openHint: '打开她的 WebUI。无人值守时先休眠，否则会撞 writer。',
-      openBlocked: '无人值守时不能直接开窗——一段会话只能一个 writer。先点「休眠」，再「打开」，看完点「回无人值守」。',
+      openHint: '在新标签页打开她的 WebUI。只是看，不会多出一个 writer；无人值守时也能开。',
+      openBlocked: '',
       running: '在跑',
       stopped: '没开',
       port: '端口',
@@ -2859,11 +2859,9 @@ function Bubble({ config, message, onMention, animate = false }) {
         [load],
       )
 
-      const openFish = useCallback(async (key, mode) => {
-        if (mode === 'unattended') {
-          setError(POND.openBlocked)
-          return
-        }
+      const openFish = useCallback(async (key) => {
+        // 2026-11-14 23:15（Fabian）：无人值守也能开 —— 浏览器里的 WebUI 只是"看"，写手还是那个进程，
+        // 不会多出一个 writer。旧版这里拦 unattended，结果"打开"永远点不动。
         setOpenBusy(key)
         try {
           const response = await fetch(`/pond/api/url?key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } })
@@ -3077,57 +3075,54 @@ function Bubble({ config, message, onMention, animate = false }) {
             : (() => {
               const running = !!item.portOpen
               const windowMode = item.mode?.mode === 'window'
-              const unattended = item.mode?.mode === 'unattended'
               const busyThis = busyAny
-              // 四个动作各自什么时候有意义（他 2026-11-13 11:52 第 4 条：检修状态下要把其余按钮的逻辑理清）。
-              const canUp = !running && !busyThis
-              const canDown = running && !busyThis
-              const canSwitch = !busyThis
-              const canOpen = running && !unattended && !windowMode && openBusy !== item.key
-              const openTitle = !running
-                ? POND.openClosed
-                : unattended ? POND.openBlocked : windowMode ? POND.openAlready : POND.openHint
+              const sleeping = !!item.sleep?.sleeping
+              // 只画当下能点的按钮（他 2026-11-14 23:15 的第②条要求）：
+              // 一个永远灰着的按钮，和一个坏了的按钮，在纸上长得一样 —— 不该出现的就别画。
+              const buttons = []
+              if (!running) {
+                buttons.push(h(
+                  'button',
+                  { onClick: () => act('up', item.key), disabled: busyThis, style: pondButtonStyle(true), title: POND.upHint },
+                  busy === `up:${item.key}` ? '…' : POND.up,
+                ))
+              } else {
+                buttons.push(h(
+                  'button',
+                  { onClick: () => openFish(item.key), disabled: openBusy === item.key, style: pondButtonStyle(false), title: POND.openHint },
+                  openBusy === item.key ? '…' : POND.open,
+                ))
+                buttons.push(windowMode
+                  ? h(
+                    'button',
+                    { onClick: () => act('restore', item.key), disabled: busyThis, style: pondButtonStyle(false), title: POND.restoreHint },
+                    busy === `restore:${item.key}` ? '…' : POND.restore,
+                  )
+                  : h(
+                    'button',
+                    { onClick: () => act('maintain', item.key), disabled: busyThis, style: pondButtonStyle(false), title: POND.maintainHint },
+                    busy === `maintain:${item.key}` ? '…' : POND.maintain,
+                  ))
+                if (sleeping) {
+                  buttons.push(h(
+                    'button',
+                    { onClick: () => act('wake', item.key), disabled: busyThis, style: pondButtonStyle(false), title: POND.wakeHint },
+                    busy === `wake:${item.key}` ? '…' : POND.wake,
+                  ))
+                }
+                buttons.push(h(
+                  'button',
+                  { onClick: () => act('down', item.key), disabled: busyThis, style: pondButtonStyle(false), title: POND.downHint },
+                  busy === `down:${item.key}` ? '…' : POND.down,
+                ))
+              }
               return h(
                 'div',
                 { style: { display: 'flex', flexDirection: 'column', gap: 6, marginTop: 2 } },
                 h(
                   'div',
                   { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
-                  h(
-                    'button',
-                    { onClick: () => act('up', item.key), disabled: !canUp, style: pondButtonStyle(true), title: running ? POND.upRunning : POND.upHint },
-                    busy === `up:${item.key}` ? '…' : POND.up,
-                  ),
-                  windowMode
-                    ? h(
-                      'button',
-                      { onClick: () => act('restore', item.key), disabled: !canSwitch, style: pondButtonStyle(false), title: POND.restoreHint },
-                      busy === `restore:${item.key}` ? '…' : POND.restore,
-                    )
-                    : h(
-                      'button',
-                      { onClick: () => act('maintain', item.key), disabled: !canSwitch, style: pondButtonStyle(false), title: POND.maintainHint },
-                      busy === `maintain:${item.key}` ? '…' : POND.maintain,
-                    ),
-                  item.sleep?.sleeping
-                    ? h(
-                      'button',
-                      { onClick: () => act('wake', item.key), disabled: busyAny, style: pondButtonStyle(false), title: POND.wakeHint },
-                      busy === `wake:${item.key}` ? '…' : POND.wake,
-                    )
-                    : null,
-                  h(
-                    'button',
-                    { onClick: () => act('down', item.key), disabled: !canDown, style: pondButtonStyle(false), title: running ? POND.downHint : POND.downClosed },
-                    busy === `down:${item.key}` ? '…' : POND.down,
-                  ),
-                  running
-                    ? h(
-                      'button',
-                      { onClick: () => openFish(item.key, item.mode?.mode), disabled: !canOpen, style: pondButtonStyle(false), title: openTitle },
-                      POND.open,
-                    )
-                    : null,
+                  ...buttons,
                 ),
                 windowMode
                   ? h('div', { style: { fontSize: 11, lineHeight: '16px', color: 'var(--dsw-alias-label-tertiary, #8a8f98)' } }, POND.windowHint)
@@ -3252,7 +3247,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v39 · wake-trace:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v40 · pond-buttons:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')
