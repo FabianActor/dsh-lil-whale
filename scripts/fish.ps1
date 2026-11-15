@@ -296,6 +296,37 @@ function Get-ProfileProcesses($member) {
   })
 }
 
+# 端口上是谁在听：netstat 拿 pid，再按 pid 找进程名。
+# 为什么不能只看"端口通"：2026-11-15 F1 实测，3084 被一个陌生 TcpListener 占着，
+# \`up xiaoman\` 照样打印"已经在跑（3084）"并退出 0 —— 纸面比现场乐观，而且他以为她起来了。
+# 判据：端口通 + 有她的 profile 进程 = 在跑；端口通 + 没有 = 端口被占（不是她的）。
+function Get-PortOwnerPid([int]$Port) {
+  # 2026-11-15 实测：本机沙箱里 netstat 只肯给 ESTABLISHED，看不到 LISTENING 行
+  # （监听器明明开着、connect 也通，netstat 里就是没有那一行）—— 所以先问 Get-NetTCPConnection。
+  try {
+    $conn = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction Stop)
+    if ($conn.Count -gt 0) { return [int]$conn[0].OwningProcess }
+  } catch { }
+  $lines = @(& netstat -ano -p TCP 2>$null | Where-Object { $_ -match (':' + $Port + '\s') -and $_ -match 'LISTENING' })
+  if ($lines.Count -eq 0) { return $null }
+  $parts = @(($lines[0] -split '\s+') | Where-Object { $_ -ne '' })
+  if ($parts.Count -eq 0) { return $null }
+  $n = 0
+  if ([int]::TryParse([string]$parts[-1], [ref]$n)) { return $n }
+  return $null
+}
+
+function Describe-PortOwner([int]$Port) {
+  $ownerPid = Get-PortOwnerPid $Port
+  if ($null -eq $ownerPid) { return '占用者读不到（netstat 没给出 pid）' }
+  try {
+    $proc = Get-Process -Id $ownerPid -ErrorAction Stop
+    return ('{0}（pid {1}）' -f $proc.ProcessName, $ownerPid)
+  } catch {
+    return ('pid {0}（进程已退出或读不到名字）' -f $ownerPid)
+  }
+}
+
 function Write-FishWindowLog($member, [string]$Event) {
   if (-not $member.Home) { return }
   $dir = Join-Path $member.Home 'logs'
@@ -415,6 +446,14 @@ function Start-Fish($member) {
     }
   }
   if (Test-Port $fishPort) {
+    # 端口通不等于她在跑：陌生人也能占着同一个端口。
+    $herProcs = @(Get-ProfileProcesses $member)
+    if ($herProcs.Count -eq 0) {
+      $owner = Describe-PortOwner $fishPort
+      Write-Host ("{0}：端口 {1} 被别的程序占了 —— {2}。她的进程根本没起，这次 up 什么都没做。" -f $member.Label, $fishPort, $owner)
+      Write-Host 'NEXT: 关掉占用者，或给这条鱼换一个端口；别把这次当成"已经在跑"。'
+      return $false
+    }
     $hbAge = Get-HeartbeatAgeSec $member
     if ($null -ne $hbAge -and $hbAge -le 90) {
       # 已经在跑就不再开一次浏览器：重复 `up` 会开出第二个一模一样的窗口，
