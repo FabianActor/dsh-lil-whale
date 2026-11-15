@@ -3126,7 +3126,7 @@ function Bubble({ config, message, onMention, animate = false }) {
                 `${POND.wakeForced} ${pondStamp(item.sleep.lastForced.at)}`,
               )
               : null,
-            parentItem ? h('span', null, `父代 ${parentItem.name}`) : null,
+            parentItem ? h('span', null, `家长 ${parentItem.name}`) : null,
           ),
           item.lastRun
             ? h(

@@ -136,7 +136,7 @@ function label(key) {
 
 const lines = []
 lines.push('# 谱系', '')
-lines.push('> 这份文件是**生成的**，别手改。真源是 `pool\\family.json`（谁是谁的爹）+ `pool\\members.json`（现在叫什么、在不在跑）。')
+lines.push('> 这份文件是**生成的**，别手改。真源是 `pool\\family.json`（谁是谁的家长）+ `pool\\members.json`（现在叫什么、在不在跑）。')
 lines.push('> 重新生成：`node scripts\\gen-family.mjs`', '')
 lines.push('> 名字是公开口径：宿主，以及按出生顺序的「第 N 条鱼」；真名只住在名册里。', '')
 
@@ -170,7 +170,7 @@ function draw(key, prefix, isLast, isRoot) {
 for (const r of roots) draw(r, '', true, true)
 lines.push('```', '')
 
-lines.push('## 名册', '', '| 键 | 名字 | 爹 | 出生 | 端口 | 角色 | 生命周期 |', '|---|---|---|---|---|---|---|')
+lines.push('## 名册', '', '| 键 | 名字 | 家长 | 出生 | 端口 | 角色 | 生命周期 |', '|---|---|---|---|---|---|---|')
 for (const [key, node] of Object.entries(family.nodes).sort((a, b) => (a[1].bornAt || '').localeCompare(b[1].bornAt || '') || a[0].localeCompare(b[0]))) {
   const m = members[key] || {}
   lines.push(`| \`${key}\` | ${pubName(key)} | ${node.parent ? '`' + node.parent + '`' : '—'} | ${node.bornAt || '—'} | ${m.port ?? '—'} | ${m.role || m.kind || '—'} | ${node.lifecycle} |`)

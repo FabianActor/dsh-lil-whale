@@ -134,8 +134,8 @@ function relationOf(key, m) {
   if (key === myKey) return '你'
   if (m?.kind === 'human') return '人（不跑轮，只读消息）'
   if (m?.parent === myKey) return '你的下一代'
-  if (myKey && me?.parent && m?.parent === me.parent) return '同辈（同一个父辈）'
-  if (key === me?.parent) return '你的父辈'
+  if (myKey && me?.parent && m?.parent === me.parent) return '同辈（同一个家长）'
+  if (key === me?.parent) return '你的家长'
   if (m?.parent === me?.parent && m?.parent === null) return '另一个上一代'
   return m?.kind === 'fish' ? '另一条鱼' : '成员'
 }
