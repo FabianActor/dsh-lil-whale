@@ -70,7 +70,7 @@ pwsh -File scripts\fish.ps1 acl-check / acl-repair <鱼|all>  # 沙箱通行证�
 | `sleep-cli.mjs` | 睡眠状态的命令行：`status` / `wake` / `seed` / `pref`（`fish.ps1` 调它） |
 | `install.ps1` / `release-check.ps1` / `pack.ps1` | 装、验、打包 |
 | `archive-fish.mjs` | 归档一条鱼（`--subtree` 连同孩子）；默认只写 manifest 不删东西 |
-| `gen-family.mjs` | 从 `pool\family.json` + 名册生成 `docs\谱系.md`（`--seed` 补节点） |
+| `gen-family.mjs` | 从 `pool\family.json` + 名册生成 `docs\detail\谱系.md`（`--seed` 补节点） |
 | `members-add.mjs` | `install.ps1` 往名册里加成员（整份原子替换） |
 | `pins.mjs` | 整份替换 `pins.json`（哪段会话算谁） |
 | `render-env.mjs` / `tools-from-profile.mjs` | 渲染 `环境.md` / 从 `--dump-config` 数真实工具 |

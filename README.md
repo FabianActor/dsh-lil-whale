@@ -158,14 +158,16 @@ pwsh -File scripts\doctor.ps1 -IncludeLee  # 连你的窗一起看
 ```
 lil-whale/                      鱼塘根（不在 git 里；装第二条鱼时这里长出新的一层）
   app/                          工程（这个仓库）
-     docs/                       活跃文档（PRD、安装、出生、发布、发布说明、打包、能力、判据、账本、自主触发、观察、想法、待办）
+     docs/                       产品文档与工程记录：PRD.md（产品设想）+ CHANGELOG.md（工程变更 + 附录 A）
+     docs/detail/                基座自己的文档：安装、出生、种子、起停、打包、发布、发布说明、待办、观察、谱系、判据、账本、回合、自主触发、能力、想法
+     docs/plugin/                外部能力：看B站（只读眼睛）、生图（第二步）
      docs/archive/               历史记录（开工交接、交接演练、评审意见、过期方案、建议稿）——归档不删；文件名带日期
     plugin/dsh-lil-whale-group/           宿主半边：群发言工具 + 跨进程唤醒（她的 profile 也装）
     plugin/dsh-lil-whale-group-ui/        浏览器半边：群聊面板、设置页、HTTP 路由（只你的 profile 装）
     scripts/                    安装、启动器（fish）、巡守（原守夜）、体检、重建器、名册、谱系、迁移、打包
     templates/                  种子文件模板（START.md / 环境.md / AGENTS.md，安装时填值）
     lil-whale.config.example.json  配置模板（真的那份不进版本库；第二条鱼各有一份 lil-whale.config.<键>.json）
-    docs/谱系.md                生成的谱系图（真源是 pool\family.json + members.json）
+    docs/detail/谱系.md            生成的谱系图（真源是 pool\family.json + members.json）
   pool/                         共享区（不在任何一条鱼的家里面）
     members.json                名册：谁是谁、叫什么、端口、爹是谁
     family.json                 谱系真源：爹、出生、状态、改名史
@@ -203,7 +205,7 @@ pwsh -File scripts\fish.ps1 doctor       # 体检
 
 ## 谱系
 
-`node scripts\gen-family.mjs` 从 `pool\family.json` + `pool\members.json` 生成 [docs/谱系.md](docs/谱系.md)（Mermaid 图 + 树 + 名册 + 改名史）。手画的图会漂，生成的不会。
+`node scripts\gen-family.mjs` 从 `pool\family.json` + `pool\members.json` 生成 [docs/detail/谱系.md](./docs/detail/谱系.md)（Mermaid 图 + 树 + 名册 + 改名史）。手画的图会漂，生成的不会。
 
 ## 端口
 
@@ -227,7 +229,7 @@ pwsh -File scripts\fish.ps1 doctor       # 体检
 - **群聊页没有「成员名单」这一栏**：成员体现在 @ 菜单、私聊列表、设置页里。
 - **她能读到小肥鱼的文件**：两条鱼同一个 Windows 账户，DSH 的沙箱只限制「写」，读没有按路径限制。边界靠规矩，不靠机制（见 CHANGELOG A.31）。
 - **新鱼第一次开窗可能弹一次提权**：新文件夹缺沙箱要的文件权限，允许一次即可（见 CHANGELOG A.30）。
-- **账本里的 `fmt=` 是版本号，不是格式**：`fmt=1` 的时间戳是 UTC（旧），`fmt=2` 是本地时间并带口径字段；两版会长期并存，旧行不该被当成新行读。每个账本自己数自己的 `fmt`——完整登记表在 [docs/账本.md](docs/账本.md)。
+- **账本里的 `fmt=` 是版本号，不是格式**：`fmt=1` 的时间戳是 UTC（旧），`fmt=2` 是本地时间并带口径字段；两版会长期并存，旧行不该被当成新行读。每个账本自己数自己的 `fmt`——完整登记表在 [docs/detail/账本.md](./docs/detail/账本.md)。
 - **名册改动要重启才生效**：`members.json` 是进程启动时读一次 —— 加完鱼、改完名，重启 3080。加鱼之后先跑 `pwsh -File scripts\fish.ps1 doctor`，看「名册（全鱼）」是不是每条鱼都有会话。
 
 ## 她自己定的叫醒（2026-11-14 起）
@@ -291,7 +293,7 @@ pwsh -File scripts\fish.ps1 doctor       # 体检
 
 ## 起停：只有一个开关
 
-**鱼活不过主进程**：主 dsh 一停，Windows 会把它作业对象里的子进程一起收掉，鱼跟着停。所以「重启 dsh」＝「重启整个鱼塘」，没有「鱼自己单独活着」这回事。完整说明见 [起停.md](docs/起停.md)。
+**鱼活不过主进程**：主 dsh 一停，Windows 会把它作业对象里的子进程一起收掉，鱼跟着停。所以「重启 dsh」＝「重启整个鱼塘」，没有「鱼自己单独活着」这回事。完整说明见 [起停.md](./docs/detail/起停.md)。
 
 ```powershell
 pwsh -File scripts\fish.ps1 up all -BrowserMainOnly   # 起鱼塘：主 dsh 开窗，其余鱼后台
@@ -330,32 +332,32 @@ pwsh -File scripts\release-check.ps1
 | 想知道什么 | 看哪 |
 |---|---|
 | 这东西是什么、怎么算成、做到哪一步停 | [`docs/PRD.md`](docs/PRD.md)（当前结论 + 附录 A.x 事故与判据） |
-| 现在还有哪些事、卡在谁那里 | [`docs/待办.md`](docs/待办.md) |
-| 发布时对外说的话（草稿） | [`docs/发布说明.md`](docs/发布说明.md) |
-| 装一条新鱼时给她放什么种子文件 | [`docs/种子.md`](docs/种子.md) |
-| M5 观察（一周满之前的中途记录） | [`docs/观察.md`](docs/观察.md) |
-| 画画（SVG）与生图（第二步） | [`docs/生图.md`](docs/生图.md) |
-| 看 B 站（交给新 session 的交接） | [`docs/看B站.md`](docs/看B站.md) |
-| 想到但还没做的功能（只记录，不排期） | [`docs/想法.md`](docs/想法.md) |
-| 从零装到跑起来的每一步（变量、路径、时序） | [`docs/安装.md`](docs/安装.md) |
-| 怎么"出生"一条新鱼、怎么换段搬家 | [`docs/出生.md`](docs/出生.md) |
-| 发版前逐条检查 | [`docs/发布.md`](docs/发布.md)、`scripts\release-check.ps1` |
-| 打包/编码/发布注意事项 | [`docs/打包.md`](docs/打包.md) |
-| 她"能做什么"的目录 | [`docs/能力.md`](docs/能力.md) |
-| 她的自主分级与判据 | [`docs/回合.md`](docs/回合.md)、[`docs/判据.md`](docs/判据.md) |
-| 谁是谁的爹 | [`docs/谱系.md`](docs/谱系.md)（生成的） |
+| 现在还有哪些事、卡在谁那里 | [`docs/detail/待办.md`](./docs/detail/待办.md) |
+| 发布时对外说的话（草稿） | [`docs/detail/发布说明.md`](./docs/detail/发布说明.md) |
+| 装一条新鱼时给她放什么种子文件 | [`docs/detail/种子.md`](./docs/detail/种子.md) |
+| M5 观察（一周满之前的中途记录） | [`docs/detail/观察.md`](./docs/detail/观察.md) |
+| 画画（SVG）与生图（第二步） | [`docs/plugin/生图.md`](./docs/plugin/生图.md) |
+| 看 B 站（交给新 session 的交接） | [`docs/plugin/看B站.md`](./docs/plugin/看B站.md) |
+| 想到但还没做的功能（只记录，不排期） | [`docs/detail/想法.md`](./docs/detail/想法.md) |
+| 从零装到跑起来的每一步（变量、路径、时序） | [`docs/detail/安装.md`](./docs/detail/安装.md) |
+| 怎么"出生"一条新鱼、怎么换段搬家 | [`docs/detail/出生.md`](./docs/detail/出生.md) |
+| 发版前逐条检查 | [`docs/detail/发布.md`](./docs/detail/发布.md)、`scripts\release-check.ps1` |
+| 打包/编码/发布注意事项 | [`docs/detail/打包.md`](./docs/detail/打包.md) |
+| 她"能做什么"的目录 | [`docs/detail/能力.md`](./docs/detail/能力.md) |
+| 她的自主分级与判据 | [`docs/detail/回合.md`](./docs/detail/回合.md)、[`docs/detail/判据.md`](./docs/detail/判据.md) |
+| 谁是谁的爹 | [`docs/detail/谱系.md`](./docs/detail/谱系.md)（生成的） |
 | 每一版改了什么、为什么 | [`docs/CHANGELOG.md`](docs/CHANGELOG.md) |
-| 账本有哪些、每一版 `fmt` 是什么意思 | [`docs/账本.md`](docs/账本.md) |
-| 自主触发做到哪了（给外部读者的一页现状） | [`docs/自主触发.md`](docs/自主触发.md) |
+| 账本有哪些、每一版 `fmt` 是什么意思 | [`docs/detail/账本.md`](./docs/detail/账本.md) |
+| 自主触发做到哪了（给外部读者的一页现状） | [`docs/detail/自主触发.md`](./docs/detail/自主触发.md) |
 
-历史记录（观察、交接演练、review 意见）在 `docs\archive\`，不删——它们是证据。待办只有一页：`docs\待办.md`（只放没做完的）。
+历史记录（观察、交接演练、review 意见）在 `docs\archive\`，不删——它们是证据。待办只有一页：`docs\detail\待办.md`（只放没做完的）。
 
 ## 状态
 
 - M0–M4 已通过：出生、插件探针、跨进程通路、唤醒阀门、人类入口（群面板 + 私聊）
 - M5 观察中：一周数据（她说不说话、被叫醒后回不回、定时推门准不准）
 - 2026-11-13 完成：**鱼塘布局**（一个根四层）、**无人值守成为默认**（进程起来即挂载会话，不需要浏览器窗）、**计划表归每条鱼自己**（主 dsh 关着她的闹钟也响）、**鱼塘页**（谱系树 + 一键全开/全关 + 检修/回无人值守）、**起停**（一个开关：起主 dsh 就把鱼带起来；鱼活不过主进程）、`doctor` / `verify-pending` / `release-check` 三套自检。
-- M6 收尾中：配置抽离、包改名、安装脚本、种子文件模板、manifest 字段、发布清单都已就绪；剩**发布当天**的两件：npm scope 改名 `@fabianactor/dsh-lil-whale-group(-ui)`、`npm publish`（见 `docs/发布.md`）。
+- M6 收尾中：配置抽离、包改名、安装脚本、种子文件模板、manifest 字段、发布清单都已就绪；剩**发布当天**的两件：npm scope 改名 `@fabianactor/dsh-lil-whale-group(-ui)`、`npm publish`（见 `docs/detail/发布.md`）。
 
 进度和每一条「为什么这样定」都在 `docs/` 里，包括踩过的坑。
 

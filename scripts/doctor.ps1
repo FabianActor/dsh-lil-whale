@@ -5,7 +5,7 @@
 #   pwsh -File scripts\doctor.ps1                只看她
 #   pwsh -File scripts\doctor.ps1 -IncludeLee    连他的窗一起看
 #
-# 为什么要有这个脚本：装完先验那四件（README / docs\出生.md）是手工敲的，
+# 为什么要有这个脚本：装完先验那四件（README / docs\detail\出生.md）是手工敲的，
 # 而"巡守死了没人告诉你""工具没注册但进程活着"这两类失败**长得跟正常一样**——
 # 只能靠一条一条去问，还得每次都问同样的话。
 #

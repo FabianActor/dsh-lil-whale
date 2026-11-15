@@ -235,7 +235,7 @@ if (args.markArchived) {
       node.archivedAt = manifest.archivedAt
       node.archivePath = archiveDir
       writeFileSync(familyFile, JSON.stringify(family, null, 2) + '\n', 'utf8')
-      console.log('  family.json 已标 archived —— 记得跑 node scripts\\gen-family.mjs 重生成 docs\\谱系.md')
+      console.log('  family.json 已标 archived —— 记得跑 node scripts\\gen-family.mjs 重生成 docs\\detail\\谱系.md')
     } else {
       console.log('  family.json 里没找到这条鱼，状态没改')
     }
