@@ -110,16 +110,19 @@ for (const n of fishNameStatics) {
 const missingStatics = [...staticOwner.keys()].filter((s) => !seenStatic.has(s))
 
 // 2) 改名配对：一条同时报「改了名、登记表没跟上」，而不是一条 WARN + 一条 FAIL
+//    （第二条鱼 02:13：一个目标只许配一个来源；有多个候选就把候选列出来，选谁要能被人复核）
 const pairedMissing = new Set()
 const pairedFresh = new Set()
 const renamedFamilies = new Set()
 for (const s of missingStatics) {
-  const match = freshStatics.find((c) => !pairedFresh.has(c) && looksLikeRename(s, c))
-  if (!match) continue
+  const cands = freshStatics.filter((c) => !pairedFresh.has(c) && looksLikeRename(s, c))
+  if (!cands.length) continue
+  const match = cands[0]
   pairedMissing.add(s)
   pairedFresh.add(match)
   renamedFamilies.add(staticOwner.get(s))
-  fail.push('像是改名：登记里的「' + s + '」在代码里找不到，代码里多了「' + match + '」——把登记表里的名字一起改（只算一个问题）')
+  const alt = cands.length > 1 ? `（也可能是 ${cands.slice(1).map((c) => '「' + c + '」').join('、')}）` : ''
+  fail.push('像是改名：登记里的「' + s + '」在代码里找不到，代码里多了「' + match + '」' + alt + '——把登记表里的名字一起改（只算一个问题）')
 }
 for (const s of missingStatics) {
   if (!pairedMissing.has(s)) warn.push('登记了但代码里抓不到静态格：' + s + '（族：' + staticOwner.get(s) + '）')
@@ -132,13 +135,22 @@ for (const c of freshStatics) {
 for (const p of seenDynamic) if (!dynamicOwner.has(p)) fail.push('新动态族未登记：' + p + '…')
 for (const p of dynamicOwner.keys()) if (!seenDynamic.has(p)) warn.push('登记了但代码里抓不到动态族：' + p + '…（族：' + dynamicOwner.get(p) + '）')
 
-// 4) 表里有、代码里一种形态都没有 —— WARN（可能整族被删/改名）
+// 4) 整族消失不是改名，是少了一个检查 —— FAIL（第三条鱼 02:14 实测：删掉一整格后旧版还印 OK）。
 //    但若这一族刚被上面的"改名配对"认领，就不要再报一次——一次改名只算一个问题。
+const goneFamilies = new Set()
 for (const f of FAMILIES) {
   if (renamedFamilies.has(f.name)) continue
   const hasStatic = (f.static || []).some((s) => seenStatic.has(s))
   const hasDynamic = (f.dynamicPrefix || []).some((p) => seenDynamic.has(p))
-  if (!hasStatic && !hasDynamic) warn.push('登记的族在代码里一种形态都没有：' + f.name)
+  if (!hasStatic && !hasDynamic) {
+    goneFamilies.add(f.name)
+    fail.push('整族消失：' + f.name + '（覆盖缩水，不是改名——代码里这一族一种形态都没有了）')
+  }
+}
+// 整族消失时，那一族每个静态名缺失的 WARN 不再重复报——一次删除只算一行。
+for (let i = warn.length - 1; i >= 0; i--) {
+  const m = /（族：([^）]+)）$/.exec(warn[i])
+  if (m && goneFamilies.has(m[1])) warn.splice(i, 1)
 }
 
 console.log('静态格 ' + seenStatic.size + ' 个 / 登记 ' + staticOwner.size)
@@ -146,8 +158,16 @@ console.log('动态族 ' + seenDynamic.size + ' 个 / 登记 ' + dynamicOwner.si
 console.log('族 ' + FAMILIES.length + ' 个')
 for (const w of warn) console.log('WARN ' + w)
 for (const f of fail) console.log('FAIL ' + f)
-if (fail.length) {
-  console.log('FAIL total=' + fail.length)
+
+// 结论必须由明细聚合（第二条鱼 02:14）：末行不许是写死的 OK。
+const nFail = fail.length
+const nWarn = warn.length
+if (nFail > 0) {
+  console.log(`doctor 覆盖面：FAIL×${nFail}（明细 FAIL 行 ${nFail} 条）、WARN×${nWarn}——覆盖表与代码不一致，不能发`)
   process.exit(1)
 }
-console.log('doctor 覆盖面 OK（每族至少一种形态、没有未登记的格）')
+if (nWarn > 0) {
+  console.log(`doctor 覆盖面：WARN×${nWarn}（明细 WARN 行 ${nWarn} 条）——不是 OK，有格子可能被删/改名，需人看`)
+  process.exit(0)
+}
+console.log('doctor 覆盖面 OK（FAIL×0 / WARN×0；每族至少一种形态、没有未登记的格）')

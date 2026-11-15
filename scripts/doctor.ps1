@@ -977,27 +977,39 @@ try {
         if (@($rTail | Where-Object { $_ -match '\| log-format \| fmt=3' }).Count -gt 0) { $rotatedWithFmt = $true; break }
       }
     } catch { }
-    # 2026-11-16 02:11（第二条鱼）："还没到"和"丢了"不能长一样。
-    # 写分界行是 r167（插件 1.6.39）起每个进程各写自己那本；旧版本进程里本来就没有写者。
-    $runningVer = $null
+    # 2026-11-16 02:15（第四条鱼 + 第二条鱼）：判"缺"之前先比"启动版本 vs 磁盘版本"，不写版本号阈值；
+    # plugin-boot.log 是共享的，按 home 取这一家最近一条 boot 行，不能用"最后一行"；一家从没启动过是第三种状态。
+    $diskVer9c = $null
+    try {
+      $pkgPath9c = Join-Path $Cfg.Root 'plugin\dsh-lil-whale-group\package.json'
+      if (Test-Path -LiteralPath $pkgPath9c) { $diskVer9c = (Get-Content -LiteralPath $pkgPath9c -Raw -Encoding UTF8 | ConvertFrom-Json).version }
+    } catch { }
+    $bootVer9c = $null
+    $bootSeen9c = $false
     try {
       $bootPath9c = Join-Path $Cfg.Root 'logs\plugin-boot.log'
       if (Test-Path -LiteralPath $bootPath9c) {
-        $bootTail9c = Get-Content -LiteralPath $bootPath9c -Encoding utf8 -Tail 1
-        if ($bootTail9c) {
-          $bootObj9c = $bootTail9c | ConvertFrom-Json
-          if ($bootObj9c.pkg) { $runningVer = [string]$bootObj9c.pkg -replace '^.*@', '' }
+        $myHome9c = [string]$m.dshHome
+        foreach ($ln9c in @(Get-Content -LiteralPath $bootPath9c -Encoding utf8)) {
+          try {
+            $o9c = $ln9c | ConvertFrom-Json
+            if (-not $o9c.pkg) { continue }
+            if ($myHome9c -and $o9c.home -and (([string]$o9c.home).TrimEnd('\') -ieq $myHome9c.TrimEnd('\'))) {
+              $bootVer9c = [string]$o9c.pkg -replace '^.*@', ''
+              $bootSeen9c = $true
+            }
+          } catch { }
         }
       }
     } catch { }
-    $writerLanded = $false
-    try { if ($runningVer -and ([version]$runningVer -ge [version]'1.6.39')) { $writerLanded = $true } } catch { }
     if ($rotatedWithFmt) {
       Add-Row '格式分界' 'OK' ($label + '：分界行在被轮转的旧文件里（轮转后新文件不重复写）')
-    } elseif (-not $writerLanded) {
-      Add-Row '格式分界' 'INFO' ($label + '：本文件还没有分界行——写分界是 1.6.39 起每个进程各写自己那本，进程还是 ' + $runningVer + '，属"还没到"，重启后自愈')
+    } elseif (-not $bootSeen9c) {
+      Add-Row '格式分界' 'INFO' ($label + '：本文件还没有分界行，这一家也还没有启动痕迹（第三种状态）——没有可比较的启动版本，等它先启动一次')
+    } elseif ($diskVer9c -and $bootVer9c -and $bootVer9c -ne $diskVer9c) {
+      Add-Row '格式分界' 'INFO' ($label + '：本文件还没有分界行——进程还是旧代码（启动时 ' + $bootVer9c + ' / 磁盘 ' + $diskVer9c + '），属"还没到"，重启后自愈')
     } else {
-      Add-Row '格式分界' 'WARN' ($label + '：程序已是 ' + $runningVer + '（≥1.6.39），本文件和最近轮转的文件里都没有 log-format 分界行——这不像"还没到"，像真丢了') 'NEXT: 重启这一条鱼（fish.ps1 down <键> -Yes; fish.ps1 up <键> -NoBrowser）'
+      Add-Row '格式分界' 'WARN' ($label + '：进程已经是新代码（启动 ' + $bootVer9c + ' = 磁盘 ' + $diskVer9c + '）却没有 log-format 分界行——这不像"还没到"，像真丢了') 'NEXT: 重启这一条鱼（fish.ps1 down <键> -Yes; fish.ps1 up <键> -NoBrowser）'
     }
   }
 } catch { Add-Row '格式分界' 'WARN' ('核不了：{0}' -f $_.Exception.Message) }
