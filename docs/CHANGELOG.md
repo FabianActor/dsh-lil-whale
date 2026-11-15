@@ -8,6 +8,12 @@
 
 ## 变更条目
 
+## r130 — 2026-11-15 19:0x
+
+- **"没会话"拆两态 + 一行两个 `why=`**（两条鱼 18:56 各报一处）：
+  - `scripts\doctor.ps1` 新增 `Test-EverHadSession`（`sessionId` 写过、或家里 `sessions\` 有文件）：`名册（全鱼）` 与 `全鱼` 两格把"没有会话"拆成 **INFO 还没醒过（从没有过会话）** 与 **FAIL 有过会话但没挂上**。理由："一条永远为真的 FAIL，会训练人忽略 FAIL"。
+  - `plugin\dsh-lil-whale-group\lib\index.js`：`skip` 行内层说明从 `why=` 改 `reason=`（`wake-skip why=intent-cooldown` 这类一行两个 `why=` 全部消掉），外层 `why=` 只说类别。
+  - `docs\detail\日志都记在哪.md` 总规矩补「一行里同一个 key 只出现一次；细分用 `reason=`」；`docs\detail\怎么装一套鱼塘.md` §5.4 补两态判据。
 ## r129 — 2026-11-15 18:5x
 
 - **生命周期字段的缺省与兜底：写死、并且会喊**（第二条鱼、第三条鱼 18:42 各踢一脚）：

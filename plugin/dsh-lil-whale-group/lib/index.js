@@ -2818,7 +2818,7 @@ function probeOneIntent(member, spec, s, now) {
     }
     const resolved = resolveIntentPath(spec, member)
     if (!resolved.ok) {
-      noteOnce(member, `intent-path-rejected id=${spec.id} why=${resolved.why}`)
+      noteOnce(member, `intent-path-rejected id=${spec.id} reason=${resolved.why}`)
       return { hit: false }
     }
     if (!existsSync(resolved.file)) {
@@ -2903,23 +2903,23 @@ async function intentTick(member, st, now) {
       dirty = true
     }
     if (isSleeping(member.key, now)) {
-      noteOnce(member, `wake-skip why=sleep intent=${spec.id}（条件成立了，先记着）`)
+      noteOnce(member, `wake-skip reason=sleep intent=${spec.id}（条件成立了，先记着）`)
       continue
     }
     const ageMs = now.getTime() - Date.parse(s.firstTrueAt)
     if (!Number.isFinite(ageMs) || ageMs > INTENT_GRACE_MIN * 60_000) {
-      noteOnce(member, `wake-skip why=intent-stale intent=${spec.id}`)
+      noteOnce(member, `wake-skip reason=intent-stale intent=${spec.id}`)
       delete s.firstTrueAt
       dirty = true
       continue
     }
     const cap = capOk(s, spec, now, readIntentGlobal())
     if (!cap.ok) {
-      noteOnce(member, `wake-skip why=${cap.why} intent=${spec.id}`)
+      noteOnce(member, `wake-skip reason=${cap.why} intent=${spec.id}`)
       continue
     }
     if (!cooldownOk(s, spec, now)) {
-      noteOnce(member, `wake-skip why=intent-cooldown intent=${spec.id}`)
+      noteOnce(member, `wake-skip reason=intent-cooldown intent=${spec.id}`)
       continue
     }
     const seq = Number(s.count) || 0

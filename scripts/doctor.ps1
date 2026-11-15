@@ -421,6 +421,23 @@ if (Test-Path -LiteralPath $pinsFile) {
   Add-Row '名册' 'FAIL' 'group\pins.json 不存在' 'NEXT: 群不认人：她说的每句话都会被守门拒掉'
 }
 
+# 她有没有过会话：sessionId 写过，或者家里的 sessions\ 目录里有文件。
+# 判据来自第三条鱼 2026-11-15 18:56：没会话要拆两态 —— 从没开口（等）和有过但没挂上（查），
+# 这两种在纸上长得一样、下一步完全不同；而"一条永远为真的 FAIL 会训练人忽略 FAIL"。
+function Test-EverHadSession([object]$m) {
+  try {
+    if ($m.sessionId) { return $true }
+    if ($m.dshHome) {
+      $sess = Join-Path ([string]$m.dshHome) 'sessions'
+      if (Test-Path -LiteralPath $sess) {
+        $any = @(Get-ChildItem -LiteralPath $sess -File -ErrorAction SilentlyContinue)
+        if ($any.Count -gt 0) { return $true }
+      }
+    }
+  } catch { }
+  return $false
+}
+
 # 4c. 名册（全鱼）：members.json 里每条鱼都该在 pins.json 里有会话
 #     只查 whale 不够 —— 装第二条鱼时 install.ps1 曾把 pins 整份抹成空数组，
 #     两个老成员同时"不在群里"；只查一条的检查也会红，但看不出是"谁少了"。
@@ -430,14 +447,18 @@ try {
     $mj = Get-Content -LiteralPath $membersFile -Raw -Encoding utf8 | ConvertFrom-Json
     $pinsObj = Get-Content -LiteralPath (Join-Path $Cfg.GroupDir 'pins.json') -Raw -Encoding utf8 | ConvertFrom-Json
     $fishKeys = @($mj.members.PSObject.Properties | Where-Object { $_.Value.kind -eq 'fish' } | ForEach-Object { $_.Name })
-    $missing = @()
+    $missing = @(); $never = @()
     foreach ($k in $fishKeys) {
       $ids = @()
       if ($pinsObj.PSObject.Properties.Name -contains $k) { $ids = @($pinsObj.$k) }
-      if ($ids.Count -eq 0) { $missing += $k }
+      if ($ids.Count -eq 0) {
+        if (Test-EverHadSession $mj.members.$k) { $missing += $k } else { $never += $k }
+      }
     }
     if ($missing.Count) {
-      Add-Row '名册（全鱼）' 'FAIL' ('这些鱼在 pins.json 里没有会话：' + ($missing -join '、')) ('NEXT: node scripts\pins.mjs --member <键> --id <会话id>（鱼有 ' + ($fishKeys -join '/') + '）')
+      Add-Row '名册（全鱼）' 'FAIL' ('这些鱼有过会话，但 pins.json 里没有：' + ($missing -join '、')) ('NEXT: node scripts\pins.mjs --member <键> --id <会话id>（鱼有 ' + ($fishKeys -join '/') + '）')
+    } elseif ($never.Count) {
+      Add-Row '名册（全鱼）' 'INFO' ('还没醒过（从没有过会话）：' + ($never -join '、') + ' —— 等她开口；有会话之后这一格会自己变成 FAIL 或 OK') 'NEXT: 在 GUI 里打开她的页面建第一段会话，再 node scripts\pins.mjs 绑定'
     } else {
       Add-Row '名册（全鱼）' 'OK' ('每条鱼都有会话：' + ($fishKeys -join '、'))
     }
@@ -779,7 +800,10 @@ if (Test-Path -LiteralPath $Cfg.MembersFile) {
       $why = @()
       if ([string]$m.lifecycle -eq 'archived') { $state = 'INFO'; $why += '已归档，不查' }
       elseif (-not $portOk) { $state = 'FAIL'; $why += '端口不通' }
-      if ($pinText -eq '名册里没有会话') { $state = 'FAIL'; $why += '名册缺会话' }
+      if ($pinText -eq '名册里没有会话') {
+        if (Test-EverHadSession $m) { $state = 'FAIL'; $why += '名册缺会话' }
+        else { if ($state -eq 'OK') { $state = 'INFO' }; $why += '还没醒过（从没有过会话）' }
+      }
       $evidence = ('{0}（{1}）｜端口 {2}｜{3}｜{4}｜{5}' -f $name, $key, $portText, $presenceText, $bootText, $pinText)
       $next = if ($state -eq 'OK') { '' } else { ('NEXT: pwsh -File scripts\fish.ps1 up {0}（看 logs\plugin-boot.log 里 home={1} 的那条）' -f $key, $m.home) }
       Add-Row '全鱼' $state $evidence $next
