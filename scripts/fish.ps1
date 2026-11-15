@@ -21,6 +21,7 @@
 #   pwsh -File fish.ps1 acl-repair [whale|all]  补沙箱通行证（补完记 pool\state\acl.log）
 #   pwsh -File fish.ps1 wake <名字|all> [-By 谁] [-Why 为什么]  家长强行叫醒（睡眠窗里也叫得醒；记 sleep.log）
 #   pwsh -File fish.ps1 bind <键> -Session <会话id>   把这段会话钉到那条鱼名下（新鱼第一次开口后由宿主跑）
+#   pwsh -File fish.ps1 promote <键> [-Why 为什么]     转正：只记一笔账（pool\state\lifecycle.log）；身份不是字段，别靠改字段
 #   pwsh -File fish.ps1 help
 #
 # 选项：-Window（开窗起；默认无人值守） -NoBrowser（强制不开） -BrowserMainOnly（只给主 dsh 开窗） -Yes（不停下来问）
@@ -668,6 +669,7 @@ fish.ps1 -- 鱼群唯一的入口
   pwsh -File fish.ps1 acl-repair [whale|all]  补沙箱通行证（补完记 pool\state\acl.log）
   pwsh -File fish.ps1 wake <名字|all>         家长强行叫醒（睡眠窗里也叫得醒；记 sleep.log）
   pwsh -File fish.ps1 bind <键> -Session <会话id>   把这段会话钉到那条鱼名下（新鱼第一次开口后由宿主跑）
+  pwsh -File fish.ps1 promote <键> [-Why 为什么]     转正：只记一笔账（pool\state\lifecycle.log）
   pwsh -File fish.ps1 help
 
 选项：-NoBrowser -Window -BrowserMainOnly -Console -Yes -By <谁> -Why <为什么> -Port <n>
@@ -1031,6 +1033,23 @@ function Invoke-Bind([string]$key, [string]$sessionId) {
 
 # ---------- 沙箱通行证：查、补（CHANGELOG A.67） ----------
 # 判据：同一路径、同样内容，文件工具能写而 pwsh 不能写 —— 是"手"缺通行证，不是语法问题。
+function Invoke-Promote([string]$key, [string]$why) {
+  # 2026-11-15：status 拆成 lifecycle（A.101）之后，已经没有一个"实验鱼"字段可以改。
+  # 转正这件事本身只剩一件可做、也必须做的事：留一笔账。别再造一个身份字段。
+  if (-not $key) { Write-Host 'xx 要指定鱼：promote <键> [-Why 为什么]'; return $false }
+  $m = Get-Fish $key
+  if (-not $m) { Write-Host ("xx 名册里没有这条鱼：{0}" -f $key); Write-Host 'NEXT: pwsh -File scripts\fish.ps1 list'; return $false }
+  if ($m.Kind -ne 'fish') { Write-Host ("xx {0} 不是鱼，没有转正这回事。" -f $key); return $false }
+  if ($m.Role -eq 'watcher') { Write-Host 'xx 巡守不在"转正"的对象里（它从第一天就是巡守）。'; return $false }
+  $reason = if ($why) { $why } else { '宿主决定' }
+  $log = Join-Path $Cfg.PoolState 'lifecycle.log'
+  $line = ('{0} | promote | fmt=1 member={1} name={2} by={3} why={4} lifecycle={5}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $m.Key, $m.Label, $By, $reason, ([string]$m.Lifecycle))
+  Add-Content -LiteralPath $log -Value $line -Encoding utf8
+  Write-Host ("ok {0} 转正已记账：{1}" -f $m.Label, $line)
+  Write-Host 'NEXT: 这一笔在 pool\state\lifecycle.log；身份没有变，变的是这句话。'
+  return $true
+}
+
 function Invoke-AclCmd([string]$action, [string]$name) {
   $members = @(Resolve-Targets $name | Where-Object { $_.Kind -eq 'fish' -and $_.Role -ne 'watcher' -and $_.Home })
   if ($members.Count -eq 0) { Write-Host 'xx 没有可查的鱼。'; return $false }
@@ -1141,6 +1160,7 @@ try {
     'acl-repair' { if (-not (Invoke-AclCmd 'repair' $Name)) { $ok = $false } }
     'wake'       { if (-not (Invoke-Wake $Name $By $Why)) { $ok = $false } }
     'bind'       { $bindKey = if ($Name) { $Name } else { $Key }; if (-not (Invoke-Bind $bindKey $Session)) { $ok = $false } }
+    'promote'    { if (-not (Invoke-Promote $Name $Why)) { $ok = $false } }
     'maintain' { if (-not (Invoke-Maintain $Name)) { $ok = $false } }
     'restore'  { if (-not (Invoke-Restore $Name)) { $ok = $false } }
     'unattended' { if (-not (Invoke-Restore $Name)) { $ok = $false } }
