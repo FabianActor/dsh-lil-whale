@@ -24,7 +24,7 @@ export function drawSectionOf(opts) {
   lines.push('');
   lines.push('1. **写**：用文件工具写 ' + BT + '画\\<名字>.svg' + BT + '。根元素至少要有：');
   lines.push('   ' + BT + '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">' + BT);
-  lines.push('2. **看**：' + BT + 'pwsh -NoProfile -File app\\scripts\\render-svg.ps1 -In 画\\<名字>.svg' + BT);
+  lines.push('2. **看**：在你家根目录跑 ' + BT + 'pwsh -NoProfile -File ..\\..\\app\\scripts\\render-svg.ps1 -In 画\\<名字>.svg' + BT);
   lines.push('   → 同目录出同名 ' + BT + '.png' + BT + '，再用 ' + BT + 'read_image' + BT + ' 读那张 PNG。');
   lines.push('   **这一步不能省**：不看图就是在盲画，改也不知道往哪儿改。');
   lines.push('3. **改**：看完再改 SVG，再渲染。一张图来回几次很正常。');
