@@ -2142,7 +2142,7 @@ function apply(ctx) {
         }
         // 自动播报：称呼变了，别人得知道（他 2026-11-14 点头要的）。
         try {
-          say(member, 'all', renameAnnouncement(result.from, result.to), 'group', 'rename')
+          say(member, 'all', renameAnnouncement(result.from, result.to), 'group')
         } catch (error) {
           logLine({ note: 'rename-announce-failed', why: String(error?.message ?? error) })
         }
