@@ -2740,14 +2740,17 @@ function noteOnce(member, msg) {
   const prev = planNotes.get(key)
   if (prev && now - prev.at < NOTE_DEDUPE_MS) {
     prev.suppressed += 1
-    if (prev.suppressed === 1) {
-      const line = `note-suppressed count=1 msg=${msg.replace(/\s+/g, ' ').slice(0, 120)}`
+    // 2026-11-16 小鱼丸：「去重的记录不能再被去重。」
+    // 被压次数要能一直涨，但同一条 key 最多一分钟记一行（免得每拍都刷）。
+    if (now - (prev.lastSuppressedAt ?? 0) >= 60_000) {
+      prev.lastSuppressedAt = now
+      const line = `note-suppressed count=${prev.suppressed} msg=${msg.replace(/\s+/g, ' ').slice(0, 120)}`
       watchmanLog('skip', `to=${member.key} ${line}`)
       memberNote(member, line)
     }
     return
   }
-  planNotes.set(key, { at: now, suppressed: 0 })
+  planNotes.set(key, { at: now, suppressed: 0, lastSuppressedAt: 0 })
   watchmanLog('skip', `to=${member.key} ${/^[a-z0-9-]+=/.test(msg) ? msg : 'note=' + msg}`)
   memberNote(member, msg)
 }

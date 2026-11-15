@@ -85,7 +85,7 @@ pwsh -File scripts\fish.ps1 acl-check / acl-repair <鱼|all>  # 沙箱通行证�
 | 大肥鱼 | `<你的 dsh 家>\logs\web-latest.log` / `.err.log` |
 | 小肥鱼 | `<小肥鱼的家>\dsh-home\logs\web-latest.log` / `.err.log` |
 | 每条鱼的起停账 | `pool\state\runs\<成员>.log` |
-| 巡守（插件版） | `<第一条鱼的家>\logs\watchman.log`（多鱼化后每行带 `to=<键>`；2026-11-14 核过实际路径） |
+| 巡守（插件版） | `<写这本日志的进程的家>\logs\watchman.log`——不是一本，是每家一本：巡守进程那本在 `homes\whale\logs\`（主 dsh 读仓库根配置，`selfHome=whale`），每条鱼自己的进程各写各的；多鱼化后每行带 `to=<键>`（2026-11-16 第三、四条鱼核过） |
 
 ## 旧脚本去哪了
 
