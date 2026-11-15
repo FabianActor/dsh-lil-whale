@@ -419,7 +419,7 @@ if (-not (Test-Path $envPath) -or $Force) {
   # （2026-11-12 20:10 Fabian 提："有些描述放在小鱼的目录内"）。
   $envScript = Join-Path $RepoRoot 'scripts\render-env.mjs'
   if (Test-Path $envScript) {
-    & node $envScript --workspace $Workspace --profile $ChildProfile --pool-dir $PoolRoot --her-port $port --deploy-date $deployDate --child-name $ChildName --child-id $ChildMemberId --parent-id $ParentMemberId 2>&1 | ForEach-Object { Write-Host ('    ' + $_) }
+    & node $envScript --workspace $Workspace --profile $ChildProfile --pool-dir $PoolRoot --her-port $port --deploy-date $deployDate --child-name $ChildName --child-id $ChildMemberId --parent-id $ParentMemberId --newborn 2>&1 | ForEach-Object { Write-Host ('    ' + $_) }
     if ($LASTEXITCODE -ne 0) {
       Warn 'render-env.mjs 失败，环境.md 没写。装完手动跑一次：node scripts\render-env.mjs --workspace <家> --profile <profile>'
     } else {

@@ -60,9 +60,10 @@ function parseArgs(argv) {
     else if (a === '--child-id') out.childId = next()
     else if (a === '--parent-id') out.parentId = next()
     else if (a === '--out') out.out = next()
+    else if (a === '--newborn') out.newborn = true
     else if (a === '--dry-run') out.dryRun = true
     else if (a === '--help' || a === '-h') {
-      console.log('用法：node scripts/render-env.mjs --workspace <家> --profile <profile> [--pool-dir <共享区>] [--dry-run]')
+      console.log('用法：node scripts/render-env.mjs --workspace <家> --profile <profile> [--pool-dir <共享区>] [--newborn] [--dry-run]')
       process.exit(0)
     } else die(`不认识的参数：${a}`)
   }
@@ -270,6 +271,17 @@ const herDshHome = resolve(me?.dshHome || join(herHome, 'dsh-home'))
 const herPort = Number(args.herPort || me?.port || 0) || 3082
 const groupDir = join(poolDir, 'group')
 
+// 新生鱼的纸只写基本信息（宿主 2026-11-15）：
+// "新生小鱼的时候，只把它的最基本信息告知，剩下的后装插件赋予的能力一概不写。"
+// 为什么不在模板里简单留空：模板会长；留空只保证"现在没有"，开关保证"以后也不会写进去"。
+// 判据：出生那一刻的纸里，不能出现她还没有的任何能力名（外部眼睛、画笔、生图……）。
+// 注意：这只是"出生时"的写法。宿主后来真装了扩展、跑 fish.ps1 refresh，纸才会出现那一节。
+const isNewborn = Boolean(args.newborn)
+const biliSection = isNewborn
+  ? ''
+  : biliSectionOf({ dshHome: me?.dshHome || join(workspace, 'dsh-home'), profile: args.profile })
+const drawSection = isNewborn ? '' : drawSectionOf({ workspace, home: me?.home || workspace })
+
 const values = {
   HER_HOME: herHome,
   HER_DSH_HOME: herDshHome,
@@ -288,8 +300,8 @@ const values = {
   TEMPLATE_SHA: templateSha,
   GENERATED_AT: generatedAt,
   DEPLOY_DATE: deployDate,
-  BILI_SECTION: biliSectionOf({ dshHome: me?.dshHome || join(workspace, "dsh-home"), profile: args.profile }),
-  DRAW_SECTION: drawSectionOf({ workspace, home: me?.home || workspace }),
+  BILI_SECTION: biliSection,
+  DRAW_SECTION: drawSection,
 }
 
 let rendered = template
