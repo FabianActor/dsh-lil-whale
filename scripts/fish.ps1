@@ -1,4 +1,4 @@
-﻿#requires -Version 7.0
+#requires -Version 7.0
 # fish.ps1 -- 鱼群唯一的入口。ASCII 文件名 + UTF-8 BOM。
 #
 # 为什么要有它：鱼一多，"开/停/体检"三件事各有各的脚本，每加一条鱼就多一套参数。
@@ -455,7 +455,7 @@ function Start-Fish($member) {
       $cfgPath = if ([System.IO.Path]::IsPathRooted($member.ConfigFile)) { $member.ConfigFile } else { Join-Path (Split-Path $PSScriptRoot -Parent) $member.ConfigFile }
       $cfgLine = "`$env:LIL_WHALE_CONFIG='$cfgPath'; "
     }
-    "${cfgLine}`$env:DSH_HOME='$($member.DshHome)'; dsh --profile $($member.Profile) --port $fishPort --no-open"
+    "${cfgLine}`$env:DSH_HOME='$($member.DshHome)'; `$env:DSH_PROFILE='$($member.Profile)'; dsh --profile $($member.Profile) --port $fishPort --no-open"
   }
   if ($openWindow -and $Console) {
     Start-Visible -Command $command -WorkingDirectory $cwd -OutLog $out

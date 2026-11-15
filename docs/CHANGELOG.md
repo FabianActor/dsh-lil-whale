@@ -8,6 +8,15 @@
 
 ## 变更条目
 
+## r140 — 2026-11-15 21:2x
+
+**fish.ps1 起鱼时显式设置 `DSH_PROFILE`。**
+
+- 症状：小满的进程被我手动拉起后，`plugin.log` 的 boot 行写着 `"profile":"web"`——不是她的 profile，是从调用方环境里继承来的。
+- 根因：`fish.ps1` 起鱼只设 `DSH_HOME` 和 `--profile` 参数，`DSH_PROFILE` 环境变量原样继承；实际生效的是 CLI 参数，所以功能没错，错的是**诊断行**。
+- 改法：起鱼命令里显式带上 `DSH_PROFILE='<profile>'`。验证：重启后 boot 行 `"profile":"xiaoman"`。
+- 判据：**"实际生效的"和"日志上写的"必须是同一个来源**；否则查故障时第一眼就被误导。
+
 ## r139 — 2026-11-15 21:0x
 
 - **让代码对得上第三条鱼的预登记**：她在群里预登记四种唤醒词（`group\messages.jsonl` 第 535 行，只追加）时附了一条判据："`lost` 那次 `watchman.log` 里应有一行 `cursor-lost`（**同通道只一次**）"。核代码发现 `cursorLostLogged` 是每次呼唤重建的 Set——递失败重试时会反复记，跟预登记对不上。
