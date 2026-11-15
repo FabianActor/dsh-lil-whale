@@ -22,6 +22,7 @@ import {
   planFileOf as planFileOfCore,
   planDue as planDueCore,
   planDeliveryText as planDeliveryTextCore,
+  planDeliveryPublicText as planDeliveryPublicTextCore,
   parseWakeCounts,
   sumWakesToday,
 } from './plan-core.js'
@@ -40,6 +41,7 @@ import {
   parseIntents,
   pruneIntentState,
   intentDeliveryText,
+  intentDeliveryPublicText,
   probePending,
   probeTextAppears,
   probeFileChanged,
@@ -2193,7 +2195,7 @@ function apply(ctx) {
   if (!isMainProcess()) {
     const selfTimer = setInterval(() => {
       try {
-        selfPlanTick()
+        selfPlanTick(ctx)
       } catch (error) {
         watchmanLog('error', `why=self-plan-tick-failed detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)}`)
       }
@@ -2201,7 +2203,7 @@ function apply(ctx) {
     selfTimer.unref?.()
     const selfBoot = setTimeout(() => {
       try {
-        selfPlanTick()
+        selfPlanTick(ctx)
       } catch {}
     }, 10_000)
     selfBoot.unref?.()
@@ -2752,6 +2754,7 @@ function planDue(member, st, now, graceMin = 1) {
 /** 闹钟递的那句话。开着的窗直接用；刚被推开的窗也递进去，等她起来自己读到。
  *  `by === 'self'` 表示这条是她自己的进程按她自己的表递的（巡守关着也照样响）。 */
 const planDeliveryText = planDeliveryTextCore
+const planDeliveryPublicText = planDeliveryPublicTextCore
 
 /**
  * 每条鱼执行自己家的计划表（2026-11-13，PRD review 的建议 B）。
@@ -2767,7 +2770,27 @@ const planDeliveryText = planDeliveryTextCore
 const SELF_PLAN_GRACE_MIN = 15
 const selfPlanSleepLoggedAt = new Map()
 
-function selfPlanTick() {
+function deliverToSelf(ctx, self, text) {
+  // 2026-11-16：闹钟正文先私投进她自己的会话（与唤醒预览同一条 form:'signal' 的路）。
+  // 递不进去（没挂、正忙）才退回公共记录，退回时只说到点了，理由不进去。
+  try {
+    const agents = ctx?.get?.('agents')
+    const agent = agents?.list?.().find((a) => memberOf(a) === self)
+    if (!agent || agent.status !== 'idle') return false
+    const built = buildUserMessage({
+      content: [{ type: 'text', text }],
+      source: { kind: 'group', form: 'signal' },
+    })
+    if (built === null || typeof built?.id !== 'string') return false
+    agent.followup(built)
+    return true
+  } catch (error) {
+    watchmanLog('error', `why=self-plan-private-failed to=${self} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)}`)
+    return false
+  }
+}
+
+function selfPlanTick(ctx) {
   if (isMainProcess()) return
   const self = ownMember()
   const member = MEMBERS[self]
@@ -2798,7 +2821,12 @@ function selfPlanTick() {
     if (!claimPlanDelivery(member, item.id)) continue
     const job = { key: item.id, tag: `plan=${item.id} at=${item.at}`, itemWhy: item.why, by: 'self' }
     try {
-      say('lee', self, planDeliveryText(job), 'group', 'watch')
+      if (deliverToSelf(ctx, self, planDeliveryText(job))) {
+        watchmanLog('deliver', `reason=self-plan-private to=${self} plan=${item.id}`)
+      } else {
+        say('lee', self, planDeliveryPublicText(job))
+        watchmanLog('deliver', `reason=self-plan-public-fallback to=${self} plan=${item.id}`)
+      }
       watchmanLog('woke', `trigger=self to=${self} plan=${item.id} at=${item.at}`)
       markWake(self, 'plan')
     } catch (error) {
@@ -3032,7 +3060,7 @@ async function intentTick(member, st, now) {
       `wid=${wid} kind=intent why=intent:${spec.id} to=${member.key} gate=pass(hour=${counts.hour}/${WAKE.perHour},day=${counts.day}/${WAKE.perDay}) hb-age=${hbAge === null ? 'none' : `${hbAge}s`} deliver=msg at=${localStampOf(s.happenedAt ?? s.firstTrueAt)} atfmt=2`,
     )
     try {
-      say('lee', member.key, intentDeliveryText(spec, probe.evidence), 'group', 'watch')
+      say('lee', member.key, intentDeliveryPublicText(spec, probe.evidence))
       // lag = 发现比发生晚了多少（事情发生的时刻 → 递出去的时刻），不是"决定→插入"。
       const happenedMs = Date.parse(String(s.happenedAt ?? s.firstTrueAt ?? ''))
       const lagSec = Number.isFinite(happenedMs) ? Math.max(0, Math.round((now.getTime() - happenedMs) / 1000)) : null
@@ -3168,10 +3196,10 @@ async function watchOne(member, st) {
           noteSkip('deny=already-delivered')
           continue
         }
-        const text = planDeliveryText(job)
+        // 2026-11-16：公共记录只留"到点了"，理由不进记录（进她自己表）。
+        const text = planDeliveryPublicText(job)
         try {
-          // s='watch'：机器发的话必须说明自己不是人亲口说的。
-          say('lee', member.key, text, 'group', 'watch')
+          say('lee', member.key, text)
           watchmanLog(
             'woke',
             dueAt === null
@@ -3212,7 +3240,7 @@ async function watchOne(member, st) {
         )
         markWake(member.key, 'plan')
         try {
-          say('lee', member.key, planDeliveryText(job))
+          say('lee', member.key, planDeliveryPublicText(job))
           watchmanLog('deliver', `reason=plan-after-wake ${job.tag}（窗是推开的，话已递进去）`)
         } catch (error) {
           watchmanLog(
@@ -3259,7 +3287,7 @@ async function watchOne(member, st) {
         // （selfPlanTick）会在宽限期内再递一次。声明一下，两边只留一条。
         if (claimPlanDelivery(member, job.key)) {
           try {
-            say('lee', member.key, planDeliveryText(job))
+            say('lee', member.key, planDeliveryPublicText(job))
             watchmanLog('deliver', `reason=plan-after-wake ${job.tag}（窗是推开的，话已递进去）`)
           } catch (error) {
             watchmanLog('error', `why=plan-deliver-failed detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)} ${job.tag}`)
@@ -3383,7 +3411,7 @@ function auditRoster(now = new Date()) {
   watchmanLog('error', `why=roster-mismatch ${problems.join(' ')}`)
   // 只告诉人（fabian）：名册外的鱼叫不动，能看见这件事的只有人。
   try {
-    say('lee', 'fabian', `巡守自检：名册和家对不上（${problems.join('；')}）。这条是巡守自己发现的，不是谁在说话。`, 'group', 'watch')
+    say('lee', 'fabian', `巡守自检：名册和家对不上（${problems.join('；')}）。这条是巡守自己发现的，不是谁在说话。`)
   } catch { /* 递不出去也还有日志 */ }
 }
 
@@ -3420,7 +3448,7 @@ async function crashNotify() {
       continue
     }
     try {
-      say('lee', 'fabian', `巡守：${labelOf(member.key)} 上次没正常退出（最后记录 ${at}，没写 stopped）。它现在起没起来，鱼塘里能看到。`, 'group', 'watch')
+      say('lee', 'fabian', `巡守：${labelOf(member.key)} 上次没正常退出（最后记录 ${at}，没写 stopped）。它现在起没起来，鱼塘里能看到。`)
       watchmanLog('note', `why=crash-notified member=${member.key} at=${at}`)
     } catch (error) {
       watchmanLog('error', `why=crash-notify-failed member=${member.key} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 80)}`)

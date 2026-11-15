@@ -1106,7 +1106,9 @@ export function apply(ctx) {
       const toSeat = /^[0-9a-f]{6}$/.test(rawSeat) ? rawSeat : ''
       // s = 谁发的：'ui' 表示从面板发的（他没有会话 id）。跟 group_say 写的 s=<会话前6位> 是同一个字段。
       const record = {
-        ts: now.toISOString(), from: HUMAN_ID, to, text, kind: 'say', s: 'ui',
+        // 2026-11-16：s 只放会话号前 6 位；面板发的话没有"那段会话"，所以不写这个字段
+    // （旧记录里的 s=ui/watch 是历史遗留，纸上已写分界）。
+    ts: now.toISOString(), from: HUMAN_ID, to, text, kind: 'say',
         ...(toSeat === '' ? {} : { toSeat }),
         ...(images.length === 0 ? {} : (images.length === 1 ? { image: images[0] } : { images })),
       }

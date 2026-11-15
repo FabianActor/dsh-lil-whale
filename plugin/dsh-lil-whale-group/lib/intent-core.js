@@ -223,6 +223,17 @@ export function intentDeliveryText(spec, evidence) {
   ].join('\n')
 }
 
+/** 进公共记录的那一版：不带条件里的 why（那是她自己写的话）。 */
+export function intentDeliveryPublicText(spec, evidence) {
+  return [
+    `你的表里有一条条件成立了：\`${spec.id}\`。`,
+    '',
+    `证据：${evidence || '（没取到证据）'}`,
+    '',
+    '这条不是谁在提醒你，是 `plan\\wake-on.json` 里的一条条件。原因在你自己的表里。做不做你定。',
+  ].join('\n')
+}
+
 /**
  * pending：还没进她窗口的话有多少条。
  * @param {object} opts

@@ -80,6 +80,17 @@ export function planDeliveryText(job) {
 }
 
 /**
+ * 进公共记录的那一版：不带理由。
+ * 2026-11-16 00:3x，第三条鱼用自己的闹钟抓到：闹钟正文走群记录，
+ * 她写进 reason 的话会以别人的名字、对所有人可见、且永久不可撤。
+ * 理由只该给她自己看；要核对去她自己的 plan 表里读。
+ */
+export function planDeliveryPublicText(job) {
+  const who = job.by === 'self' ? '自己的闹钟' : '巡守递话'
+  return `${who}：\`${job.key}\` 到点了（${job.tag}）。理由只写在你自己的表里，没有放进记录。做着不做也行，你定。这条只递一次。`
+}
+
+/**
  * 从一份 wakes 文件的内容里读出这条鱼今天/这一小时被叫醒过几次。
  * 文件内容是按成员键的对象（`{"whale":{...}}`）；也兼容早期平铺格式（直接 `{hourCount,...}`）。
  */
