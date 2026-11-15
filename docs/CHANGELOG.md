@@ -8,6 +8,12 @@
 
 ## 变更条目
 
+## r129 — 2026-11-15 18:5x
+
+- **生命周期字段的缺省与兜底：写死、并且会喊**（第二条鱼、第三条鱼 18:42 各踢一脚）：
+  - `lifecycle` 缺失 ⇒ 按 `active` 读（理由：11-15 之前不存在归档状态），规则写进 `docs\detail\怎么装一套鱼塘.md` §5.3 与 `docs\detail\日志都记在哪.md` 总规矩（缺省值只写一处）。
+  - `scripts\doctor.ps1` 新增 **3j 生命周期字段**：旧 `status` 还在就 WARN（"兼容兜底会读它，但兜底没有到期日"）；缺 `lifecycle` 也 WARN（说明按 `active` 读）。
+  - `scripts\gen-family.mjs` 抽出 `lifecycleOf()`；读到旧字段时在末尾打一次 `⚠ 读到旧字段 status（该迁移了）`——兜底可以不删，但要会喊。
 ## r128 — 2026-11-15 18:4x
 
 - **新生鱼的纸只写基本信息**（宿主 18:44："新生小鱼的时候，只把它的最基本信息告知，剩下的后装插件赋予的能力一概不写"）。`scripts\render-env.mjs` 新增 `--newborn`：把扩展能力占位符（`BILI_SECTION` 外部眼睛、`DRAW_SECTION` 画笔）一律替换成空串，`scripts\install.ps1` 渲染纸时带上这个参数。

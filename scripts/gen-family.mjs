@@ -58,7 +58,7 @@ if (existsSync(familyFile)) {
       name: m.name || key,
       parent: m.parent ?? null,
       bornAt: m.bornAt ?? null,
-      lifecycle: m.lifecycle || (m.status === 'archived' ? 'archived' : 'active'),
+      lifecycle: lifecycleOf(m, key),
       note: '',
       renames: [],
     }
@@ -71,7 +71,7 @@ if (existsSync(familyFile)) {
 let added = 0
 for (const [key, m] of Object.entries(members)) {
   if (!family.nodes[key]) {
-    family.nodes[key] = { name: m.name || key, parent: m.parent ?? null, bornAt: m.bornAt ?? null, lifecycle: m.lifecycle || (m.status === 'archived' ? 'archived' : 'active'), note: '', renames: [] }
+    family.nodes[key] = { name: m.name || key, parent: m.parent ?? null, bornAt: m.bornAt ?? null, lifecycle: lifecycleOf(m, key), note: '', renames: [] }
     added++
   }
 }
@@ -121,6 +121,15 @@ const pubNames = (() => {
   fish.forEach((k, i) => { map[k] = `第${CN[i] || i + 1}条鱼` })
   return map
 })()
+// 旧字段兜底要会喊（小鱼丸 2026-11-15 18:42）：兼容读 status 可以，
+// 但没有到期日的兜底会变成第二种真源——读到旧字段就报一次，让人去迁。
+const legacyLifecycleKeys = new Set()
+function lifecycleOf(m, key) {
+  if (m?.lifecycle === 'active' || m?.lifecycle === 'archived') return m.lifecycle
+  if (m?.status !== undefined) legacyLifecycleKeys.add(key)
+  return m?.status === 'archived' ? 'archived' : 'active'
+}
+
 function pubName(key) { return pubNames[key] || key }
 
 function label(key) {
@@ -215,3 +224,4 @@ const nextOut = lines.join('\n')
 const prevOut = existsSync(out) ? readFileSync(out, 'utf8') : null
 if (prevOut !== nextOut) writeFileSync(out, nextOut, 'utf8')
 console.log(`✓ 谱系已生成：${out}（根 ${root}，${Object.keys(family.nodes).length} 个节点）`)
+if (legacyLifecycleKeys.size) console.error('⚠ 读到旧字段 status（该迁移了）：' + [...legacyLifecycleKeys].join('、'))

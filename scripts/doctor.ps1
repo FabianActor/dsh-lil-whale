@@ -353,6 +353,41 @@ if (-not (Test-Path -LiteralPath $wakeConfigJs)) {
   }
 }
 
+# 3j. 生命周期字段：缺省值要写死，旧字段要有到期日（小鱼丸/小肥鱼 2026-11-15 18:42）
+#     判据：①没有 lifecycle ⇒ 按 active 读（11-15 之前不存在归档这个状态）；
+#           ②还带着旧 status 字段 ⇒ 报一次 —— 兜底可以不删，但要会喊。
+try {
+  if ($Cfg.MembersFile -and (Test-Path -LiteralPath $Cfg.MembersFile)) {
+    $lifeMissing = @(); $lifeLegacy = @()
+    $mjLife = Get-Content -LiteralPath $Cfg.MembersFile -Raw -Encoding utf8 | ConvertFrom-Json
+    foreach ($p in $mjLife.members.PSObject.Properties) {
+      $m = $p.Value
+      if ($m.kind -ne 'fish') { continue }
+      if ($m.PSObject.Properties.Name -notcontains 'lifecycle') { $lifeMissing += $p.Name }
+      if ($m.PSObject.Properties.Name -contains 'status') { $lifeLegacy += $p.Name }
+    }
+    $famFile = Join-Path $Cfg.PoolDir 'family.json'
+    if (Test-Path -LiteralPath $famFile) {
+      try {
+        $fam = Get-Content -LiteralPath $famFile -Raw -Encoding utf8 | ConvertFrom-Json
+        foreach ($fp in $fam.nodes.PSObject.Properties) {
+          if ($fp.Value.PSObject.Properties.Name -notcontains 'lifecycle') { $lifeMissing += ('family:' + $fp.Name) }
+          if ($fp.Value.PSObject.Properties.Name -contains 'status') { $lifeLegacy += ('family:' + $fp.Name) }
+        }
+      } catch { }
+    }
+    if ($lifeLegacy.Count) {
+      Add-Row '生命周期字段' 'WARN' ('还带着旧 status 字段：' + ($lifeLegacy -join '、') + '（兼容兜底会读它，但兜底没有到期日）') 'NEXT: 迁掉旧字段，只留 lifecycle（迁移脚本见 docs\detail\还没做完的事.md）'
+    } elseif ($lifeMissing.Count) {
+      Add-Row '生命周期字段' 'WARN' ('缺 lifecycle：' + ($lifeMissing -join '、') + '（按 active 读；此规则自 2026-11-15 起有效）') 'NEXT: 补 lifecycle=active'
+    } else {
+      Add-Row '生命周期字段' 'OK' '名册和谱系里只有 lifecycle（缺省按 active 读），没有旧 status 字段'
+    }
+  }
+} catch {
+  Add-Row '生命周期字段' 'WARN' ('核不了：' + $_.Exception.Message)
+}
+
 # 4. 名册：群认会话不认名字；登记错了 = 叫错人
 $pinsFile = Join-Path $Cfg.GroupDir 'pins.json'
 if (Test-Path -LiteralPath $pinsFile) {
