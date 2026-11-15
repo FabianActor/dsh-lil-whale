@@ -815,6 +815,26 @@ if (Test-Path -LiteralPath $Cfg.MembersFile) {
   Add-Row '全鱼' 'WARN' '名册不存在（还是"一条鱼"的时代）' 'NEXT: node scripts\migrate-members.mjs 生成 pool\members.json'
 }
 
+# 9c. 格式分界（巡守账本）：分界行只在启动时写，而"启动"不是必然事件。
+#     小鱼丸 2026-11-15 19:08：别让补强变成唯一 —— 但不能让它的缺席也看不见。
+try {
+  $wmLogs = @(Get-ChildItem -LiteralPath (Join-Path $Cfg.PondRoot 'homes') -Filter 'watchman.log' -Recurse -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
+  if ($wmLogs.Count -gt 0) {
+    $wm = $wmLogs[0]
+    $wmTail = @(Get-Content -LiteralPath $wm.FullName -Encoding utf8 -Tail 3000)
+    $hasFmt3 = @($wmTail | Where-Object { $_ -match '\| log-format \| fmt=3' }).Count -gt 0
+    $boundary = '2026-11-15 18:35'
+    $lateAny = @($wmTail | Where-Object { $_ -match '^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})' -and [string]$matches[1] -gt $boundary }).Count -gt 0
+    if ($hasFmt3) {
+      Add-Row '格式分界' 'OK' ('{0}：有 log-format 分界行' -f (Split-Path $wm.FullName -Leaf))
+    } elseif ($lateAny) {
+      Add-Row '格式分界' 'WARN' ('{0}：已有 18:35 之后的行，但没有 log-format 分界行（补强未生效）' -f (Split-Path $wm.FullName -Leaf)) 'NEXT: 重启巡守（fish.ps1 down lee -Yes; fish.ps1 up lee -NoBrowser）'
+    } else {
+      Add-Row '格式分界' 'INFO' ('{0}：还没有 18:35 之后的行，分界未到' -f (Split-Path $wm.FullName -Leaf))
+    }
+  }
+} catch { Add-Row '格式分界' 'WARN' ('核不了：{0}' -f $_.Exception.Message) }
+
 # 9b. 工具数（每条鱼）：账本里只有数字，但"变少"本身就是一条该报的事。
 #     第三条鱼 2026-11-15 19:05：工具消失是静默的，能加一行检查就加一行。
 try {
