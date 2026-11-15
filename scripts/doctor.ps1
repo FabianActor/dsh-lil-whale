@@ -240,6 +240,21 @@ if (Test-Path -LiteralPath $pluginLog) {
     Add-Row '名册自检' 'WARN' 'roster-audit.log 不存在——只说明还没跑过（1.5.x 未进进程？），不说明没问题' 'NEXT: 重启 3080 后等第一拍'
   }
 
+  # 3g. dsh 依赖的 undici 有没有装全（2026-11-15，小肥鱼报的 web_fetch 崩）
+  # 现象：目录在、lib\cache 里少文件 ⇒ require('undici') 报 Cannot find module '../cache/memory-cache-store'。
+  # 判据：看文件在不在，不看接口通不通（接口可能走别的路，通了也不代表这个包是好的）。
+  $repair = Join-Path $PSScriptRoot 'repair-undici.mjs'
+  if (Test-Path -LiteralPath $repair) {
+    $undiciOut = & node $repair --check 2>&1
+    $undiciCode = $LASTEXITCODE
+    if ($undiciCode -eq 0) {
+      Add-Row 'undici 文件' 'OK' (($undiciOut | Select-Object -Last 1).Trim())
+    } else {
+      Add-Row 'undici 文件' 'FAIL' (($undiciOut | Where-Object { $_ -match '^WARN|^  - ' } | Select-Object -First 3) -join ' ') 'NEXT: node scripts/repair-undici.mjs --fix'
+    }
+  } else {
+    Add-Row 'undici 文件' 'WARN' '没有 scripts\repair-undici.mjs' 'NEXT: 从仓库同步这个脚本'
+  }
 # 4. 名册：群认会话不认名字；登记错了 = 叫错人
 $pinsFile = Join-Path $Cfg.GroupDir 'pins.json'
 if (Test-Path -LiteralPath $pinsFile) {

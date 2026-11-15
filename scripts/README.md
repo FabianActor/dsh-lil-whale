@@ -106,3 +106,5 @@ pwsh -File scripts\fish.ps1 acl-check / acl-repair <鱼|all>  # 沙箱通行证�
 1. **别用命令行里出现的字符串判断"某进程在不在"**：搜 `watchman.ps1` 会把任何一个正在读这段文字的 pwsh（包括你排障时敲的那条命令）都算成巡守。现在巡守自己往 `logs\watchman.pid` 写 PID，只认这个文件。
 2. **别套两层 pwsh**：`Start-Process pwsh -Command "pwsh -File x.ps1"` 会多出一个没人管的父进程。要跑脚本就用 `-Command "& 'x.ps1'"`。
 3. **杀进程要反过来收紧**：`fish.ps1` 的 `down` 只认「`node.exe` 的**第一个参数**就是 `bin.js`」的进程，再看参数里有没有 `--profile <鱼>`。只搜「命令行里出现过这两个词」的话，会把正在读这两个词的 shell 当成鱼杀掉 —— 测试时真撞上了。
+
+| `repair-undici.mjs` | 查 dsh 的 undici 是否装全；`--fix` 从官方 tarball 补回缺的 5 个 cache 文件（doctor 3g） |
