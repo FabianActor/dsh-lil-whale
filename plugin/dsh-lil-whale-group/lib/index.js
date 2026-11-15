@@ -2574,7 +2574,7 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
   }
   // 四种措辞（first / lost / resumed / 没过档）从 handleChannel 提到 wake-preview-core.js，
   // 好让"摆题的人"不碰真状态也能把四句话写成断言（2026-11-15 20:49，第三条鱼与第二条鱼的分工）。
-  const { where, tailHint } = wakeWordingOf({
+  const { where, tailHint, tpl, tailTpl } = wakeWordingOf({
     kind: channel.kind,
     who,
     dmWho: channel.who,
@@ -2608,7 +2608,7 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
   // `id` 是构造出来的 user message id，用来跟会话日志对账（见 wakeDeliverLog 的注释）；
   // `last-line` 是那条消息在通道文件里的绝对行号（1 基），`last-from` 是它谁写的。
   // 有这两个字段，"同一条被递了两次"和"我们自己叫了两次"才分得开 —— 只看时间戳分不开。
-  const deliveryNote = `id=${built.id} member=${member} channel=${channel.key} seat=${seat === '' ? '-' : seat} pending=${incoming.length} last-line=${lastIncomingIndex + 1} last-from=${incoming[incoming.length - 1]?.from ?? '-'} last-ts=${lastTs || 0} cursor=${lines.length} prior-cursor=${sharedSeenStored} cursor-state=${cursorLost ? "lost" : firstRead ? "first" : "resumed"}`
+  const deliveryNote = `id=${built.id} member=${member} channel=${channel.key} seat=${seat === '' ? '-' : seat} pending=${incoming.length} last-line=${lastIncomingIndex + 1} last-from=${incoming[incoming.length - 1]?.from ?? '-'} last-ts=${lastTs || 0} cursor=${lines.length} prior-cursor=${sharedSeenStored} cursor-state=${cursorLost ? "lost" : firstRead ? "first" : "resumed"} tpl=${tpl} n=${incoming.length} tail=${tailTpl}`
   try {
     agent.followup(built)
   } catch (error) {

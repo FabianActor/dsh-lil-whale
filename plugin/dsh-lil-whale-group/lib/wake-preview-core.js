@@ -28,5 +28,17 @@ export function wakeWordingOf({ kind, who, dmWho = '', count, firstRead, cursorL
       ? '先看最后三条；前面的不用补，想看再翻。'
       : '先看最后三条，再看看有没有指名你的。'
     : '去看看。'
-  return { where, tailHint }
+  // 2026-11-15 21:18，小鱼丸指出的：状态层有账（cursor-state），句子层没有账——
+  // 投递日志里没有一处记"当时说的是哪句话"，事后只能靠谁在群里抄得准。
+  // 所以把模板 id 一起返回，由调用方写进账本：tpl + n + tail。
+  // 判据：**能验的东西要能事后验；只能当场验的，等于只有当事人可信。**
+  const tpl = kind === 'dm'
+    ? 'dm'
+    : backlog
+      ? firstRead
+        ? cursorLost ? 'group-lost' : 'group-first'
+        : 'group-backlog'
+      : 'group-plain'
+  const tailTpl = backlog ? (firstRead ? 'tail-no-backfill' : 'tail-named') : 'tail-go'
+  return { where, tailHint, tpl, tailTpl }
 }

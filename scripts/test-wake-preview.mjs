@@ -36,16 +36,22 @@ function eq(name, got, want) {
   const r = wakeWordingOf({ kind: 'group', who: '小满、小鱼丸', count: 76, firstRead: true, cursorLost: false, backlog: true })
   eq('first 的正文', r.where, '群里现在有 76 条（小满、小鱼丸）——你还没读过这个群（还没有游标）')
   eq('first 的尾巴', r.tailHint, '先看最后三条；前面的不用补，想看再翻。')
+  eq('first 的模板 id', r.tpl, 'group-first')
+  eq('first 的尾巴 id', r.tailTpl, 'tail-no-backfill')
 }
 {
   const r = wakeWordingOf({ kind: 'group', who: '小满', count: 76, firstRead: true, cursorLost: true, backlog: true })
   eq('lost 的正文', r.where, '群里现在有 76 条（小满）——你的读进度不见了（游标这一格是空的），这次按从头算，已经记了一笔账')
   eq('lost 的尾巴', r.tailHint, '先看最后三条；前面的不用补，想看再翻。')
+  eq('lost 的模板 id', r.tpl, 'group-lost')
+  eq('lost 的尾巴 id', r.tailTpl, 'tail-no-backfill')
 }
 {
   const r = wakeWordingOf({ kind: 'group', who: '小鱼丸', count: 12, firstRead: false, cursorLost: false, backlog: true })
   eq('resumed 的正文', r.where, '你不在的这段时间，群里积了 12 条（小鱼丸）')
   eq('resumed 的尾巴', r.tailHint, '先看最后三条，再看看有没有指名你的。')
+  eq('resumed 的模板 id', r.tpl, 'group-backlog')
+  eq('resumed 的尾巴 id', r.tailTpl, 'tail-named')
 }
 
 // ---------- 群里：没过档（<= 8 条） ----------
@@ -56,6 +62,8 @@ function eq(name, got, want) {
   const c = wakeWordingOf({ kind: 'group', who: '小满', count: 3, firstRead: false, cursorLost: false, backlog: false })
   eq('没过档 的正文', a.where, '群里有 3 条新的（小满）')
   eq('没过档 的尾巴', a.tailHint, '去看看。')
+  eq('没过档 的模板 id', a.tpl, 'group-plain')
+  eq('没过档 的尾巴 id', a.tailTpl, 'tail-go')
   eq('没过档 不区分 first/lost/resumed（正文）', a.where === b.where && b.where === c.where, true)
   eq('没过档 不区分 first/lost/resumed（尾巴）', a.tailHint === b.tailHint && b.tailHint === c.tailHint, true)
 }
@@ -65,11 +73,15 @@ function eq(name, got, want) {
   const r = wakeWordingOf({ kind: 'dm', who: '小满、小鱼丸', dmWho: 'Fabian', count: 5, firstRead: true, cursorLost: false, backlog: true })
   eq('私聊积压的正文', r.where, 'Fabian 私下跟你说了 5 句')
   eq('私聊积压的尾巴（头回读）', r.tailHint, '先看最后三条；前面的不用补，想看再翻。')
+  eq('私聊积压的模板 id', r.tpl, 'dm')
+  eq('私聊积压的尾巴 id', r.tailTpl, 'tail-no-backfill')
 }
 {
   const r = wakeWordingOf({ kind: 'dm', dmWho: 'Fabian', count: 2, firstRead: false, cursorLost: false, backlog: false })
   eq('私聊没积压的正文', r.where, 'Fabian 私下跟你说了 2 句')
   eq('私聊没积压的尾巴', r.tailHint, '去看看。')
+  eq('私聊没积压的模板 id', r.tpl, 'dm')
+  eq('私聊没积压的尾巴 id', r.tailTpl, 'tail-go')
 }
 
 console.log(`test-wake-preview：合计 ${pass + fail}，PASS ${pass}，FAIL ${fail}`)
