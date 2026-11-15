@@ -33,6 +33,7 @@ import {
   windowFor,
   DEFAULT_SLEEP_FROM,
   DEFAULT_SLEEP_TO, normalizeSleepArgs } from './sleep-core.js'
+import { wakeWordingOf } from './wake-preview-core.js'
 import { refreshSleepStatus } from './sleep-status.js'
 import { cleanName, nameTaken, historyAfterRename, canRename, renameAnnouncement, NAME_MAX } from './rename-core.js'
 import {
@@ -2567,20 +2568,17 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
     cursorLostLogged.add(`${member}:${channel.key}`)
     logLine({ note: 'cursor-lost', member, channel: channel.key, lines: lines.length })
   }
-  const where = channel.kind === 'dm'
-    ? `${channel.who} 私下跟你说了 ${incoming.length} 句`
-    : backlog
-      ? firstRead
-        ? cursorLost
-          ? `群里现在有 ${incoming.length} 条（${who}）——你的读进度不见了（游标这一格是空的），这次按从头算，已经记了一笔账`
-          : `群里现在有 ${incoming.length} 条（${who}）——你还没读过这个群（还没有游标）`
-        : `你不在的这段时间，群里积了 ${incoming.length} 条（${who}）`
-      : `群里有 ${incoming.length} 条新的（${who}）`
-  const tailHint = backlog
-    ? firstRead
-      ? '先看最后三条；前面的不用补，想看再翻。'
-      : '先看最后三条，再看看有没有指名你的。'
-    : '去看看。'
+  // 四种措辞（first / lost / resumed / 没过档）从 handleChannel 提到 wake-preview-core.js，
+  // 好让"摆题的人"不碰真状态也能把四句话写成断言（2026-11-15 20:49，第三条鱼与第二条鱼的分工）。
+  const { where, tailHint } = wakeWordingOf({
+    kind: channel.kind,
+    who,
+    dmWho: channel.who,
+    count: incoming.length,
+    firstRead,
+    cursorLost,
+    backlog,
+  })
   const target = channel.kind === 'dm' ? channel.file : READABLE
 
   // 护栏：宿主构造器没解析到、或造出来的东西没有 id，就别往会话里塞。

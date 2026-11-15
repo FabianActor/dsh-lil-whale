@@ -144,6 +144,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '条件逻辑' (($intentOut | Select-Object -Last 2) -join ' / ') }
     else { Ok '条件逻辑' '行为测试全过（test-intent.mjs）' }
   } else { Fail '条件逻辑' 'scripts\test-intent.mjs 不在包里' }
+  # ── 4f. 唤醒词四种分支（2026-11-15，CHANGELOG r138）────────────────────
+  $previewTest = Join-Path $pkg 'scripts\test-wake-preview.mjs'
+  if (Test-Path $previewTest) {
+    $previewOut = & node $previewTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '唤醒词' (($previewOut | Select-Object -Last 2) -join ' / ') }
+    else { Ok '唤醒词' '行为测试全过（test-wake-preview.mjs）' }
+  } else { Fail '唤醒词' 'scripts\test-wake-preview.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {
