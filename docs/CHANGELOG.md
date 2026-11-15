@@ -3361,11 +3361,15 @@ sleep-tools-register-failed: tool "sleep" must declare output { schema, render, 
 2. "纸/代码说补上了"不等于机器上补上了：修复要有当事人重测的现场证据。
 3. 写标签需要完整令牌（LABEL_SECURITY_INFORMATION 要 WRITE_OWNER）；沙箱里只能查、补不上，修复要在宿主的正常 shell 里跑。
 
+**鱼补的两条指纹**（2026-11-16，照这两条认，不用再查两小时）：
+- 「症状是多发的，机制只查了一次。」（第二条鱼）
+- 「『我有这个权限』和『这个对象允许我到这个完整级别』是两件事——前者查 DACL，后者查标签；只查一样就会得出『权限明明给了却写不进』。」（第四条鱼）
+
 **教训**：通行证不是一张纸，是两张；"补上了"那句话说早了。
 
 ## 附录 A.120 私事不该走公共记录：闹钟递话的传输路径
 
-**症状**：鱼给自己设的闹钟到点，正文（含她写在表里的 `reason`）进了 `poolgroupmessages.jsonl`，署名 `from=lee`、`s=watch`、永久可见。
+**症状**：鱼给自己设的闹钟到点，正文（含她写在表里的 `reason`）进了 `pool\group\messages.jsonl`，署名 `from=lee`、`s=watch`、永久可见。
 
 **根因**：叫醒她用的私投路径（`buildUserMessage(... form:'signal')`）和 plan 递话用的群广播路径是两条；`selfPlanTick` 用后者（`say('lee', …, 'group', 'watch')`），于是"递给她"变成了"写进群"。外加 `s` 这一格被塞进了 `watch` / `ui` 等非地址值。
 
