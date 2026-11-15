@@ -2637,7 +2637,7 @@ function noteOnce(member, msg) {
   const key = `${todayKey(new Date())}|${member.key}|${msg}`
   if (planNotes.has(key)) return
   planNotes.add(key)
-  watchmanLog('skip', `to=${member.key} why=${msg}`)
+  watchmanLog('skip', `to=${member.key} ${/^[a-z0-9-]+=/.test(msg) ? msg : 'note=' + msg}`)
 }
 
 function planDue(member, st, now, graceMin = 1) {
@@ -2694,7 +2694,7 @@ function selfPlanTick() {
   for (const item of due) {
     const total = totalWakesToday()
     if (total >= WAKE.totalPerDay) {
-      watchmanLog('wake-skip', `to=${self} why=plan:${item.id} deny=total-cap total=${total}/${WAKE.totalPerDay}`)
+      watchmanLog('wake-skip', `to=${self} deny=total-cap plan=${item.id} total=${total}/${WAKE.totalPerDay}`)
       continue
     }
     if (!claimPlanDelivery(member, item.id)) continue
@@ -2818,11 +2818,11 @@ function probeOneIntent(member, spec, s, now) {
     }
     const resolved = resolveIntentPath(spec, member)
     if (!resolved.ok) {
-      noteOnce(member, `intent-path-rejected id=${spec.id} reason=${resolved.why}`)
+      noteOnce(member, `note=intent-path-rejected id=${spec.id} reason=${resolved.why}`)
       return { hit: false }
     }
     if (!existsSync(resolved.file)) {
-      noteOnce(member, `intent-path-missing id=${spec.id}`)
+      noteOnce(member, `note=intent-path-missing id=${spec.id}`)
       return { hit: false }
     }
     if (spec.kind === 'text-appears') {
@@ -2835,7 +2835,7 @@ function probeOneIntent(member, spec, s, now) {
     const r = probeFileChanged({ current, baseline: s.baseline ?? null })
     return { hit: r.hit, evidence: r.evidence, atMs: r.atMs ?? null, patch: { baseline: r.baseline } }
   } catch (error) {
-    noteOnce(member, `intent-probe-failed id=${spec.id} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 100)}`)
+    noteOnce(member, `note=intent-probe-failed id=${spec.id} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 100)}`)
     return { hit: false }
   }
 }
@@ -2856,7 +2856,7 @@ async function intentTick(member, st, now) {
   try {
     raw = JSON.parse(readFileSync(file, 'utf8'))
   } catch (error) {
-    noteOnce(member, `intent-unreadable ${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 80)}`)
+    noteOnce(member, `note=intent-unreadable ${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 80)}`)
     return
   }
   const { list, notes, badShape } = parseIntents(raw)
@@ -2871,7 +2871,7 @@ async function intentTick(member, st, now) {
   // "还 armed"和"已删的残影"。每次 tick 按条件表剪一次，剪掉的 id 记一行（有证据）。
   for (const id of pruneIntentState(state, list)) {
     dirty = true
-    noteOnce(member, `intent-state-pruned id=${id}`)
+    noteOnce(member, `note=intent-state-pruned id=${id}`)
   }
   if (list.length === 0) {
     if (dirty) writeIntentState(member, state)
@@ -2882,7 +2882,7 @@ async function intentTick(member, st, now) {
     state[spec.id] = s
     if (spec.each === 'once' && s.done) continue
     if (spec.until && String(spec.until) < today) {
-      noteOnce(member, `intent-expired id=${spec.id} until=${spec.until}`)
+      noteOnce(member, `note=intent-expired id=${spec.id} until=${spec.until}`)
       continue
     }
     if (!inTimeWindow(spec, now)) continue
@@ -2903,23 +2903,23 @@ async function intentTick(member, st, now) {
       dirty = true
     }
     if (isSleeping(member.key, now)) {
-      noteOnce(member, `wake-skip reason=sleep intent=${spec.id}（条件成立了，先记着）`)
+      noteOnce(member, `deny=sleep intent=${spec.id}（条件成立了，先记着）`)
       continue
     }
     const ageMs = now.getTime() - Date.parse(s.firstTrueAt)
     if (!Number.isFinite(ageMs) || ageMs > INTENT_GRACE_MIN * 60_000) {
-      noteOnce(member, `wake-skip reason=intent-stale intent=${spec.id}`)
+      noteOnce(member, `deny=intent-stale intent=${spec.id}`)
       delete s.firstTrueAt
       dirty = true
       continue
     }
     const cap = capOk(s, spec, now, readIntentGlobal())
     if (!cap.ok) {
-      noteOnce(member, `wake-skip reason=${cap.why} intent=${spec.id}`)
+      noteOnce(member, `deny=${cap.why} intent=${spec.id}`)
       continue
     }
     if (!cooldownOk(s, spec, now)) {
-      noteOnce(member, `wake-skip reason=intent-cooldown intent=${spec.id}`)
+      noteOnce(member, `deny=intent-cooldown intent=${spec.id}`)
       continue
     }
     const seq = Number(s.count) || 0
@@ -2941,7 +2941,7 @@ async function intentTick(member, st, now) {
       watchmanLog('woke', `wid=${wid} trigger=intent lag=${lagSec === null ? 'lag-unknown' : `${lagSec}s`} inserted=1`)
       markWake(member.key, 'intent')
     } catch (error) {
-      watchmanLog('wake-skip', `wid=${wid} why=intent-deliver-failed detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 100)}`)
+      watchmanLog('wake-skip', `wid=${wid} deny=intent-deliver-failed detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 100)}`)
       continue
     }
     const schedule = looksLikeSchedule(s, now)
@@ -2955,7 +2955,7 @@ async function intentTick(member, st, now) {
     delete s.happenedAt
     if (spec.each === 'once') s.done = true
     if (schedule.isScheduleLike) {
-      noteOnce(member, `intent-looks-like-schedule id=${spec.id} minute=${schedule.minute} streak=${schedule.streak}`)
+      noteOnce(member, `note=intent-looks-like-schedule id=${spec.id} minute=${schedule.minute} streak=${schedule.streak}`)
     }
     bumpIntentGlobal(now)
     dirty = true
@@ -3018,9 +3018,9 @@ async function watchOne(member, st) {
       saveWatchState()
       watchmanLog('skip', `${why} ${job.tag}`)
     }
-    // 睡着的时候不推门、不递话：计划到点了也不叫醒（醒来后不补发，账里记 why=sleep）。
+    // 睡着的时候不推门、不递话：计划到点了也不叫醒（醒来后不补发，账里记 deny=sleep）。
     if (isSleeping(member.key)) {
-      noteSkip('why=sleep')
+      noteSkip('deny=sleep')
       continue
     }
     // 2026-11-13 09:07 她给的判据：端口通 + 心跳新鲜，才算"窗开着、人也挂着"。
@@ -3058,7 +3058,7 @@ async function watchOne(member, st) {
       const totalNow = totalWakesToday()
       if (totalNow >= WAKE.totalPerDay) {
         watchmanLog('wake-skip', `wid=${wid} deny=total-cap total=${totalNow}/${WAKE.totalPerDay}`)
-        noteSkip('why=total-cap')
+        noteSkip('deny=total-cap')
         continue
       }
 
@@ -3067,7 +3067,7 @@ async function watchOne(member, st) {
         // 那份内存快照谁都看不见谁，正是三条 deliver 的来源。
         if (!claimPlanDelivery(member, job.key)) {
           watchmanLog('wake-skip', `wid=${wid} deny=already-delivered`)
-          noteSkip('why=already-delivered')
+          noteSkip('deny=already-delivered')
           continue
         }
         const text = planDeliveryText(job)
@@ -3115,7 +3115,7 @@ async function watchOne(member, st) {
         markWake(member.key, 'plan')
         try {
           say('lee', member.key, planDeliveryText(job))
-          watchmanLog('deliver', `why=plan-after-wake ${job.tag}（窗是推开的，话已递进去）`)
+          watchmanLog('deliver', `reason=plan-after-wake ${job.tag}（窗是推开的，话已递进去）`)
         } catch (error) {
           watchmanLog(
             'error',
@@ -3125,13 +3125,13 @@ async function watchOne(member, st) {
       } else {
         st.fails += 1
         saveWatchState()
-        watchmanLog('wake-skip', `wid=${wid} why=push-failed fails=${st.fails} detail=${res.detail}`)
+        watchmanLog('wake-skip', `wid=${wid} deny=push-failed fails=${st.fails} detail=${res.detail}`)
       }
       continue
     }
 
     if (awake) {
-      noteSkip('why=already-awake')
+      noteSkip('deny=already-awake')
       continue
     }
     if (st.wakes >= WATCH.maxWakesPerDay) {
@@ -3162,7 +3162,7 @@ async function watchOne(member, st) {
         if (claimPlanDelivery(member, job.key)) {
           try {
             say('lee', member.key, planDeliveryText(job))
-            watchmanLog('deliver', `why=plan-after-wake ${job.tag}（窗是推开的，话已递进去）`)
+            watchmanLog('deliver', `reason=plan-after-wake ${job.tag}（窗是推开的，话已递进去）`)
           } catch (error) {
             watchmanLog('error', `why=plan-deliver-failed detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)} ${job.tag}`)
           }

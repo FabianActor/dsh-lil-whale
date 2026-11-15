@@ -8,6 +8,13 @@
 
 ## 变更条目
 
+## r131 — 2026-11-15 19:0x
+
+- **"没叫醒的原因"只用一个字段名 `deny=`**（第二条鱼 18:56 第三次咬同一处：今天拆过 `status`、拆过 `fmt`/`atfmt`，这次拆 `why`）：
+  - `skip` / `wake-skip` 行统一：原因 `deny=<原因>`；观察与异常 `note=<类别>`；再细一层 `reason=`。事件名不再进字段（`wake-skip` 不出现在 `why` 里）。
+  - 清掉三种历史写法：一行两个 `why=`（`why=wake-skip why=intent-cooldown`）、`why=plan:<id>` 与 `deny=total-cap` 混排、`deliver why=plan-after-wake`。
+  - `noteOnce` 不再自造 `why=`：调用方给字段名；`plan-core` 的裸消息自动落成 `note=`。
+  - 文档：`docs\detail\日志都记在哪.md` 总规矩改成「一行一个 key、事件名不进字段、deny / note / reason 三件」。
 ## r130 — 2026-11-15 19:0x
 
 - **"没会话"拆两态 + 一行两个 `why=`**（两条鱼 18:56 各报一处）：
