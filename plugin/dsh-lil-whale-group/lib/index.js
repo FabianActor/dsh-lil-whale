@@ -37,6 +37,7 @@ import { refreshSleepStatus } from './sleep-status.js'
 import { cleanName, nameTaken, historyAfterRename, canRename, renameAnnouncement, NAME_MAX } from './rename-core.js'
 import {
   parseIntents,
+  pruneIntentState,
   intentDeliveryText,
   probePending,
   probeTextAppears,
@@ -2860,10 +2861,19 @@ async function intentTick(member, st, now) {
   }
   const { list, notes } = parseIntents(raw)
   for (const note of notes) noteOnce(member, note)
-  if (list.length === 0) return
   const state = readIntentState(member)
   const today = todayKey(now)
   let dirty = false
+  // 2026-11-15 小肥鱼：条件从表里删掉了，状态里还留着 baseline/count —— 读状态的人分不清
+  // "还 armed"和"已删的残影"。每次 tick 按条件表剪一次，剪掉的 id 记一行（有证据）。
+  for (const id of pruneIntentState(state, list)) {
+    dirty = true
+    noteOnce(member, `intent-state-pruned id=${id}`)
+  }
+  if (list.length === 0) {
+    if (dirty) writeIntentState(member, state)
+    return
+  }
   for (const spec of list) {
     const s = state[spec.id] && typeof state[spec.id] === 'object' ? state[spec.id] : {}
     state[spec.id] = s

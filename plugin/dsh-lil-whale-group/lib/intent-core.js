@@ -292,3 +292,16 @@ export function probeFileChanged({ current, baseline }) {
     baseline: current,
   }
 }
+
+// 2026-11-15 小肥鱼：删掉的条件不会从状态里消失 —— 读状态的人分不清"还 armed"和"已删的残影"。
+// 这里只做一件事：把不在当前条件表里的 id 从状态里剪掉，并把剪掉的 id 报出来（谁调用谁记一行）。
+export function pruneIntentState(state, list) {
+  const live = new Set((Array.isArray(list) ? list : []).map((spec) => spec?.id).filter(Boolean))
+  const removed = []
+  for (const id of Object.keys(state ?? {})) {
+    if (live.has(id)) continue
+    delete state[id]
+    removed.push(id)
+  }
+  return removed
+}

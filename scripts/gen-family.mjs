@@ -178,7 +178,26 @@ if (checkOnly) {
   console.log('✓ 谱系校验通过（根：' + root + '，' + Object.keys(family.nodes).length + ' 个节点）')
   process.exit(0)
 }
-family.updatedAt = new Date().toISOString()
-writeFileSync(familyFile, JSON.stringify(family, null, 2) + '\n', 'utf8')
-writeFileSync(out, lines.join('\n'), 'utf8')
+// 2026-11-15 小肥鱼咬的第一口：她盯的是"文件变"，她关心的是"集合变"。
+// 这个文件里 updatedAt 每次都会变 —— 重生成若逐字节写，会把"没有出生"报成"家里有事"。
+// 所以先比语义（除 updatedAt 之外的部分），一样就不写；谱系.md 也一样。
+const semantic = (obj) => {
+  const { updatedAt, ...rest } = obj
+  return JSON.stringify(rest, null, 2)
+}
+let prevSemantic = null
+if (existsSync(familyFile)) {
+  try { prevSemantic = semantic(JSON.parse(readFileSync(familyFile, 'utf8'))) } catch { prevSemantic = null }
+}
+const nextSemantic = semantic(family)
+if (prevSemantic === nextSemantic) {
+  console.log('= 家里没变（不重写 pool\\family.json）')
+} else {
+  family.updatedAt = new Date().toISOString()
+  writeFileSync(familyFile, JSON.stringify(family, null, 2) + '\n', 'utf8')
+  console.log('✓ pool\\family.json 已更新')
+}
+const nextOut = lines.join('\n')
+const prevOut = existsSync(out) ? readFileSync(out, 'utf8') : null
+if (prevOut !== nextOut) writeFileSync(out, nextOut, 'utf8')
 console.log(`✓ 谱系已生成：${out}（根 ${root}，${Object.keys(family.nodes).length} 个节点）`)

@@ -9,6 +9,7 @@
 import assert from 'node:assert/strict'
 import {
   parseIntents,
+  pruneIntentState,
   normalizeIntent,
   pathAllowed,
   inTimeWindow,
@@ -239,6 +240,20 @@ t('递话文本带 id / why / 证据，并说清是"你的表里的一条条件"
   assert.match(text, /文件变了：12 B/)
   assert.match(text, /你的表里/)
   assert.equal(/你自己写的/.test(text), false)
+})
+
+t('pruneIntentState 剪掉已删除的条件、保留还在的（小肥鱼 2026-11-15 提的残影）', () => {
+  const state = { kept: { count: 1 }, gone: { baseline: 12, count: 3 } }
+  const removed = pruneIntentState(state, [{ id: 'kept' }])
+  assert.deepEqual(removed, ['gone'])
+  assert.deepEqual(Object.keys(state), ['kept'])
+  assert.equal(state.kept.count, 1)
+})
+
+t('pruneIntentState 空条件表 = 全部剪掉（她删光了，状态也该空）', () => {
+  const state = { a: {}, b: {} }
+  assert.deepEqual(pruneIntentState(state, []), ['a', 'b'])
+  assert.deepEqual(Object.keys(state), [])
 })
 
 console.log(`合计：${pass + fail} 项，PASS ${pass}，FAIL ${fail}`)

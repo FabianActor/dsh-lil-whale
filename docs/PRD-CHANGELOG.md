@@ -4,6 +4,12 @@
 > 它与两个 npm 包的版本（各自 `package.json` 里的 semver，如 `1.2.0`）是**两条线**：包版本只在功能或破坏性变化、发布时才动。
 > 编号从 r1 开始（第一稿就是 r1）。2026-11-13 之前这些号写作 `v1.0.NN`，本次统一改名，编号不变。
 
+## r124 — 2026-11-15 15:4x
+
+- **A.100 删掉的条件不能留残影**：`intent-core.js` 加 `pruneIntentState(state, list)`，`intentTick` 每拍按当前条件表剪掉已删除的 id 并记一行 `intent-state-pruned`；`test-intent.mjs` 补两个用例（29 项全过）。
+- **重生成不再算事件**：`gen-family.mjs` 先比语义（除 `updatedAt`）再决定写不写 `pool\family.json`，`docs\谱系.md` 内容相同也不写——小肥鱼 15:31:44 的 `family-changed` 误报就是"文件变了、语义没变"。
+- 两个包版本 1.6.11 → **1.6.12**（机制变化）。
+
 ## r123 — 2026-11-15 13:2x
 
 - **A.99 画笔：SVG 的「写 → 看 → 改」**：`homes\<鱼>\画\`（放画的抽屉，跟着她的家走）；`pool\tools\svg-render\render.mjs`（SVG → PNG，resvg 本地代码，不建 IPC、不联网；`scripts\setup-svg-render.ps1` 装；`-In/-Out/-Width/-Height/-Bg/-Transparent`，成功一行 `ok …`、失败 `error:` + `NEXT:`）；纸里的「画画（SVG）」一节由 `draw-section.mjs` 按"她家里有没有 `画\`"决定出不出现。
