@@ -203,6 +203,10 @@ function runLog(member, result, why) {
 //   - 一次性睡眠 / 家长强制叫醒在共享区：`pool\state\sleep\<键>.json` —— 巡守和面板要读。
 // 判据放在 `sleep-core.js`（纯函数、有 40 个行为测试）：窗口、跨午夜、优先级、坏形状都只算一次。
 const SLEEP_DIR = join(POOL_STATE, 'sleep')
+// 2026-11-15：这四个数的唯一写者是巡守进程。代码里的是默认值、配置能覆盖，
+// 只有跑起来的那个进程知道真正的数；别让每个读者自己去日志里捞（小肥鱼）。
+const WAKE_CAPS_FILE = join(POOL_STATE, 'wake-caps.json')
+let wakeCapsSince = null
 const SLEEP_STATUS_FILE = join(POOL_STATE, 'sleep-status.json')
 const SLEEP_LOG = join(POOL_STATE, 'sleep.log')
 // 改名账本（2026-11-14 他定的规矩）：名字只能由她自己改，每一次都要留一行。
@@ -776,6 +780,46 @@ function localStampOf(value) {
   if (Number.isNaN(d.getTime())) return '?'
   const pad = (n) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
+/**
+ * 生效值快照：caps 是这一轮真正用的数，since 是本进程第一次写，at 是这一次写。
+ * 两个时间能分开三种状态：文件不在 = 从没写过；since=at 且都旧 = 起来过一次就死了；
+ * since 不动、at 在走 = 还活着（小鱼丸 2026-11-15 08:44 补的）。
+ */
+function wakeCapsSnapshot(nowIso) {
+  const overrides = []
+  for (const key of ['cooldownSec', 'perHour', 'perDay', 'totalPerDay']) {
+    if (CFG.wake && Object.prototype.hasOwnProperty.call(CFG.wake, key)) overrides.push('wake.' + key)
+  }
+  if (CFG.watch && Object.prototype.hasOwnProperty.call(CFG.watch, 'maxWakesPerDay')) overrides.push('watch.maxWakesPerDay')
+  return {
+    caps: {
+      cooldownSec: WAKE.cooldownSec,
+      perHour: WAKE.perHour,
+      perDay: WAKE.perDay,
+      totalPerDay: WAKE.totalPerDay,
+      maxWakesPerDay: WATCH.maxWakesPerDay,
+    },
+    since: wakeCapsSince,
+    at: nowIso,
+    pid: process.pid,
+    source: { configFile: CFG._path ?? null, configExists: CFG._exists !== false, overrides },
+  }
+}
+
+function writeWakeCaps() {
+  try {
+    const nowIso = new Date().toISOString()
+    if (!wakeCapsSince) wakeCapsSince = nowIso
+    writeJson(WAKE_CAPS_FILE, wakeCapsSnapshot(nowIso))
+  } catch (error) {
+    watchmanLog('note', 'why=wake-caps-write-failed detail=' + String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120))
+  }
+}
+
+function wakeCapsLine() {
+  return 'caps=' + WAKE.cooldownSec + 's/' + WAKE.perHour + 'h/' + WAKE.perDay + 'd/' + WAKE.totalPerDay + 'total cap=' + WATCH.maxWakesPerDay + '/day'
 }
 
 function watchmanLog(result, why) {
@@ -2177,6 +2221,10 @@ function apply(ctx) {
   watchmanLog('resumed', `fmt=2 reason=unclean previous-start=${lastRun?.startedAt ?? 'unknown'} pid=${process.pid}`)
     }
     watchmanLog('started', `fmt=2 pid=${process.pid} prev-run=${prevText} gap=${gapText} tail-errors=${logProbe.tailErrors} interval=${WATCH.intervalMs / 1000}s port=${WATCH.port} cap=${WATCH.maxWakesPerDay}/day errors_today_own=${readErrorCount(ownMember())} errors_today_peer=${readErrorCount(peerMember())} exe=${pwshInfo()}`)
+    // 生效值只有一个写者（就是这里）。读者（环境.md / doctor）读 wake-caps.json，
+    // 读不到就说读不到，别再拿代码里的默认值冒充正在生效的数。
+    writeWakeCaps()
+    watchmanLog('wake-caps', `fmt=1 ${wakeCapsLine()} at=${new Date().toISOString()} pid=${process.pid}`)
     void watchmanTick().catch(() => {})
   }
 }
@@ -3301,6 +3349,7 @@ async function watchmanTick() {
   try { auditRoster() } catch { /* 自检失败不该炸巡守 */ }
   // 面板只读这一份汇总：睡眠判断只有 sleep-core.js 一处实现（A.23）。
   try { writeSleepStatus() } catch { /* 面板显示失败不该炸巡守 */ }
+  try { writeWakeCaps() } catch { /* 写不出生效值也不该炸巡守 */ }
   try { maybeRotateLogs() } catch { /* 同上 */ }
 }
 

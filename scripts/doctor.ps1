@@ -255,6 +255,32 @@ if (Test-Path -LiteralPath $pluginLog) {
   } else {
     Add-Row 'undici 文件' 'WARN' '没有 scripts\repair-undici.mjs' 'NEXT: 从仓库同步这个脚本'
   }
+  # 3h. 生效值：巡守进程写出来的那份（2026-11-15 小肥鱼/小鱼丸）
+  # 判据：文件在、at 是近 5 分钟内的、四个数与环境.md 对得上；"没写过"和"死了"要分得开。
+  $capsFile = Join-Path $Cfg.PoolState 'wake-caps.json'
+  if (-not (Test-Path -LiteralPath $capsFile)) {
+    Add-Row '生效值' 'WARN' 'wake-caps.json 不存在：巡守从没写过（或还没重启到带这段代码的版本）' 'NEXT: 重启主 dsh（3080）后看 pool\state\wake-caps.json'
+  } else {
+    try {
+      $caps = Get-Content -LiteralPath $capsFile -Raw -Encoding UTF8 | ConvertFrom-Json
+      $atText = [string]$caps.at
+      $atMs = if ($atText) { [DateTimeOffset]::Parse($atText).ToUnixTimeMilliseconds() } else { 0 }
+      $ageMin = if ($atMs -gt 0) { [Math]::Round(((Get-Date).ToUniversalTime() - [DateTimeOffset]::FromUnixTimeMilliseconds($atMs).UtcDateTime).TotalMinutes) } else { -1 }
+      $capText = "间隔 $($caps.caps.cooldownSec)s / 每小时 $($caps.caps.perHour) / 每天 $($caps.caps.perDay) / 全池 $($caps.caps.totalPerDay) / 推门 $($caps.caps.maxWakesPerDay)"
+      $overrides = @($caps.source.overrides)
+      $srcText = if ($overrides.Count -gt 0) { "配置覆盖：" + ($overrides -join '、') } else { '代码默认值' }
+      if ($ageMin -lt 0) {
+        Add-Row '生效值' 'FAIL' 'wake-caps.json 里没有可读的 at' 'NEXT: 看 pool\state\wake-caps.json 的内容'
+      } elseif ($ageMin -gt 5) {
+        Add-Row '生效值' 'FAIL' "巡守 $ageMin 分钟没更新生效值（进程可能死了/卡住）：$capText" 'NEXT: 看 homes\<鱼>\logs\watchman.log 末尾有没有 wake-caps 行'
+      } else {
+        Add-Row '生效值' 'OK' "$capText（$srcText；$ageMin 分钟前）"
+      }
+    } catch {
+      Add-Row '生效值' 'FAIL' "wake-caps.json 读不出来：$($_.Exception.Message)" 'NEXT: 看文件是不是写坏了'
+    }
+  }
+
 # 4. 名册：群认会话不认名字；登记错了 = 叫错人
 $pinsFile = Join-Path $Cfg.GroupDir 'pins.json'
 if (Test-Path -LiteralPath $pinsFile) {

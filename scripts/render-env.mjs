@@ -202,6 +202,45 @@ function wakeNumbers(cfgPathOverride) {
 }
 const wake = wakeNumbers(args.config ? resolve(args.config) : '')
 
+// ---- 生效值：唯一写者是巡守进程（2026-11-15 小肥鱼/小鱼丸） ----
+// 代码里的是默认值、配置能覆盖；只有跑起来的那个进程知道真正的数。
+// 读不到就明说读不到 —— 别让代码默认值冒充正在生效的数。
+function readWakeCaps() {
+  const file = join(poolDir, 'state', 'wake-caps.json')
+  if (!existsSync(file)) return { ok: false, why: '文件不存在（巡守还没写过）', file }
+  try {
+    const raw = JSON.parse(readFileSync(file, 'utf8'))
+    const atMs = Date.parse(raw?.at ?? '')
+    if (!Number.isFinite(atMs)) return { ok: false, why: '文件里没有可读的 at', file }
+    const ageMin = Math.round((Date.now() - atMs) / 60000)
+    const fresh = ageMin <= 5
+    return { ok: fresh, why: fresh ? '' : `已经 ${ageMin} 分钟没更新`, raw, atMs, ageMin, file }
+  } catch (error) {
+    return { ok: false, why: `文件读不出来：${error.message}`, file }
+  }
+}
+const capsInfo = readWakeCaps()
+if (capsInfo.ok && capsInfo.raw?.caps) {
+  for (const key of ['cooldownSec', 'perHour', 'perDay']) {
+    const v = Number(capsInfo.raw.caps[key])
+    if (Number.isFinite(v) && v > 0) wake[key] = v
+  }
+}
+const pad2 = (n) => String(n).padStart(2, '0')
+const capsAtLocal = capsInfo.ok
+  ? (() => {
+      const d = new Date(capsInfo.atMs)
+      return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`
+    })()
+  : ''
+const capsOverrides = Array.isArray(capsInfo.raw?.source?.overrides) ? capsInfo.raw.source.overrides : []
+const capsSource = capsInfo.ok
+  ? (capsOverrides.length ? `配置覆盖了 ${capsOverrides.join('、')}` : '代码默认值（配置没覆盖）')
+  : ''
+const capsNote = capsInfo.ok
+  ? `生效值：巡守于 ${capsAtLocal} 写出（pid ${capsInfo.raw?.pid ?? '?'}；${capsSource}）。下面的数字就是它当时用的。`
+  : `读不到巡守写出的生效值（${capsInfo.why}）——下面的数字是代码里的默认值，可能不是正在生效的。`
+
 // ---- 模板与指纹 ----
 const templatePath = join(REPO_ROOT, 'templates', '环境.md.tpl')
 if (!existsSync(templatePath)) die(`找不到模板：${templatePath}`)
@@ -231,6 +270,7 @@ const values = {
   HER_PORT: String(herPort),
   GROUP_DIR: groupDir,
   POOL_DIR: poolDir,
+  CAPS_NOTE: capsNote,
   COOLDOWN: String(wake.cooldownSec),
   PER_HOUR: String(wake.perHour),
   PER_DAY: String(wake.perDay),
