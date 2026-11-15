@@ -69,34 +69,76 @@ for (const f of FAMILIES) {
 const fail = []
 const warn = []
 
-// 1) 代码里有、表里没有（新格/新族）——FAIL
-for (const n of seenStatic) {
-  if (staticOwner.has(n)) continue
-  // 把动态族写死的提示：名字有形如 "前缀（具体内容）"，且前缀本身已登记为动态族
-  const m = /^([^（]+（)/.exec(n)
-  if (m && dynamicOwner.has(m[1])) {
-    fail.push('把动态族写成了静态名：' + n + '（应走动态前缀 ' + m[1] + '…）')
-  } else {
-    fail.push('新格未登记：' + n)
+// 改名的识别（第三条鱼 2026-11-16 02:07）：一次改名不该读成两个问题。
+// 登记里有 '版本一致'、代码里变成 '版本一致X' —— 若两行分开报，读的人会去查两个假问题。
+// 所以先把「登记了但抓不到」和「抓到了但没登记」按相似度配对，配上的合成一行。
+function editDistance(a, b) {
+  const m = a.length
+  const n = b.length
+  if (!m) return n
+  if (!n) return m
+  let prev = Array.from({ length: n + 1 }, (_, j) => j)
+  for (let i = 1; i <= m; i++) {
+    const cur = [i]
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))
+    }
+    prev = cur
   }
+  return prev[n]
 }
-for (const p of seenDynamic) {
-  if (!dynamicOwner.has(p)) fail.push('新动态族未登记：' + p + '…')
+function looksLikeRename(a, b) {
+  if (Math.abs(a.length - b.length) > 4) return false
+  return editDistance(a, b) <= 2
 }
 
-// 2) 表里有、代码里一种形态都没有——WARN（可能改名，也可能真删了）
+// 1a) 把动态族写成静态名（例如 '钥匙（小肥鱼）'）——单独点名，不要和新格混在一起
+const fishNameStatics = []
+const freshStatics = []
+for (const n of seenStatic) {
+  if (staticOwner.has(n)) continue
+  const m = /^([^（]+（)/.exec(n)
+  if (m && dynamicOwner.has(m[1])) fishNameStatics.push(n)
+  else freshStatics.push(n)
+}
+for (const n of fishNameStatics) {
+  const m = /^([^（]+（)/.exec(n)
+  fail.push('把动态族写成了静态名：' + n + '（应走动态前缀 ' + m[1] + '…）')
+}
+
+// 1b) 登记了但代码里抓不到 —— 先不报，等和「新格」配对
+const missingStatics = [...staticOwner.keys()].filter((s) => !seenStatic.has(s))
+
+// 2) 改名配对：一条同时报「改了名、登记表没跟上」，而不是一条 WARN + 一条 FAIL
+const pairedMissing = new Set()
+const pairedFresh = new Set()
+const renamedFamilies = new Set()
+for (const s of missingStatics) {
+  const match = freshStatics.find((c) => !pairedFresh.has(c) && looksLikeRename(s, c))
+  if (!match) continue
+  pairedMissing.add(s)
+  pairedFresh.add(match)
+  renamedFamilies.add(staticOwner.get(s))
+  fail.push('像是改名：登记里的「' + s + '」在代码里找不到，代码里多了「' + match + '」——把登记表里的名字一起改（只算一个问题）')
+}
+for (const s of missingStatics) {
+  if (!pairedMissing.has(s)) warn.push('登记了但代码里抓不到静态格：' + s + '（族：' + staticOwner.get(s) + '）')
+}
+for (const c of freshStatics) {
+  if (!pairedFresh.has(c)) fail.push('新格未登记：' + c)
+}
+
+// 3) 动态族：代码里有、表里没有 → FAIL；表里有、代码里没有 → WARN
+for (const p of seenDynamic) if (!dynamicOwner.has(p)) fail.push('新动态族未登记：' + p + '…')
+for (const p of dynamicOwner.keys()) if (!seenDynamic.has(p)) warn.push('登记了但代码里抓不到动态族：' + p + '…（族：' + dynamicOwner.get(p) + '）')
+
+// 4) 表里有、代码里一种形态都没有 —— WARN（可能整族被删/改名）
+//    但若这一族刚被上面的"改名配对"认领，就不要再报一次——一次改名只算一个问题。
 for (const f of FAMILIES) {
+  if (renamedFamilies.has(f.name)) continue
   const hasStatic = (f.static || []).some((s) => seenStatic.has(s))
   const hasDynamic = (f.dynamicPrefix || []).some((p) => seenDynamic.has(p))
   if (!hasStatic && !hasDynamic) warn.push('登记的族在代码里一种形态都没有：' + f.name)
-}
-
-// 3) 表里有、但某个静态名/前缀缺失——WARN（族还在，具体那一格没了）
-for (const [s, fam] of staticOwner) {
-  if (!seenStatic.has(s)) warn.push('登记了但代码里抓不到静态格：' + s + '（族：' + fam + '）')
-}
-for (const [p, fam] of dynamicOwner) {
-  if (!seenDynamic.has(p)) warn.push('登记了但代码里抓不到动态族：' + p + '…（族：' + fam + '）')
 }
 
 console.log('静态格 ' + seenStatic.size + ' 个 / 登记 ' + staticOwner.size)
