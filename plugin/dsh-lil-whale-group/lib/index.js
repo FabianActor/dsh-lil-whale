@@ -3235,7 +3235,7 @@ function rosterNonFishKeys() {
 
 // 账本格式：fmt=1（2026-11-14 18:15 之前）的时间戳是 UTC，只有计数；
 // fmt=2 起时间戳改本地（和 watchman/fish/sleep 同钟），并带 scope=fish / exclude= 两个口径字段。
-// 两版会长期并存：读账的人先看 fmt 再决定怎么读时间（docs\账本.md）。
+// 两版会长期并存：读账的人先看 fmt 再决定怎么读时间（docs\日志都记在哪.md）。
 function auditRoster(now = new Date()) {
   if (Date.now() - lastRosterAuditAt < ROSTER_AUDIT_EVERY_MS) return
   lastRosterAuditAt = Date.now()

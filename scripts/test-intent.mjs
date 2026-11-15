@@ -118,7 +118,7 @@ t('带 .. 的路径拒', () => {
 
 t('pool/ 与 app/docs/ 允许', () => {
   assert.equal(pathAllowed('pool/group/群.md').ok, true)
-  assert.equal(pathAllowed('app\\docs\\detail\\待办.md').ok, true)
+  assert.equal(pathAllowed('app\\docs\\detail\\还没做完的事.md').ok, true)
 })
 
 t('自家要 insideHome:true，别人家一律不许', () => {

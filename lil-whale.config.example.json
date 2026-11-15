@@ -1,5 +1,5 @@
 {
-  "_说明": "这是模板。install.ps1 会照着它在你自己的仓库根目录生成 lil-whale.config.json（那个文件不进版本库，因为里面是你的绝对路径）。字段含义见 docs/打包.md。",
+  "_说明": "这是模板。install.ps1 会照着它在你自己的仓库根目录生成 lil-whale.config.json（那个文件不进版本库，因为里面是你的绝对路径）。字段含义见 docs/怎么打包给别人.md。",
   "_版本": 2,
   "repoRoot": "D:\\path\\to\\lil-whale\\app",
   "selfHome": "D:\\path\\to\\lil-whale\\homes\\whale",

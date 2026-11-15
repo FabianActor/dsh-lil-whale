@@ -1,10 +1,10 @@
-// gen-family.mjs -- 从数据生成谱系（pool\family.json + pool\members.json -> docs\detail\谱系.md）。
+// gen-family.mjs -- 从数据生成谱系（pool\family.json + pool\members.json -> docs\detail\鱼塘谱系.md）。
 //
 // 为什么生成而不手画：手画的图第一周对、第二周开始漂，第三周没人信它。
 // 这里只有两个输入：谁是爹（family.json）、现在叫什么/在不在跑（members.json）。
 //
 // 用法：
-//   node scripts\gen-family.mjs              # 生成 docs\detail\谱系.md
+//   node scripts\gen-family.mjs              # 生成 docs\detail\鱼塘谱系.md
 //   node scripts\gen-family.mjs --check      # 只校验，不写文件（CI / doctor 用）
 //   node scripts\gen-family.mjs --seed       # 用 members.json 初始化 family.json（没有时自动做）
 
@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url'
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const checkOnly = process.argv.includes('--check')
-// 未知参数拒绝（`--help` 曾经真的重写 docs\detail\谱系.md）。
+// 未知参数拒绝（`--help` 曾经真的重写 docs\detail\鱼塘谱系.md）。
 const gfArgs = process.argv.slice(2)
 const gfUnknown = gfArgs.filter((a) => a.startsWith('--') && !['--check', '--seed'].includes(a))
 if (gfUnknown.length > 0) {
@@ -173,14 +173,14 @@ if (renamed.length) {
   lines.push('')
 }
 
-const out = join(REPO, 'docs', 'detail', '谱系.md')
+const out = join(REPO, 'docs', 'detail', '鱼塘谱系.md')
 if (checkOnly) {
   console.log('✓ 谱系校验通过（根：' + root + '，' + Object.keys(family.nodes).length + ' 个节点）')
   process.exit(0)
 }
 // 2026-11-15 小肥鱼咬的第一口：她盯的是"文件变"，她关心的是"集合变"。
 // 这个文件里 updatedAt 每次都会变 —— 重生成若逐字节写，会把"没有出生"报成"家里有事"。
-// 所以先比语义（除 updatedAt 之外的部分），一样就不写；谱系.md 也一样。
+// 所以先比语义（除 updatedAt 之外的部分），一样就不写；鱼塘谱系.md 也一样。
 const semantic = (obj) => {
   const { updatedAt, ...rest } = obj
   return JSON.stringify(rest, null, 2)

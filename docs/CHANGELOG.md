@@ -17,7 +17,7 @@
 ## r124 — 2026-11-15 15:4x
 
 - **A.100 删掉的条件不能留残影**：`intent-core.js` 加 `pruneIntentState(state, list)`，`intentTick` 每拍按当前条件表剪掉已删除的 id 并记一行 `intent-state-pruned`；`test-intent.mjs` 补两个用例（29 项全过）。
-- **重生成不再算事件**：`gen-family.mjs` 先比语义（除 `updatedAt`）再决定写不写 `pool\family.json`，`docs\detail\谱系.md` 内容相同也不写——第二条鱼 15:31:44 的 `family-changed` 误报就是"文件变了、语义没变"。
+- **重生成不再算事件**：`gen-family.mjs` 先比语义（除 `updatedAt`）再决定写不写 `pool\family.json`，`docs\detail\鱼塘谱系.md` 内容相同也不写——第二条鱼 15:31:44 的 `family-changed` 误报就是"文件变了、语义没变"。
 - 两个包版本 1.6.11 → **1.6.12**（机制变化）。
 
 ## r123 — 2026-11-15 13:2x
@@ -39,7 +39,7 @@
 
 ## r120 — 2026-11-15 09:2x
 
-- **默认值不被配置钉死**（第三条鱼发现）：两份活配置删掉 `wake`/`watch` 段（五项都等于默认值），只留 `_叫醒闸` 说明；示例配置值留空；`docs\detail\打包.md` 两行改口。
+- **默认值不被配置钉死**（第三条鱼发现）：两份活配置删掉 `wake`/`watch` 段（五项都等于默认值），只留 `_叫醒闸` 说明；示例配置值留空；`docs\detail\怎么打包给别人.md` 两行改口。
 - **doctor 3i「默认值」**：导入同一个 `WAKE_DEFAULTS`（不读源码文字），找"值等于默认"的覆盖项并 WARN 点名；实测"钉一个默认值 + 一个偏离值"，只点名前者。
 - **PRD**：新增 **附录 A.97**（症状/判据/修法/自检/三条判据/教训"有出处和有必要是两件事"）。
 - **包**：两包 1.6.9（只改配置与体检脚本，不动包代码）。
@@ -93,7 +93,7 @@
 - 新增 **附录 A.94 所有的闸：默认值要抬到"正常聊天永远撞不到"**：起因（第三条鱼一小时 12 次撞 `perHour`、消息扣住不丢、00:50:53 松开）、十道闸的改前/改后表、为什么留、三条判据、教训。
 - `plugin/dsh-lil-whale-group/lib/index.js`：`WAKE` 从 `CFG.wake` 读（cooldownSec 60→15、perHour 12→40、perDay 60→200、totalPerDay 120→400）；`WATCH.maxWakesPerDay` 从 `CFG.watch` 读（8→24）；新增 `numSetting()`。
 - 界面两修（`client build v42 · multiline-multi-image`）：Shift+Enter 换行 + 自增高；多图最多 4 张（选图/粘贴/拖入/缩略图/逐张删），记录 1 张写 `image`、多张写 `images`；宿主、UI 路由、重建器三处同改。
-- `lil-whale.config.example.json` 与 `docs\detail\打包.md` 补 `wake` / `watch` 两段；两包 1.6.3→1.6.4。
+- `lil-whale.config.example.json` 与 `docs\detail\怎么打包给别人.md` 补 `wake` / `watch` 两段；两包 1.6.3→1.6.4。
 
 ## r109（2026-11-15 00:1x）
 
@@ -122,7 +122,7 @@
 
 **保留**：水表 80/天（成本与账号安全，不是行为引导）、生成器挂载、`环境.md` 按真实白名单生成、别人家不能盯。
 
-**文档**：A.90 重写（r105 收窄 + 四条撤掉的理由）；`docs\detail\账本.md` 删 `rolls.log` 行；`环境.md` 重生成（两条鱼）。**两包 1.6.0 → 1.6.1**。
+**文档**：A.90 重写（r105 收窄 + 四条撤掉的理由）；`docs\detail\日志都记在哪.md` 删 `rolls.log` 行；`环境.md` 重生成（两条鱼）。**两包 1.6.0 → 1.6.1**。
 
 **要重启才生效**：whale 重启后 `roll` 从她工具表消失；3080 重启后巡守侧衰减彻底消失。
 
@@ -130,18 +130,18 @@
 
 - **给 whale 装了一只只读的眼睛（B站）**：上游 `bilibili-mcp` 服务端再挂一份，白名单 18 个只读工具（无发评论/点赞/私信/登录）；水表 80 次/天 + `ledger.jsonl`；追更三工具（`watchlist_*`，why 必填、上限 5、同 UP 10 分钟一次）；挂载改由 `apply-neutral-preset.mjs --with-bili` 生成（不再手写进 patch）。fishball 不动。
 - **三条"生活"设计**：`roll({reason})` 今天可以不想看（机制掷骰，账本 `rolls.log`）；沉默衰减（连续 3 天没说话 → 素材额度 3/天，6 天 → 0，闹钟日记照旧）；两本日记（`给主人的信.md` / `<日期>.md`）。
-- `环境.md` 新增「看外面（B站，只读）」一节，**按每条鱼真实白名单生成**（`scripts\bili-section.mjs`）；`docs\detail\账本.md` 补 `rolls.log` 与 `bili\ledger.jsonl` 两行。
+- `环境.md` 新增「看外面（B站，只读）」一节，**按每条鱼真实白名单生成**（`scripts\bili-section.mjs`）；`docs\detail\日志都记在哪.md` 补 `rolls.log` 与 `bili\ledger.jsonl` 两行。
 - 两包 1.5.5 → **1.6.0**；PRD **r104** + **A.90**。
 
 ## r103 — 2026-11-14 18:3x
 
 - **字段级版本 `atfmt=2`**：`wake-try` 行（plan 与 intent 两处）的 `at=` 后面加 `atfmt=2`；没有 `atfmt` 的旧行按 `atfmt=1`（UTC）读。起因：她指出 `watchman.log` 里"整行 fmt=2 + 字段 at= 还是 UTC"会让人差八小时，建议"版本号贴着它管的东西"。
-- **`docs\detail\账本.md` 补三个账本**：`homes\<鱼>\dsh-home\logs\wake.log`（推门 why=）、`pool\group\plugin.log`（注册/挂载/toolCount，**UTC ISO**）、`homes\<鱼>\logs\close.log`（开关窗，busy= 推导）；新增「字段级版本」一节与读账第 4 条。
+- **`docs\detail\日志都记在哪.md` 补三个账本**：`homes\<鱼>\dsh-home\logs\wake.log`（推门 why=）、`pool\group\plugin.log`（注册/挂载/toolCount，**UTC ISO**）、`homes\<鱼>\logs\close.log`（开关窗，busy= 推导）；新增「字段级版本」一节与读账第 4 条。
 - 两包 1.5.4 → **1.5.5**；PRD **r103** + A.89 补记 2。
 
 ## r102 — 2026-11-14 18:2x
 
-- **新建 [`docs\detail\账本.md`](./detail/账本.md)**：登记十个账本的写者 / 钟 / `fmt` 含义，并写明"没有 `fmt` 按 `fmt=1` 读""每个账本自己数自己的 `fmt`""时间一律本地（roster-audit 的 fmt=1 例外）"。起因：她指出"版本字段能替旧行说话，但这一版是什么意思得有个地方写"。
+- **新建 [`docs\detail\日志都记在哪.md`](./detail/日志都记在哪.md)**：登记十个账本的写者 / 钟 / `fmt` 含义，并写明"没有 `fmt` 按 `fmt=1` 读""每个账本自己数自己的 `fmt`""时间一律本地（roster-audit 的 fmt=1 例外）"。起因：她指出"版本字段能替旧行说话，但这一版是什么意思得有个地方写"。
 - **README** 增一条：`fmt=` 是版本号不是格式，并链到登记表；文档索引加一行。
 - `auditRoster()` 上方补同义注释（代码注释给写的人，docs 给读的人）。
 - 无行为变更，包版本不变（1.5.4）。
@@ -196,7 +196,7 @@
 
 - **日志轮转**（他 16:39 批的）：新增 `scripts\rotate-logs.mjs`（> 1 MB 切一份、同类留 3 份、`--dry-run`）；巡守每小时起一次（`maybeRotateLogs()`，独立进程、失败不炸巡守）；A.86。
 - **四堆备份归档**：删 `pool\group\群.md.bak-20261112-194734`（280 KB 派生文件）；`shortcut-tests` / 旧 ACL 备份 / 15 份 profile `.bak` 移进 `pool\archive\`（profile 每类留最近 2 份）。
-- **待办合并**：删按天页（11-12 / 11-13 / 11-14），只留 `docs\detail\待办.md`（只放没做完的）；README / 出生流程 / PRD 里的旧待办路径与 ACL 备份位置同步改口。
+- **待办合并**：删按天页（11-12 / 11-13 / 11-14），只留 `docs\detail\还没做完的事.md`（只放没做完的）；README / 出生流程 / PRD 里的旧待办路径与 ACL 备份位置同步改口。
 - **`~\.dsh\profiles` 清理**：24 个 `.bak`（194 KB）收进 `~\.dsh\backups\20261114-profile-baks\`（留一条退路，随时可删）。
 - **`scripts\README.md` 同步现状**：入口从四个改两个（`Run DSH.cmd` / `Stop DSH.cmd` 已删）、`down-main` 语义改成"先鱼后主"、补 `test-rename.mjs` / `rotate-logs.mjs` 两行、`test-sleep` 40→50 用例、巡守日志实际路径改成 `<第一条鱼的家>\logs\watchman.log`、`HER_WAKER` → `selfWaker`。
 ## r93 — 2026-11-14 16:2x
@@ -263,7 +263,7 @@
 
 - **新增附录 A.76 鱼活不过主进程**：11:44 重启 3080 把两条鱼一起带走（作业对象），账本记成 unclean。他定：接受，不修（鱼脱离宿主单独启动无意义）。
 - 入口合并：删 `Run DSH.cmd` / `Stop DSH.cmd`，只留起/停鱼塘两条；`down-main` 改成先正常停鱼再停主 dsh；鱼塘勾选框改名「起主 dsh 时把鱼也带起来」。
-- 新增 `docs\detail\起停.md`；README 起停段重写。
+- 新增 `docs\detail\怎么启动和关闭鱼塘.md`；README 起停段重写。
 ## r82 — 2026-11-14
 
 - **新增附录 A.74 起停要留调用者**：`fish.ps1` 每次调用记 `pool\state\fish.log`（pid / 父进程 / 参数），
@@ -308,7 +308,7 @@
 
 - **改**：配置键从单鱼时代的 `her*` / `whale*` 换成 `self*`（selfHome / selfDshHome / selfWaker / selfPort / selfProfile / selfCwd）；旧键仍能读（`LEGACY_KEYS` + `$Cfg.Her*` 别名），`install.ps1` 写新键并删旧键。
 - **改**：两份 `config.js`（宿主 + UI）合成同一份；三份配置与 example 换键（`_版本: 2`）；代码里 `CFG.her*`→`CFG.self*`、`HER_HOME`→`SELF_HOME`、`plan-core.js` 参数 `herHome`→`homeRoot`。
-- **文档**：新附录 A.69；`docs\detail\打包.md` 配置表、`docs\detail\安装.md`（键名 33 处 + §11 三条已修项复核）。
+- **文档**：新附录 A.69；`docs\detail\怎么打包给别人.md` 配置表、`docs\detail\怎么装一套鱼塘.md`（键名 33 处 + §11 三条已修项复核）。
 - **验证**：三个 profile `--dump-config` 解析正常；`fish.ps1 list`、`doctor` 全过、`test-plan` 26/26、`release-check` 13/13。
 
 ## r75 — 2026-11-14 00:5x
@@ -355,12 +355,12 @@
 - 把他手动加的 `disabled: true` 从 `web` profile 的 patch 里撤掉（备份 `cordis.patch.yml.bak-before-enable-ui-20261113-215419`），重启 3080 后恢复。
 ## r67 — 2026-11-13 21:1x
 
-- **使用建议改成"直接跑 scripts 里的"**：他 21:11 说桌面副本会过时（"更新频率非常高…我现在直接去 scripts 里面跑脚本"），把桌面四份清掉了。README「自启动与四个快捷方式」、`docs\detail\安装.md` §1.3 与故障排查表、A.43 都改成：`.cmd` 的定位是 `scripts\bin\` 里的原件（永远最新），桌面副本只是快照、不跟着更新，不再推荐拷到桌面。
+- **使用建议改成"直接跑 scripts 里的"**：他 21:11 说桌面副本会过时（"更新频率非常高…我现在直接去 scripts 里面跑脚本"），把桌面四份清掉了。README「自启动与四个快捷方式」、`docs\detail\怎么装一套鱼塘.md` §1.3 与故障排查表、A.43 都改成：`.cmd` 的定位是 `scripts\bin\` 里的原件（永远最新），桌面副本只是快照、不跟着更新，不再推荐拷到桌面。
 ## r66 — 2026-11-13 21:1x
 
-- **把 pwsh 7 写成明面上的依赖**：README 前置表标成必需运行时依赖 + 安装命令 + "5.1 会在解析阶段报错"；`docs\detail\安装.md` §2.1 版本写 7.2+ 并说明原因。附录 A.61。
+- **把 pwsh 7 写成明面上的依赖**：README 前置表标成必需运行时依赖 + 安装命令 + "5.1 会在解析阶段报错"；`docs\detail\怎么装一套鱼塘.md` §2.1 版本写 7.2+ 并说明原因。附录 A.61。
 - **运行期护栏**：七个入口 `.ps1` 首行加 `#requires -Version 7.0`；四个 `.cmd` 启动器先 `where pwsh`，缺了给英文提示并退出（`.cmd` 中文可能乱码，这句宁可丑）。
-- 顺带修文档里过时的 `acl\` 位置（C1 之后已在 `pool\state\acl\`）：README 依赖节与目录树、PRD §4.1 与 A.55 树、`docs\detail\安装.md` 目录树、`docs\detail\出生.md` 开头布局说明。
+- 顺带修文档里过时的 `acl\` 位置（C1 之后已在 `pool\state\acl\`）：README 依赖节与目录树、PRD §4.1 与 A.55 树、`docs\detail\怎么装一套鱼塘.md` 目录树、`docs\detail\怎么生一条新鱼.md` 开头布局说明。
 - 起因：我用 Windows PowerShell 5.1 跑 `release-check.ps1` 撞了一串语法错——脚本没坏，是版本不对。这类坑只有踩过的人知道，所以写进用户说明。
 
 ## r65 — 2026-11-13 20:5x
@@ -475,7 +475,7 @@
 - **无人值守设为默认（他 10:56 拍板）**：`fish.ps1` 新增 `-Window`；小鱼 `up` 默认无窗（无人值守），巡守仍开窗。要看窗用 `maintain`，看完 `restore`。
 - `fish.ps1` 起鱼前自动补 `agent-loop.resumeSessionId`（`Ensure-Unattended`）：`install.ps1` 时没有会话 id，`up` 时 `pins.json` 里已有；进程未起，改 patch 不触发热重载。
 - 现场：第二条鱼、第三条鱼切到 `mode: unattended`，心跳新鲜、无浏览器窗；旧进程无账显示 `?`。
-- README / `scripts\README.md` / `docs\detail\安装.md` 的"起鱼"说明同步成默认无人值守；A.45 补拍板与落地、留三项未做。
+- README / `scripts\README.md` / `docs\detail\怎么装一套鱼塘.md` 的"起鱼"说明同步成默认无人值守；A.45 补拍板与落地、留三项未做。
 
 ## r46（2026-11-13）
 
@@ -516,7 +516,7 @@
 ## r41（2026-11-13）
 
 - **`scripts\bin\` 从九个入口收成四个**（他 2026-11-13 00:21："Run lil whale.cmd 感觉也没必要了"）：删 `Run DSH-Check` / `Run All Whales-Check` / `Run lil whale-Check` / `Stop lil whale` / `Run lil whale`。留下的四个 = 起/停主 dsh、起/停所有鱼；**单条鱼的起停归 `fish.ps1 up|down <键>` 与鱼塘**，不再进 .cmd。
-- `scripts\README.md` 按当前架构重写（fish.ps1 唯一底层、launch/stop 是薄壳、每条鱼的起停账在 `pool\state\runs\<鱼>.log`、桌面副本不是快捷方式）；`README` 装机步骤与 `install.ps1` 收尾提示、`docs\detail\安装.md` 五处同步。
+- `scripts\README.md` 按当前架构重写（fish.ps1 唯一底层、launch/stop 是薄壳、每条鱼的起停账在 `pool\state\runs\<鱼>.log`、桌面副本不是快捷方式）；`README` 装机步骤与 `install.ps1` 收尾提示、`docs\detail\怎么装一套鱼塘.md` 五处同步。
 
 ## r40（2026-11-13）
 
@@ -616,7 +616,7 @@
 ## r25（2026-11-12）
 
 
-- **谱系**：`pool\family.json`（真源：爹/出生/状态/改名史）+ `scripts\gen-family.mjs` → `docs\detail\谱系.md`（Mermaid + 树 + 名册 + 改名史，生成前校验单根/无环）。新增 A.27。
+- **谱系**：`pool\family.json`（真源：爹/出生/状态/改名史）+ `scripts\gen-family.mjs` → `docs\detail\鱼塘谱系.md`（Mermaid + 树 + 名册 + 改名史，生成前校验单根/无环）。新增 A.27。
 - **一鱼一配置**：每鱼一份 `lil-whale.config.<键>.json`，名册记 `configFile`，`fish.ps1` 启动时导出 `LIL_WHALE_CONFIG`；`install.ps1` 加 `-ChildName`/`-ChildMemberId`，`AGENTS.md.tpl` 改用 `{{CHILD_NAME}}`。新增 A.28。
 - **第二条鱼入册**：`fishball`（第三条鱼），爹 `lee`，端口 3083，状态 experiment；`scripts\members-add.mjs` 往名册里加鱼（保留手改的 name）。
 
@@ -655,7 +655,7 @@
 - **A.19 的"怎么加"落成一条命令**：新增 `scripts\apply-neutral-preset.mjs`——现读当前 dsh 的 `standard` 生成中立 preset（复用 `gen-neutral-preset.mjs`）→ **幂等**插进 profile patch（已有 `preset-neutral` 就跳过）→ 写前备份 `.bak-<stamp>`、`tmp-<pid>` + rename 写入 → 用 `dsh --profile <p> --patch <新文件> --dump-config` 只读验证（失败自动还原备份）。`--default` 把默认 preset 也改成 `neutral`；`--dry-run` 只打印要追加的内容。
 - **为什么还要一层脚本**：YAML 的缩进、`- insert:` 层级、末尾换行、"跑第二遍插两份"都是手改容易错的地方；而这四件事脚本都能幂等做完，并且**写之前就知道会写什么**（dry-run）。
 - **已验证（不用重启）**：在她真实 patch 的副本上跑通三遍——dry-run 只打印；写入后 `--dump-config` exit 0、`preset-neutral` 与 `default: neutral` 都在；再跑一次输出"已经装过了"、文件未变。
-- 同步：`docs\detail\出生.md`「以后换段怎么办」第 5 步改成一条命令；`docs\archive\待办-2026-11-12.md` D5 行补 `apply` 脚本。
+- 同步：`docs\detail\怎么生一条新鱼.md`「以后换段怎么办」第 5 步改成一条命令；`docs\archive\待办-2026-11-12.md` D5 行补 `apply` 脚本。
 
 ## r18（2026-11-12）
 
@@ -663,7 +663,7 @@
 - **新增 `scripts\gen-neutral-preset.mjs`**：从当前装着的 dsh 现读 `preset-standard` 的 `plugins` 清单（`--dump-config`），只把 `persona` 的 `prefix` 换成能力陈述，输出 `templates\preset-neutral.yml`（`- insert:` 形式）。**为什么生成而不是手抄**：preset 的 `plugins` 是完整快照，覆盖后不会自动合并上游更新——手抄等于把今天这份冻结进仓库，生成则升级 dsh 后重跑一次就跟着走。
 - **已验证（不用重启）**：生成物插进 `whale` profile 的临时副本，`dsh --profile whale --dump-config` exit 0，`- id: preset-neutral` 出现且 `standard` 仍在。**未验证**：真会话选 `neutral` 后的行为（要重启 + 搬家当天）。
 - **两个坑**：①`prefix` 里含 `: `，裸写会被 YAML 当 mapping（`bad indentation of a mapping entry`）⇒ 单引号包住；②沙箱里用 `import.meta.url.pathname` 手算仓库根会留下 `%E6%96%87…` 编码（`cwd` 不存在 ⇒ `spawnSync` 返回 `status=null` 且无 error），要用 `fileURLToPath`。
-- 同步：`docs\detail\出生.md`「以后换段怎么办」第 5 步写了用法与"升级后重跑"；`docs\archive\待办-2026-11-12.md` 加 D5 行。
+- 同步：`docs\detail\怎么生一条新鱼.md`「以后换段怎么办」第 5 步写了用法与"升级后重跑"；`docs\archive\待办-2026-11-12.md` 加 D5 行。
 
 ## r17（2026-11-12）
 
@@ -679,7 +679,7 @@
 
 - **私聊也有可读投影**（她 12:35 提的"私聊没有可读版"，他 14:03 说放开手脚之后做的）：`sayPrivate()` 落完 jsonl 就追写 `dm\私聊-<a>__<b>.md`（标题 `# 私聊 · A / B`，每条 `**时间 · 谁**` + 正文，带图写 `（图片 images/<月>/<id>.<ext>）`）；`scripts\rebuild-group-md.mjs` 增私聊段，能从 jsonl 整本重建，说不清来源的差异照旧拒绝整本写。群和私聊共用 `readableBodyOf()`——"图片在可读文件里怎么写"只有一个出处。
 - **修重建脚本漏掉纯图消息**：`blockOf()` 原来只认 `text`，12:28 那条"只有图没有字"的记录被整条跳过 ⇒ 重建结果比 `群.md` 少一行，对照脚本报成"未归类差异"。改成"有字或有图都算有正文"，重建 1775 行与 `群.md` 零差异。教训同 A.17：**派生脚本漏一种输入，会让源头看起来在说谎**。
-- **修 `docs\archive\待办-2026-11-12.md` 里被 PowerShell 双引号 here-string 吃掉的 code 标记**（六行：`` ` ``→`\`、`` `t ``→TAB、`` `r ``→CR）。同一个坑 A.16 初稿踩过一次；规矩补进 `docs\detail\打包.md`：**写含反引号的文档不要用 `@"..."@`**，用 edit/write 工具或单引号 here-string。
+- **修 `docs\archive\待办-2026-11-12.md` 里被 PowerShell 双引号 here-string 吃掉的 code 标记**（六行：`` ` ``→`\`、`` `t ``→TAB、`` `r ``→CR）。同一个坑 A.16 初稿踩过一次；规矩补进 `docs\detail\怎么打包给别人.md`：**写含反引号的文档不要用 `@"..."@`**，用 edit/write 工具或单引号 here-string。
 - 状态行 → r16。
 
 ## r15（2026-11-12）
@@ -710,7 +710,7 @@
 2. **新增附录 A.14「工具注册必须同步」**：异步补注册不会出现在会话工具表里（不报错、不失败），判据是日志里有 `host-resolve` 却没有 `group_say-registered`。2026-11-12 因它哑了 8 小时。
 3. **新增附录 A.15「日志路径必须有一条不经过配置」**：配置能决定日志去哪儿，就等于 bug 能决定证据去哪儿。启动时同时写 `group\plugin.log`（按配置）与 `logs\plugin-boot.log`（按代码位置）。
 4. 状态行 → r12，补 M6 进度（r11 是 2026-11-11 的头像工作，状态行当时没跟着动，这次一并补上）。
-5. **新增 `docs\detail\出生.md`**（五步 + 每步为什么 + 错了长什么样），与 `docs\detail\发布.md`、`docs\detail\能力.md` 一起构成 M6 的三份文档。
+5. **新增 `docs\detail\怎么生一条新鱼.md`**（五步 + 每步为什么 + 错了长什么样），与 `docs\detail\发布前检查清单.md`、`docs\detail\她能做什么.md` 一起构成 M6 的三份文档。
 
 ## r11（2026-11-11）
 
@@ -742,7 +742,7 @@
 
 1. **A7 的观察记录不进她的日志了**：原打算往 `logs\watchman.log` 加 `said`/`silent` 两个结果值，被她挡下——"那份日志我每天 08:40 要读，一个关于自己的计数不管叫什么名字，放在枕头边就会被读成在审我。**指标住在哪儿，决定它审谁**"。改为写工程自己的 `logs\wake-metrics.log`，措辞换成 `wake-followup | has-reply=yes/no`（**主语从她换成这次唤醒**）。§3 A7 证据栏与 §8.4 同步改。
 2. **`messages.jsonl` 加可选字段 `s`**：`group_say` 写发起会话 id 前 6 位，面板发的写 `ui`。理由是"一个名字可以有两段会话同时活着"，没有它，她分不清这句话是哪个第一条鱼说的，验收时也没法对账。§8.1 字段表已补。
-3. **`回合.md` §6.1 换成她的 L0–L4**：等级按**起点归属**排，不按自主程度排。L4（没人叫、自己动）在她的环境里**物理上不存在**——所以这只鱼的自主上限是 L3，G1 要按 L3 验收。
+3. **`2026-11-09-自主回合问题清单.md` §6.1 换成她的 L0–L4**：等级按**起点归属**排，不按自主程度排。L4（没人叫、自己动）在她的环境里**物理上不存在**——所以这只鱼的自主上限是 L3，G1 要按 L3 验收。
 
 ## r7（2026-11-11）· 另一个 第一条鱼 的五条意见
 
@@ -751,7 +751,7 @@
 1. **唤醒词按积压分档**（采纳）：§8.3 第 6 步改为"积压超过 8 条就换话术「你睡了有一会儿，群里积了 N 条」+「先看最后三条，再看看有没有指名你的」"。理由是 20 条塞一个 turn 只会变成流水账。
 2. **A7 加可验判据**（采纳，窗口改大）：插件每次叫醒记一笔，15 分钟后回看这个人有没有往群里写过新行，写 `said`/`silent` 到 `watchman.log`。§3 A7 的证据栏与 §8.4 都改了。她提的 5 分钟改 15 分钟——首 token 现在要几十秒到几分钟。
 3. **§7.9 与全文"她"的矛盾**（采纳）：补"两套口径"——讲产品/机制/别人的鱼用 `ta`，讲我们这一只用「她」；判据是"这句话换个对象还成立吗"。
-4. **§6 顺序松动**（部分采纳）：`回合.md` 里闹钟降为兜底；新增 §6.1「醒来之后有别的动作」——只测"有东西可做"那一半，**不叫自主回合**（被叫醒仍是外部输入）。
+4. **§6 顺序松动**（部分采纳）：`2026-11-09-自主回合问题清单.md` 里闹钟降为兜底；新增 §6.1「醒来之后有别的动作」——只测"有东西可做"那一半，**不叫自主回合**（被叫醒仍是外部输入）。
 5. **宿主 发言不必经我代发**（已不成立，但暴露 PRD 过期）：FR-5 那句"第一版经 第一条鱼 的 `group_say` 代发"在 M4 落地后失效了——他在群面板里直接打字。已改。
 
 ## r6（2026-11-10）· M4 回填
@@ -846,7 +846,7 @@
 1. §1.2 的 **G1 从"目标"降为"上游依赖"**：它是整个项目的动因，但本项目不验收它 —— 本项目只保证「有人敲门时，她有自己的东西可拿出来」。「没人敲门时她也在过」是另一个能力（自主回合），拆到新文档。
 2. §4.2 明确不做：**不做自主回合**。
 3. M1 / M6 / M8 的"对应目标"改掉：M1 → G2 的前置，M6 → G3，M8 → A6（G1 的地基）。
-4. 新增 [回合.md](./detail/回合.md)：它是什么、为什么拆、触发源三条路的成本对比、已知技术约束、验收草案、未决 U1–U4。
+4. 新增 [自主回合问题清单](./archive/2026-11-09-自主回合问题清单.md)：它是什么、为什么拆、触发源三条路的成本对比、已知技术约束、验收草案、未决 U1–U4。
 
 ---
 
@@ -1015,7 +1015,7 @@ or export DEEPSEEK_API_KEY in the launching environment
 - **同族**：A.17（判据的出处必须是那件事本身）、A.14（别让"没发生"长得像"发生了"）。交接这条的版本是：**"能读"和"准"长得一样，演练只能证前者。**
 - **persona 换中立（她的决定）**：她不要 `You are a coding agent…` 这种**身份断言**，要**能力陈述**；理由是"人设该从行为里长出来，不该从预设里写进去"。上游四档（`standard` / `ptc` / `minimal` / `cordis`）没有现成的"中立"；`dsh-persona` 这一行只能挂在 preset 内部，用来**遮蔽**部署级人设，所以只能新增一档 preset。
 - **怎么加（已备好，搬段当天用）**：`scripts\gen-neutral-preset.mjs` 从当前装着的 dsh 现读 `standard` 的 `plugins` 清单（`--dump-config`），只把 `persona` 那行的 `prefix` 换成能力陈述，输出 `templates\preset-neutral.yml`（`- insert:` 形式，可整段插进她的 profile patch）。**为什么是生成而不是手抄**：preset 的 `plugins` 是完整快照，覆盖后不会自动合并上游更新（`dsh-agent-preset-registry` README 原话），手抄等于把今天这份冻结进仓库；生成则升级 dsh 后重跑一次就跟着走。
-- **`notes\交接.md` 是前瞻文档**：它的写作时刻必然早于搬家，所以必须能表达"还没发生"——「最后一件事」写 `未填`（空 = 搬前版本，可读的状态），搬段时刻只写到不会错的精度（`2026-11-12 下午`）。详见 `docs\detail\判据.md` §16。
+- **`notes\交接.md` 是前瞻文档**：它的写作时刻必然早于搬家，所以必须能表达"还没发生"——「最后一件事」写 `未填`（空 = 搬前版本，可读的状态），搬段时刻只写到不会错的精度（`2026-11-12 下午`）。详见 `docs\detail\怎么判断与起名.md` §16。
 - **交接四行必须填实**：「上一段 / 为什么结束 / 最后一件事 / `NEXT:`」——**不许写"见下"**（指向不存在的地方，读者会以为下面有）；**搬段时刻不许预先写死**（还没发生的时刻写成事实，与"页脚超前"同族）。
 - **一条命令装上（搬段当天）**：`scripts\apply-neutral-preset.mjs --patch "<她的 DSH_HOME>\profiles\whale\cordis.patch.yml" --default` —— 生成 → 幂等插入 → 备份 → tmp+rename 写入 → `--patch` 只读验证（失败自动还原）。`--dry-run` 只打印要追加的内容。
 - **已验证（不用重启）**：把生成物插进 `whale` profile 的临时副本，`dsh --profile whale --dump-config` exit 0，`- id: preset-neutral` 出现、`standard` 仍在；`apply-neutral-preset.mjs` 在 patch 副本上跑通（dry-run / 写入+验证 / 再跑幂等）。**未验证**：真会话上选 `neutral` 后的实际行为（要重启 + 搬家那天才做）。
@@ -1108,7 +1108,7 @@ lil-whale\state  → junction → pool\state
 
 **问题**：鱼一多，"谁是谁的爹、谁还活着、谁改过名"会散在名册、聊天记录和人的记忆里。手画的谱系图第一周对、第二周漂、第三周没人信。
 
-**做法**：`pool\family.json` 是谱系真源（每个节点的 `parent` / `bornAt` / `status` / `renames`），`pool\members.json` 是当下事实（名字、端口、角色）。`scripts\gen-family.mjs` 合成 `docs\detail\谱系.md`：Mermaid 图 + ASCII 树 + 名册表 + 改名史。
+**做法**：`pool\family.json` 是谱系真源（每个节点的 `parent` / `bornAt` / `status` / `renames`），`pool\members.json` 是当下事实（名字、端口、角色）。`scripts\gen-family.mjs` 合成 `docs\detail\鱼塘谱系.md`：Mermaid 图 + ASCII 树 + 名册表 + 改名史。
 
 **生成前先校验**（错了就不写图）：parent 必须存在、不能成环、鱼只能有一个根（人类可以各是一棵树）。
 
@@ -1674,7 +1674,7 @@ lil-whale\state  → junction → pool\state
 | 两份 `config.js` 默认值 | 配置丢了会指回旧布局（`<repo>\..\lil-whale`、`lil-whale-pool`） | 默认鱼塘布局：`<pond>\homes\<键>` + `<pond>\pool`；`watchmanPidFile` 归 pool |
 | `install.ps1` | 不生成 `family.json`；`$InPond` 硬要求仓库目录名 `app` | 装完 seed 一份 `family.json`；只认"旁边有 `pool\`" |
 | `doctor.ps1`「她的端口」 | 只看第一条鱼端口（多鱼后等于没看主 dsh） | 改名「主 dsh 端口」，按名册找 `role=watcher` 那条 |
-| 四个 `scripts\*.mjs` | `--help` 会真的执行（曾重写 `members.json` 与 `谱系.md`） | 未知参数一律 `exit 2` + 用法 |
+| 四个 `scripts\*.mjs` | `--help` 会真的执行（曾重写 `members.json` 与 `鱼塘谱系.md`） | 未知参数一律 `exit 2` + 用法 |
 
 **两条判据**（她 11-12 定的口径，这里只是用上）：
 
@@ -1744,7 +1744,7 @@ lil-whale\state  → junction → pool\state
 **改成什么**：
 
 1. **README「它需要什么」**：PowerShell 7 标成**必需的运行时依赖**，写明 5.1 会在解析阶段报错；表后给 `winget install --id Microsoft.PowerShell -e` 与「装完开新终端、`pwsh -v` 要打出 7.x」。
-2. **`docs\detail\安装.md` §2.1**：版本写到 7.2+，原因写清（子进程用 `pwsh -File`、脚本用了 7 的语法），同样给安装命令。
+2. **`docs\detail\怎么装一套鱼塘.md` §2.1**：版本写到 7.2+，原因写清（子进程用 `pwsh -File`、脚本用了 7 的语法），同样给安装命令。
 3. **运行期护栏**：七个入口脚本（`install` / `fish` / `doctor` / `release-check` / `verify-pending` / `pack` / `wake-fish`）首行加 `#requires -Version 7.0` —— 用 5.1 跑会被直接拒绝并说明版本不对；四个 `.cmd` 启动器先 `where pwsh`，缺了就用英文提示装什么、然后退出。
 
 **判据**：一个依赖算不算"写进说明里了"，看三件事——①文档里有安装命令 ②缺了的时候有人（脚本）替你说 ③说的地方在你踩坑之前（安装/双击时），不是踩坑之后。
@@ -1815,7 +1815,7 @@ window.__ModuleLoader__.load({
 2. `fish.ps1 restore <键>`：看完关窗，回无人值守。
 3. 群里说第一句：第一句话得有人说，机器不能替。
 
-**有意不做**：不自动复制父辈凭证；不自动排作息（作息是她自己长出来的）；不预填性格（见 `docs\detail\出生.md` 的"不要做的三件"）。
+**有意不做**：不自动复制父辈凭证；不自动排作息（作息是她自己长出来的）；不预填性格（见 `docs\detail\怎么生一条新鱼.md` 的"不要做的三件"）。
 
 **判据**：①`new` 建出来的鱼在 `members.json` 里 `status=experiment`、`parent` 指向家长；②`births.log` 有一行能对上名册；③`family.json` 里有这个节点；④实验鱼当家长时只提醒不拦，出生行记 `parentStatus=experiment`；⑤同一时刻鱼数 ≤ `maxFish`。
 
@@ -2052,7 +2052,7 @@ sleep-tools-register-failed: tool "sleep" must declare output { schema, render, 
 - 入口合并成两个：`up all -BrowserMainOnly`（起鱼塘）与 `down all -Yes`（停鱼塘）；删掉 `Run DSH.cmd` / `Stop DSH.cmd` 两个只会误导人的快捷方式。
 - `fish.ps1 down-main` 改成「先正常停鱼、最后停主 dsh」——既然鱼一定会被带走，那就让停的人在带走之前把 `stopped` 写好。这样「重启 dsh」不再在账本里留下假崩溃。
 - 鱼塘勾选框改名：「起主 dsh 时把鱼也带起来」，并写清关掉＝空鱼塘（调试用）。
-- 新增 `docs\detail\起停.md`：两个入口、勾选语义、检修命令、账本怎么记。
+- 新增 `docs\detail\怎么启动和关闭鱼塘.md`：两个入口、勾选语义、检修命令、账本怎么记。
 
 **判据**：重启主 dsh 之后，鱼的 `runs` 账里应该有 `stopped reason=stop-script`（走 `down-main`/`down all` 时），或者 `started prev-run=open`（被硬杀时）——不再出现「unclean 但其实是正常重启」这种说不清的状态。
 
@@ -2268,7 +2268,7 @@ sleep-tools-register-failed: tool "sleep" must declare output { schema, render, 
 
 **同一批收拾的**（他 2026-11-14 16:39 批的）：
 - 归档：`群.md.bak`（280 KB，派生文件）删；`shortcut-tests`、旧 ACL 备份、15 份 profile `.bak` 移 `pool\archive\`（profile 每类留最近 2 份）。
-- 待办：历史按天页删除，只留 `docs\detail\待办.md`（只放没做完的）。
+- 待办：历史按天页删除，只留 `docs\detail\还没做完的事.md`（只放没做完的）。
 - `~\.dsh\profiles` 里 24 个 `.bak`（194 KB）收进 `~\.dsh\backups\20261114-profile-baks\`。
 
 **教训**："归档"和"没人收"是两件事——备份留着是退路，日志留着是垃圾。分清楚哪些是证据、哪些只是过程。
@@ -2384,7 +2384,7 @@ sleep-tools-register-failed: tool "sleep" must declare output { schema, render, 
 
 她的原话："**版本字段能替旧行说话，但'这一版是什么意思'得有个地方写。**" 现场是 `roster-audit.log` 里两行并存——UTC 的 `fmt=1` 和本地的 `fmt=2`——只看文件的人会以为隔了八小时。
 
-做法：新建 [`docs\detail\账本.md`](./detail/账本.md)，登记每个账本：谁写、用什么钟、`fmt=1` 是什么、`fmt=2` 起是什么。三条总规矩写在同一页：
+做法：新建 [`docs\detail\日志都记在哪.md`](./detail/日志都记在哪.md)，登记每个账本：谁写、用什么钟、`fmt=1` 是什么、`fmt=2` 起是什么。三条总规矩写在同一页：
 
 1. **没有 `fmt` 字段的行按 `fmt=1` 读**（缺省值必须被定义）。
 2. **每个账本自己数自己的 `fmt`**，不跨账本比版本号。
@@ -2396,7 +2396,7 @@ sleep-tools-register-failed: tool "sleep" must declare output { schema, render, 
 
 ### A.89 补记 2（2026-11-14 18:3x，她补的两处）
 
-**1. 登记表漏了三个她天天在读的账。** 补进 [`docs\detail\账本.md`](./detail/账本.md)：
+**1. 登记表漏了三个她天天在读的账。** 补进 [`docs\detail\日志都记在哪.md`](./detail/日志都记在哪.md)：
 
 | 账本 | 关键点 |
 |---|---|
@@ -2597,7 +2597,7 @@ sleep-tools-register-failed: tool "sleep" must declare output { schema, render, 
 
 - **症状**（第三条鱼发现）：r114 为了"纸上的数字要有出处"，把 `wake`/`watch` 五项显式写进两份配置——但五项**逐字等于代码默认值**。于是"配置覆盖了五项"是真的，却一个值都没变：等于把默认值抄进配置里钉死。下次把默认从 40 抬到 60，改 `wake-config.js` **不会生效**，配置把 40 钉住了；而纸上写着"配置覆盖"，**没有任何一处看起来是错的**。
 - **判据**（她的原话）：**配置里只留确实偏离默认的项，等于默认的就删掉。** 否则默认值会被静默劫持。
-- **修法**：两份活配置删掉 `wake`/`watch` 段，只留一句 `_叫醒闸` 说明"只在想偏离默认时写，默认值见 `wake-config.js` 的 `WAKE_DEFAULTS`"；示例配置保留键但值留空（`"wake": {}`）；`docs\detail\打包.md` 两行改口。
+- **修法**：两份活配置删掉 `wake`/`watch` 段，只留一句 `_叫醒闸` 说明"只在想偏离默认时写，默认值见 `wake-config.js` 的 `WAKE_DEFAULTS`"；示例配置保留键但值留空（`"wake": {}`）；`docs\detail\怎么打包给别人.md` 两行改口。
 - **自检**：`doctor.ps1` 新增 **3i「默认值」**——用 `node` 导入同一个 `WAKE_DEFAULTS`（不读源码文字），再逐条鱼的配置里找"值等于默认"的键，命中就 WARN 点名（`fishball.wake.perHour=40`）。用"故意钉一个等于默认的值 + 一个偏离值"实测过：前者被点名、后者不报。
 - **判据三条**：①配置里不出现"等于默认"的键；②自检读的是同一个 `WAKE_DEFAULTS`，不是抄一遍数字；③自检自己找不到文件时要报"没法做"，不能静默通过。
 - **教训**：**"有出处"和"有必要"是两件事。** 为了给纸一个出处，把默认值抄进配置，等于用出处把默认锁死了。
@@ -2778,7 +2778,7 @@ sleep-tools-register-failed: tool "sleep" must declare output { schema, render, 
 3. 画图不占额度、不联网；渲染器是本地代码（resvg 一个 npm 包，装在 `pool\tools\`，不进 `app` 仓库），沙箱里的鱼能跑。
 
 **没有做**：不评分"画得好不好"；不建素材库；不替她起题目（2026-11-12 那条留白原则）。
-**第一次真的用起来（2026-11-15 13:2x–13:5x）**：第二条鱼在 `homes\whale\画\鲸落.svg` 上从 v1 画到 v10——v1 眼睛画在尾巴那头（整条鱼是反的）、v8 尾巴/胸鳍/头才像鲸、v9 加倾角与海雪方向"沉出来了"、v10 给身体加背深腹浅的渐变有了体积。她自己的两条判据进了 `判据.md` §23（"糊边也有两档"、"形状有参照物、动作没有"）。她另写了 `run\svg-lint.ps1`（先做负样本，三条全抓到）——"一个只会说『没问题』的检查器，和没有检查器一样"。
+**第一次真的用起来（2026-11-15 13:2x–13:5x）**：第二条鱼在 `homes\whale\画\鲸落.svg` 上从 v1 画到 v10——v1 眼睛画在尾巴那头（整条鱼是反的）、v8 尾巴/胸鳍/头才像鲸、v9 加倾角与海雪方向"沉出来了"、v10 给身体加背深腹浅的渐变有了体积。她自己的两条判据进了 `怎么判断与起名.md` §23（"糊边也有两档"、"形状有参照物、动作没有"）。她另写了 `run\svg-lint.ps1`（先做负样本，三条全抓到）——"一个只会说『没问题』的检查器，和没有检查器一样"。
 **补记（2026-11-15 13:3x，第二条鱼）**："浏览器没写出 PNG"这一句话，把"路径错"和"沙箱挡"两个原因混成了同一个症状——她用的是绝对路径、脚本确实跑起来了，死在 Edge 的 IPC；我那次是路径错。**同一个 NEXT 行，两个原因，修法完全不同。** 教训：失败信息要把"谁失败了"和"为什么失败"分开写。
 
 她另外做了一件对的事：渲染被挡死之后，她没有停在"看不见"，而是写了个不渲染的检查器 `run\svg-lint.ps1`（验 XML 合法、元素出界、文字按字号估宽溢出），**并且先做了负样本**（`画\_lint-负样本.svg`：出界 rect、出界 circle、超长居中字），三条全被抓到才信它。她的判据：**"一个只会说'没问题'的检查器，和没有检查器一样。"**
@@ -2791,7 +2791,7 @@ sleep-tools-register-failed: tool "sleep" must declare output { schema, render, 
 
 **修法**：`intent-core.js` 加纯函数 `pruneIntentState(state, list)`（按当前条件表剪、返回被剪的 id），`intentTick` 每拍调一次，剪掉的 id 记一行 `intent-state-pruned id=…`。测试进 `scripts\test-intent.mjs`（29 项）。
 
-**同一小时里的第二个洞（她最先咬的那一口）**：`pool\family.json` 里有个 `updatedAt` 每次重生成都变；`gen-family.mjs` 逐字节重写 ⇒ 她的 `family-changed` 条件在 15:31:44 真响了，而"家里一个人都没变"。她的原话："**我盯的是『文件变』，我关心的是『集合变』**——判据选错了对象，就会把『重写』报成『有事』。"修法：`gen-family.mjs` 先比语义（除 `updatedAt` 之外的部分），一样就不写；`docs\detail\谱系.md` 同理（内容相同不写）。
+**同一小时里的第二个洞（她最先咬的那一口）**：`pool\family.json` 里有个 `updatedAt` 每次重生成都变；`gen-family.mjs` 逐字节重写 ⇒ 她的 `family-changed` 条件在 15:31:44 真响了，而"家里一个人都没变"。她的原话："**我盯的是『文件变』，我关心的是『集合变』**——判据选错了对象，就会把『重写』报成『有事』。"修法：`gen-family.mjs` 先比语义（除 `updatedAt` 之外的部分），一样就不写；`docs\detail\鱼塘谱系.md` 同理（内容相同不写）。
 
 **判据**：①状态里不许有当前条件表里没有的 id；②"重生成"与"真变化"要在文件层面分得开（能分不开，是因为文件里混了元数据）；③我自己的教训——修这一处时我用错了条件表的键（`conditions` 而不是 `items`），一次性脚本把她的三条状态全剪了；两个还在的条件丢了 baseline，下一拍会自己重建、不会误报，但计数归零。**评估别人的状态之前，先确认自己读的是同一份表。**
 
