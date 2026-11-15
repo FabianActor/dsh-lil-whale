@@ -618,6 +618,12 @@ function growTextarea(el) {
   el.style.height = 'auto'
   el.style.height = `${Math.min(el.scrollHeight, 220)}px`
 }
+// 发出去之后把高度收回去：以前只在输入时算高度，setText('') 之后框还停在旧高度（2026-11-15 第 1 条）。
+function resetTextareaHeight(el) {
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${Math.min(el.scrollHeight || 0, 220)}px`
+}
 function insertNewline(el, value, setValue) {
   const start = el.selectionStart ?? value.length
   const end = el.selectionEnd ?? start
@@ -1038,17 +1044,19 @@ function Bubble({ config, message, onMention, animate = false }) {
      * "样式算对了、画出来还是圆角矩形"，改用 `<circle>` 之后一次就对了（见 PRD 附录 A.10/A.11）。
      */
     /**
-     * 浮在聊天区上的文字条。两个"跳转"按钮共用这一份——样式只写一次，
-     * 以后改圆角/阴影/颜色只改这里（2026-11-15 他要求"素材复用，保持设计统一"）。
+     * 浮在聊天区上的一句说明。
+     *
+     * 以前它和按钮共用同一个白胶囊样式，看起来像能点（2026-11-15 第 3 条）。
+     * 现在说明只说明：浅底、无阴影、不接事件；按钮留着自己那份圆。
      */
-    function FloatingPill({ children }) {
+    function FloatingHint({ children }) {
       return h('span', {
         style: {
-          height: 34, display: 'flex', alignItems: 'center',
-          padding: '0 10px', borderRadius: 999, fontSize: 12, whiteSpace: 'nowrap',
-          color: 'var(--dsw-alias-label-secondary, rgba(0,0,0,0.62))',
-          background: 'var(--dsw-alias-button-floating-fill, #ffffff)',
-          boxShadow: '0 1px 2px rgba(0,0,0,0.10), 0 4px 12px rgba(0,0,0,0.10)',
+          height: 24, display: 'flex', alignItems: 'center',
+          padding: '0 8px', borderRadius: 999, fontSize: 12, whiteSpace: 'nowrap',
+          color: 'var(--dsw-alias-label-tertiary, rgba(0,0,0,0.45))',
+          background: 'var(--dsw-alias-bg-layer-3, rgba(0,0,0,0.06))',
+          pointerEvents: 'none',
         },
       }, children)
     }
@@ -1063,7 +1071,7 @@ function Bubble({ config, message, onMention, animate = false }) {
         },
       },
       hint
-        ? h('span', { style: { marginTop: -34, marginRight: 8, display: 'flex' } }, h(FloatingPill, null, hint))
+        ? h('span', { style: { marginTop: -30, marginRight: 8, display: 'flex' } }, h(FloatingHint, null, hint))
         : null,
       h('button', {
         type: 'button',
@@ -1101,11 +1109,11 @@ function Bubble({ config, message, onMention, animate = false }) {
     function JumpToHistory({ onClick, rightInset, hint }) {
       return h('div', {
         style: {
-          position: 'absolute', left: 0, right: 0, top: 10, height: 0,
+          position: 'absolute', left: 0, right: 0, top: 12, height: 34,
           display: 'flex', justifyContent: 'flex-end', alignItems: 'center', pointerEvents: 'none', zIndex: 8,
         },
       },
-      hint ? h('span', { style: { marginRight: 8, display: 'flex' } }, h(FloatingPill, null, hint)) : null,
+      hint ? h('span', { style: { marginRight: 8, display: 'flex' } }, h(FloatingHint, null, hint)) : null,
       h('button', {
         type: 'button',
         onClick,
@@ -1237,6 +1245,9 @@ function Bubble({ config, message, onMention, animate = false }) {
       const scrollRef = useRef(null)
       const bottom = useRef(null)
       const inputRef = useRef(null)
+
+      // 发出去（或粘贴/恢复草稿）之后按内容重算高度，否则框停在旧高度。
+      useEffect(() => { resetTextareaHeight(inputRef.current) }, [text])
 
       const loadContacts = useCallback(async () => {
         try {
@@ -1753,15 +1764,21 @@ function Bubble({ config, message, onMention, animate = false }) {
       const bottom = useRef(null)
       const scrollRef = useRef(null)
       const inputRef = useRef(null)
+      // 发送后按内容重算高度（同 DmPage）。
+      useEffect(() => { resetTextareaHeight(inputRef.current) }, [text])
       // "回到上次看到的位置"：群页刚打开时视角在底部，历史线在头顶上面。
       const dividerRef = useRef(null)
       const historyAboveRef = useRef(false)
+      const historyVisitedRef = useRef(false)
       const [historyAbove, setHistoryAbove] = useState(false)
       // 线是不是在视口上方 —— 只回答这一件事，不回答"该不该显示"。
       const measureHistory = useCallback(() => {
         const el = scrollRef.current
         const line = dividerRef.current
-        const next = Boolean(el && line && line.getBoundingClientRect().top < el.getBoundingClientRect().top + 4)
+        // 线在视口上方 = 上面还有没看过的。
+        const lineAbove = Boolean(el && line && line.getBoundingClientRect().top < el.getBoundingClientRect().top + 4)
+        // 点过一次就不再催：往下读时线会滑出视口上沿，以前会反复把提示亮出来（第 4 条）。
+        const next = lineAbove && !historyVisitedRef.current
         if (next !== historyAboveRef.current) {
           historyAboveRef.current = next
           setHistoryAbove(next)
@@ -1770,6 +1787,9 @@ function Bubble({ config, message, onMention, animate = false }) {
       const jumpToHistory = useCallback(() => {
         const el = scrollRef.current
         if (!el) return
+        // 点过一次就当去过：这次往下读不该再被同一根线提醒。
+        historyVisitedRef.current = true
+        if (historyAboveRef.current) { historyAboveRef.current = false; setHistoryAbove(false) }
         const line = dividerRef.current
         // 没有线（没有新消息）就跳到最早的一条：两种情况下这个按钮都得做事。
         if (!line) { el.scrollTo({ top: 0, behavior: 'smooth' }); return }
@@ -1836,15 +1856,6 @@ function Bubble({ config, message, onMention, animate = false }) {
         })
       }, [])
 
-      // 看过 1.5 秒才算读过：让红点有出现的余地，也不至于一闪就没
-      useEffect(() => {
-        // 在底部才算"看见了"；翻历史时不要替人清未读，否则底下那句提示会自己消失。
-        if (tab !== 'group' || unread.group === 0 || !atBottom) return
-        if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
-        const timer = setTimeout(() => { void markRead('group').then(() => refresh()) }, 1500)
-        return () => clearTimeout(timer)
-      }, [tab, unread.group, refresh])
-
       useEffect(() => {
         void refresh()
         const timer = setInterval(() => { void refresh() }, 3000)
@@ -1853,6 +1864,23 @@ function Bubble({ config, message, onMention, animate = false }) {
 
       // 贴底 / 翻历史 / 回到底部：跟私聊页共用一套（见 useFollowTail）。
       const { atBottom, measureBottom, jumpToBottom } = useFollowTail(scrollRef, [messages.length, tab, splash])
+
+      // 看过 1.5 秒才算读过：让红点有出现的余地，也不至于一闪就没。
+      // 依赖里必须有 atBottom：翻历史回到底部的那一下才是"看见了"；
+      // 以前少了它，读完了未读也不清（2026-11-15 第 5 条）。
+      useEffect(() => {
+        if (tab !== 'group' || unread.group === 0 || !atBottom) return
+        if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
+        const timer = setTimeout(() => {
+          void markRead('group').then(() => {
+            historyVisitedRef.current = false
+            refresh()
+            // 面板读完一批，喊一声；侧边栏红点不用等下一轮轮询。
+            window.dispatchEvent(new Event('dsh-group-read'))
+          })
+        }, 1500)
+        return () => clearTimeout(timer)
+      }, [tab, unread.group, refresh, atBottom])
       // 翻历史时底下来了新消息：只数"最后一条之后新增了几条"，回到底部就清零。
       // 不用未读数（未读是服务器口径，可能包含别的窗口看过的，不能当"你还没看"的证据）。
       const lastSeenTsRef = useRef('')
@@ -2637,7 +2665,10 @@ function Bubble({ config, message, onMention, animate = false }) {
         }
         void tick()
         const timer = setInterval(() => { void tick() }, 5000)
-        return () => { alive = false; clearInterval(timer) }
+        // 面板里读完一批会喊一声：红点立刻消失，不必等下一轮轮询（第 5 条）。
+        const onRead = () => { void tick() }
+        window.addEventListener('dsh-group-read', onRead)
+        return () => { alive = false; clearInterval(timer); window.removeEventListener('dsh-group-read', onRead) }
       }, [])
 
       return h('div', { style: { position: 'relative', width: size, height: size, display: 'grid', placeItems: 'center' } },
@@ -3333,7 +3364,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v44 · unread-tab-history-hint:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v45 · ui-five-fixes:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')
