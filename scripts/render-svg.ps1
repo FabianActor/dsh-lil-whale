@@ -1,7 +1,8 @@
 #requires -Version 7.0
 <#
 .SYNOPSIS
-  把一张 SVG 渲染成 PNG（本机 Edge 无头模式，不联网）。
+  把一张 SVG 渲染成 PNG（本机 Edge 无头模式，不联网）。只在宿主可用：
+  沙箱里的鱼起不来浏览器（Chromium 要命名管道，2026-11-15 实测被挡），她用 scripts\svg-render.mjs。
 
 .DESCRIPTION
   画画这件事的闭环是「写 → 看 → 改」。SVG 是文本，鱼能写；但看不见就没法改。
