@@ -977,10 +977,27 @@ try {
         if (@($rTail | Where-Object { $_ -match '\| log-format \| fmt=3' }).Count -gt 0) { $rotatedWithFmt = $true; break }
       }
     } catch { }
+    # 2026-11-16 02:11（第二条鱼）："还没到"和"丢了"不能长一样。
+    # 写分界行是 r167（插件 1.6.39）起每个进程各写自己那本；旧版本进程里本来就没有写者。
+    $runningVer = $null
+    try {
+      $bootPath9c = Join-Path $Cfg.Root 'logs\plugin-boot.log'
+      if (Test-Path -LiteralPath $bootPath9c) {
+        $bootTail9c = Get-Content -LiteralPath $bootPath9c -Encoding utf8 -Tail 1
+        if ($bootTail9c) {
+          $bootObj9c = $bootTail9c | ConvertFrom-Json
+          if ($bootObj9c.pkg) { $runningVer = [string]$bootObj9c.pkg -replace '^.*@', '' }
+        }
+      }
+    } catch { }
+    $writerLanded = $false
+    try { if ($runningVer -and ([version]$runningVer -ge [version]'1.6.39')) { $writerLanded = $true } } catch { }
     if ($rotatedWithFmt) {
       Add-Row '格式分界' 'OK' ($label + '：分界行在被轮转的旧文件里（轮转后新文件不重复写）')
+    } elseif (-not $writerLanded) {
+      Add-Row '格式分界' 'INFO' ($label + '：本文件还没有分界行——写分界是 1.6.39 起每个进程各写自己那本，进程还是 ' + $runningVer + '，属"还没到"，重启后自愈')
     } else {
-      Add-Row '格式分界' 'WARN' ($label + '：已有 18:35 之后的行，但本文件和最近轮转的文件里都没有 log-format 分界行') 'NEXT: 重启巡守（fish.ps1 down lee -Yes; fish.ps1 up lee -NoBrowser）'
+      Add-Row '格式分界' 'WARN' ($label + '：程序已是 ' + $runningVer + '（≥1.6.39），本文件和最近轮转的文件里都没有 log-format 分界行——这不像"还没到"，像真丢了') 'NEXT: 重启这一条鱼（fish.ps1 down <键> -Yes; fish.ps1 up <键> -NoBrowser）'
     }
   }
 } catch { Add-Row '格式分界' 'WARN' ('核不了：{0}' -f $_.Exception.Message) }
