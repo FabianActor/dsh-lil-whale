@@ -1707,6 +1707,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       const initialTextRef = useRef(readDraft(GROUP_DRAFT_KEY))
       const [hasText, setHasText] = useState(() => initialTextRef.current.trim() !== '')
       const draftTimerRef = useRef(null)
+      const draftValueRef = useRef(initialTextRef.current)
       const [to, setTo] = useState('all')
       // @ 面板选中人的回调要稳定：Bubble 是 memo 的，每次渲染新函数会让 120 个气泡全部重渲染。
       const mentionTo = useCallback((id) => setTo(id), [])
@@ -1719,10 +1720,17 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       // 输入法选字期间不写：那时 text 里是 "xiaofei"，存下去就是一份假草稿。
       const saveDraftSoon = useCallback((value) => {
         if (composingRef.current) return
+        draftValueRef.current = value
         if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
         draftTimerRef.current = setTimeout(() => writeDraft(GROUP_DRAFT_KEY, value), 300)
       }, [])
-      useEffect(() => () => { if (draftTimerRef.current) clearTimeout(draftTimerRef.current) }, [])
+      // 卸载（切 tab / 关面板）时把还没落盘的那 300ms 存掉，别让人刚打的字随组件一起消失。
+      useEffect(() => () => {
+        if (draftTimerRef.current) {
+          clearTimeout(draftTimerRef.current)
+          writeDraft(GROUP_DRAFT_KEY, draftValueRef.current)
+        }
+      }, [])
       const [presence, setPresence] = useState({})
       const [seats, setSeats] = useState([])
       const [pickerOpen, setPickerOpen] = useState(false)
@@ -3505,7 +3513,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v48 · ui-typing-uncontrolled:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v49 · ui-typing-uncontrolled:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')
