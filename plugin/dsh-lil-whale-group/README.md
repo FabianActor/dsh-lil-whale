@@ -1,6 +1,6 @@
 # dsh-lil-whale-group
 
-两只鱼之间的那条线。按 [PRD §8](../../docs/小小肥鱼-PRD.md) 实现。
+两只鱼之间的那条线。按 [PRD §8](../../docs/PRD.md) 实现。
 
 ## 一句话
 

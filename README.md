@@ -158,8 +158,8 @@ pwsh -File scripts\doctor.ps1 -IncludeLee  # 连你的窗一起看
 ```
 lil-whale/                      鱼塘根（不在 git 里；装第二条鱼时这里长出新的一层）
   app/                          工程（这个仓库）
-     docs/                       活跃文档（PRD、安装流程详解、出生流程、发布、打包、能力地图、判据、谱系）
-     docs/archive/               历史记录（观察、交接演练、review 意见、过期方案）——归档不删；旧待办页已删，只留 docs/待办.md
+     docs/                       活跃文档（PRD、安装、出生、发布、发布说明、打包、能力、判据、账本、自主触发、观察、想法、待办）
+     docs/archive/               历史记录（开工交接、交接演练、评审意见、过期方案、建议稿）——归档不删；文件名带日期
     plugin/dsh-lil-whale-group/           宿主半边：群发言工具 + 跨进程唤醒（她的 profile 也装）
     plugin/dsh-lil-whale-group-ui/        浏览器半边：群聊面板、设置页、HTTP 路由（只你的 profile 装）
     scripts/                    安装、启动器（fish）、巡守（原守夜）、体检、重建器、名册、谱系、迁移、打包
@@ -291,7 +291,7 @@ pwsh -File scripts\fish.ps1 doctor       # 体检
 
 ## 起停：只有一个开关
 
-**鱼活不过主进程**：主 dsh 一停，Windows 会把它作业对象里的子进程一起收掉，鱼跟着停。所以「重启 dsh」＝「重启整个鱼塘」，没有「鱼自己单独活着」这回事。完整说明见 [起停.md](起停.md)。
+**鱼活不过主进程**：主 dsh 一停，Windows 会把它作业对象里的子进程一起收掉，鱼跟着停。所以「重启 dsh」＝「重启整个鱼塘」，没有「鱼自己单独活着」这回事。完整说明见 [起停.md](docs/起停.md)。
 
 ```powershell
 pwsh -File scripts\fish.ps1 up all -BrowserMainOnly   # 起鱼塘：主 dsh 开窗，其余鱼后台
@@ -329,17 +329,24 @@ pwsh -File scripts\release-check.ps1
 
 | 想知道什么 | 看哪 |
 |---|---|
-| 这东西是什么、怎么算成、做到哪一步停 | [`docs/小小肥鱼-PRD.md`](docs/小小肥鱼-PRD.md)（当前结论 + 附录 A.x 事故与判据） |
-| 从零装到跑起来的每一步（变量、路径、时序） | [`docs/安装流程详解.md`](docs/安装流程详解.md) |
-| 怎么"出生"一条新鱼、怎么换段搬家 | [`docs/出生流程.md`](docs/出生流程.md) |
+| 这东西是什么、怎么算成、做到哪一步停 | [`docs/PRD.md`](docs/PRD.md)（当前结论 + 附录 A.x 事故与判据） |
+| 现在还有哪些事、卡在谁那里 | [`docs/待办.md`](docs/待办.md) |
+| 发布时对外说的话（草稿） | [`docs/发布说明.md`](docs/发布说明.md) |
+| 装一条新鱼时给她放什么种子文件 | [`docs/种子.md`](docs/种子.md) |
+| M5 观察（一周满之前的中途记录） | [`docs/观察.md`](docs/观察.md) |
+| 画画（SVG）与生图（第二步） | [`docs/生图.md`](docs/生图.md) |
+| 看 B 站（交给新 session 的交接） | [`docs/看B站.md`](docs/看B站.md) |
+| 想到但还没做的功能（只记录，不排期） | [`docs/想法.md`](docs/想法.md) |
+| 从零装到跑起来的每一步（变量、路径、时序） | [`docs/安装.md`](docs/安装.md) |
+| 怎么"出生"一条新鱼、怎么换段搬家 | [`docs/出生.md`](docs/出生.md) |
 | 发版前逐条检查 | [`docs/发布.md`](docs/发布.md)、`scripts\release-check.ps1` |
 | 打包/编码/发布注意事项 | [`docs/打包.md`](docs/打包.md) |
-| 她"能做什么"的目录 | [`docs/能力地图.md`](docs/能力地图.md) |
-| 她的自主分级与判据 | [`docs/自主回合.md`](docs/自主回合.md)、[`docs/判据与名字.md`](docs/判据与名字.md) |
+| 她"能做什么"的目录 | [`docs/能力.md`](docs/能力.md) |
+| 她的自主分级与判据 | [`docs/回合.md`](docs/回合.md)、[`docs/判据.md`](docs/判据.md) |
 | 谁是谁的爹 | [`docs/谱系.md`](docs/谱系.md)（生成的） |
-| 每一版改了什么、为什么 | [`docs/PRD-CHANGELOG.md`](docs/PRD-CHANGELOG.md) |
+| 每一版改了什么、为什么 | [`docs/变更记录.md`](docs/变更记录.md) |
 | 账本有哪些、每一版 `fmt` 是什么意思 | [`docs/账本.md`](docs/账本.md) |
-| 自主触发做到哪了（给外部读者的一页现状） | [`docs/自主触发-现状-2026-11-14.md`](docs/自主触发-现状-2026-11-14.md) |
+| 自主触发做到哪了（给外部读者的一页现状） | [`docs/自主触发.md`](docs/自主触发.md) |
 
 历史记录（观察、交接演练、review 意见）在 `docs\archive\`，不删——它们是证据。待办只有一页：`docs\待办.md`（只放没做完的）。
 

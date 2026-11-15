@@ -1,4 +1,4 @@
-#requires -Version 7.0
+﻿#requires -Version 7.0
 # scripts\release-check.ps1 —— 拟发版检查
 #
 # 为什么要有它：平时所有验证都在**工作目录**里做，而工作目录里混着本机配置、临时脚本、
@@ -82,7 +82,7 @@ if ($root) {
   $codeFiles = $allFiles | Where-Object { $_.Extension -in '.js', '.mjs', '.ps1', '.json', '.tpl', '.yml' }
   # 用户会读的文档：本机路径 = WARN（读得懂，但不该把作者的家写进用户手册）。
   # 项目记录（PRD / 待办 / 观察）例外：那里面的路径是事故证据，清掉等于抹证据 —— 不扫。
-  $recordDocs = '\\docs\\(小小肥鱼-PRD|待办-|观察-)'
+  $recordDocs = '\\docs\\(PRD|待办|观察)'
   $docFiles = $allFiles | Where-Object { $_.Extension -eq '.md' -and $_.FullName -notmatch '\\archive\\' -and $_.FullName -notmatch $recordDocs }
   $codeLeaks = $codeFiles | Select-String -SimpleMatch -Pattern 'D:\文档\WorkSpace', 'C:\Users\Fabian' -List
   $docLeaks = $docFiles | Select-String -SimpleMatch -Pattern 'D:\文档\WorkSpace', 'C:\Users\Fabian' -List
