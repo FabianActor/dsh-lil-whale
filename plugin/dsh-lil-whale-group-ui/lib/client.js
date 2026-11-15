@@ -2033,6 +2033,10 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
           const stillSame = (inputRef.current?.value ?? '') === rawValue
           if (stillSame) {
             if (inputRef.current) inputRef.current.value = ''
+            // 2026-11-16（第二条鱼报）：打完字 300ms 内就发送时，草稿防抖定时器还挂着；
+            // 不清掉它，它会在发送成功之后把刚发出去的正文又写回草稿 —— 重进面板就是一条幽灵草稿。
+            if (draftTimerRef.current) { clearTimeout(draftTimerRef.current); draftTimerRef.current = null }
+            draftValueRef.current = ''
             setHasText(false)
             writeDraft(GROUP_DRAFT_KEY, '')
           } else {
@@ -2043,6 +2047,8 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
         } catch (e) {
           // 发失败别把人刚打的字吞掉：输入框空着时把原文放回去（草稿已经按输入存过了）。
           if (inputRef.current && !inputRef.current.value) {
+            if (draftTimerRef.current) { clearTimeout(draftTimerRef.current); draftTimerRef.current = null }
+            draftValueRef.current = rawValue
             inputRef.current.value = rawValue
             setHasText(rawValue.trim() !== '')
             writeDraft(GROUP_DRAFT_KEY, rawValue)
