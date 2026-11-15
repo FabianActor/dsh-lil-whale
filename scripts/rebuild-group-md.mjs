@@ -75,7 +75,8 @@ function labelAt(key, iso) {
 
 // 机器发的话要自己说出来（同 plugin/dsh-lil-whale-group/lib/index.js 的 provenanceOf）。
 // `s` 平时是会话 id；不是会话 id 的值说明这句不是某一轮人说的。
-const S_DISPLAY = { watch: '巡守' }
+// 2026-11-16：s=watch 是旧数据（机器代发），不一定是巡守；显示成「机器」。
+const S_DISPLAY = { watch: '机器', rename: '机器' }
 
 function provenanceOf(s) {
   // 只给"已知的机器来源"加标注：s 平时是座位 id（如 ae4daa）或会话 id，
@@ -217,6 +218,28 @@ function classify(hunk, a, b) {
       return {
         known: true,
         why: '改名漂移：只差标题里的显示名（时间/来源/箭头都一致）——写它的人用了进程里缓存的旧名字。',
+      };
+    }
+  }
+  // 署名标签变化：2026-11-16 旧数据 s=watch 从「巡守」改成「机器」（第四条鱼发现：
+  // s=watch 只说明是旧版机器路径代发，其中一条其实是鱼自己进程递的闹钟）。
+  // 只差标题里的括号标签、其余（时间/名字/箭头）一致时，这一处是可解释的。
+  if (removed.length > 0 && hunk.ins.length === removed.length) {
+    const mLines = removed.map(headerOf);
+    const nLines = hunk.ins.map((i) => b[i]).map(headerOf);
+    const ok = mLines.every((m, i) => {
+      const n = nLines[i];
+      if (m === null || n === null) return false;
+      if (m[1] !== n[1] || m[2] !== n[2]) return false;
+      if ((m[4] ?? '') !== (n[4] ?? '')) return false;
+      const oldLabel = m[3] ?? '';
+      const newLabel = n[3] ?? '';
+      return /（巡守|改名）$/.test(oldLabel) && newLabel === '（机器）';
+    });
+    if (ok) {
+      return {
+        known: true,
+        why: '署名标签变化：旧数据 s=watch/s=rename 由「巡守/改名」改显示成「机器」（2026-11-16，署名与发起方不再共用一个值）。',
       };
     }
   }
