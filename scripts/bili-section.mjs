@@ -186,8 +186,8 @@ export function biliSectionOf(opts) {
 
   // 2) 旧的 MCP 块
   const patch = join(dshHome, 'profiles', profile, 'cordis.patch.yml');
-  if (!existsSync(patch)) return mcpSection('');
+  if (!existsSync(patch)) return '' // 2026-11-15：没有眼睛就不写这一节（别让她知道有这扇门）;
   const text = readFileSync(patch, 'utf8');
-  if (!/id:\s*mcp-bili-readonly/.test(text)) return mcpSection('');
+  if (!/id:\s*mcp-bili-readonly/.test(text)) return '' // 2026-11-15：没有眼睛就不写这一节（别让她知道有这扇门）;
   return mcpSection(text);
 }
