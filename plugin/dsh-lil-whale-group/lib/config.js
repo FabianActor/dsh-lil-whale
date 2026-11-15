@@ -20,7 +20,7 @@
  * 服务的那条鱼"。旧的 `her*` / `whale*` 是单鱼时代的名字（第二条鱼出现后 `whaleProfile`
  * 在 fishball 的配置里只能填 `fishball`，读起来是错的），仍然接受，只作兼容别名。
  */
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -115,7 +115,9 @@ export function config() {
       error = `config 读取失败（${path}）：${e.message}`
     }
   }
-  cached = { ...derive({ ...DEFAULTS, ...raw }), _path: path, _exists: existsSync(path), _error: error }
+  let mtime = null
+  try { mtime = statSync(path).mtime.toISOString() } catch { /* 文件不在就没有 mtime */ }
+  cached = { ...derive({ ...DEFAULTS, ...raw }), _path: path, _exists: existsSync(path), _error: error, _mtime: mtime }
   return cached
 }
 

@@ -8,7 +8,7 @@
 // 身份优先按**钉住的 sessionId** 认（2026-11-09 起）：同一目录下可能有两段会话，
 // 按 cwd 会叫错人。cwd 只作退路，并在 plugin.log 留一行痕迹。
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, renameSync, rmSync, statSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { homedir } from 'node:os'
 import { pathToFileURL, fileURLToPath } from 'node:url'
@@ -788,6 +788,15 @@ function localStampOf(value) {
  * 两个时间能分开三种状态：文件不在 = 从没写过；since=at 且都旧 = 起来过一次就死了；
  * since 不动、at 在走 = 还活着（小鱼丸 2026-11-15 08:44 补的）。
  */
+/** 磁盘上那份配置现在的 mtime（只用来和加载时比，读不到给 null）。 */
+function configMtimeNow() {
+  try {
+    return statSync(CFG._path).mtime.toISOString()
+  } catch {
+    return null
+  }
+}
+
 function wakeCapsSnapshot(nowIso) {
   const overrides = []
   for (const key of ['cooldownSec', 'perHour', 'perDay', 'totalPerDay']) {
@@ -805,7 +814,15 @@ function wakeCapsSnapshot(nowIso) {
     since: wakeCapsSince,
     at: nowIso,
     pid: process.pid,
-    source: { configFile: CFG._path ?? null, configExists: CFG._exists !== false, overrides },
+    source: {
+      configFile: CFG._path ?? null,
+      configExists: CFG._exists !== false,
+      overrides,
+      // 输入自己的时间戳：at 在走只证明写者活着，configMtime 才能证明"它读的是这一份"
+      // （小鱼丸 2026-11-15 09:26 提的：时间在动、输入没动，跟"进程在但不醒"同一个形状）
+      configMtime: CFG._mtime ?? null,
+      configMtimeNow: configMtimeNow(),
+    },
   }
 }
 

@@ -227,11 +227,24 @@ const capsCfgPath = String(capsInfo.raw?.source?.configFile ?? '')
 const capsText = '两次之间至少隔 ' + wake.cooldownSec + ' 秒、每人每小时最多 ' + wake.perHour + ' 次、每天最多 ' + wake.perDay + ' 次、全池每天最多 ' + wake.totalPerDay + ' 次、巡守推门最多 ' + wake.maxWakesPerDay + ' 次'
 const capsAtText = capsAtLocal
 const capsPid = capsInfo.raw?.pid ?? '?'
-const capsNote = caps
+const fmtLocalIso = (iso) => {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`
+}
+// 输入自己的时间戳（小鱼丸 2026-11-15 09:26）：at 在走只证明写者活着，
+// 两个都动（at + configMtime）才证明"它读的确实是现在这份配置"。
+const capsCfgMtime = capsInfo.ok ? fmtLocalIso(capsInfo.raw?.source?.configMtime) : ''
+const capsCfgMtimeNow = capsInfo.ok ? fmtLocalIso(capsInfo.raw?.source?.configMtimeNow) : ''
+const cfgChangedAfterLoad = Boolean(capsCfgMtime && capsCfgMtimeNow && capsCfgMtime !== capsCfgMtimeNow)
+let capsNote = caps
   ? (capsCfgPath
       ? '（来源：转抄 pool/state/wake-caps.json 的 source —— 巡守读的是 ' + capsCfgPath + '（' + capsSourceText + '），于 ' + capsAtText + ' 写出，pid ' + capsPid + '）'
       : '（来源：巡守没记下它读的是哪份配置（source.configFile 空），于 ' + capsAtText + ' 写出，pid ' + capsPid + '）')
   : '（读不到巡守写出的生效值：' + capsInfo.why + ' —— 上面这几个数是代码默认值，可能不是正在生效的；没有来源路径可抄，等巡守写出 wake-caps.json 再刷新这张纸）'
+if (cfgChangedAfterLoad) {
+  capsNote += '——**注意：配置文件在巡守加载之后被改过**（加载时 ' + capsCfgMtime + '，现在 ' + capsCfgMtimeNow + '）；生效值仍是加载时那份，要等巡守重启才变'
+}
 
 // ---- 模板与指纹 ----
 const templatePath = join(REPO_ROOT, 'templates', '环境.md.tpl')

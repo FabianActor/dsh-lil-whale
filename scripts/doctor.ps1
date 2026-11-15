@@ -296,7 +296,11 @@ if (Test-Path -LiteralPath $pluginLog) {
       } elseif ($ageMin -gt 5) {
         Add-Row '生效值' 'FAIL' "巡守 $ageMin 分钟没更新生效值（进程可能死了/卡住）：$capText" 'NEXT: 看 homes\<鱼>\logs\watchman.log 末尾有没有 wake-caps 行'
       } else {
-        Add-Row '生效值' 'OK' "$capText（$srcText；$ageMin 分钟前）"
+        $capPid = $caps.pid
+    $capLoaded = ''
+    try { if ($caps.source.configMtime) { $capLoaded = ([datetime]$caps.source.configMtime).ToLocalTime().ToString('HH:mm:ss') } } catch { }
+    $capWho = "pid=$capPid" + $(if ($capLoaded) { "，配置于 $capLoaded 加载" } else { '' })
+    Add-Row '生效值' 'OK' "$capText（$srcText；$capWho；$ageMin 分钟前写出）"
       }
     } catch {
       Add-Row '生效值' 'FAIL' "wake-caps.json 读不出来：$($_.Exception.Message)" 'NEXT: 看文件是不是写坏了'
@@ -343,7 +347,8 @@ if (-not (Test-Path -LiteralPath $wakeConfigJs)) {
     if ($pinned.Count -gt 0) {
       Add-Row '默认值' 'WARN' ("配置里钉着等于默认值的键：" + ($pinned -join '、') + '（等于默认就该删，否则以后改默认不生效）') 'NEXT: 删掉这些键，只留真正偏离默认的项'
     } else {
-      Add-Row '默认值' 'OK' '配置里没有等于默认值的覆盖项（默认值改得动）'
+      $nowStamp = (Get-Date).ToString('HH:mm:ss')
+    Add-Row '默认值' 'OK' "磁盘上现在这份配置（读于 $nowStamp）里没有等于默认值的覆盖项（默认值改得动）"
     }
   }
 }
