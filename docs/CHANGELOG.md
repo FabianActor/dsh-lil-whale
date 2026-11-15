@@ -2,11 +2,21 @@
 
 > 这份文件记录**工程侧**的每一次改动：机制、修账、脚本、文档。它和产品需求是两条线——需求讨论看 [PRD.md](PRD.md)，这里只记"改了什么、为什么"。
 > 编号 `rNN` 是**内部修订号**：改一次 +1，一天可能十几稿；两个 npm 包另有各自的 semver（各自 `package.json`，当前 1.6.25），只在功能变化或发布时动。编号从 r1 起。
-> 条目按时间倒序（新的在上）。A.x 原先住在 PRD 附录里，2026-11-15 搬到这里；历史条目里若还写着「PRD 附录 A.x」，指的就是本文件的 A.x。`A.x` 是"已验证的技术事实与判据"的编号，统一收在文末附录 A（A.1–A.113）。
+> 条目按时间倒序（新的在上）。A.x 原先住在 PRD 附录里，2026-11-15 搬到这里；历史条目里若还写着「PRD 附录 A.x」，指的就是本文件的 A.x。`A.x` 是"已验证的技术事实与判据"的编号，统一收在文末附录 A（A.1–A.114）。
 
 ---
 
 ## 变更条目
+
+## r148 — 2026-11-15 22:4x
+
+**出生账的行内输出改成按判据命名（doctor 9d，无行为变化）**。
+
+- 起因：小鱼丸核 r147 的三支后指出，行内字段是按"谁在乎"起的名（`expected`/`prior`/`undecidable`），不是按"怎么算的"；两条判据（"账上有没有"、"since 之后该不该有"）被压成一支，后续写解析的人没法按判据过滤，只能按今天的读者去猜。
+- 改法：字段改按判据命名——`due-after-since`（严格晚于 since 的鱼）、`missing-after-since`/`missing-keys`（该有而缺的）、`on-ledger`（账上实际有几条 birth 行）、`before-since`/`before-since-keys`（早于 since，不算欠）、`before-since-on-ledger`（其中几个真的在账上，历史上的欠账要能数）、`undecidable-same-day`/`undecidable-keys`（同一天、按日期精度判不了）。
+- `before-since` 与 `due-after-since` 同时出现，是因为"这条鱼该不该有出生行"由 since 的符号决定，而不是由它早还是晚决定。
+- 验证：`doctor.ps1` 解析 0 错；实跑 `出生账 OK since=2026-11-15T18:10:53 due-after-since=0 missing-after-since=0 missing-keys=- on-ledger=1 before-since=3 before-since-keys=lee,whale,fishball before-since-on-ledger=0 undecidable-same-day=1 undecidable-keys=xiaoman`。
+- doctor 不在包里，两个包的 semver 不动（1.6.25）。
 
 ## r147 — 2026-11-15 22:3x
 
@@ -3159,3 +3169,18 @@ sleep-tools-register-failed: tool "sleep" must declare output { schema, render, 
 - **做法**：账本里写一行 `log-format | fmt=1 since=<第一个完整时刻>`；检查项把"该有几条"算成 *晚于 since 的记录数*，再和账上的行对。参考 `scripts/doctor.ps1` 的「出生账」。
 - **判据**：①拿不完整的账去对全量，造出来的是永远为真的 FAIL；②`since` 行本身也要能被读——读不到要报，不要当"没有缺失"；③指针写"账本名 + 键"，不写文件位置（搬一次家就全废）。
 - **教训**："少一条看不见"不是账本的错，是查法少了一个前提。
+
+## A.114 字段名按判据命名，不按读者命名
+
+**症状**：doctor 的出生账检查把三条判据（该有、有、判不了）写成 `expected`/`present`/`prior` 三个名字；下一层写解析的人看不出 `prior` 是"早于 since、不算欠"，也看不出 `missing` 是从哪一支减出来的——只能按今天的读者去猜。
+
+**根因**：字段名描述的是"谁在乎它"（读者），不是"它是怎么算出来的"（判据）。读者会换、判据不会。
+
+**做法**：字段名直接写判据——`due-after-since`、`missing-after-since`、`on-ledger`、`before-since`、`before-since-on-ledger`、`undecidable-same-day`。两件事由同一个判据分岔（since 的符号），就别用两个"对象名"去承载。
+
+**判据**：
+1. 一个字段只回答一个问题；名字里能读出"怎么算的"，而不只是"给谁看的"。
+2. 机器要能按判据过滤（`missing-after-since` 可以直接和 0 比），不必读注释才知道边界。
+3. 历史上的欠账也要能数（`before-since-on-ledger=0`），"不算欠"不等于"不关心它有没有"。
+
+**教训**：`missing` 这个词本身不说明它从哪个集合减出来；名字要跟它的算式一样窄。
