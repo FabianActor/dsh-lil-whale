@@ -1,12 +1,24 @@
 # 工程变更记录
 
 > 这份文件记录**工程侧**的每一次改动：机制、修账、脚本、文档。它和产品需求是两条线——需求讨论看 [PRD.md](PRD.md)，这里只记"改了什么、为什么"。
-> 编号 `rNN` 是**内部修订号**：改一次 +1，一天可能十几稿；两个 npm 包另有各自的 semver（各自 `package.json`，当前 1.6.29），只在功能变化或发布时动。编号从 r1 起。
-> 条目按时间倒序（新的在上）。A.x 原先住在 PRD 附录里，2026-11-15 搬到这里；历史条目里若还写着「PRD 附录 A.x」，指的就是本文件的 A.x。`A.x` 是"已验证的技术事实与判据"的编号，统一收在文末附录 A（A.1–A.118）。
+> 编号 `rNN` 是**内部修订号**：改一次 +1，一天可能十几稿；两个 npm 包另有各自的 semver（各自 `package.json`，当前 1.6.30），只在功能变化或发布时动。编号从 r1 起。
+> 条目按时间倒序（新的在上）。A.x 原先住在 PRD 附录里，2026-11-15 搬到这里；历史条目里若还写着「PRD 附录 A.x」，指的就是本文件的 A.x。`A.x` 是"已验证的技术事实与判据"的编号，统一收在文末附录 A（A.1–A.119）。
 
 ---
 
 ## 变更条目
+
+## r154 — 2026-11-16 00:2x
+
+**通行证的第二半：完整性标签**（第三条鱼实测 `plan`/`logs`/`run` 用 pwsh 写不进；DACL 明明允许）
+
+- 症状：`members.json` / 家目录的 DACL 里有 workspace capability SID 的写权限，沙箱里 `pwsh` 仍报"拒绝访问"；`notes` / `bili-duty` 能写，`plan` / `logs` / `run` 不能。
+- 根因：沙箱 grant 只在 workspace 根贴 `Mandatory Label\Low Mandatory Level:(OI)(CI)(NW)`（可继承）；`plan` / `logs` / `run` 是在 grant 之前建好的（install 时就建），从没拿到标签，仍是 Medium，Low 进程的写入被 no-write-up 拒绝。11-13 的 acl-repair 只补了 DACL——**纸说修了，机器没修**（第三条鱼原话）。
+- 修法：以完整令牌（计划任务）先 `icacls <家>\{notes,plan,logs,run,bili-duty,画} /grant <当前用户>:(OI)(CI)F`，再 `/setintegritylevel (OI)(CI)L /T`；跳过 `dsh-home` 与 reparse point。三条鱼全部补齐。
+- 代码：`scripts/common.ps1` 新增 `Test-WorkspaceLowLabel` / `Get-WorkspaceLabelGaps` / `Repair-WorkspaceLabelGaps`；`scripts/fish.ps1` 的 `acl-check` / `acl-repair` 先查标签再查 capability SID；`scripts/doctor.ps1` 每条鱼新增「完整性标签」一格（WARN 带 `acl-repair` 的 NEXT）。
+- 判据：①"能写"要两张票（DACL + 标签），只验一张的检查器会给出假 OK；②"纸/代码说补上了"不等于机器上补上了，修复要由当事人重测；③写标签需要完整令牌（LABEL_SECURITY_INFORMATION 要 WRITE_OWNER），沙箱里只能查、补不上。
+- 顺带（同一轮）：条件表改成**全部校验再取前 5 条**（此前第 6 条以后的错误既不生效也不报）；条件表的问题写进**鱼自己家的** `logs\intent.log`（巡守账里那份对她是"看不见的账"）；`环境.md` 的 token 句改成"一轮**新增**约 200 token；整轮输入看 `ctx`，账在 `usage` 日志"。
+- 教训：**通行证不是一张纸，是两张；上一次"补上了"只补了其中一张。**
 
 ## r153 — 2026-11-16 00:0x
 
@@ -3313,3 +3325,15 @@ sleep-tools-register-failed: tool "sleep" must declare output { schema, render, 
 1. 凡是"延迟执行"的写入，都要有 flush 路径（卸载、隐藏、切页），否则延迟的就是数据。
 2. flush 的判据是"有没有还没写的内容"，不是"有没有定时器"（内容可能已经被别的路径写过）。
 
+## 附录 A.119 通行证有两半：DACL 和完整性标签
+
+**症状**：文件工具能写、沙箱里的 `pwsh` 报"拒绝访问"；DACL 里明明有对应 SID 的写权限。
+
+**根因**：Windows 的写入要过两次检查——DACL（谁能动）与强制完整性级别（什么级别的进程能动）。沙箱 grant 只在 workspace 根贴可继承的 Low 标签；**早于 grant 创建的子目录**（安装时就建好的 `plan` / `logs` / `run`）没有标签（Medium），Low 进程写 Medium 对象被 no-write-up 拒绝。11-13 修的是 DACL，只修了一半。
+
+**判据**：
+1. 验"能不能写"必须同时验 DACL 与 Mandatory Label；只验 DACL 的检查器会给出**假 OK**。
+2. "纸/代码说补上了"不等于机器上补上了：修复要有当事人重测的现场证据。
+3. 写标签需要完整令牌（LABEL_SECURITY_INFORMATION 要 WRITE_OWNER）；沙箱里只能查、补不上，修复要在宿主的正常 shell 里跑。
+
+**教训**：通行证不是一张纸，是两张；"补上了"那句话说早了。

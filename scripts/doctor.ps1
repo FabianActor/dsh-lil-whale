@@ -142,9 +142,16 @@ if (Test-Path -LiteralPath $pluginLog) {
         if (-not (Test-Path -LiteralPath $wakeOn)) { continue }
         $onLabel = $p.Value.name
         try {
-          $raw = Get-Content -LiteralPath $wakeOn -Raw -Encoding utf8 | ConvertFrom-Json
-          $list = if ($raw -is [array]) { @($raw) } elseif ($null -ne $raw.items) { @($raw.items) } else { $null }
-          if ($null -eq $list) {
+          $txt = Get-Content -LiteralPath $wakeOn -Raw -Encoding utf8
+          $raw = $txt | ConvertFrom-Json
+          # 2026-11-16：ConvertFrom-Json '[]' 返回 $null；而 if 表达式里返回 @() 也会被管道展开成 $null。
+          # 所以"形状对不对"用单独的标志，别拿 $null 判断空表。
+          $shapeOk = $true
+          $list = @()
+          if ($raw -is [array]) { $list = @($raw) }
+          elseif ($null -ne $raw -and $null -ne $raw.items) { $list = @($raw.items) }
+          elseif (-not ($null -eq $raw -and $txt.Trim() -eq '[]')) { $shapeOk = $false }
+          if (-not $shapeOk) {
             Add-Row ('条件（' + $onLabel + '）') 'FAIL' 'wake-on.json 形状不对（要数组或 {items:[...]}）' 'NEXT: 让她改写成数组'
           } else {
             $bad = @($list | Where-Object { -not $_.why -or -not $_.kind })
@@ -763,6 +770,13 @@ try {
         Add-Row ('家根权限（' + $fishName + '）') 'WARN' '家根没有当前用户的完全控制：沙箱贴通行证要 WRITE_OWNER，鱼会连 pwsh 都起不来' ('NEXT: pwsh -File scripts/fish.ps1 acl-repair ' + $prop.Name)
       } else {
         Add-Row ('家根权限（' + $fishName + '）') 'OK' '家根有当前用户的完全控制（沙箱贴通行证的前置）'
+      }
+      # 2026-11-16：DACL 只是通行证的一半；另一半是完整性标签（沙箱里的 pwsh 是 Low）。
+      $labelGaps = @(Get-WorkspaceLabelGaps $probe)
+      if ($labelGaps.Count -gt 0) {
+        Add-Row ('完整性标签（' + $fishName + '）') 'WARN' ("{0} 个对象缺 Low 标签（DACL 允许、pwsh 仍写不进）" -f $labelGaps.Count) ('NEXT: pwsh -File scripts\fish.ps1 acl-repair ' + $prop.Name)
+      } else {
+        Add-Row ('完整性标签（' + $fishName + '）') 'OK' '家目录树都有 Low 标签（沙箱里 pwsh 写权限的另一半）'
       }
       if ($m.dshHome) {
         $cred = Join-Path ([string]$m.dshHome) '.credentials.yaml'

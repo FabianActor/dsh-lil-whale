@@ -80,6 +80,15 @@ t(`最多认 ${INTENT_MAX} 条（多出来的留一行说明）`, () => {
   assert.ok(notes.some((n) => /intent-too-many/.test(n)))
 })
 
+t('超限条目里写错的也报（不再静默）', () => {
+  // 2026-11-16 小鱼丸：先 slice 再校验，第 6 条以后的错误既不生效也不报。
+  const many = Array.from({ length: INTENT_MAX }, (_, i) => ({ id: `i${i}`, kind: 'pending', why: 'w' }))
+  many.push({ id: 'bad', kind: 'pending' })
+  const { list, notes } = parseIntents(many)
+  assert.equal(list.length, INTENT_MAX)
+  assert.ok(notes.some((n) => /intent-without-why id=bad/.test(n)))
+})
+
 t('text-appears 缺 match 不成立', () => {
   const { list, notes } = parseIntents([{ id: 'x', kind: 'text-appears', why: 'w', path: 'pool/group/群.md' }])
   assert.equal(list.length, 0)

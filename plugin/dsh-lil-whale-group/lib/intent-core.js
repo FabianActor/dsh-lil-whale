@@ -51,13 +51,14 @@ export function parseIntents(raw) {
     badShape = true
   }
   if (badShape) return { list: [], notes: ['intent-bad-shape（要一个数组，或 {items:[...]}）'], badShape: true }
-  if (list.length > INTENT_MAX) notes.push(`intent-too-many count=${list.length} 只认前 ${INTENT_MAX} 条`)
-  const out = []
-  for (const it of list.slice(0, INTENT_MAX)) {
-    const spec = normalizeIntent(it, notes)
-    if (spec) out.push(spec)
+  // 2026-11-16 小鱼丸：先 slice 再校验，第 6 条以后的错误既不生效、也不报——
+  // "没校验"和"校验通过"长得一样。改成全部校验（只报不改），再取前 INTENT_MAX 条。
+  const parsed = list.map((it) => normalizeIntent(it, notes))
+  const valid = parsed.filter(Boolean)
+  if (valid.length > INTENT_MAX) {
+    notes.push(`intent-too-many count=${valid.length} 只认前 ${INTENT_MAX} 条（第 ${INTENT_MAX + 1} 条起未启用）`)
   }
-  return { list: out, notes, badShape: false }
+  return { list: valid.slice(0, INTENT_MAX), notes, badShape: false }
 }
 
 /** 把一条原始条目归一成规格；不合格返回 null 并留一行说明。 */

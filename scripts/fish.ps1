@@ -1073,6 +1073,26 @@ function Invoke-AclCmd([string]$action, [string]$name) {
         continue
       }
     }
+    # 2026-11-16：通行证有两半——DACL + 完整性标签；DACL 允许、标签缺失时 pwsh 照样写不进。
+    $labelGaps = @(Get-WorkspaceLabelGaps $m)
+    if ($labelGaps.Count -gt 0) {
+      if ($action -eq 'check') {
+        Write-Host ("{0}：{1} 个对象缺完整性标签（DACL 允许也写不进；沙箱里 pwsh 是 Low）" -f $m.Label, $labelGaps.Count)
+        $labelGaps | Select-Object -First 8 | ForEach-Object { Write-Host ("   - {0}" -f $_) }
+        if ($labelGaps.Count -gt 8) { Write-Host ("   … 还有 {0} 个" -f ($labelGaps.Count - 8)) }
+        Write-Host ("NEXT: pwsh -File scripts\fish.ps1 acl-repair {0}" -f $m.Key)
+        $ok = $false
+        continue
+      }
+      $fixedLabel = Repair-WorkspaceLabelGaps $m
+      $leftLabel = @(Get-WorkspaceLabelGaps $m)
+      if ($leftLabel.Count -gt 0) {
+        Write-Host ("xx {0}：标签补了 {1} 个，还剩 {2} 个补不上（要么不是所有者，要么对象被占用）" -f $m.Label, $fixedLabel, $leftLabel.Count)
+        $ok = $false
+        continue
+      }
+      Write-Host ("   补上了完整性标签：{0} 个对象" -f $fixedLabel)
+    }
     $gaps = Get-WorkspaceGrantGaps $m
     if ($gaps.Count -eq 0) {
       Write-Host ("{0}：通行证齐全（{1}）" -f $m.Label, $sid)

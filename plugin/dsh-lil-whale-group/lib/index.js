@@ -2723,6 +2723,19 @@ function noteOnce(member, msg) {
   if (planNotes.has(key)) return
   planNotes.add(key)
   watchmanLog('skip', `to=${member.key} ${/^[a-z0-9-]+=/.test(msg) ? msg : 'note=' + msg}`)
+  memberNote(member, msg)
+}
+
+/** 条件表的问题也要写进**她自己的**日志：巡守的账她不一定知道去哪翻。
+ *  2026-11-16 小鱼丸："to=fishball 写在别人看不见的账里"等于静默。 */
+function memberNote(member, msg) {
+  try {
+    const dir = join(member.home, 'logs')
+    mkdirSync(dir, { recursive: true })
+    appendFileSync(join(dir, 'intent.log'), `${new Date().toISOString()} | ${msg}\n`, 'utf8')
+  } catch {
+    /* 写不进就算——巡守账里还有一份 */
+  }
 }
 
 function planDue(member, st, now, graceMin = 1) {
@@ -2945,7 +2958,7 @@ async function intentTick(member, st, now) {
     return
   }
   const { list, notes, badShape } = parseIntents(raw)
-  for (const note of notes) noteOnce(member, note)
+  for (const note of notes) noteOnce(member, note)   // noteOnce 里会同时写她自己的 intent.log
   // 坏形状 = "读错了地方"，不是"她删光了"。这种时候一律不动状态：
   // 剪一次就再也回不来了，而少剪一次下一拍还会再来（小肥鱼 2026-11-15 15:42）。
   if (badShape) return

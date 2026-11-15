@@ -234,3 +234,56 @@ function Get-FileFingerprint([string]$Path) {
   }
   return ([BitConverter]::ToString($hash) -replace '-', '').Substring(0, 12).ToLowerInvariant()
 }
+
+# ---------- 完整性标签：通行证的另一半（2026-11-16） ----------
+# DACL 只决定"谁能动"；沙箱里的 pwsh 是 Low 完整性进程，目标对象若是 Medium 就写不进去。
+# 沙箱 grant 只在 workspace 根贴一次可继承的 Low 标签，早于它建好的子目录永远拿不到。
+# 判据：DACL 允许 + icacls 没有 "Mandatory Label\Low Mandatory Level" = 缺标签。
+function Test-WorkspaceLowLabel([string]$Path) {
+  try {
+    $out = @(& icacls $Path 2>$null)
+    return [bool](($out | Where-Object { $_ -match 'Mandatory Label\\Low Mandatory Level|S-1-16-4096' }).Count -gt 0)
+  } catch {
+    return $true   # 查不了就当有，别误报
+  }
+}
+
+function Get-WorkspaceLabelGaps([object]$Member) {
+  $homeDir = [string]$Member.Home
+  if (-not $homeDir -or -not (Test-Path -LiteralPath $homeDir)) { return @() }
+  $gaps = New-Object System.Collections.Generic.List[string]
+  $stack = New-Object System.Collections.Generic.Stack[object]
+  $stack.Push((Get-Item -LiteralPath $homeDir -Force))
+  while ($stack.Count -gt 0) {
+    $cur = $stack.Pop()
+    if ($cur.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { continue }
+    if ($cur.PSIsContainer -and -not (Test-WorkspaceLowLabel $cur.FullName)) { $gaps.Add($cur.FullName) }
+    foreach ($f in @(Get-ChildItem -LiteralPath $cur.FullName -Force -ErrorAction SilentlyContinue)) {
+      if ($f.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { continue }
+      # dsh-home 故意留 Medium：沙箱写不进凭证，别补
+      if ($f.PSIsContainer -and $f.Name -eq 'dsh-home' -and $cur.FullName -eq $homeDir) { continue }
+      if ($f.PSIsContainer) { $stack.Push($f) }
+      elseif (-not (Test-WorkspaceLowLabel $f.FullName)) { $gaps.Add($f.FullName) }
+    }
+  }
+  return @($gaps)
+}
+
+# 需要当前用户对每个对象有 WRITE_OWNER（写标签走 LABEL_SECURITY_INFORMATION）。
+# 先贴一条自己的 FullControl，再写标签；失败逐条打印，不假装成功。
+function Repair-WorkspaceLabelGaps([object]$Member) {
+  $me = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+  $n = 0
+  foreach ($path in @(Get-WorkspaceLabelGaps $Member)) {
+    try {
+      & icacls $path /grant ($me + ':F') 2>&1 | Out-Null
+      $isDir = (Get-Item -LiteralPath $path -Force).PSIsContainer
+      $lv = if ($isDir) { '(OI)(CI)L' } else { 'Low' }
+      $out = @(& icacls $path /setintegritylevel $lv 2>&1)
+      if ($out -match '拒绝访问|denied|Failed processing [1-9]') { Write-Host ('! 补不上标签：' + $path) } else { $n++ }
+    } catch {
+      Write-Host ('! 补不上标签：' + $path)
+    }
+  }
+  return $n
+}
