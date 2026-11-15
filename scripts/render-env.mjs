@@ -25,6 +25,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { biliSectionOf } from './bili-section.mjs'
+import { drawSectionOf } from './draw-section.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 // 2026-11-15：默认值和"默认值+覆盖"只在 wake-config.js 里写一份。
@@ -288,6 +289,7 @@ const values = {
   GENERATED_AT: generatedAt,
   DEPLOY_DATE: deployDate,
   BILI_SECTION: biliSectionOf({ dshHome: me?.dshHome || join(workspace, "dsh-home"), profile: args.profile }),
+  DRAW_SECTION: drawSectionOf({ workspace, home: me?.home || workspace }),
 }
 
 let rendered = template
