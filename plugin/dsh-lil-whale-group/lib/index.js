@@ -2439,6 +2439,9 @@ async function tick(ctx) {
  */
 // 夹游标只留痕一次，免得每 60 秒刷一行。
 const clampLogged = new Set()
+// 游标丢过一次就记一行（同通道在同一进程里只记一次）——第三条鱼 20:5x 的预登记里写着这个预期，
+// 原来的写法是每次唤醒重建 Set，递失败重试时会反复记，跟预登记对不上。
+const cursorLostLogged = new Set()
 
 function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
   const lines = readLinesOf(channel.file)
@@ -2457,8 +2460,7 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
   const sharedSeen = Math.min(sharedSeenStored, lines.length)
   const seatSeen = Math.min(seatSeenStored, lines.length)
   // 2026-11-15 20:3x：游标这一格是 0、但工程账上有过投递 —— 那不是新生，是丢了。
-  // 每次唤醒都要清空，否则同一 session 里第二次丢就哑了。
-  const cursorLostLogged = new Set()
+  // 去重用的 Set 在模块层（上面），同一通道只记一次。
   const clampKey = `${member}:${channel.key}`
   if ((sharedSeenStored > lines.length || seatSeenStored > lines.length) && !clampLogged.has(clampKey)) {
     clampLogged.add(clampKey)
