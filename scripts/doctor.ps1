@@ -258,8 +258,23 @@ if (Test-Path -LiteralPath $pluginLog) {
   # 3h. 生效值：巡守进程写出来的那份（2026-11-15 小肥鱼/小鱼丸）
   # 判据：文件在、at 是近 5 分钟内的、四个数与环境.md 对得上；"没写过"和"死了"要分得开。
   $capsFile = Join-Path $Cfg.PoolState 'wake-caps.json'
+  # "文件不在"有两种意思，顺序不能反（小肥鱼 2026-11-15 08:50）：
+  #   日志里没有 wake-caps 行 → 版本还没到，等重启；
+  #   日志里有那行、文件却不在 → 写失败（权限/路径/盘），要查。
+  $capsLogSeen = $false
+  $homesRoot = Join-Path $Cfg.PoolDir 'homes'
+  if (Test-Path -LiteralPath $homesRoot) {
+    foreach ($h in @(Get-ChildItem -LiteralPath $homesRoot -Directory -ErrorAction SilentlyContinue)) {
+      $lg = Join-Path $h.FullName 'logs\watchman.log'
+      if ((Test-Path -LiteralPath $lg) -and (Select-String -LiteralPath $lg -Pattern 'wake-caps \| fmt=1' -Quiet -ErrorAction SilentlyContinue)) { $capsLogSeen = $true; break }
+    }
+  }
   if (-not (Test-Path -LiteralPath $capsFile)) {
-    Add-Row '生效值' 'WARN' 'wake-caps.json 不存在：巡守从没写过（或还没重启到带这段代码的版本）' 'NEXT: 重启主 dsh（3080）后看 pool\state\wake-caps.json'
+    if ($capsLogSeen) {
+      Add-Row '生效值' 'FAIL' 'watchman.log 里有 wake-caps 行，但 wake-caps.json 不在：写失败（权限/路径/盘）' 'NEXT: 看巡守日志里 wake-caps-write-failed 的 detail'
+    } else {
+      Add-Row '生效值' 'WARN' '日志里还没有 wake-caps 行：版本还没到（等主 dsh 重启到带这段代码的版本）' 'NEXT: 重启主 dsh（3080）后看 pool\state\wake-caps.json'
+    }
   } else {
     try {
       $caps = Get-Content -LiteralPath $capsFile -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -269,7 +284,9 @@ if (Test-Path -LiteralPath $pluginLog) {
       $capText = "间隔 $($caps.caps.cooldownSec)s / 每小时 $($caps.caps.perHour) / 每天 $($caps.caps.perDay) / 全池 $($caps.caps.totalPerDay) / 推门 $($caps.caps.maxWakesPerDay)"
       $overrides = @($caps.source.overrides)
       $srcText = if ($overrides.Count -gt 0) { "配置覆盖：" + ($overrides -join '、') } else { '代码默认值' }
-      if ($ageMin -lt 0) {
+      if (-not $capsLogSeen) {
+        Add-Row '生效值' 'WARN' "文件在（$capText），但日志里没有 wake-caps 行——可能不是这个版本的巡守写的" 'NEXT: 确认主 dsh 的 pkg 版本与 boot 行'
+      } elseif ($ageMin -lt 0) {
         Add-Row '生效值' 'FAIL' 'wake-caps.json 里没有可读的 at' 'NEXT: 看 pool\state\wake-caps.json 的内容'
       } elseif ($ageMin -gt 5) {
         Add-Row '生效值' 'FAIL' "巡守 $ageMin 分钟没更新生效值（进程可能死了/卡住）：$capText" 'NEXT: 看 homes\<鱼>\logs\watchman.log 末尾有没有 wake-caps 行'

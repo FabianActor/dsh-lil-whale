@@ -203,6 +203,13 @@ function readWakeCaps() {
 }
 const capsInfo = readWakeCaps()
 const caps = capsInfo.ok && capsInfo.raw?.caps ? capsInfo.raw.caps : null
+// 生效值以巡守写的那份为准；没写就明说，别拿渲染器自己的输入冒充
+if (caps) {
+  for (const key of ['cooldownSec', 'perHour', 'perDay', 'totalPerDay', 'maxWakesPerDay']) {
+    const v = Number(caps[key])
+    if (Number.isFinite(v) && v > 0) wake[key] = v
+  }
+}
 const pad2 = (n) => String(n).padStart(2, '0')
 const capsAtLocal = capsInfo.ok
   ? (() => {
@@ -210,16 +217,19 @@ const capsAtLocal = capsInfo.ok
       return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`
     })()
   : ''
+// 纸不该"自述"路径，该"转抄"路径（小肥鱼 2026-11-15 08:51）：
+// 转抄 wake-caps.json 里巡守自己写的 source —— 转述有出处，自述只有自信。
 const capsOverrides = Array.isArray(capsInfo.raw?.source?.overrides) ? capsInfo.raw.source.overrides : []
-const capsSourceText = capsInfo.ok
-  ? (capsOverrides.length ? `配置覆盖了 ${capsOverrides.join('、')}` : '配置里没有 wake 键 → 用默认值')
-  : '代码默认值'
-const readFromText = cfgInfo.readOk
-  ? `${cfgInfo.path}（${capsSourceText}）`
-  : `${cfgInfo.path}（读不出来：${cfgInfo.error ?? '文件不存在'}）`
-const capsNote = capsInfo.ok
-  ? `生效值：间隔 ${caps.cooldownSec} 秒 / 每小时 ${caps.perHour} 次 / 每天 ${caps.perDay} 次 / 全池 ${caps.totalPerDay} 次 / 推门 ${caps.maxWakesPerDay} 次·天；读自：${readFromText}；巡守于 ${capsAtLocal} 写出（pid ${capsInfo.raw?.pid ?? '?'}）`
-  : `读不到巡守写出的生效值（${capsInfo.why}）——下面是默认值：间隔 ${wake.cooldownSec} 秒 / 每小时 ${wake.perHour} 次 / 每天 ${wake.perDay} 次 / 全池 ${wake.totalPerDay} 次 / 推门 ${wake.maxWakesPerDay} 次·天；读自：${readFromText}`
+const capsSourceText = capsOverrides.length ? `配置覆盖了 ${capsOverrides.join('、')}` : '配置里没有 wake 键 → 用默认值'
+const capsCfgPath = String(capsInfo.raw?.source?.configFile ?? '')
+const capsSourceLine = caps
+  ? (capsCfgPath
+      ? `读自：${capsCfgPath}（${capsSourceText}）；巡守于 ${capsAtLocal} 写出（pid ${capsInfo.raw?.pid ?? '?'}）`
+      : `巡守没记下它读的是哪份配置（source.configFile 空）；巡守于 ${capsAtLocal} 写出（pid ${capsInfo.raw?.pid ?? '?'}）`)
+  : ''
+const capsNote = caps
+  ? `生效值：间隔 ${caps.cooldownSec} 秒 / 每小时 ${caps.perHour} 次 / 每天 ${caps.perDay} 次 / 全池 ${caps.totalPerDay} 次 / 推门 ${caps.maxWakesPerDay} 次·天；${capsSourceLine}`
+  : `读不到巡守写出的生效值（${capsInfo.why}）——下面这几个数只是代码默认值，可能不是正在生效的；没有来源路径可抄，等巡守写出 wake-caps.json 再刷新这张纸`
 
 // ---- 模板与指纹 ----
 const templatePath = join(REPO_ROOT, 'templates', '环境.md.tpl')
