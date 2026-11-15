@@ -2988,7 +2988,7 @@ async function intentTick(member, st, now) {
     noteOnce(member, `note=intent-unreadable ${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 80)}`)
     return
   }
-  const { list, notes, badShape } = parseIntents(raw)
+  const { list, notes, badShape } = parseIntents(raw, { ownKey: member.key })
   for (const note of notes) noteOnce(member, note)   // noteOnce 里会同时写她自己的 intent.log
   // 坏形状 = "读错了地方"，不是"她删光了"。这种时候一律不动状态：
   // 剪一次就再也回不来了，而少剪一次下一拍还会再来（小肥鱼 2026-11-15 15:42）。

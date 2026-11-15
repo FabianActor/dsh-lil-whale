@@ -135,6 +135,13 @@ t('自家要 insideHome:true，别人家一律不许', () => {
   assert.equal(pathAllowed('homes/whale/logs/watchman.log', { insideHome: true, ownKey: 'whale' }).ok, true)
   assert.equal(pathAllowed('homes/fishball/notes/x.md', { insideHome: true, ownKey: 'whale' }).ok, false)
   assert.equal(pathAllowed('homes/fishball/notes/x.md', { insideHome: true, ownKey: 'whale' }).why, 'other-fish')
+// 私聊是双向隐私窗口：自家会话放行、别人会话拒、没带 ownKey 时拒（2026-11-16 第四条鱼）
+assert.equal(pathAllowed('pool/dm/lee__whale.jsonl', { ownKey: 'whale' }).ok, true)
+assert.equal(pathAllowed('pool/dm/whale__lee.jsonl', { ownKey: 'whale' }).ok, true)
+assert.equal(pathAllowed('pool/dm/lee__xiaoman.jsonl', { ownKey: 'whale' }).ok, false)
+assert.equal(pathAllowed('pool/dm/lee__xiaoman.jsonl', { ownKey: 'whale' }).why, 'other-dm')
+assert.equal(pathAllowed('pool/dm/lee__whale.jsonl').ok, false)
+assert.equal(pathAllowed('pool/dm/lee__whale.jsonl').why, 'dm-needs-own-key')
 })
 
 // ---------- 时间窗 / 冷却 / 额度 ----------

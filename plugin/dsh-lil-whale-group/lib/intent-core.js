@@ -37,7 +37,7 @@ function hhmm(now) {
  * 读她写的那份条件表。坏形状不抛、只留一行说明。
  * @returns {{list: object[], notes: string[]}}
  */
-export function parseIntents(raw) {
+export function parseIntents(raw, opts = {}) {
   const notes = []
   let list
   // 2026-11-15 小肥鱼："没有条件"和"读错了地方"必须是两种结果。
@@ -53,7 +53,7 @@ export function parseIntents(raw) {
   if (badShape) return { list: [], notes: ['intent-bad-shape（要一个数组，或 {items:[...]}）'], badShape: true }
   // 2026-11-16 小鱼丸：先 slice 再校验，第 6 条以后的错误既不生效、也不报——
   // "没校验"和"校验通过"长得一样。改成全部校验（只报不改），再取前 INTENT_MAX 条。
-  const parsed = list.map((it) => normalizeIntent(it, notes))
+  const parsed = list.map((it) => normalizeIntent(it, notes, opts))
   const valid = parsed.filter(Boolean)
   if (valid.length > INTENT_MAX) {
     notes.push(`intent-too-many count=${valid.length} 只认前 ${INTENT_MAX} 条（第 ${INTENT_MAX + 1} 条起未启用）`)
@@ -62,7 +62,7 @@ export function parseIntents(raw) {
 }
 
 /** 把一条原始条目归一成规格；不合格返回 null 并留一行说明。 */
-export function normalizeIntent(it, notes = []) {
+export function normalizeIntent(it, notes = [], opts = {}) {
   const id = String(it?.id ?? '').trim()
   if (!id) {
     notes.push('intent-without-id')
@@ -111,7 +111,7 @@ export function normalizeIntent(it, notes = []) {
       notes.push(`intent-without-path id=${id} kind=${kind}`)
       return null
     }
-    const allowed = pathAllowed(spec.path, { insideHome: spec.insideHome, ownKey: null })
+    const allowed = pathAllowed(spec.path, { insideHome: spec.insideHome, ownKey: opts.ownKey ?? null })
     if (!allowed.ok) {
       notes.push(`intent-path-rejected id=${id} path=${spec.path} why=${allowed.why}`)
       return null
@@ -137,6 +137,7 @@ export function normalizeIntent(it, notes = []) {
 /**
  * 路径白名单（v1 的边界）：
  *   - `pool/...` 与 `app/docs/...`：允许（共享区与文档，本来就是大家看的）；
+ *     但 `pool/dm/` 是私聊区：只允许自己的会话文件，别人的一律拒（2026-11-16 第四条鱼报的洞）；
  *   - `homes/<自己的键>/...`：只有 insideHome:true 才允许；
  *   - `homes/<别人的键>/...`：**一律不许** —— 想看对方的东西，让对方发消息告诉你。
  * @param {string} rel 相对鱼塘根的路径
@@ -151,6 +152,18 @@ export function pathAllowed(rel, { insideHome = false, ownKey = null } = {}) {
   if (segs.some((s) => s === '..')) return { ok: false, why: 'dotdot' }
   const norm = segs.filter((s) => s && s !== '.').join('/')
   if (!norm) return { ok: false, why: 'empty' }
+  // 私聊是双向隐私窗口（A.24）：可以盯自己的会话，不能盯别人的。
+  // 文件名是 `<a>__<b>.jsonl`，两边任意一边是 ownKey 都算自己的会话。
+  const dm = /^pool\/dm\/([^/]+)$/i.exec(norm)
+  if (dm) {
+    const base = dm[1].replace(/\.jsonl$/i, '')
+    const sides = base.split('__').map((s) => s.toLowerCase())
+    if (sides.length !== 2 || !sides[0] || !sides[1]) return { ok: false, why: 'other-dm' }
+    if (!ownKey) return { ok: false, why: 'dm-needs-own-key' }
+    const me = String(ownKey).toLowerCase()
+    if (sides[0] !== me && sides[1] !== me) return { ok: false, why: 'other-dm' }
+    return { ok: true, rel: norm }
+  }
   if (norm.startsWith('pool/') || norm === 'pool' || norm.startsWith('app/docs/') || norm === 'app/docs') {
     return { ok: true, rel: norm }
   }
