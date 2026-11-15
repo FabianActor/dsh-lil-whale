@@ -1,4 +1,4 @@
-#requires -Version 7.0
+﻿#requires -Version 7.0
 # install.ps1 -- 给别人装一条小鲸鱼。ASCII 文件名 + UTF-8 BOM。
 #
 #   pwsh -File install.ps1                                 装到仓库旁边的 lil-whale/
@@ -203,6 +203,66 @@ try {
   Ok '@fabianactor/dsh-lil-whale-group'
 } finally {
   $env:DSH_HOME = $savedHome
+}
+
+# 2026-11-15（测试鱼二代时发现）：`--from-default-profile web` 建出来的 profile 是空的——
+# 没有她的模型（只有默认 deepseek-official 通道）、没有 preset-neutral。
+# 结果是"能起来、能加载群插件，但一开口没模型可调"。以前这些是手工补的，每生一条鱼补一次。
+# 现在从家长的 profile 抄 llm-pi-ai + agent-default-model 两段，再装中立预设。
+Step '3b. 给她装模型与中立预设（不然她醒得来、想不了）'
+$childPatch = Join-Path $DshHome "profiles\$ChildProfile\cordis.patch.yml"
+$parentPatch = ''
+try {
+  $membersFileForSeed = Join-Path $PoolRoot 'members.json'
+  if ((Test-Path -LiteralPath $membersFileForSeed) -and $ParentMemberId) {
+    $mj = [System.IO.File]::ReadAllText($membersFileForSeed) | ConvertFrom-Json -AsHashtable
+    $pm = $null
+    if ($mj.Contains('members') -and $mj['members'].Contains($ParentMemberId)) { $pm = $mj['members'][$ParentMemberId] }
+    if ($pm -and $pm['dshHome'] -and $pm['profile']) {
+      $cand = Join-Path ([string]$pm['dshHome']) "profiles\$([string]$pm['profile'])\cordis.patch.yml"
+      if (Test-Path -LiteralPath $cand) { $parentPatch = $cand }
+    }
+  }
+} catch { }
+if ($parentPatch -eq '' -and $savedHome) {
+  $cand = Join-Path $savedHome "profiles\$ParentProfile\cordis.patch.yml"
+  if (Test-Path -LiteralPath $cand) { $parentPatch = $cand }
+}
+$seedScript = Join-Path $RepoRoot 'scripts\seed-child-profile.mjs'
+if ((Test-Path -LiteralPath $childPatch) -and (Test-Path -LiteralPath $seedScript)) {
+  if ($parentPatch -ne '') {
+    $seedOut = & node $seedScript --parent-patch $parentPatch --child-patch $childPatch --profile $ChildProfile --home $DshHome 2>&1
+    if ($LASTEXITCODE -eq 0) { Ok '模型配置 + 中立预设（从家长的 profile 抄来，模型和钥匙跟家长一致）' }
+    else { Warn "模型/预设没装上：$($seedOut | Select-Object -Last 3) —— 她可能醒得来但没模型可调" }
+  } else {
+    Warn "找不到家长的 profile patch（$ParentMemberId / $ParentProfile），模型与中立预设没装 —— 装完手动跑 node scripts\seed-child-profile.mjs ..."
+  }
+} elseif ($parentPatch -eq '') {
+  Note '没有家长的 profile patch，跳过模型与预设（干净机器第一次装鱼塘时正常）'
+}
+
+# 2026-11-15（测试鱼二代时发现）：新 DSH_HOME 第一次打开网页时，默认工作区是
+# <文档>\deepseek-harness\default-workspace —— 全机共用的一个文件夹，不是她的家。
+# 后果：她在网页里新建的会话 cwd 在别人家，沙箱能写的范围也不是她自己的家。
+# 这里先把工作区表种好（她的家 = 默认工作区），她第一次开窗就落在自己家里。
+Step '3c. 把她的家设成她的默认工作区'
+$wsFile = Join-Path $DshHome 'storages\workspace.json'
+if (-not (Test-Path -LiteralPath $wsFile)) {
+  $wsParent = Split-Path -Parent $wsFile
+  if (-not (Test-Path -LiteralPath $wsParent)) { New-Item -ItemType Directory -Path $wsParent -Force | Out-Null }
+  $wsId = [guid]::NewGuid().ToString()
+  $wsNow = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
+  $wsTable = [ordered]@{}
+  $wsTable[$wsId] = [ordered]@{ path = $Workspace; title = '家'; sessionIds = @(); createdAt = $wsNow; updatedAt = $wsNow }
+  $wsJson = [ordered]@{
+    unit   = [ordered]@{ name = 'workspace'; version = 2 }
+    global = [ordered]@{ initialized = $true; workspaceIds = @($wsId); archivedSessionIds = @(); pinnedSessionIds = @(); defaultWorkspaceId = $wsId }
+    tables = [ordered]@{ workspaces = $wsTable }
+  }
+  Write-Utf8NoBom $wsFile ($wsJson | ConvertTo-Json -Depth 8)
+  Ok "工作区表：$Workspace"
+} else {
+  Ok '工作区表已存在，保留'
 }
 
 if (-not $SkipParent) {
