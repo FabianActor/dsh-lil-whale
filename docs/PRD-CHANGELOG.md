@@ -6,7 +6,8 @@
 
 ## r123 — 2026-11-15 13:2x
 
-- **A.99 画笔：SVG 的「写 → 看 → 改」**：`homes\<鱼>\画\`（放画的抽屉，跟着她的家走）；`app\scripts\render-svg.ps1`（SVG → PNG，借本机 Edge 无头模式，不联网、不装依赖；`-In/-Out/-Width/-Height/-Bg/-Transparent`，成功一行 `ok …`、失败 `error:` + `NEXT:`）；纸里的「画画（SVG）」一节由 `draw-section.mjs` 按"她家里有没有 `画\`"决定出不出现。
+- **A.99 画笔：SVG 的「写 → 看 → 改」**：`homes\<鱼>\画\`（放画的抽屉，跟着她的家走）；`pool\tools\svg-render\render.mjs`（SVG → PNG，resvg 本地代码，不建 IPC、不联网；`scripts\setup-svg-render.ps1` 装；`-In/-Out/-Width/-Height/-Bg/-Transparent`，成功一行 `ok …`、失败 `error:` + `NEXT:`）；纸里的「画画（SVG）」一节由 `draw-section.mjs` 按"她家里有没有 `画\`"决定出不出现。
+- **渲染器当天换过一次**：先做的是 Edge 无头（宿主可用），但小肥鱼在沙箱里被 Chromium 的命名管道挡住（`platform_channel.cc:187 拒绝访问 0x5`），改成 **resvg**（`pool\tools\svg-render\render.mjs`，本地代码、不建 IPC；`scripts\setup-svg-render.ps1` 装，自带冒烟）。她实测一次出图。
 - **口径**：先给笔（零成本、文本可改、是她自己的笔），生图模型留第二步（他 2026-11-15 拍板"第一步：SVG，第二步：生图模型"）；不评分、不建素材库、不替她起题目。
 
 ## r122 — 2026-11-15 09:3x

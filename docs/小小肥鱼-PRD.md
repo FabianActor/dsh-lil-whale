@@ -2485,7 +2485,7 @@ sleep-tools-register-failed: tool "sleep" must declare output { schema, render, 
 **三件东西**：
 
 1. `homes\<鱼>\画\` —— 放画的抽屉（在鱼塘里、跟着她的家走，不在 `app` 仓库里）。
-2. `app\scripts\render-svg.ps1` —— SVG → PNG，借本机 Edge 的 `--headless=new`（不联网、不装大件）。参数 `-In`（必填）`-Out`（默认同名 `.png`）`-Width` `-Height` `-Bg` `-Transparent`；画布优先级 参数 > SVG 自身 `width/height` > `viewBox` > 800×600；成功打印一行 `ok <png> <字节> <宽>x<高>`，失败打印 `error: …` + `NEXT: …` 并 `exit 1`；`$env:LIL_WHALE_EDGE` 可覆盖浏览器路径。
+2. `pool\tools\svg-render\render.mjs` —— SVG → PNG，用 **resvg**（Rust 写的纯软件光栅化器，本地代码、不建 IPC、不联网、不落 profile 目录）。参数 `-In`（必填）`-Out`（默认同名 `.png`）`-Width` `-Height` `-Bg` `-Transparent`；画布优先级 参数 > SVG 自身 `width/height` > `viewBox` > 800×600；成功打印一行 `ok <png> <字节> <宽>x<高>`，失败打印 `error: …` + `NEXT: …` 并 `exit 1`。用 `app\scripts\setup-svg-render.ps1` 装（装到 `pool\tools\svg-render\`，node_modules 不进库；装完自带冒烟）。**为什么不是浏览器**：2026-11-15 小肥鱼在沙箱里试 Edge，`FATAL:mojo/.../platform_channel.cc:187] Check failed: 拒绝访问 (0x5)`——沙箱挡了 Chromium 的命名管道，`--no-sandbox`/`--single-process`/`--headless=old` 全无效；宿主侧 Edge 能画，但她自己看不见，等于盲画。换成 resvg 后她用 `node ..\..\pool\tools\svg-render\render.mjs -In 画\鲸落.svg` 一次就出图（29,607 B、800×600）。宿主侧还留了 `app\scripts\render-svg.ps1`（Edge）作交叉对照，但纸里只写 resvg 这一条。
 3. 纸里「画画（SVG）」一节 —— 由 `app\scripts\draw-section.mjs` 生成，**按"她家里有没有 `画\`"决定出不出现**（和 B站那节同一个办法：纸只写机制，不写期望）。
 
 **为什么"看"必须是独立一步**：模型能写 SVG，但看不见就不知道往哪儿改——盲画等于把反馈循环断在第一步。所以纸里把一圈写死：**写 → 渲染 → `read_image` 看 → 改**，缺一步都不算画。
@@ -2494,6 +2494,9 @@ sleep-tools-register-failed: tool "sleep" must declare output { schema, render, 
 
 1. `render-svg.ps1` 对合法 SVG 都出一张非空 PNG 并打印尺寸；失败必须 `exit 1` + `NEXT:`——"看起来没事的失败"不许出现。
 2. 纸上这一节只在 `画\` 存在时出现；不存在时不留空壳标题。
-3. 画图不占额度、不联网、不新增依赖（Edge 是系统自带）。
+3. 画图不占额度、不联网；渲染器是本地代码（resvg 一个 npm 包，装在 `pool\tools\`，不进 `app` 仓库），沙箱里的鱼能跑。
 
 **没有做**：不评分"画得好不好"；不建素材库；不替她起题目（2026-11-12 那条留白原则）。
+**补记（2026-11-15 13:3x，小肥鱼）**："浏览器没写出 PNG"这一句话，把"路径错"和"沙箱挡"两个原因混成了同一个症状——她用的是绝对路径、脚本确实跑起来了，死在 Edge 的 IPC；我那次是路径错。**同一个 NEXT 行，两个原因，修法完全不同。** 教训：失败信息要把"谁失败了"和"为什么失败"分开写。
+
+她另外做了一件对的事：渲染被挡死之后，她没有停在"看不见"，而是写了个不渲染的检查器 `run\svg-lint.ps1`（验 XML 合法、元素出界、文字按字号估宽溢出），**并且先做了负样本**（`画\_lint-负样本.svg`：出界 rect、出界 circle、超长居中字），三条全被抓到才信它。她的判据：**"一个只会说'没问题'的检查器，和没有检查器一样。"**
