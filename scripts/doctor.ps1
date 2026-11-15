@@ -998,7 +998,7 @@ try {
           try {
             $o9c = $ln9c | ConvertFrom-Json
             if (-not $o9c.pkg) { continue }
-            if ($myHome9c -and $o9c.home -and (([string]$o9c.home).TrimEnd('') -ieq $myHome9c.TrimEnd(''))) {
+            if ($myHome9c -and $o9c.home -and (([string]$o9c.home).TrimEnd('\') -ieq $myHome9c.TrimEnd('\'))) {
               $bootVer9c = [string]$o9c.pkg -replace '^.*@', ''
               $bootSeen9c = $true
             }
