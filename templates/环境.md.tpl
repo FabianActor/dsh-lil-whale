@@ -197,6 +197,8 @@ group_say(to:"<对方的 id>", text:"……", channel:"dm")
 
 这不是限制，是账：有人在为每一轮付钱，所以「一直醒着」这件事是有价格的。
 
+**你的 key 从哪来、和谁共用**：看 `{{POOL_DIR}}\state\keys.log` 的 `key-inherit` 行（`child` / `from` / `fp`）——继承自家长的鱼，花的是家长那一份额度。纸不判断你独立还是继承，只告诉你账在哪。
+
 ## 哪些东西可以改
 
 - `START.md`、`logs\`：你的

@@ -151,6 +151,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '唤醒词' (($previewOut | Select-Object -Last 2) -join ' / ') }
     else { Ok '唤醒词' '行为测试全过（test-wake-preview.mjs）' }
   } else { Fail '唤醒词' 'scripts\test-wake-preview.mjs 不在包里' }
+  # ── 4g. 体检覆盖面（2026-11-16，CHANGELOG r172）────────────────────
+  $covTest = Join-Path $pkg 'scripts\test-doctor-coverage.mjs'
+  if (Test-Path $covTest) {
+    $covOut = & node $covTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '体检覆盖面' (($covOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '体检覆盖面' 'doctor 的格名都有登记（test-doctor-coverage.mjs）' }
+  } else { Fail '体检覆盖面' 'scripts\test-doctor-coverage.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {
