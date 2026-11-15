@@ -327,9 +327,9 @@ if (-not (Test-Path -LiteralPath $wakeConfigJs)) {
       if (-not $cfgRel) { continue }
       $cfgPath = if ([System.IO.Path]::IsPathRooted($cfgRel)) { $cfgRel } else { Join-Path $Cfg.Root $cfgRel }
       if (-not (Test-Path -LiteralPath $cfgPath)) { continue }
-      try { $cfg = Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json } catch { continue }
+      try { $fishCfg = Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json } catch { continue }
       foreach ($section in @('wake', 'watch')) {
-        $sec = $cfg.$section
+        $sec = $fishCfg.$section
         if ($null -eq $sec) { continue }
         foreach ($p in $sec.PSObject.Properties) {
           if ($p.Name -like '_*') { continue }
