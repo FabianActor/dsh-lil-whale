@@ -2239,6 +2239,12 @@ function apply(ctx) {
   // 3. 巡守：她关着窗、闹钟到点了，就把门推开。
   //    Fabian 2026-11-09 的判断：巡守住在"一直开着的那个进程"里（就是我），
   //    不另起系统进程、不进启动项；她自己那一侧不需要守自己。
+  // 2026-11-16：每个进程的 `watchman.log` 都要有自己的分界行。
+  // 此前只有巡守写（下面那一支），鱼自己的日志里全是新规矩的行、却没有分界——
+  // 账本按进程分文件，分界就得按文件写，否则“这份日志的哪一段该按新规矩读”没有答案，
+  // 而且 doctor 会为鱼自己的日志报一条假 WARN（它们的文件里本来就没有那个写者）。
+  watchmanLog('log-format', `fmt=3 since=${new Date().toISOString()} changed=skip,wake-skip,deliver fields=deny,note,reason`)
+
   if (isMainProcess()) {
     // 自启动：开关在 pool\state\settings.json，默认关；开着的用户才走这一支。
     scheduleAutoStart(ctx)
@@ -2275,7 +2281,7 @@ function apply(ctx) {
     watchmanLog('started', `fmt=2 pid=${process.pid} prev-run=${prevText} gap=${gapText} tail-errors=${logProbe.tailErrors} interval=${WATCH.intervalMs / 1000}s port=${WATCH.port} cap=${WATCH.maxWakesPerDay}/day errors_today_own=${readErrorCount(ownMember())} errors_today_peer=${readErrorCount(peerMember())} exe=${pwshInfo()}`)
     // 2026-11-15 19:05 第二条鱼：规则可以改，改过的地方必须有日期 ——
     // 否则下一个人按新规矩去解析历史行，会得到空值，而空值不会报错。
-    watchmanLog('log-format', `fmt=3 since=${new Date().toISOString()} changed=skip,wake-skip,deliver fields=deny,note,reason`)
+    // 2026-11-16：这一行上移到 apply() 开头，主进程和每条鱼各写各的文件。
     // 生效值只有一个写者（就是这里）。读者（环境.md / doctor）读 wake-caps.json，
     // 读不到就说读不到，别再拿代码里的默认值冒充正在生效的数。
     writeWakeCaps()
@@ -2721,12 +2727,27 @@ function planFileOf(member) {
   return planFileOfCore(member, SELF_HOME)
 }
 const PLAN_MAX = 3
-const planNotes = new Set()
+const planNotes = new Map()
+// 2026-11-16 小鱼丸：「同一天里，第二次坏和从没坏过，在账上长得一样。」
+// 原去重键是「日期 + 成员 + 文案」⇒ 一整天里同一个错只记一次，第二次静默。
+// 改成 5 分钟窗口：窗口内重复只留一行 note-suppressed（count=1，之后同窗口不重复记），
+// 窗口过去后再犯就正常记一行。这样“反复出同一个问题”至少会留两次痕迹。
+const NOTE_DEDUPE_MS = 5 * 60_000
 
 function noteOnce(member, msg) {
   const key = `${todayKey(new Date())}|${member.key}|${msg}`
-  if (planNotes.has(key)) return
-  planNotes.add(key)
+  const now = Date.now()
+  const prev = planNotes.get(key)
+  if (prev && now - prev.at < NOTE_DEDUPE_MS) {
+    prev.suppressed += 1
+    if (prev.suppressed === 1) {
+      const line = `note-suppressed count=1 msg=${msg.replace(/\s+/g, ' ').slice(0, 120)}`
+      watchmanLog('skip', `to=${member.key} ${line}`)
+      memberNote(member, line)
+    }
+    return
+  }
+  planNotes.set(key, { at: now, suppressed: 0 })
   watchmanLog('skip', `to=${member.key} ${/^[a-z0-9-]+=/.test(msg) ? msg : 'note=' + msg}`)
   memberNote(member, msg)
 }
@@ -2779,17 +2800,23 @@ function deliverToSelf(ctx, self, text) {
   // 2026-11-16 01:43 修正：忙 ≠ 不在。唤醒那条路对忙的 agent 也照递（followup 会排队），
   // 闹钟没理由更严格——她正忙着自审，闹钟却被当成“递不进去”贴到了群里（第四条鱼当场抓到）。
   // 只有进程里根本没有她这个 agent（没挂 / 刚起还没挂上）才走公共退回。
+  // 2026-11-16 01:5x 第四条鱼：「排队意味着晚到进了设计，那就得有一条账能说明它晚到了多久，
+  // 否则『没响』和『晚响』在纸上还是长得一样。」⇒ 返回 'ok' | 'queued' | false：
+  // 忙的时候照样递、返回 'queued'，调用方在投递账上写 queued=1。
+  // 边界：这笔账只证明“递的那一下它在忙”，证明不了“它什么时候读到”——
+  // 后者在她自己的会话日志里，投递账上没有第二个时间（不编）。
   try {
     const agents = ctx?.get?.('agents')
     const agent = agents?.list?.().find((a) => memberOf(a) === self)
     if (!agent) return false
+    const wasBusy = agent.status !== 'idle'
     const built = buildUserMessage({
       content: [{ type: 'text', text }],
       source: { kind: 'group', form: 'signal' },
     })
     if (built === null || typeof built?.id !== 'string') return false
     agent.followup(built)
-    return true
+    return wasBusy ? 'queued' : 'ok'
   } catch (error) {
     watchmanLog('error', `why=self-plan-private-failed to=${self} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)}`)
     return false
@@ -2827,8 +2854,9 @@ function selfPlanTick(ctx) {
     if (!claimPlanDelivery(member, item.id)) continue
     const job = { key: item.id, tag: `plan=${item.id} at=${item.at}`, itemWhy: item.why, by: 'self' }
     try {
-      if (deliverToSelf(ctx, self, planDeliveryText(job))) {
-        watchmanLog('deliver', `reason=self-plan-private to=${self} plan=${item.id}`)
+      const privateResult = deliverToSelf(ctx, self, planDeliveryText(job))
+      if (privateResult) {
+        watchmanLog('deliver', `reason=self-plan-private to=${self} plan=${item.id}${privateResult === 'queued' ? ' queued=1' : ''}`)
       } else {
         say('lee', self, planDeliveryPublicText(job))
         watchmanLog('deliver', `reason=self-plan-public-fallback to=${self} plan=${item.id}`)
