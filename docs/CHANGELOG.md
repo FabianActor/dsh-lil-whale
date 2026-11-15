@@ -22,6 +22,8 @@
 - **验证**：基线 `OK（FAIL×0 / WARN×0）`、exit 0；删 `Add-Row '名册自检'` ⇒ 1 行 FAIL「整族消失……没有新名字出现」、`FAIL×1`、exit 1；改名 `版本一致`→`版本一致X` ⇒ 1 行 FAIL「像是改名」、exit 1；删整格 + 加一个陌生新格 ⇒ `WARN 整族消失（同时出现了 1 个新名字……可能是改名，需人判）` + `FAIL 新格未登记`、exit 1；还原基线 OK。`doctor` 真实运行：whale `OK 有分界行`、fishball/xiaoman `INFO 进程还是旧代码（启动 1.6.36，分界写者自 1.6.39 起才有）`；只给 fishball 伪造一条 `pkg=1.6.41` 的启动行 ⇒ fishball `WARN 带分界的代码却没有 log-format 行`、xiaoman 仍 INFO；恢复后 `plugin-boot.log` 78,113 B 逐字相同。
 - **补记（第四条鱼 #733，字符级）**：上面那段 `TrimEnd` 曾写成 `TrimEnd('')`——引号里是空集。`.NET` 里 `TrimEnd` 的参数是"要裁的字符集"，空集等于**不裁**（它不是 `Trim()`；`Trim()` 才去空白），所以两边只要有一边带尾反斜杠，`-ieq` 就不成立 ⇒ 走进"这一家还没有启动痕迹"那支，报一个**假的第三种状态**。已改成 `([string]$o9c.home).TrimEnd('\') -ieq $myHome9c.TrimEnd('\')`；实测：`'D:\x\homes\fishball\dsh-home\'` 与 `'D:\x\homes\fishball\dsh-home'` 旧写法 false、新写法 true。判据：''`TrimEnd` 的参数是要裁的字符集，空集等于不裁；长得像 `Trim()` 但它做的事不一样''。
 
+- **补记 2（第一条鱼 #741，反证成立一半）**：`homes\whale\logs\watchman.log` 里 19:38:59 / 20:20 / 21:07 / 21:55 / 23:06 / 01:34:55 有六行 `log-format`，而 01:34:55 那个进程的启动行是 `pkg=…@1.6.36` ⇒ "写者自 1.6.39 起才有"这句话不准确。真实结构：写者一直存在，但 1.6.39 之前只有巡守写、且巡守的 `selfHome` 是 `homes\whale`（`index.js:171-173`：`SELF_HOME = CFG.selfHome`、`WATCHMAN_LOG = join(SELF_HOME, 'logs', 'watchman.log')`），所以它只写第一条鱼那份；1.6.39 起 `index.js:2246` 在 `apply()` 开头写、不再只在 `isMainProcess()` 分支里（分支在 2248 行）⇒ **每个进程往自己的 `selfHome\logs\watchman.log` 写自己那份**。结论：鱼丸/小满的 INFO 仍是真的"还没到"，重启后各自写一份会变 OK；"只有一个写者、重启多少次都不会变"不成立。文案改成"1.6.39 起才每个进程各写自己那份"，判据不变。
+
 - 判据：''"写者在不在"绑的是"写者引入的那一刻"的版本，不是"任一版本差"''；''数字本身不会说话，注解会''；''结论必须由明细聚合，且末行里的数要等于明细行数''。
 
 ## r176 — 2026-11-16 02:1x
