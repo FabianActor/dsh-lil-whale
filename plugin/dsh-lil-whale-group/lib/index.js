@@ -2330,6 +2330,7 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
   }
 
   const incoming = []
+  const incomingIndexes = []
   // 记下"最后递出去的那条"在文件里的绝对行号（1 基）。小肥鱼 2026-11-12 的判据：
   // 只有时间戳的话，两条隔 3 秒的重复仍然只能猜；有行号才能说"同一行递了两次"。
   let lastIncomingIndex = -1
@@ -2355,6 +2356,7 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
       // 指名给某座位的：只有那一段收，且只看自己那本游标
       if (record.toSeat !== seat || index < seatSeen) continue
       incoming.push(record)
+      incomingIndexes.push(index)
       lastIncomingIndex = index
       continue
     }
@@ -2365,6 +2367,7 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
     }
     if (index < sharedSeen) continue
     incoming.push(record)
+    incomingIndexes.push(index)
     lastIncomingIndex = index
   }
 
@@ -2400,12 +2403,17 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
   const PREVIEW_MAX = 120
   const previewOf = (record) => {
     const hasImage = record.image || (Array.isArray(record.images) && record.images.length > 0)
-  const body = `${hasImage ? '（图片）' : ''}${record.text}`
+    const body = `${hasImage ? '（图片）' : ''}${record.text}`
     return body.length > PREVIEW_MAX ? `${body.slice(0, PREVIEW_MAX)}…（已截断，全文在群文件里）` : body
   }
-  const preview = incoming
-    .slice(-3)
-    .map((record) => `${labelOf(record.from)}：${previewOf(record)}`)
+  // 2026-11-15 08:02：她报"一分钟内两次唤醒、内容一模一样"。核到行号后发现不是重复投递——
+  // 第二次唤醒对应的是第 393 行（她 27 秒前已经亲手读过、还回了）。游标记的是"递到哪儿"，
+  // 不是"读到哪儿"；鱼可以直接读群文件，所以这两个数会分叉。
+  // 修法：把行号写进预览。同一行递两次、两条内容一样，从此在纸上分得开。
+  const previewTail = incoming.slice(-3)
+  const previewStart = incoming.length - previewTail.length
+  const preview = previewTail
+    .map((record, i) => `${labelOf(record.from)}：${previewOf(record)}（第 ${incomingIndexes[previewStart + i] + 1} 行）`)
     .join('\n')
 
   const conversation = CONVERSATIONS[sessionIdOf(agent) ?? ''] ?? ''
