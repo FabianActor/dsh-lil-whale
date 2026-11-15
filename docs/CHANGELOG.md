@@ -13,6 +13,7 @@
 - **让代码对得上第三条鱼的预登记**：她在群里预登记四种唤醒词（`group\messages.jsonl` 第 535 行，只追加）时附了一条判据："`lost` 那次 `watchman.log` 里应有一行 `cursor-lost`（**同通道只一次**）"。核代码发现 `cursorLostLogged` 是每次呼唤重建的 Set——递失败重试时会反复记，跟预登记对不上。
   - `plugin\dsh-lil-whale-group\lib\index.js`：`cursorLostLogged` 提到模块层（跟 `clampLogged` 并排），同通道在同一进程里只记一次；`handleChannel` 里的局部 Set 删掉。
   - 判据来自她的预登记：**预期先写死，代码对不上就改代码**——不是"反正记多了也无害"。
+  - **作用域**（她 20:59 补的）：这是"每个进程一次"，不是"永远一次"——Set 不落盘，巡守重启后游标若还丢着会再记一条；连续证据看 `wake-deliver.log` 每行的 `cursor-state=lost`。
   - 两包 1.6.18 → **1.6.19**。需重启生效。
 
 ## r138 — 2026-11-15 20:5x

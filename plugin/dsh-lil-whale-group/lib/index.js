@@ -2439,8 +2439,10 @@ async function tick(ctx) {
  */
 // 夹游标只留痕一次，免得每 60 秒刷一行。
 const clampLogged = new Set()
-// 游标丢过一次就记一行（同通道在同一进程里只记一次）——第三条鱼 20:5x 的预登记里写着这个预期，
-// 原来的写法是每次唤醒重建 Set，递失败重试时会反复记，跟预登记对不上。
+// 游标丢过一次就记一行 —— 第三条鱼 20:5x 的预登记里写着"同通道只一次"，原来的写法是
+// 每次唤醒重建 Set，递失败重试时会反复记。她后来补了作用域：**这里兑现的是"每个进程一次"，
+// 不是"永远一次"** —— Set 不落盘，巡守重启后游标若还丢着，同一通道会再记一条；
+// 连续证据看 wake-deliver.log 每行的 cursor-state=lost。
 const cursorLostLogged = new Set()
 
 function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
