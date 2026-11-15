@@ -349,8 +349,15 @@ if (existsSync(DM_DIR)) {
     for (const hunk of hunks) {
       for (const i of hunk.del.slice(0, 2)) console.log(`  现有: ${String(a[i]).slice(0, 90)}`)
       for (const j of hunk.ins.slice(0, 2)) console.log(`  重建: ${String(b[j]).slice(0, 90)}`)
+      // 2026-11-16：纯新增（只有插入、没有删除）属于"新增记录还没投影"，和群投影同一条规矩。
+      // 手工追加的私聊（宿主脚本直接 append jsonl）不会顺带写投影，以前会让 --write 永远
+      // 卡在 dmUnexplained > 0 上——可读投影一直停在旧的一版。
+      if (hunk.del.length === 0 && hunk.ins.length > 0) {
+        console.log('  归类: 已知 —— 新增记录还没投影（纯插入）')
+        continue
+      }
+      dmUnexplained += 1
     }
-    dmUnexplained += hunks.length
   }
 }
 if (dmUnexplained > 0) process.exitCode = 1
