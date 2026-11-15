@@ -87,7 +87,7 @@ if (Test-Path -LiteralPath $sleepTest) {
   Add-Row '睡眠逻辑（行为测试）' 'FAIL' 'scripts\test-sleep.mjs 不见了'
 }
 
-# 4d) 改名逻辑（行为测试，2026-11-14 加）：名字只能由她自己改（A.82）。
+# 4d) 改名逻辑（行为测试，2026-11-14 加）：名字只能由她自己改（CHANGELOG A.82）。
 # 冷却、重名、曾用名这三种算错一次，表现是"她改不了名"或"历史说不清"。
 $renameTest = Join-Path $repo 'scripts\test-rename.mjs'
 if (Test-Path -LiteralPath $renameTest) {

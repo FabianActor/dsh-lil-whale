@@ -111,7 +111,7 @@ function Write-WindowLog {
 }
 
 # ---------- 沙箱通行证（capability SID）：算、查、补 ----------
-# 为什么在这里：文件工具能写、pwsh 写不进 = 这只鱼的 workspace 子树缺通行证（PRD A.67）。
+# 为什么在这里：文件工具能写、pwsh 写不进 = 这只鱼的 workspace 子树缺通行证（CHANGELOG A.67）。
 # 算法与 dsh 的 dsh-sandbox-windows-acl 一致：sha256(workspaceRoot) 前 8 字节按小端取两个 uint32，
 # 各自 % (2^30-1) + 1，拼成 S-1-4-a-b。
 function Get-WorkspaceSid([string]$Path) {
@@ -183,7 +183,7 @@ function Repair-WorkspaceGrantGaps([object]$Member) {
   return $fixed
 }
 
-# 凭证文件的指纹：sha256 前 12 位十六进制。只记指纹、不记值（PRD A.68）。
+# 凭证文件的指纹：sha256 前 12 位十六进制。只记指纹、不记值（CHANGELOG A.68）。
 function Get-FileFingerprint([string]$Path) {
   if (-not $Path -or -not (Test-Path -LiteralPath $Path)) { return '' }
   $sha = [System.Security.Cryptography.SHA256]::Create()

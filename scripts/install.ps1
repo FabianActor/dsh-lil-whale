@@ -150,7 +150,7 @@ foreach ($d in @($Workspace, (Join-Path $Workspace 'logs'), (Join-Path $Workspac
 }
 Ok "建好了她家的目录和共享区（$PoolRoot）"
 
-# 她家里只放两个 Junction：group / state 的真身在共享区（PRD A.22）。
+# 她家里只放两个 Junction：group / state 的真身在共享区（CHANGELOG A.22）。
 # 为什么不是真目录：群和账本是共享的，第二条鱼出现时，第二条的群文件写进第一条的家就是越界。
 foreach ($link in @('group', 'state')) {
   $path = Join-Path $Workspace $link
@@ -368,7 +368,7 @@ try { $gi = Get-Item -LiteralPath $groupPath -ErrorAction Stop; if ($gi.LinkType
 $poolGroup = Join-Path $PoolRoot 'group'
 if ($sharedGroup) {
   # 共享区：只补缺、绝不覆盖。新池子第一次装的时候 messages/pins 谁都没建过 ——
-  # 这里是唯一的创建机会；但已有内容一个字都不能动（A.29 那次把整份名册抹掉就是"初始化"干的）。
+  # 这里是唯一的创建机会；但已有内容一个字都不能动（CHANGELOG A.29 那次把整份名册抹掉就是"初始化"干的）。
   $poolMsg = Join-Path $poolGroup 'messages.jsonl'
   $poolPins = Join-Path $poolGroup 'pins.json'
   $pinsPath = $poolPins
@@ -404,7 +404,7 @@ if ($sharedGroup) {
 }
 
 # 名册（pool\members.json）：干净安装时谁都没建过，这里补一份最小名册 ——
-# 不生成它的话，面板/群会退回"内置三条"，新装的鱼在设置页和 @ 面板里看不见（A.32 那个病）。
+# 不生成它的话，面板/群会退回"内置三条"，新装的鱼在设置页和 @ 面板里看不见（CHANGELOG A.32 那个病）。
 $membersPath = Join-Path $PoolRoot 'members.json'
 if (-not (Test-Path $membersPath)) {
   $nowIso = (Get-Date).ToString('o')
@@ -431,7 +431,7 @@ if (-not (Test-Path $membersPath)) {
 } else {
   # 名册已存在（鱼塘里已经有别的鱼）：把这条新鱼加进去，别让用户再手跑一次。
   # 2026-11-13 17:0x 修：原来这里只打印"用 members-add.mjs"，装第二条鱼时新鱼不在名册里，
-  # fish.ps1 认不出它、面板里也看不见（A.32 同族）。
+  # fish.ps1 认不出它、面板里也看不见（CHANGELOG A.32 同族）。
   $membersAdd = Join-Path $RepoRoot 'scripts\members-add.mjs'
   if (Test-Path $membersAdd) {
     $addArgs = @($membersAdd, '--key', $childMember, '--name', $ChildName, '--parent', $ParentMemberId,
@@ -460,7 +460,7 @@ if (Test-Path -LiteralPath $genFamily) {
 $planPath = Join-Path $Workspace 'plan\wake-plan.json'
 if (-not (Test-Path $planPath)) { Write-Utf8NoBom $planPath "[]`n"; Ok 'plan\wake-plan.json（空的：她现在没有任何固定日程）' }
 
-# 睡眠作息（PRD A.73）：默认 00:00–08:00，她可以自己改；家长可以强行叫醒。
+# 睡眠作息（CHANGELOG A.73）：默认 00:00–08:00，她可以自己改；家长可以强行叫醒。
 # 判断逻辑只在 sleep-core.js 一份实现里 —— 这里只负责种文件，不自己算窗口。
 $sleepCli = Join-Path $RepoRoot 'scripts\sleep-cli.mjs'
 $sleepSeedKey = $childMember

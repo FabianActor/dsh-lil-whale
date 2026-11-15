@@ -12,7 +12,7 @@
 | --- | --- |
 | `Run All Whales.cmd` —— 起整个鱼塘（主 dsh 开窗、其余后台） | `Stop All Whales.cmd` —— 关整个鱼塘（先鱼后主） |
 
-> 2026-11-14 删了 `Run DSH.cmd` / `Stop DSH.cmd`：鱼活不过主进程（PRD A.76），"只起主 dsh"就是空鱼塘，和 `Run All Whales.cmd` 已经不是两件事。要调试空鱼塘用 `pwsh -File scripts\fish.ps1 up-main`。
+> 2026-11-14 删了 `Run DSH.cmd` / `Stop DSH.cmd`：鱼活不过主进程（CHANGELOG A.76），"只起主 dsh"就是空鱼塘，和 `Run All Whales.cmd` 已经不是两件事。要调试空鱼塘用 `pwsh -File scripts\fish.ps1 up-main`。
 
 **为什么从九个删到四个**（删了 `Run DSH-Check` / `Run All Whales-Check` / `Run lil whale-Check` / `Stop lil whale` / `Run lil whale`）：
 
@@ -32,7 +32,7 @@
 
 ## 底层
 
-所有入口最后都走 `scripts\fish.ps1`（2026-11-12 统一，见 PRD A.26）：
+所有入口最后都走 `scripts\fish.ps1`（2026-11-12 统一，见 CHANGELOG A.26）：
 
 ```
 pwsh -File scripts\fish.ps1 list                 # 名册 + 端口 + 心跳
@@ -42,9 +42,9 @@ pwsh -File scripts\fish.ps1 up-main / down-main  # 主 dsh（down-main 先把鱼
 pwsh -File scripts\fish.ps1 doctor | refresh <鱼|all>
 pwsh -File scripts\fish.ps1 maintain / restore <鱼>   # 检修：先停无人值守、开一扇窗；看完关窗再 restore
 pwsh -File scripts\fish.ps1 new -Key <键> -Name <名字> -Parent <父辈键> [-DryRun]   # 养一条新鱼（只由人跑）
-pwsh -File scripts\fish.ps1 key grant -Key <孩子键> -From <家长键>                 # 给钥匙（只由人跑，PRD A.65）
+pwsh -File scripts\fish.ps1 key grant -Key <孩子键> -From <家长键>                 # 给钥匙（只由人跑，CHANGELOG A.65）
 pwsh -File scripts\fish.ps1 key revoke -Key <孩子键>                               # 停用那份钥匙
-pwsh -File scripts\fish.ps1 acl-check / acl-repair <鱼|all>  # 沙箱通行证自检 / 补齐（PRD A.67）
+pwsh -File scripts\fish.ps1 acl-check / acl-repair <鱼|all>  # 沙箱通行证自检 / 补齐（CHANGELOG A.67）
 ```
 
 `launch.ps1` / `stop.ps1` / `start-whale.ps1` / `watchman.ps1` 已在 2026-11-13 归档到 `archive\legacy-scripts-2026-11-13\`——同一个动作只留一个入口，新东西请直接写 `fish.ps1`。

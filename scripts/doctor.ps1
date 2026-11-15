@@ -469,7 +469,7 @@ if (Test-Path -LiteralPath $envTemplate) {
   }
 }
 
-# 4e. writer 唯一：一段会话只能一个进程写（PRD A.47）
+# 4e. writer 唯一：一段会话只能一个进程写（CHANGELOG A.47）
 #     两个进程各自 resume 同一段会话，第二个会拿到 session/writer-held —— 它不会炸 host，
 #     但会静默地"起不来"，看起来像"点了唤醒没反应"。判据两样：
 #       ①同一个 profile 出现两个以上 node 进程（进程级的抢写）；
@@ -557,7 +557,7 @@ if ($lastBoot) {
 
 # 5b. 版本一致：启动痕迹说的版本，必须和磁盘上那份 package.json 一样
 #     （11-12 踩过：PKG_VERSION 写死 '1.0.0'，而代码已是 1.1.0。我当时正拿这行判断"新代码有没有生效"——
-#      它说了假话，而假话跟真话长得一样。A.17 之后版本号只有 package.json 一个出处，这里就核这一条。）
+#      它说了假话，而假话跟真话长得一样。CHANGELOG A.17 之后版本号只有 package.json 一个出处，这里就核这一条。）
 if ($lastBoot) {
   try {
     $bootObj = $lastBoot | ConvertFrom-Json
@@ -635,7 +635,7 @@ if (Test-Path -LiteralPath $closeLog) {
   Add-Row '窗口留痕' 'WARN' 'logs\close.log 不存在（开门/关门的账还没记过：fish.ps1 只在真开窗/真停时才记 open/close）'
 }
 
-# 8e. 沙箱通行证 & 钥匙指纹（2026-11-14 A.67 / A.68）
+# 8e. 沙箱通行证 & 钥匙指纹（2026-11-14 CHANGELOG A.67 / CHANGELOG A.68）
 #     "文件工具能写、pwsh 写不进"= 这只鱼的 workspace 子树缺 capability SID；
 #     "人从 UI 改了 key"不会进 keys.log —— 只能靠指纹对一下，报出来但不拦（换 key 是正常操作）。
 try {

@@ -19,7 +19,7 @@
 | Windows | 启动与巡守脚本是 `.ps1` / `.cmd`；其它平台要自己接入口 |
 | **PowerShell 7（`pwsh`）** | **必需的运行时依赖**，不是系统自带的 Windows PowerShell 5.1。脚本用了 7 才有的语法，5.1 会在**解析阶段**就报错 |
 | DeepSeek Harness | `npm i -g @deepseek-ai/dsh`（0.2.x） |
-| 两把 API key | 你一把、她一把。她可以自己去平台申请。**共不共用只能由人决定**：默认各用各的，要共用得人明确说（继承要显式传 `-InheritKey`，见 PRD A.65） |
+| 两把 API key | 你一把、她一把。她可以自己去平台申请。**共不共用只能由人决定**：默认各用各的，要共用得人明确说（继承要显式传 `-InheritKey`，见 CHANGELOG A.65） |
 | 一台不常关的电脑 | 她不是持续运行的；不叫醒时她不存在 |
 
 **装 PowerShell 7**（一次就够）：
@@ -45,7 +45,7 @@ pwsh -File scripts\install.ps1
 
 它会做：建目录、给她建独立 `DSH_HOME` 与 profile、把两个插件装进对应 profile、写 `lil-whale.config.json`、放种子文件（`START.md` / `环境.md` / `AGENTS.md`，**没有性格、没有开场白**）。
 
-它**不会**做：填 API key、建会话、写第一句话。这三件必须由人来。**API key 只有两种来法：人填，或人明确说继承**——脚本从不自己找 key（PRD A.65 死命令）。
+它**不会**做：填 API key、建会话、写第一句话。这三件必须由人来。**API key 只有两种来法：人填，或人明确说继承**——脚本从不自己找 key（CHANGELOG A.65 死命令）。
 
 常用参数：
 
@@ -93,7 +93,7 @@ pwsh -File scripts\fish.ps1 new -Key xiaoxing -Name 小星星 -Parent whale
 
 - **键**：小写字母开头，只能小写字母/数字/短横线，2–16 位（Windows 不区分大小写，大写会撞）。
 - **名字**：中英文都行，16 个字以内；群里靠它认人。
-- **API key 只有两种来法，都由你决定**（PRD 附录 A.65）：在她自己的网页里填，或者你明确说"继承某条鱼的"——
+- **API key 只有两种来法，都由你决定**（PRD 附录 CHANGELOG A.65）：在她自己的网页里填，或者你明确说"继承某条鱼的"——
   `pwsh -File scripts\fish.ps1 key grant -Key xiaoxing -From whale`（花的是 whale 的额度；回收用 `key revoke`）。
 - 新鱼出生后还要三步：`fish.ps1 maintain <键>` 开窗填 key → 群里说第一句话 → `fish.ps1 restore <键>` 回无人值守。
 - 实验鱼（`status: experiment`）也能当家长，但归档时会连同孩子一起归档（`archive-fish.mjs --subtree`）。
@@ -225,8 +225,8 @@ pwsh -File scripts\fish.ps1 doctor       # 体检
 - **@ 菜单只列鱼**（人类不在里面）。同一条鱼真的有好几段会话时，才会多出「名字 · 座位号」的行 —— 一段就是常态，不列。
 - **私聊列表里每条鱼都有一行**，哪怕还没聊过；点进去就是新对话。
 - **群聊页没有「成员名单」这一栏**：成员体现在 @ 菜单、私聊列表、设置页里。
-- **她能读到小肥鱼的文件**：两条鱼同一个 Windows 账户，DSH 的沙箱只限制「写」，读没有按路径限制。边界靠规矩，不靠机制（见 PRD A.31）。
-- **新鱼第一次开窗可能弹一次提权**：新文件夹缺沙箱要的文件权限，允许一次即可（见 PRD A.30）。
+- **她能读到小肥鱼的文件**：两条鱼同一个 Windows 账户，DSH 的沙箱只限制「写」，读没有按路径限制。边界靠规矩，不靠机制（见 CHANGELOG A.31）。
+- **新鱼第一次开窗可能弹一次提权**：新文件夹缺沙箱要的文件权限，允许一次即可（见 CHANGELOG A.30）。
 - **账本里的 `fmt=` 是版本号，不是格式**：`fmt=1` 的时间戳是 UTC（旧），`fmt=2` 是本地时间并带口径字段；两版会长期并存，旧行不该被当成新行读。每个账本自己数自己的 `fmt`——完整登记表在 [docs/账本.md](docs/账本.md)。
 - **名册改动要重启才生效**：`members.json` 是进程启动时读一次 —— 加完鱼、改完名，重启 3080。加鱼之后先跑 `pwsh -File scripts\fish.ps1 doctor`，看「名册（全鱼）」是不是每条鱼都有会话。
 
@@ -344,7 +344,7 @@ pwsh -File scripts\release-check.ps1
 | 她"能做什么"的目录 | [`docs/能力.md`](docs/能力.md) |
 | 她的自主分级与判据 | [`docs/回合.md`](docs/回合.md)、[`docs/判据.md`](docs/判据.md) |
 | 谁是谁的爹 | [`docs/谱系.md`](docs/谱系.md)（生成的） |
-| 每一版改了什么、为什么 | [`docs/变更记录.md`](docs/变更记录.md) |
+| 每一版改了什么、为什么 | [`docs/CHANGELOG.md`](docs/CHANGELOG.md) |
 | 账本有哪些、每一版 `fmt` 是什么意思 | [`docs/账本.md`](docs/账本.md) |
 | 自主触发做到哪了（给外部读者的一页现状） | [`docs/自主触发.md`](docs/自主触发.md) |
 

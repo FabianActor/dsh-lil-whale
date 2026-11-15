@@ -25,7 +25,7 @@
 **成本与边界**：
 
 - 水表：只有设了 `BILI_MEMBER` 的鱼才计数（现在只有 whale），默认 80 次/天；账本 `pool\state\bili\ledger.jsonl`；计数 `pool\state\bili\<member>.json`。
-- 凭证：`pool\mcp\bili\bili_credential.json`（Fabian 的 B 站登录态复制过来的；服务端按"脚本同目录"找它）。**key 只能由人给**（PRD 附录 A.65）。
+- 凭证：`pool\mcp\bili\bili_credential.json`（Fabian 的 B 站登录态复制过来的；服务端按"脚本同目录"找它）。**key 只能由人给**（PRD 附录 CHANGELOG A.65）。
 - 不能做：发评论、点赞、收藏、私信、登录、发布。`bili_reply` 等根本没进白名单。
 
 ---
@@ -86,7 +86,7 @@
 6. **`ffmpeg` 不在 PATH**：装了 `imageio-ffmpeg` 就用 `imageio_ffmpeg.get_ffmpeg_exe()` 拿路径，别假设系统里有。
 7. **MCP 子进程是鱼进程启动时拉起的**：改完 `mcp_server.py` 要重启那条鱼的进程（`fish.ps1 down <键> -Yes` + `up <键> -NoBrowser`），不是刷新页面。
 8. **白名单在服务端执行**（`@tool()` 装饰器里，`:54-76`），不是在提示词里说"别用"——名单外的工具连列表都不出现，这是真闸门。
-9. **改 profile patch 前先停进程**（A.20），否则热重载会把正在跑的 agent 工具绑定抽走。
+9. **改 profile patch 前先停进程**（CHANGELOG A.20），否则热重载会把正在跑的 agent 工具绑定抽走。
 
 ---
 

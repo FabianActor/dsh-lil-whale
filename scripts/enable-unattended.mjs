@@ -7,7 +7,7 @@
  * `persistence.open()` + `initializeAgent()`，**绕开 session-controller 的
  * `composeAgent()`** —— 而 preset 的工具正是在那里挂的。结果：会话挂上了、
  * 心跳在写，但 agent 手里只剩两个工具（`group_say` / `working_directory`）。
- * 小鱼丸 2026-11-13 全天都在这个状态里（PRD A.54）。
+ * 小鱼丸 2026-11-13 全天都在这个状态里（CHANGELOG A.54）。
  *
  * 现在的做法：插件自己调 `ctx.get('sessionController').agents.resume(sessionId)`，
  * 由 session-controller 负责 preset 挂载（`plugin/dsh-lil-whale-group/lib/index.js` 的
@@ -25,7 +25,7 @@ const EXPLAIN = [
   'enable-unattended.mjs 已退役（2026-11-13）。',
   '',
   '它写的是 agent-loop 的 resumeSessionId —— 那条路会绕开 session-controller 的',
-  'preset 挂载，结果是她只剩 group_say / working_directory 两个工具（PRD A.54）。',
+  'preset 挂载，结果是她只剩 group_say / working_directory 两个工具（CHANGELOG A.54）。',
   '',
   '现在不需要它：无人值守由插件自己调 sessionController.agents.resume() 完成。',
   '  - 起鱼：pwsh -File scripts\\fish.ps1 up <键>        （默认就是无人值守）',

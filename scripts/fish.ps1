@@ -26,7 +26,7 @@
 #       -By/-Why（记账用） -Port（覆盖端口）
 #
 # 两种"在跑"：
-#   unattended = 无窗起，会话由插件调 sessionController 自己挂上（PRD A.45 / A.54）
+#   unattended = 无窗起，会话由插件调 sessionController 自己挂上（CHANGELOG A.45 / CHANGELOG A.54）
 #   window     = 开着浏览器窗（会话由客户端挂上；一段会话只能一个 writer）
 # 模式记在 pool\state\mode\<键>.json —— 不记的话，鱼塘和脚本都只能猜"这扇窗是谁开的"。
 #
@@ -88,7 +88,7 @@ try {
 if ($env:DSH_LAUNCH_NO_BROWSER -eq '1') { $NoBrowser = $true }
 
 # ---------- 名册 ----------
-# 真源是 pool\members.json（PRD A.25）。文件不在就退回配置里那两条 —— 能跑，但只有两条。
+# 真源是 pool\members.json（CHANGELOG A.25）。文件不在就退回配置里那两条 —— 能跑，但只有两条。
 function Get-Members {
   # 配置里能指定名册（membersFile）；没有才退回 pool 下的默认位置。
   $file = if ($Cfg.MembersFile) { $Cfg.MembersFile } else { Join-Path $Cfg.PoolDir 'members.json' }
@@ -280,7 +280,7 @@ function Clear-Mode($member) {
 }
 
 # 同一个 profile 只许一个进程：两个进程会各自去 resume 同一段会话，
-# 第二个拿到的是 session/writer-held（PRD A.47）。端口只是"有没有人监听"，
+# 第二个拿到的是 session/writer-held（CHANGELOG A.47）。端口只是"有没有人监听"，
 # 端口没开也可能已经有一个正在启动/换了端口的进程 —— 所以按 profile 找。
 function Get-ProfileProcesses($member) {
   if (-not $member.Profile) { return @() }
@@ -629,7 +629,7 @@ fish.ps1 -- 鱼群唯一的入口
 
 选项：-NoBrowser -Window -BrowserMainOnly -Console -Yes -By <谁> -Why <为什么> -Port <n>
       new 专用：-Key <成员键> -Parent <父辈键> -DryRun（只查规则，不建东西）
-      key 专用：key grant -Key <孩子键> -From <家长键> / key revoke -Key <孩子键>（人执行，见 PRD A.65）
+      key 专用：key grant -Key <孩子键> -From <家长键> / key revoke -Key <孩子键>（人执行，见 CHANGELOG A.65）
 '@ | Write-Host
 }
 
@@ -663,7 +663,7 @@ function Invoke-Down([string]$name) {
 }
 
 # ---------- 检修 / 回无人值守 ----------
-# 检修 = 先停掉无人值守的那份，再开一扇窗让人看（PRD A.47）。
+# 检修 = 先停掉无人值守的那份，再开一扇窗让人看（CHANGELOG A.47）。
 # 为什么必须"先停"：一段会话只能一个 writer；无人值守已经挂着 agent 时再起第二个进程会被拒。
 function Invoke-Maintain([string]$name) {
   $m = Get-Fish $name
@@ -689,7 +689,7 @@ function Invoke-Maintain([string]$name) {
   return $true
 }
 
-# 回无人值守：无窗起，会话由 host 自己挂上（A.45）。
+# 回无人值守：无窗起，会话由 host 自己挂上（CHANGELOG A.45）。
 function Invoke-Restore([string]$name) {
   $m = Get-Fish $name
   if (-not $m) { throw "没有这条鱼：$name" }
@@ -726,7 +726,7 @@ function Invoke-Restore([string]$name) {
 # 用法：pwsh -File scripts\fish.ps1 new -Key <成员键> -Name <名字> -Parent <父辈键> [-Port 0] [-DryRun]
 # 它做什么：查重（键 / 名字 / 端口 / 鱼数上限）→ 调 install.ps1（-SkipParent，不碰父辈的 profile）→ 记 births.log → 打印还缺什么。
 # 它不做什么：不填 API key、不替你开窗、不写第一句话 —— 这三件必须由人或孩子自己完成。
-# ---------- 钥匙：人给、人收（死命令，见 PRD A.65） ----------
+# ---------- 钥匙：人给、人收（死命令，见 CHANGELOG A.65） ----------
 # 只有人能跑这两个动作：把某条鱼的 .credentials.yaml 复制给孩子，或者停用它。
 function Invoke-KeyCmd($action, $childKey) {
   if (-not $childKey) { Write-Host '用法：fish.ps1 key grant -Key <孩子键> -From <家长键> / key revoke -Key <孩子键>'; return $false }
@@ -947,7 +947,7 @@ function Invoke-NewFish {
   return $true
 }
 
-# ---------- 沙箱通行证：查、补（PRD A.67） ----------
+# ---------- 沙箱通行证：查、补（CHANGELOG A.67） ----------
 # 判据：同一路径、同样内容，文件工具能写而 pwsh 不能写 —— 是"手"缺通行证，不是语法问题。
 function Invoke-AclCmd([string]$action, [string]$name) {
   $members = @(Resolve-Targets $name | Where-Object { $_.Kind -eq 'fish' -and $_.Role -ne 'watcher' -and $_.Home })
@@ -986,7 +986,7 @@ function Invoke-AclCmd([string]$action, [string]$name) {
   return $ok
 }
 
-# ---------- 强行叫醒（PRD A.73） ----------
+# ---------- 强行叫醒（CHANGELOG A.73） ----------
 # 她可以自己睡（工具 sleep），但上级家长有权利把她叫醒。
 # 判断窗口/跨午夜/优先级全在 sleep-core.js 一份实现里，这里只调 sleep-cli.mjs，不自己算。
 function Invoke-Wake([string]$name, [string]$by = 'fish.ps1', [string]$why = '') {

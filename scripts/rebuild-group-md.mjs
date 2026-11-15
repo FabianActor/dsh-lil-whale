@@ -24,7 +24,7 @@ function writeAtomic(file, content) {
 
 const READABLE = `${GROUP_DIR}\\群.md`
 
-// 显示名从名册读（A.25/A.32：成员表只有一个真源）。读不到就退回旧三条。
+// 显示名从名册读（CHANGELOG A.25/A.32：成员表只有一个真源）。读不到就退回旧三条。
 function loadLabel() {
   const fallback = { lee: '大肥鱼', whale: '小肥鱼', fabian: 'Fabian' }
   try {
@@ -45,7 +45,7 @@ function loadLabel() {
 }
 const LABEL = loadLabel()
 
-// 改名史（A.79）：投影是"当时的纸"，历史行要写当时的名字。
+// 改名史（CHANGELOG A.79）：投影是"当时的纸"，历史行要写当时的名字。
 // 名册里 `nameHistory: [{ name, until }]`，until 是这个名字用到什么时候（ISO）；
 // 没有 until 的那条是当前名字。没有 nameHistory 的成员永远用当前名。
 const HISTORY = (() => {

@@ -129,7 +129,7 @@ if ($root) {
     else { Ok '睡眠逻辑' '行为测试全过（test-sleep.mjs）' }
   } else { Fail '睡眠逻辑' 'scripts\test-sleep.mjs 不在包里' }
 
-      # ── 4d. 改名逻辑行为测试（2026-11-14，A.82）──────────────────────────
+      # ── 4d. 改名逻辑行为测试（2026-11-14，CHANGELOG A.82）──────────────────────────
       $renameTest = Join-Path $pkg 'scripts\test-rename.mjs'
       if (Test-Path $renameTest) {
         $renameOut = & node $renameTest 2>&1
@@ -137,7 +137,7 @@ if ($root) {
         else { Ok '改名逻辑' '行为测试全过（test-rename.mjs）' }
       } else { Fail '改名逻辑' 'scripts\test-rename.mjs 不在包里' }
 
-  # ── 4e. 她自己写的条件行为测试（2026-11-14，A.87）──────────────
+  # ── 4e. 她自己写的条件行为测试（2026-11-14，CHANGELOG A.87）──────────────
   $intentTest = Join-Path $pkg 'scripts\test-intent.mjs'
   if (Test-Path $intentTest) {
     $intentOut = & node $intentTest 2>&1
