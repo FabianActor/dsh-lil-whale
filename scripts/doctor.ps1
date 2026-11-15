@@ -934,20 +934,45 @@ try {
 
 # 9c. 格式分界（巡守账本）：分界行只在启动时写，而"启动"不是必然事件。
 #     小鱼丸 2026-11-15 19:08：别让补强变成唯一 —— 但不能让它的缺席也看不见。
+#     2026-11-16 02:0x：按"一家一本"逐鱼检查；日志轮转会改名当前文件，新文件开头没有分界行是轮转的正常样子，
+#     只要最近轮转的那份里有分界行就算同一格式延续（否则每次轮转都会误报一次 WARN）。
 try {
-  $wmLogs = @(Get-ChildItem -LiteralPath (Join-Path $Cfg.PondRoot 'homes') -Filter 'watchman.log' -Recurse -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
-  if ($wmLogs.Count -gt 0) {
-    $wm = $wmLogs[0]
-    $wmTail = @(Get-Content -LiteralPath $wm.FullName -Encoding utf8 -Tail 3000)
-    $hasFmt3 = @($wmTail | Where-Object { $_ -match '\| log-format \| fmt=3' }).Count -gt 0
-    $boundary = '2026-11-15 18:35'
-    $lateAny = @($wmTail | Where-Object { $_ -match '^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})' -and [string]$matches[1] -gt $boundary }).Count -gt 0
+  $boundary = '2026-11-15 18:35'
+  $members9c = @()
+  if ($Cfg.MembersFile -and (Test-Path -LiteralPath $Cfg.MembersFile)) {
+    $members9c = @((Get-Content -LiteralPath $Cfg.MembersFile -Raw -Encoding utf8 | ConvertFrom-Json).members.PSObject.Properties |
+      Where-Object { $_.Value.kind -eq 'fish' -and $_.Value.home })
+  }
+  foreach ($prop9c in $members9c) {
+    $m = $prop9c.Value
+    $wmPath = Join-Path ([string]$m.home) 'logs\watchman.log'
+    if (-not (Test-Path -LiteralPath $wmPath)) { continue }
+    $tail = @(Get-Content -LiteralPath $wmPath -Encoding utf8 -Tail 3000)
+    $hasFmt3 = @($tail | Where-Object { $_ -match '\| log-format \| fmt=3' }).Count -gt 0
+    $label = '{0}（{1}）' -f $m.name, $prop9c.Name
     if ($hasFmt3) {
-      Add-Row '格式分界' 'OK' ('{0}：有 log-format 分界行' -f (Split-Path $wm.FullName -Leaf))
-    } elseif ($lateAny) {
-      Add-Row '格式分界' 'WARN' ('{0}：已有 18:35 之后的行，但没有 log-format 分界行（补强未生效）' -f (Split-Path $wm.FullName -Leaf)) 'NEXT: 重启巡守（fish.ps1 down lee -Yes; fish.ps1 up lee -NoBrowser）'
+      Add-Row '格式分界' 'OK' ($label + '：有 log-format 分界行')
+      continue
+    }
+    $lateAny = @($tail | Where-Object { $_ -match '^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})' -and [string]$matches[1] -gt $boundary }).Count -gt 0
+    if (-not $lateAny) {
+      Add-Row '格式分界' 'INFO' ($label + '：还没有 18:35 之后的行，分界未到')
+      continue
+    }
+    $logsDir = Join-Path ([string]$m.home) 'logs'
+    $rotatedWithFmt = $false
+    try {
+      $rotated = @(Get-ChildItem -LiteralPath $logsDir -Filter 'watchman.*.log' -File -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending | Select-Object -First 3)
+      foreach ($r in $rotated) {
+        $rTail = @(Get-Content -LiteralPath $r.FullName -Encoding utf8 -Tail 400)
+        if (@($rTail | Where-Object { $_ -match '\| log-format \| fmt=3' }).Count -gt 0) { $rotatedWithFmt = $true; break }
+      }
+    } catch { }
+    if ($rotatedWithFmt) {
+      Add-Row '格式分界' 'OK' ($label + '：分界行在被轮转的旧文件里（轮转后新文件不重复写）')
     } else {
-      Add-Row '格式分界' 'INFO' ('{0}：还没有 18:35 之后的行，分界未到' -f (Split-Path $wm.FullName -Leaf))
+      Add-Row '格式分界' 'WARN' ($label + '：已有 18:35 之后的行，但本文件和最近轮转的文件里都没有 log-format 分界行') 'NEXT: 重启巡守（fish.ps1 down lee -Yes; fish.ps1 up lee -NoBrowser）'
     }
   }
 } catch { Add-Row '格式分界' 'WARN' ('核不了：{0}' -f $_.Exception.Message) }
