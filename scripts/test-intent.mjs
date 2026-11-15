@@ -142,6 +142,10 @@ assert.equal(pathAllowed('pool/dm/lee__xiaoman.jsonl', { ownKey: 'whale' }).ok, 
 assert.equal(pathAllowed('pool/dm/lee__xiaoman.jsonl', { ownKey: 'whale' }).why, 'other-dm')
 assert.equal(pathAllowed('pool/dm/lee__whale.jsonl').ok, false)
 assert.equal(pathAllowed('pool/dm/lee__whale.jsonl').why, 'dm-needs-own-key')
+// 目录本身也拒：盯 `pool/dm` 等于拿到“谁的那一对刚变过”（文件名 + mtime）
+assert.equal(pathAllowed('pool/dm').ok, false)
+assert.equal(pathAllowed('pool/dm').why, 'dm-dir')
+assert.equal(pathAllowed('pool/dm/', { ownKey: 'whale' }).why, 'dm-dir')
 })
 
 // ---------- 时间窗 / 冷却 / 额度 ----------

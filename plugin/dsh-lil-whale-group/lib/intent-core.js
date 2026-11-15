@@ -154,6 +154,9 @@ export function pathAllowed(rel, { insideHome = false, ownKey = null } = {}) {
   if (!norm) return { ok: false, why: 'empty' }
   // 私聊是双向隐私窗口（A.24）：可以盯自己的会话，不能盯别人的。
   // 文件名是 `<a>__<b>.jsonl`，两边任意一边是 ownKey 都算自己的会话。
+  // 目录本身也拒：file-changed 可以盯目录，盯 `pool/dm` 就等于拿到"谁的那一对刚变过"
+  // （文件名 + mtime 都是公开的）——内容拦住了、索引没拦住（2026-11-16 第四条鱼）。
+  if (/^pool\/dm$/i.test(norm)) return { ok: false, why: 'dm-dir' }
   const dm = /^pool\/dm\/([^/]+)$/i.exec(norm)
   if (dm) {
     const base = dm[1].replace(/\.jsonl$/i, '')
