@@ -613,8 +613,13 @@ const imageUrlOf = (image) => {
 }
 // 换行：Enter 发送，Shift+Enter 换行。手动插入而不是靠浏览器默认——
 // 受控 textarea 上默认行为在部分输入法/组合状态下会被吃掉，这里只做一件事，不猜。
+// 浏览器支持 field-sizing 时（Chromium 123+），输入框高度交给 CSS 自己长；
+// 每敲一个字写一次 style 再读 scrollHeight，会强制整页排版，是快速输入卡的主因。
+const GROW_BY_CSS = typeof CSS !== 'undefined' && Boolean(CSS.supports && CSS.supports('field-sizing', 'content'))
+
 function growTextarea(el) {
   if (!el) return
+  if (GROW_BY_CSS) return
   el.style.height = 'auto'
   el.style.height = `${Math.min(el.scrollHeight, 220)}px`
 }
@@ -1247,7 +1252,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       const inputRef = useRef(null)
 
       // 发出去（或粘贴/恢复草稿）之后按内容重算高度，否则框停在旧高度。
-      useEffect(() => { resetTextareaHeight(inputRef.current) }, [text])
+      useEffect(() => { if (!GROW_BY_CSS) resetTextareaHeight(inputRef.current) }, [text])
 
       const loadContacts = useCallback(async () => {
         try {
@@ -1530,7 +1535,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
             value: text,
             onChange: (event) => {
               setText(event.target.value)
-              growTextarea(event.currentTarget)
+              if (!GROW_BY_CSS) growTextarea(event.currentTarget)
               if (activePeer !== null && !composingRef.current) writeDraft(dmDraftKeyOf(activePeer), event.target.value)
             },
             onCompositionStart: () => { composingRef.current = true },
@@ -1576,7 +1581,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
               color: 'var(--dsw-alias-label-primary)', font: 'inherit',
               width: '100%', boxSizing: 'border-box',
               // 窄屏（多半是手机）用 16px：iOS 在聚焦小于 16px 的输入框时会把整页放大一下。
-              fontSize: coarse ? 16 : 14, lineHeight: '24px', padding: '4px 2px', minHeight: 44, maxHeight: 220,
+              fontSize: coarse ? 16 : 14, lineHeight: '24px', padding: '4px 2px', minHeight: 44, maxHeight: 220, fieldSizing: 'content',
             },
           }),
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
@@ -1696,7 +1701,12 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       // 同 DmPage：输入法选字期间不落草稿（那时 value 里是拼音字母）。
       const composingRef = useRef(false)
       const [messages, setMessages] = useState([])
-      const [text, setText] = useState(() => readDraft(GROUP_DRAFT_KEY))
+      // 输入框改成非受控：每敲一个字都 setState 会让整页（含最近 N 条气泡）重渲染，
+      // 实测打 10 个字有 ~450ms 花在样式重算上（2026-11-15 第三轮）。
+      // 现在只有「空 ↔ 非空」变化才 setState —— 只为发送按钮的灰态。
+      const initialTextRef = useRef(readDraft(GROUP_DRAFT_KEY))
+      const [hasText, setHasText] = useState(() => initialTextRef.current.trim() !== '')
+      const draftTimerRef = useRef(null)
       const [to, setTo] = useState('all')
       // @ 面板选中人的回调要稳定：Bubble 是 memo 的，每次渲染新函数会让 120 个气泡全部重渲染。
       const mentionTo = useCallback((id) => setTo(id), [])
@@ -1707,7 +1717,12 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       // 群聊草稿：改一个字就存，切走 / 刷新 / 重新进页面都还在。
       // 发出去以后 text 变空串，这里顺手把草稿删掉（见 writeDraft 的空值分支）。
       // 输入法选字期间不写：那时 text 里是 "xiaofei"，存下去就是一份假草稿。
-      useEffect(() => { if (!composingRef.current) writeDraft(GROUP_DRAFT_KEY, text) }, [text])
+      const saveDraftSoon = useCallback((value) => {
+        if (composingRef.current) return
+        if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
+        draftTimerRef.current = setTimeout(() => writeDraft(GROUP_DRAFT_KEY, value), 300)
+      }, [])
+      useEffect(() => () => { if (draftTimerRef.current) clearTimeout(draftTimerRef.current) }, [])
       const [presence, setPresence] = useState({})
       const [seats, setSeats] = useState([])
       const [pickerOpen, setPickerOpen] = useState(false)
@@ -1775,7 +1790,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       const presenceSigRef = useRef('')
       const seatsSigRef = useRef('')
       // 发送后按内容重算高度（同 DmPage）。
-      useEffect(() => { resetTextareaHeight(inputRef.current) }, [text])
+      useEffect(() => { if (!GROW_BY_CSS) resetTextareaHeight(inputRef.current) }, [hasText])
       // "回到上次看到的位置"：群页刚打开时视角在底部，历史线在头顶上面。
       const dividerRef = useRef(null)
       const historyAboveRef = useRef(false)
@@ -1973,7 +1988,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
         })
       }, [])
       const submit = useCallback(async () => {
-        const value = text.trim()
+        const value = (inputRef.current?.value ?? '').trim()
         if ((value === '' && pendingImages.length === 0) || sending) return
         setSending(true)
         try {
@@ -2004,7 +2019,9 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
             body: JSON.stringify(body),
           })
           if (!response.ok) throw new Error(`HTTP ${response.status}`)
-          setText('')
+          if (inputRef.current) inputRef.current.value = ''
+          setHasText(false)
+          writeDraft(GROUP_DRAFT_KEY, '')
           setPendingImages([])
           await refresh()
         } catch (e) {
@@ -2012,7 +2029,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
         } finally {
           setSending(false)
         }
-      }, [text, to, sending, refresh, tab, pendingImages.length])
+      }, [to, sending, refresh, tab, pendingImages.length])
 
       // 两档忙：正在回这一段 / 在别处忙。群聊与私聊同一套文案。
       // 名单从配置（名册）来 —— 写死 lee/whale 时，新鱼的"正在忙"永远不会显示（A.32 同一个病）。
@@ -2035,7 +2052,12 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       // 列表只跟消息、分割线、宽度、配置有关；输入框里的文字不是它的输入。
       // 只渲染最近 N 条：500+ 条时，600 个气泡每 3 秒重排一次就是卡顿的来源。
       const visibleStart = Math.max(0, messages.length - renderLimit)
-      const visibleMessages = visibleStart > 0 ? messages.slice(visibleStart) : messages
+      // 打字时不能重新切片：slice 每次都是新数组，会让下面的 useMemo 依赖每帧都变，
+      // 等于每敲一个字就重建一遍气泡元素树（2026-11-15 第二轮：他报快速输入仍卡）。
+      const visibleMessages = useMemo(
+        () => (visibleStart > 0 ? messages.slice(visibleStart) : messages),
+        [messages, visibleStart],
+      )
       const loadEarlier = useCallback(() => {
         const el = scrollRef.current
         if (el) pendingScrollRef.current = { height: el.scrollHeight, top: el.scrollTop }
@@ -2306,8 +2328,14 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
                 : null,
               h('textarea', {
                 ref: inputRef,
-                value: text,
-                onChange: (event) => { setText(event.target.value); growTextarea(event.currentTarget) },
+                defaultValue: initialTextRef.current,
+                onChange: (event) => { if (!GROW_BY_CSS) growTextarea(event.currentTarget) },
+                onInput: (event) => {
+                  const value = event.currentTarget.value
+                  // 只有「空 ↔ 非空」变了才 setState；同值时 React 自己会跳过。
+                  setHasText(value.trim() !== '')
+                  saveDraftSoon(value)
+                },
                 onCompositionStart: () => { composingRef.current = true },
                 onCompositionEnd: (event) => {
                   composingRef.current = false
@@ -2336,7 +2364,13 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
                 onKeyDown: (event) => {
                   if (event.key === 'Enter' && event.shiftKey) {
                     event.preventDefault()
-                    insertNewline(event.currentTarget, text, setText)
+                    const ta = event.currentTarget
+                    const start = ta.selectionStart ?? ta.value.length
+                    const end = ta.selectionEnd ?? start
+                    ta.value = `${ta.value.slice(0, start)}\n${ta.value.slice(end)}`
+                    ta.selectionStart = ta.selectionEnd = start + 1
+                    setHasText(ta.value.trim() !== '')
+                    saveDraftSoon(ta.value)
                     return
                   }
                   if (event.key === 'Enter' && !event.shiftKey) {
@@ -2350,7 +2384,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
                   border: 'none', outline: 'none', resize: 'none', background: 'transparent',
                   color: 'var(--dsw-alias-label-primary)', font: 'inherit',
                   fontSize: 14, lineHeight: '24px', padding: '4px 2px',
-                  minHeight: 44, maxHeight: 220,
+                  minHeight: 44, maxHeight: 220, fieldSizing: 'content',
                 },
               }),
               h('div', { style: { position: 'relative', display: 'flex', alignItems: 'center', gap: 10 } },
@@ -2409,13 +2443,13 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
                   to === 'all' ? t.groupOnly : t.toOne(targetName(config, to))),
                 h('button', {
                   onClick: () => { void submit() },
-                  disabled: sending || (text.trim() === '' && pendingImages.length === 0),
+                  disabled: sending || (!hasText && pendingImages.length === 0),
                   title: t.send,
                   style: {
                     flex: '0 0 32px', width: 32, height: 32, padding: 0, border: 'none',
                     background: 'transparent', position: 'relative',
-                    cursor: sending || (text.trim() === '' && pendingImages.length === 0) ? 'not-allowed' : 'pointer',
-                    opacity: sending || (text.trim() === '' && pendingImages.length === 0) ? 0.4 : 1,
+                    cursor: sending || (!hasText && pendingImages.length === 0) ? 'not-allowed' : 'pointer',
+                    opacity: sending || (!hasText && pendingImages.length === 0) ? 0.4 : 1,
                     display: 'grid', placeItems: 'center', transition: 'opacity 120ms ease',
                   },
                 },
@@ -3457,7 +3491,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v46 · ui-window-120:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v47 · ui-typing-uncontrolled:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')

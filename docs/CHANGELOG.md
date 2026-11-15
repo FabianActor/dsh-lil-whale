@@ -1,12 +1,36 @@
 # 工程变更记录
 
 > 这份文件记录**工程侧**的每一次改动：机制、修账、脚本、文档。它和产品需求是两条线——需求讨论看 [PRD.md](PRD.md)，这里只记"改了什么、为什么"。
-> 编号 `rNN` 是**内部修订号**：改一次 +1，一天可能十几稿；两个 npm 包另有各自的 semver（各自 `package.json`，当前 1.6.26），只在功能变化或发布时动。编号从 r1 起。
-> 条目按时间倒序（新的在上）。A.x 原先住在 PRD 附录里，2026-11-15 搬到这里；历史条目里若还写着「PRD 附录 A.x」，指的就是本文件的 A.x。`A.x` 是"已验证的技术事实与判据"的编号，统一收在文末附录 A（A.1–A.115）。
+> 编号 `rNN` 是**内部修订号**：改一次 +1，一天可能十几稿；两个 npm 包另有各自的 semver（各自 `package.json`，当前 1.6.27），只在功能变化或发布时动。编号从 r1 起。
+> 条目按时间倒序（新的在上）。A.x 原先住在 PRD 附录里，2026-11-15 搬到这里；历史条目里若还写着「PRD 附录 A.x」，指的就是本文件的 A.x。`A.x` 是"已验证的技术事实与判据"的编号，统一收在文末附录 A（A.1–A.116）。
 
 ---
 
 ## 变更条目
+
+## r150 — 2026-11-15 23:4x 前端：群聊输入框不再每敲一个字重渲染整页
+
+**起因**：他说"快速输入/删除大量文本时候还是有点卡"（r149 已把 600 个气泡降到 120 个）。
+
+**定位**（headless Edge + CDP 逐项拆）：
+- 打 10 个字：Task 606ms，其中 Script 只有 13–23ms，**RecalcStyle 490–500ms**；空转时 Recalc 3ms。
+- 只文本框 `value=` 赋值不发事件：Recalc 5ms；只发一个 input 事件（值都没变）：Recalc 50ms；真实 `Input.insertText` 打字：Recalc ~490ms/10 字。
+- 把消息列表 `display:none` 后同一段打字：Recalc 113ms ⇒ 重算代价跟列表节点数成正比，但**触发的不是列表本身，是每敲一个字都发生的整页重渲染**。
+- 决定性实验：临时把群输入框 `onChange` 里的 `setText` 去掉（只留浏览器原生输入）→ RecalcStyle 从 ~498ms/10 字降到 **4–5ms** ⇒ 根因是受控输入框每敲一个字都 setState，整个 GroupPage（含 120 条气泡）重渲染，浏览器跟着做一遍大范围样式重算。
+
+**改法**（`plugin/dsh-lil-whale-group-ui/lib/client.js`）：
+- 群输入框改成**非受控**（`defaultValue`），打字不经过 React state；发送时从 `inputRef.current.value` 读内容。
+- 只保留一个 `hasText` 布尔 state：仅当"空 ↔ 非空"变化时 setState（发送按钮的灰态用），同值 React 自己会跳过。
+- 草稿改成防抖 300ms 写 localStorage（原来每字写一次）；Shift+Enter 换行改为直接操作 `textarea.value` + 恢复光标。
+- 消息列表的 `slice` 用 `useMemo`（`[messages, visibleStart]`），不再每帧产生新数组。
+- DM 与群的输入框都加 `field-sizing: content`（浏览器支持时让 CSS 管高度，免掉每字写 style 再读 `scrollHeight`；不支持时退回原 `growTextarea`）。
+
+**验证**：
+- 同机 A/B：10 个字 Task **606 → 93ms**、RecalcStyle **498 → 8ms**、Script 23 → 9ms；再打 10 个字 77ms / 5ms。
+- 草稿：打字 700ms 后 localStorage 落下"草稿测试"；清空后自动删除；`@` 面板能打开；页面无 console 错误。
+- 四套测试与 `doctor` 不变（`test-plan` 26、`test-intent` 31、`test-sleep` 75、`test-wake-preview` 30）。
+
+**判据**：①"卡"要先分清是重算还是重渲染：Script 小、Recalc 大 ⇒ 找谁在触发样式失效；②打字这条路上不该有"每字一次"的东西——state、存盘、写 style 都算；③先在隔离环境里用真实键盘事件复现，再改。
 
 ## r149 — 2026-11-15 23:0x
 
@@ -3214,4 +3238,17 @@ sleep-tools-register-failed: tool "sleep" must declare output { schema, render, 
 3. 增量挂载必须在挂载后补偿滚动位置，否则"加载更早"会把眼睛弹走。
 
 **边界**：窗口化只解决渲染；传输与解析仍随条数线性增长，过万条时该加后端分页（`?limit=&before=`），那是下一步。
+
+## 附录 A.116 打字卡不是消息多：每敲一个字别重渲染整页
+
+**症状**：群聊 500+ 条消息时，快速输入/删除明显卡顿；渲染窗口从 600 条降到 120 条（r149）后变好，但打字仍卡。
+
+**根因**：输入框是受控组件，`onChange` 里每字一次 `setText` ⇒ 整个群页组件重渲染（消息列表虽被 memo，页面层级与样式计算仍被拖下水）⇒ 浏览器每次做 450–500ms 的样式重算。消息越多越贵，看着像"消息太多的锅"，其实是"每字一次整页重渲染 × 列表节点数"。
+
+**判据**：
+1. 分清"重算（RecalcStyle）"与"重渲染（Script）"：Script 小、Recalc 大 ⇒ 触发的是样式失效，不是 React 计算。
+2. 输入路径上不允许"每字一次"的动作：setState、写 localStorage、写 style 再读布局属性，都算。
+3. 修完用真实键盘事件（`Input.insertText`）复测，不能只在合成事件里验证。
+
+**教训**："消息条数多"是放大器，不是振源。先找到那个"每按一个键都发生"的动作，再谈减节点。
 
