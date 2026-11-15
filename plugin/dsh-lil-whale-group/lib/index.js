@@ -894,6 +894,27 @@ function wakeMarksFile() {
  */
 const WAKE_DELIVER_LOG = join(dirname(WAKE_METRICS), 'wake-deliver.log')
 
+/**
+ * 这条鱼在这个通道上"以前被递过东西"吗？
+ *
+ * 2026-11-15 20:29 第三条鱼提的那条：只看"游标是 0"会把两件事说成一件 ——
+ * 「从没有过」和「曾经有过、后来丢了」。丢的那次会被写成"你还没读过"，于是
+ * 一次真丢账从此变成一次友好的第一次。这跟她自己 11-12 修 cursor-clamped 的
+ * 判据同源：错的时候跟对的时候不能长得一样。
+ *
+ * 证据只取工程侧的 wake-deliver.log（delivered | id=… member=… channel=…）。
+ * 它是只追加的，游标会被清、它不会被清。读不到就当"没有过"——宁可说"第一次"，
+ * 也别在拿不到证据时吓人。
+ */
+function hadPriorDelivery(member, channelKey) {
+  try {
+    const text = readFileSync(WAKE_DELIVER_LOG, "utf8")
+    return text.includes("member=" + member + " channel=" + channelKey)
+  } catch {
+    return false
+  }
+}
+
 function wakeDeliverLog(result, why) {
   try {
     mkdirSync(dirname(WAKE_DELIVER_LOG), { recursive: true })
@@ -2434,6 +2455,9 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
   const seatSeenStored = cursorOf(cursors, seatKey, channel.key)
   const sharedSeen = Math.min(sharedSeenStored, lines.length)
   const seatSeen = Math.min(seatSeenStored, lines.length)
+  // 2026-11-15 20:3x：游标这一格是 0、但工程账上有过投递 —— 那不是新生，是丢了。
+  // 每次唤醒都要清空，否则同一 session 里第二次丢就哑了。
+  const cursorLostLogged = new Set()
   const clampKey = `${member}:${channel.key}`
   if ((sharedSeenStored > lines.length || seatSeenStored > lines.length) && !clampLogged.has(clampKey)) {
     clampLogged.add(clampKey)
@@ -2538,11 +2562,18 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
   // 判据用"递之前游标是不是 0"：0 = 头一回读这个通道；否则 = 离开过一段时间再回来。
   // 用词也别替她断言原因：窗关着、睡着、刚出生，在投递层看来是同一件事。
   const firstRead = sharedSeenStored === 0
+  const cursorLost = firstRead && hadPriorDelivery(member, channel.key)
+  if (cursorLost && !cursorLostLogged.has(`${member}:${channel.key}`)) {
+    cursorLostLogged.add(`${member}:${channel.key}`)
+    logLine({ note: 'cursor-lost', member, channel: channel.key, lines: lines.length })
+  }
   const where = channel.kind === 'dm'
     ? `${channel.who} 私下跟你说了 ${incoming.length} 句`
     : backlog
       ? firstRead
-        ? `群里现在有 ${incoming.length} 条（${who}）——你还没读过这个群（还没有游标）`
+        ? cursorLost
+          ? `群里现在有 ${incoming.length} 条（${who}）——你的读进度不见了（游标这一格是空的），这次按从头算，已经记了一笔账`
+          : `群里现在有 ${incoming.length} 条（${who}）——你还没读过这个群（还没有游标）`
         : `你不在的这段时间，群里积了 ${incoming.length} 条（${who}）`
       : `群里有 ${incoming.length} 条新的（${who}）`
   const tailHint = backlog
@@ -2575,7 +2606,7 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
   // `id` 是构造出来的 user message id，用来跟会话日志对账（见 wakeDeliverLog 的注释）；
   // `last-line` 是那条消息在通道文件里的绝对行号（1 基），`last-from` 是它谁写的。
   // 有这两个字段，"同一条被递了两次"和"我们自己叫了两次"才分得开 —— 只看时间戳分不开。
-  const deliveryNote = `id=${built.id} member=${member} channel=${channel.key} seat=${seat === '' ? '-' : seat} pending=${incoming.length} last-line=${lastIncomingIndex + 1} last-from=${incoming[incoming.length - 1]?.from ?? '-'} last-ts=${lastTs || 0} cursor=${lines.length} prior-cursor=${sharedSeenStored}`
+  const deliveryNote = `id=${built.id} member=${member} channel=${channel.key} seat=${seat === '' ? '-' : seat} pending=${incoming.length} last-line=${lastIncomingIndex + 1} last-from=${incoming[incoming.length - 1]?.from ?? '-'} last-ts=${lastTs || 0} cursor=${lines.length} prior-cursor=${sharedSeenStored} cursor-state=${cursorLost ? "lost" : firstRead ? "first" : "resumed"}`
   try {
     agent.followup(built)
   } catch (error) {
