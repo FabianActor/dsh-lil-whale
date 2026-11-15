@@ -864,6 +864,51 @@ if (Test-Path -LiteralPath $Cfg.MembersFile) {
   Add-Row '全鱼' 'WARN' '名册不存在（还是"一条鱼"的时代）' 'NEXT: node scripts\migrate-members.mjs 生成 pool\members.json'
 }
 
+# 9d. 出生账（births.log）：账上多一条看得见，少一条看不见——除非账本自己说了从哪天起是完整的。
+#     第三条鱼 2026-11-15 22:25：我这边这本账是空的；第四条鱼补：先让它自己说 since，否则"鱼数=行数"永远 FAIL。
+try {
+  $birthsLog = Join-Path $Cfg.PoolState 'births.log'
+  if (-not (Test-Path -LiteralPath $birthsLog)) {
+    Add-Row '出生账' 'INFO' '还没有 births.log（记账之后还没有鱼出生）'
+  } else {
+    $bLines = @(Get-Content -LiteralPath $birthsLog -Encoding utf8)
+    $fmtLine = @($bLines | Where-Object { $_ -match '\| log-format \|' }) | Select-Object -Last 1
+    if (-not $fmtLine) {
+      Add-Row '出生账' 'WARN' 'births.log 没有 log-format since 标记：这本账记不了"少"，只能记得住"多"' 'NEXT: 往 births.log 追加一行 log-format（格式见 docs/detail/日志都记在哪.md）'
+    } else {
+      $sinceText = if ([string]$fmtLine -match 'since=([0-9T:\-\.Z]+)') { $matches[1] } else { $null }
+      if (-not $sinceText) {
+        Add-Row '出生账' 'WARN' 'births.log 的 log-format 行没有 since=' 'NEXT: 补一个 since= 时间戳'
+      } else {
+        $since = try { [datetimeoffset]::Parse($sinceText).LocalDateTime } catch { $null }
+        if (-not $since) {
+          Add-Row '出生账' 'WARN' ('births.log 的 since 读不了：{0}' -f $sinceText)
+        } else {
+          $mf = $Cfg.MembersFile
+          $members = if ($mf -and (Test-Path -LiteralPath $mf)) { (Get-Content -LiteralPath $mf -Raw -Encoding utf8 | ConvertFrom-Json).members } else { $null }
+          $expected = @()
+          if ($members) {
+            foreach ($p in $members.PSObject.Properties) {
+              if ($p.Value.kind -ne 'fish' -or -not $p.Value.bornAt) { continue }
+              $born = try { [datetime]::ParseExact([string]$p.Value.bornAt, 'yyyy-MM-dd', $null) } catch { $null }
+              if ($born -and $born.Date -ge $since.Date) { $expected += $p.Name }
+            }
+          }
+          $present = @($bLines | Where-Object { $_ -match '\| birth \|' } | ForEach-Object { if ($_ -match 'key=([a-z0-9-]+)') { $matches[1] } } | Where-Object { $_ })
+          $missing = @($expected | Where-Object { $present -notcontains $_ })
+          if ($expected.Count -eq 0) {
+            Add-Row '出生账' 'OK' ('births.log 有 since 标记；这不之后还没有鱼出生（记录 {0} 条）' -f $present.Count)
+          } elseif ($missing.Count -eq 0) {
+            Add-Row '出生账' 'OK' ('since 之后 {0} 条鱼，账上都有出生行' -f $expected.Count)
+          } else {
+            Add-Row '出生账' 'WARN' ('since 之后 {0} 条鱼，缺 {1} 条出生行：{2}' -f $expected.Count, $missing.Count, ($missing -join ', ')) ('NEXT: 查 pool\state\births.log 为什么少了这些键（{0}）' -f ($missing -join ','))
+          }
+        }
+      }
+    }
+  }
+} catch { Add-Row '出生账' 'WARN' ('核不了：{0}' -f $_.Exception.Message) }
+
 # 9c. 格式分界（巡守账本）：分界行只在启动时写，而"启动"不是必然事件。
 #     小鱼丸 2026-11-15 19:08：别让补强变成唯一 —— 但不能让它的缺席也看不见。
 try {
