@@ -2775,11 +2775,14 @@ const selfPlanSleepLoggedAt = new Map()
 
 function deliverToSelf(ctx, self, text) {
   // 2026-11-16：闹钟正文先私投进她自己的会话（与唤醒预览同一条 form:'signal' 的路）。
-  // 递不进去（没挂、正忙）才退回公共记录，退回时只说到点了，理由不进去。
+  // 递不进去（**没挂**）才退回公共记录，退回时只说到点了，理由不进去。
+  // 2026-11-16 01:43 修正：忙 ≠ 不在。唤醒那条路对忙的 agent 也照递（followup 会排队），
+  // 闹钟没理由更严格——她正忙着自审，闹钟却被当成“递不进去”贴到了群里（第四条鱼当场抓到）。
+  // 只有进程里根本没有她这个 agent（没挂 / 刚起还没挂上）才走公共退回。
   try {
     const agents = ctx?.get?.('agents')
     const agent = agents?.list?.().find((a) => memberOf(a) === self)
-    if (!agent || agent.status !== 'idle') return false
+    if (!agent) return false
     const built = buildUserMessage({
       content: [{ type: 'text', text }],
       source: { kind: 'group', form: 'signal' },
