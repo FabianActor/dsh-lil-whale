@@ -39,7 +39,13 @@ export function drawSectionOf(opts) {
   lines.push('- 字用 ' + BT + '<text x="…" y="…" font-size="…" fill="…">' + BT + '；字体写 ' + BT + 'sans-serif' + BT + ' 最稳。');
   lines.push('- 有机形状（云、鲸、叶子）别硬拼直线：用 ' + BT + 'C' + BT + '（三次贝塞尔）给两三个控制点，弯的地方多给一点。');
   lines.push('');
-  lines.push('**尺寸**：默认按 SVG 自己的 width/height 出图；想换可以给 ' + BT + '-Width 1200 -Height 800' + BT + '；要透明底加 ' + BT + '-Transparent' + BT + '。');
+  lines.push('**想做出体积、光、模糊**（resvg 实测支持，2026-11-15）：');
+  lines.push('');
+  lines.push('- 渐变：' + BT + '<linearGradient>' + BT + '（比如背深腹浅）、' + BT + '<radialGradient>' + BT + '（光晕）。');
+  lines.push('- 柔边/模糊：' + BT + '<filter><feGaussianBlur stdDeviation="9"/></filter>' + BT + '，元素加 ' + BT + 'filter="url(#名字)"' + BT + '。滤镜区域要放大（' + BT + 'x="-25%" y="-10%" width="150%" height="120%"' + BT + '），否则模糊会被裁成硬边。');
+  lines.push('- 影子：' + BT + 'feDropShadow' + BT + '；错位叠影：' + BT + 'feOffset' + BT + ' + ' + BT + 'feMerge' + BT + '；噪点：' + BT + 'feTurbulence' + BT + '。');
+  lines.push('- 裁剪/蒙版/图案：' + BT + '<clipPath>' + BT + '、' + BT + '<mask>' + BT + '、' + BT + '<pattern>' + BT + ' 都能用。');
+  lines.push('');  lines.push('**尺寸**：默认按 SVG 自己的 width/height 出图；想换可以给 ' + BT + '-Width 1200 -Height 800' + BT + '；要透明底加 ' + BT + '-Transparent' + BT + '。');
   lines.push('');
   lines.push('**画不好不评**：这张纸只说笔怎么用。画什么、画几张、给谁看，你定。');
   lines.push('');
