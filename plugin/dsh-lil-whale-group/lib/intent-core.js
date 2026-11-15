@@ -40,16 +40,24 @@ function hhmm(now) {
 export function parseIntents(raw) {
   const notes = []
   let list
+  // 2026-11-15 小肥鱼："没有条件"和"读错了地方"必须是两种结果。
+  // 拿不到预期的键时不能退化成空数组 —— 空数组走到 intentTick 会被当成"她全删了"，
+  // 于是把状态剪光，还看起来是正确行为（她 11-12 的 null 覆盖简报是同一个形状）。
+  let badShape = false
   if (Array.isArray(raw)) list = raw
   else if (Array.isArray(raw?.items)) list = raw.items
-  else return { list: [], notes: ['intent-bad-shape（要一个数组，或 {items:[...]}）'] }
+  else {
+    list = []
+    badShape = true
+  }
+  if (badShape) return { list: [], notes: ['intent-bad-shape（要一个数组，或 {items:[...]}）'], badShape: true }
   if (list.length > INTENT_MAX) notes.push(`intent-too-many count=${list.length} 只认前 ${INTENT_MAX} 条`)
   const out = []
   for (const it of list.slice(0, INTENT_MAX)) {
     const spec = normalizeIntent(it, notes)
     if (spec) out.push(spec)
   }
-  return { list: out, notes }
+  return { list: out, notes, badShape: false }
 }
 
 /** 把一条原始条目归一成规格；不合格返回 null 并留一行说明。 */

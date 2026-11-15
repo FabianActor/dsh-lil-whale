@@ -2859,8 +2859,11 @@ async function intentTick(member, st, now) {
     noteOnce(member, `intent-unreadable ${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 80)}`)
     return
   }
-  const { list, notes } = parseIntents(raw)
+  const { list, notes, badShape } = parseIntents(raw)
   for (const note of notes) noteOnce(member, note)
+  // 坏形状 = "读错了地方"，不是"她删光了"。这种时候一律不动状态：
+  // 剪一次就再也回不来了，而少剪一次下一拍还会再来（小肥鱼 2026-11-15 15:42）。
+  if (badShape) return
   const state = readIntentState(member)
   const today = todayKey(now)
   let dirty = false

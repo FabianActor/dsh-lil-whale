@@ -256,6 +256,18 @@ t('pruneIntentState 空条件表 = 全部剪掉（她删光了，状态也该空
   assert.deepEqual(Object.keys(state), [])
 })
 
+t('parseIntents：读错了键 = badShape，不是"空表"（小肥鱼 2026-11-15 15:42：没有条件和读错地方必须是两种结果）', () => {
+  const r = parseIntents({ conditions: [{ id: 'x' }] })
+  assert.equal(r.badShape, true)
+  assert.equal(r.list.length, 0)
+})
+
+t('parseIntents：items: [] 是合法的空表，不是坏形状（她真的删光了，才该剪状态）', () => {
+  const r = parseIntents({ items: [] })
+  assert.equal(r.badShape, false)
+  assert.equal(r.list.length, 0)
+})
+
 console.log(`合计：${pass + fail} 项，PASS ${pass}，FAIL ${fail}`)
 if (fail > 0) {
   for (const f of failures) console.log(`  ✗ ${f}`)
