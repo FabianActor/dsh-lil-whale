@@ -10,8 +10,8 @@
 
 | 层 | 是什么 | 在哪 |
 |---|---|---|
-| 网络/签名层 | `bilibili-api-python` 17.4.2（WBI 签名、字幕、评论、抽帧、登录态） | 她 venv：`C:\Users\Fabian\.dsh\bili-duty\.venv` |
-| 工具层（**我们的**） | 上游 `AGI_Ananas/bilibili-mcp`（MIT）的 vendored 副本 + 我们加的 3 个工具 + 水表 | `D:\文档\WorkSpace\lil-whale\pool\mcp\bili\mcp_server.py`（1,970 行、37 个工具、87.7 KB） |
+| 网络/签名层 | `bilibili-api-python` 17.4.2（WBI 签名、字幕、评论、抽帧、登录态） | 她 venv：`<DSH_HOME>\bili-duty\.venv` |
+| 工具层（**我们的**） | 上游 `AGI_Ananas/bilibili-mcp`（MIT）的 vendored 副本 + 我们加的 3 个工具 + 水表 | `<鱼塘根>\pool\mcp\bili\mcp_server.py`（1,970 行、37 个工具、87.7 KB） |
 | 挂载层 | `@deepseek-ai/dsh-mcp-client`（stdio MCP） | 每条鱼的 profile patch 里一条 `mcp-bili-readonly` |
 | 白名单 | 服务端执行（`BILI_MCP_TOOLS`，名单外连 `tools/list` 都不出现） | 同上，env 里 |
 
@@ -25,7 +25,7 @@
 **成本与边界**：
 
 - 水表：只有设了 `BILI_MEMBER` 的鱼才计数（现在只有 whale），默认 80 次/天；账本 `pool\state\bili\ledger.jsonl`；计数 `pool\state\bili\<member>.json`。
-- 凭证：`pool\mcp\bili\bili_credential.json`（Fabian 的 B 站登录态复制过来的；服务端按"脚本同目录"找它）。**key 只能由人给**（PRD 附录 CHANGELOG A.65）。
+- 凭证：`pool\mcp\bili\bili_credential.json`（宿主的 B 站登录态复制过来的；服务端按"脚本同目录"找它）。**key 只能由人给**（PRD 附录 CHANGELOG A.65）。
 - 不能做：发评论、点赞、收藏、私信、登录、发布。`bili_reply` 等根本没进白名单。
 
 ---
@@ -94,18 +94,18 @@
 
 | 东西 | 路径 |
 |---|---|
-| MCP 服务端（要改的就是它） | `D:\文档\WorkSpace\lil-whale\pool\mcp\bili\mcp_server.py` |
-| 来源/白名单/凭证说明 | `D:\文档\WorkSpace\lil-whale\pool\mcp\bili\SOURCE.md` |
-| 挂载生成器 | `D:\文档\WorkSpace\lil-whale\app\scripts\apply-neutral-preset.mjs`（`--with-bili <鱼键>`） |
-| 小肥鱼 profile patch | `D:\文档\WorkSpace\lil-whale\homes\whale\dsh-home\profiles\whale\cordis.patch.yml` |
-| 小鱼丸 profile patch | `D:\文档\WorkSpace\lil-whale\homes\fishball\dsh-home\profiles\fishball\cordis.patch.yml` |
-| 额度账本 / 计数 | `D:\文档\WorkSpace\lil-whale\pool\state\bili\ledger.jsonl` / `<member>.json` |
+| MCP 服务端（要改的就是它） | `<鱼塘根>\pool\mcp\bili\mcp_server.py` |
+| 来源/白名单/凭证说明 | `<鱼塘根>\pool\mcp\bili\SOURCE.md` |
+| 挂载生成器 | `<鱼塘根>\app\scripts\apply-neutral-preset.mjs`（`--with-bili <鱼键>`） |
+| 小肥鱼 profile patch | `<鱼塘根>\homes\whale\dsh-home\profiles\whale\cordis.patch.yml` |
+| 小鱼丸 profile patch | `<鱼塘根>\homes\fishball\dsh-home\profiles\fishball\cordis.patch.yml` |
+| 额度账本 / 计数 | `<鱼塘根>\pool\state\bili\ledger.jsonl` / `<member>.json` |
 | `环境.md` 里那节"看外面" | 由 `app\scripts\bili-section.mjs` 读白名单生成，别手写 |
 
 **直连探针**（不经过鱼、不动进程，用来验服务端）：
 
 ```powershell
-& 'C:\Users\Fabian\.dsh\bili-duty\.venv\Scripts\python.exe' - <<'PY'
+& '<DSH_HOME>\bili-duty\.venv\Scripts\python.exe' - <<'PY'
 # 用 mcp 客户端连 stdio，列工具 / 调 bili_frames(num=12)
 PY
 ```
@@ -115,7 +115,7 @@ PY
 **挂载/重启**：
 
 ```powershell
-cd D:\文档\WorkSpace\lil-whale\app
+cd <鱼塘根>\app
 pwsh -File scripts\fish.ps1 down whale -Yes
 pwsh -File scripts\apply-neutral-preset.mjs --with-bili whale --home ..\homes\whale\dsh-home --profile whale
 pwsh -File scripts\fish.ps1 up whale -NoBrowser
@@ -126,7 +126,7 @@ pwsh -File scripts\fish.ps1 up whale -NoBrowser
 ## 7. 给接手的 session：第一件事
 
 1. 先跑一遍探针，确认 15 个工具还在、`bili_frames` 能返回 3 张（基线）。
-2. 决定做路线 1 还是 1+2；`pip install imageio-ffmpeg` 进 venv 前先跟 Fabian 说一声（新增依赖）。
+2. 决定做路线 1 还是 1+2；`pip install imageio-ffmpeg` 进 venv 前先跟 宿主 说一声（新增依赖）。
 3. 改完先**只重启一条鱼**（建议 whale），用探针验完再挂到 fishball。
 4. 把新增工具的代价写进 `环境.md` 那节（由 `bili-section.mjs` 生成，别手改纸）。
 
@@ -140,7 +140,7 @@ pwsh -File scripts\fish.ps1 up whale -NoBrowser
 
 路线 1 确实做通了（`bili_grab` 真解码、`bili_frames` 12 帧、探针全绿），但做完一对比就发现不值：
 同样是"看一条视频"，插件给的是 **1 张分镜图 + 视频 AI 总结 + 分段 + 热评 + 弹幕热词 + 每格台词**，
-我们给的是 6 张大图、约 9k token、没有任何文字。Fabian 拍板：**不重复造轮子，换成现成插件**。
+我们给的是 6 张大图、约 9k token、没有任何文字。宿主拍板：**不重复造轮子，换成现成插件**。
 
 装了什么（只动了 whale）：
 
@@ -150,7 +150,7 @@ pwsh -File scripts\fish.ps1 up whale -NoBrowser
 | 工具 | `bili_look` / `bili_look_zoom` / `bili_find` / `bili_feed` / `bili_comments` / `bili_surf` / `bili_inbox`（写操作存在但权限默认 `off`） |
 | 配置 | `homes\whale\dsh-home\bili-eyes.json`（额度收到 `maxPerHour:12` / `maxFindPerHour:30`） |
 | ffmpeg | 共享静态版 `pool\tools\ffmpeg\bin\{ffmpeg,ffprobe}.exe`（插件自带下载器拉的，不走系统 PATH） |
-| 登录 | `homes\whale\dsh-home\bili-eyes\credential.json`（Fabian 的号，`cookies.txt` 一起生成） |
+| 登录 | `homes\whale\dsh-home\bili-eyes\credential.json`（宿主的号，`cookies.txt` 一起生成） |
 | 数据 | `pool\cache\bili-eyes\media\`（下载的视频）、`$DSH_HOME\bili-eyes\`（缓存/台词/history） |
 
 **whale 的 `mcp-bili-readonly` 已整块退役**（原因：插件也有 `bili_comments`，两套同名工具会撞；两套并存模型也会挑错）。
@@ -158,4 +158,4 @@ pwsh -File scripts\fish.ps1 up whale -NoBrowser
 
 - `app\scripts\bili-section.mjs` 现在会读 profile 的 `dsh.profile.bundles` 判断挂的是插件还是 MCP，自动写对应口径；`环境.md` 已用 `fish.ps1 refresh whale` 重生成。
 - 备份：`cordis.patch.yml.bak-bili-eyes-20261115`、`node_modules\.modules.yaml.bak-20261115`（旧家目录搬家后 pnpm virtualStoreDir 指错，装插件前修过）。
-- **待办**：Fabian 手动重启 whale 后才生效；重启后让 whale 自己 `bili_look` 一条验证图片能进模型；fishball 暂不动，等 whale 验证完再决定接不接。
+- **待办**：宿主手动重启 whale 后才生效；重启后让 whale 自己 `bili_look` 一条验证图片能进模型；fishball 暂不动，等 whale 验证完再决定接不接。
