@@ -13,6 +13,8 @@
  * - 私聊：不区分 first/lost/resumed（渠道是谁、递了几句），只按积压与否换尾巴
  */
 
+import { createHash } from 'node:crypto'
+
 export function wakeWordingOf({ kind, who, dmWho = '', count, firstRead, cursorLost, backlog }) {
   const where = kind === 'dm'
     ? `${dmWho} 私下跟你说了 ${count} 句`
@@ -32,13 +34,20 @@ export function wakeWordingOf({ kind, who, dmWho = '', count, firstRead, cursorL
   // 投递日志里没有一处记"当时说的是哪句话"，事后只能靠谁在群里抄得准。
   // 所以把模板 id 一起返回，由调用方写进账本：tpl + n + tail。
   // 判据：**能验的东西要能事后验；只能当场验的，等于只有当事人可信。**
+  // 2026-11-15 21:3x，第三条鱼：tpl 记的是"哪一句"，不记"哪一版"——明天文案改了，
+  // tpl 还是同一个 id，旧行对应的句子在代码里已经不存在，而且没有任何地方会报。
+  // 所以 id 带版本：任何一句文案的改动都必须把 @N 加一（改句子 = 改 id，diff 里看得见）。
   const tpl = kind === 'dm'
-    ? 'dm'
+    ? 'dm@1'
     : backlog
       ? firstRead
-        ? cursorLost ? 'group-lost' : 'group-first'
-        : 'group-backlog'
-      : 'group-plain'
-  const tailTpl = backlog ? (firstRead ? 'tail-no-backfill' : 'tail-named') : 'tail-go'
-  return { where, tailHint, tpl, tailTpl }
+        ? cursorLost ? 'group-lost@1' : 'group-first@1'
+        : 'group-backlog@1'
+      : 'group-plain@1'
+  const tailTpl = backlog ? (firstRead ? 'tail-no-backfill@1' : 'tail-named@1') : 'tail-go@1'
+  // 2026-11-15 21:3x，第二条鱼：tpl 锁的是"选了哪一句"，锁不住"句子里那个数对不对"。
+  // 渲染后整句的短指纹跟 tpl 一起记，才能事后重算出同一句话；
+  // 变量（n / 谁）本来就在同一行里，所以可复核 = 这一行 + 这个版本的代码。
+  const sha8 = createHash('sha256').update(where + '\n' + tailHint, 'utf8').digest('hex').slice(0, 8)
+  return { where, tailHint, tpl, tailTpl, sha8 }
 }
