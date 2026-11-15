@@ -48,6 +48,9 @@ export function wakeWordingOf({ kind, who, dmWho = '', count, firstRead, cursorL
   // 2026-11-15 21:3x，第二条鱼：tpl 锁的是"选了哪一句"，锁不住"句子里那个数对不对"。
   // 渲染后整句的短指纹跟 tpl 一起记，才能事后重算出同一句话；
   // 变量（n / 谁）本来就在同一行里，所以可复核 = 这一行 + 这个版本的代码。
-  const sha8 = createHash('sha256').update(where + '\n' + tailHint, 'utf8').digest('hex').slice(0, 8)
-  return { where, tailHint, tpl, tailTpl, sha8 }
+  // 名称故意窄：wtext（wording text）= where + tailHint。
+  // 不含 head（「这段会话是 xx」）、不含预览里引用的消息（那是数据）、不含固定尾句与路径。
+  // 别叫 sha8——那样将来有人会拿它证明「她看到的就是这整句话」，比事实大一块。
+  const wtext8 = createHash('sha256').update(where + '\n' + tailHint, 'utf8').digest('hex').slice(0, 8)
+  return { where, tailHint, tpl, tailTpl, wtext8 }
 }

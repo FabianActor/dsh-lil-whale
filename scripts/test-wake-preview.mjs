@@ -71,17 +71,17 @@ function eq(name, got, want) {
 
 // ---------- 渲染指纹：能事后重算出同一句话 ----------
 // 2026-11-15 21:3x，小鱼丸："tpl 锁的是'选了哪一句'，锁不住'句子里那个数对不对'。"
-// 所以投递行同时记 tpl@版本 + sha8 + pkg：拿同一版代码、同样的变量（n、谁），
-// 就能重算出同一个 sha8；算不出来，那一行就只是"记下了当时用了哪个模板"。
+// 所以投递行同时记 tpl@版本 + wtext8 + pkg：拿同一版代码、同样的变量（n、谁），
+// 就能重算出同一个 wtext8；算不出来，那一行就只是"记下了当时用了哪个模板"。
 {
   const a = wakeWordingOf({ kind: 'group', who: '小满、小鱼丸', count: 76, firstRead: false, cursorLost: false, backlog: true })
   const b = wakeWordingOf({ kind: 'group', who: '小满、小鱼丸', count: 76, firstRead: false, cursorLost: false, backlog: true })
   const c = wakeWordingOf({ kind: 'group', who: '小满、小鱼丸', count: 77, firstRead: false, cursorLost: false, backlog: true })
-  eq('同一组入参的 sha8 稳定', a.sha8 === b.sha8, true)
-  eq('n 变了 sha8 要变', a.sha8 === c.sha8, false)
-  eq('sha8 是 8 位十六进制', /^[0-9a-f]{8}$/.test(a.sha8), true)
+  eq('同一组入参的 wtext8 稳定', a.wtext8 === b.wtext8, true)
+  eq('n 变了 wtext8 要变', a.wtext8 === c.wtext8, false)
+  eq('wtext8 是 8 位十六进制', /^[0-9a-f]{8}$/.test(a.wtext8), true)
   const recompute = createHash('sha256').update(a.where + '\n' + a.tailHint, 'utf8').digest('hex').slice(0, 8)
-  eq('用记录里的正文与尾巴能重算出同一个 sha8', recompute, a.sha8)
+  eq('用记录里的正文与尾巴能重算出同一个 wtext8', recompute, a.wtext8)
 }
 
 // ---------- 私聊 ----------
