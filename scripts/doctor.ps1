@@ -439,36 +439,15 @@ try {
 }
 
 # 4. 名册：群认会话不认名字；登记错了 = 叫错人
+#    2026-11-16 17:59 第三、四条鱼发现：这一格是单鱼时代的遗留——写死 whale、又拿"配置主人的家"去查别人；
+#    鱼在自己家里跑 doctor 时会误报 FAIL，还附一条会改坏共享状态的 NEXT。上面的「会话绑定」已逐鱼查过同一件事。
+#    "修是让旧路也对，删是让它不存在"——整格删掉，只留两件仍需要的事。
 $pinsFile = Join-Path $Cfg.GroupDir 'pins.json'
-if (Test-Path -LiteralPath $pinsFile) {
-  try {
-    $pins = Get-Content -LiteralPath $pinsFile -Raw -Encoding UTF8 | ConvertFrom-Json
-    $whaleIds = @($pins.whale)
-    if ($whaleIds.Count -eq 0) {
-      Add-Row '名册' 'FAIL' 'pins.json 里 whale 是空的' 'NEXT: 开她的窗 → 侧边栏复制 Session ID → node scripts\pins.mjs --member whale --id <id>'
-    } else {
-      $sessionsDir = Join-Path $Cfg.HerDshHome 'sessions'
-      $missing = @()
-      foreach ($id in $whaleIds) {
-        $found = Get-ChildItem -LiteralPath $sessionsDir -Directory -ErrorAction SilentlyContinue |
-          ForEach-Object { Join-Path $_.FullName $id } |
-          Where-Object { Test-Path -LiteralPath $_ }
-        if (-not $found) { $missing += $id }
-      }
-      if ($missing.Count -eq 0) {
-        Add-Row '名册' 'OK' ("whale = " + ($whaleIds -join ', ') + "（会话目录都在）")
-      } else {
-        Add-Row '名册' 'FAIL' ("whale 里有会话找不到：" + ($missing -join ', ')) 'NEXT: 那段会话可能已被删/换段——用 node scripts\pins.mjs --member whale --id <新id> 换掉'
-      }
-      if ($whaleIds.Count -gt 1) {
-        Add-Row '名册（说明）' 'WARN' '同一时刻只该有一段会话在群里：两条 id = 可能两段都算她' 'NEXT: 搬段完成后只留一条'
-      }
-    }
-  } catch {
-    Add-Row '名册' 'FAIL' ("pins.json 读不了：{0}" -f $_.Exception.Message) 'NEXT: 它必须是合法 JSON；别手改到一半'
-  }
-} else {
+if (-not (Test-Path -LiteralPath $pinsFile)) {
   Add-Row '名册' 'FAIL' 'group\pins.json 不存在' 'NEXT: 群不认人：她说的每句话都会被守门拒掉'
+} else {
+  # 空白也要是声明：watcher 的家不在鱼塘里（%USERPROFILE%\.dsh），「会话绑定」按设计只盖三条鱼。
+  Add-Row '名册（lee）' 'INFO' 'watcher 的家不在鱼塘里，pins.lee 不在这套体检的视野里（空白是声明，不是通过）'
 }
 
 # 她有没有过会话：sessionId 写过，或者家里的 sessions\ 目录里有文件。
@@ -748,9 +727,17 @@ try {
   if ($Cfg.MembersFile -and (Test-Path -LiteralPath $Cfg.MembersFile)) {
     $rosterAcl = (Get-Content -LiteralPath $Cfg.MembersFile -Raw -Encoding utf8 | ConvertFrom-Json).members
     $keyLog = Join-Path $Cfg.PoolState 'keys.log'
+    $keyFps = @{}
+    $keyNameOf = @{}
+    $inheritFrom = @{}
     $lastKeyLine = @{}
     if (Test-Path -LiteralPath $keyLog) {
       foreach ($line in (Get-Content -LiteralPath $keyLog -Encoding utf8)) {
+        if ($line -like '*| key-inherit |*') {
+          $ck = if ($line -match 'child=([a-z0-9-]+)') { $Matches[1] } else { $null }
+          $fk = if ($line -match 'from=([a-z0-9-]+)') { $Matches[1] } else { $null }
+          if ($ck -and $fk) { $inheritFrom[$ck] = $fk }
+        }
         if ($line -match 'child=([a-z0-9-]+)') { $lastKeyLine[$Matches[1]] = $line }
       }
     }
@@ -782,6 +769,8 @@ try {
         $cred = Join-Path ([string]$m.dshHome) '.credentials.yaml'
         if (Test-Path -LiteralPath $cred) {
           $fp = Get-FileFingerprint $cred
+          $keyFps[$prop.Name] = $fp
+          $keyNameOf[$prop.Name] = $fishName
           $rec = $lastKeyLine[$prop.Name]
           if (-not $rec) {
             Add-Row ('钥匙（' + $fishName + '）') 'OK' ("指纹 {0}（没有账本记录：人自己填的，正常）" -f $fp)
@@ -793,6 +782,25 @@ try {
         }
       }
     }
+  }
+  # 跨鱼钥匙：doctor 只比"自己 vs 自己上次"，两条鱼共用一把 key 时账上一路 OK（2026-11-16 第三、四条鱼发现）。
+  # 这不是 FAIL —— 继承是有意设计（keys.log 的 key-inherit 会记）；但它一定是有后果的事实，要说出来。
+  $fpGroups = @($keyFps.GetEnumerator() | Group-Object Value | Where-Object { $_.Count -gt 1 })
+  if ($fpGroups.Count -gt 0) {
+    foreach ($g in $fpGroups) {
+      $members = @($g.Group | ForEach-Object { [string]$_.Key })
+      $roots = @($members | Where-Object { -not $inheritFrom.ContainsKey($_) -or ($members -notcontains $inheritFrom[$_]) })
+      $explained = ($roots.Count -eq 1) -and @($members | Where-Object { $_ -ne $roots[0] -and ($members -contains $inheritFrom[$_]) }).Count -eq ($members.Count - 1)
+      $who = ($members | ForEach-Object { $keyNameOf[$_] + '（' + $_ + '）' }) -join '、'
+      if ($explained) {
+        $childDesc = ($members | Where-Object { $_ -ne $roots[0] } | ForEach-Object { $_ + ' ← ' + $inheritFrom[$_] }) -join '、'
+        Add-Row '钥匙（跨鱼）' 'OK' ("{0} 共用同一把钥匙（指纹 {1}）：有意继承（{2}，有 key-inherit 记录）" -f $who, $g.Name, $childDesc)
+      } else {
+        Add-Row '钥匙（跨鱼）' 'WARN' ("{0} 共用同一把钥匙（指纹 {1}）：会互相抢同一份额度，且账上没有继承记录" -f $who, $g.Name) 'NEXT: 若是有意的，用 fish.ps1 key grant 记账；不想共用就让宿主在各自网页里填各自的 key'
+      }
+    }
+  } else {
+    Add-Row '钥匙（跨鱼）' 'OK' '各条鱼的钥匙指纹各不相同'
   }
 } catch {
   Add-Row '通行证' 'WARN' ('查不了：' + $_.Exception.Message)
