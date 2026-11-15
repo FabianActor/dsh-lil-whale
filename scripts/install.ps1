@@ -265,6 +265,32 @@ if (-not (Test-Path -LiteralPath $wsFile)) {
   Ok '工作区表已存在，保留'
 }
 
+# 2026-11-15 20:2x（第三条鱼第一次醒来）：沙箱给 workspace 贴通行证要到家根上拿 WRITE_OWNER，
+# 而新家缺"当前用户的完全控制"这条显式 ACE ⇒ 所有 pwsh 起不来（Win32 5），
+# 鱼醒来第一件事变成修自己的门。装的时候补，补不上就当场失败 —— 错在装的人，不在鱼。
+Step '3d. 家根权限（沙箱贴通行证的前置）'
+$needMe = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+$rootAcl = Get-Acl -LiteralPath $Workspace
+$hasFull = @($rootAcl.Access | Where-Object {
+  $_.AccessControlType -eq 'Allow' -and
+  $_.IdentityReference.Value -eq $needMe -and
+  (([System.Security.AccessControl.FileSystemRights]$_.FileSystemRights -band [System.Security.AccessControl.FileSystemRights]::FullControl) -eq [System.Security.AccessControl.FileSystemRights]::FullControl)
+})
+if ($hasFull.Count -gt 0) {
+  Ok "已有完全控制：$needMe"
+} else {
+  try {
+    $rule = [System.Security.AccessControl.FileSystemAccessRule]::new($needMe, 'FullControl', 'Allow')
+    $rootAcl.AddAccessRule($rule)
+    Set-Acl -LiteralPath $Workspace -AclObject $rootAcl -ErrorAction Stop
+    $again = @((Get-Acl -LiteralPath $Workspace).Access | Where-Object { $_.AccessControlType -eq 'Allow' -and $_.IdentityReference.Value -eq $needMe })
+    if ($again.Count -eq 0) { throw '写完读不到那条 ACE' }
+    Ok "补了完全控制：$needMe"
+  } catch {
+    Die "给家根补完全控制失败：$($_.Exception.Message)" "检查 $Workspace 的所有者；没有这条权限，鱼第一次调用 pwsh 就会失败（Win32 5）"
+  }
+}
+
 if (-not $SkipParent) {
   Step "4. 把两个插件装进你的 profile（$ParentProfile）"
   try {

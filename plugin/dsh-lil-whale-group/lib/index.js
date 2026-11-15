@@ -1825,9 +1825,13 @@ function apply(ctx) {
       const sid = sessionIdOf(exec.agent)
       if (member === null || !pinnedSessions(member).includes(sid)) {
         logLine({ note: 'group_say-rejected', member, sessionId: sid })
+        // 2026-11-15：旧文案教鱼"自己把 id 写进 pins.json"——名册是宿主的账，鱼不该自己改。
+        // 第三条鱼第一次开口时就是照着这句去改的（还真改成了，因为沙箱能提权）。
+        // 该做的是让宿主跑一条命令；文案指向那条命令，别再把宿主的活派给鱼。
         throw new Error(
           '这段会话不在群里。群只认 pins.json 里登记过的会话（一个人可以登记多段）。' +
-          '要在这里发言，把这段会话的 id 写进 pins.json 就行，不用改代码、不用重启。',
+          '让宿主跑：pwsh -File scripts/fish.ps1 bind <你的成员键> <这段会话的 id>。' +
+          '这是名册，只有宿主能写；你不用自己改文件。',
         )
       }
       const channel = args.channel === 'dm' ? 'dm' : 'group'
@@ -1898,7 +1902,7 @@ function apply(ctx) {
       if (member === null || !pinnedSessions(member).includes(sid)) {
         throw new Error(
           '这段会话不在群里。群只认 pins.json 里登记过的会话（一个人可以登记多段）。' +
-          '要在这里用睡觉工具，把这段会话的 id 写进 pins.json 就行。',
+          '要在这里用睡觉工具，也一样：让宿主跑 pwsh -File scripts/fish.ps1 bind <你的成员键> <这段会话的 id>。',
         )
       }
       return member
@@ -2528,13 +2532,23 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
   // 积压分档（2026-11-11，另一个 Leea 提的）：一次塞 20 条，一个 turn 处理完就是流水账。
   // 超过 8 条就明说"先看最后三条"，让"没读完"变成合情合理的做法，而不是必须完成的任务。
   const backlog = incoming.length > WAKE.backlogTier
+  // 2026-11-15 20:2x，第三条鱼第一次开口时的第一句就抓到这个：
+  // 唤醒词对她说"你睡了有一会儿，群里积了 76 条"，可她没睡过、也从来没读过群。
+  // 「没有游标」和「睡了一觉」在纸上长得一样 —— 又是缺省值没被定义（CHANGELOG A.97）。
+  // 判据用"递之前游标是不是 0"：0 = 头一回读这个通道；否则 = 离开过一段时间再回来。
+  // 用词也别替她断言原因：窗关着、睡着、刚出生，在投递层看来是同一件事。
+  const firstRead = sharedSeenStored === 0
   const where = channel.kind === 'dm'
     ? `${channel.who} 私下跟你说了 ${incoming.length} 句`
     : backlog
-      ? `你睡了有一会儿，群里积了 ${incoming.length} 条（${who}）`
+      ? firstRead
+        ? `群里现在有 ${incoming.length} 条（${who}）——你还没读过这个群（还没有游标）`
+        : `你不在的这段时间，群里积了 ${incoming.length} 条（${who}）`
       : `群里有 ${incoming.length} 条新的（${who}）`
   const tailHint = backlog
-    ? '先看最后三条，再看看有没有指名你的。'
+    ? firstRead
+      ? '先看最后三条；前面的不用补，想看再翻。'
+      : '先看最后三条，再看看有没有指名你的。'
     : '去看看。'
   const target = channel.kind === 'dm' ? channel.file : READABLE
 
@@ -2561,7 +2575,7 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
   // `id` 是构造出来的 user message id，用来跟会话日志对账（见 wakeDeliverLog 的注释）；
   // `last-line` 是那条消息在通道文件里的绝对行号（1 基），`last-from` 是它谁写的。
   // 有这两个字段，"同一条被递了两次"和"我们自己叫了两次"才分得开 —— 只看时间戳分不开。
-  const deliveryNote = `id=${built.id} member=${member} channel=${channel.key} seat=${seat === '' ? '-' : seat} pending=${incoming.length} last-line=${lastIncomingIndex + 1} last-from=${incoming[incoming.length - 1]?.from ?? '-'} last-ts=${lastTs || 0} cursor=${lines.length}`
+  const deliveryNote = `id=${built.id} member=${member} channel=${channel.key} seat=${seat === '' ? '-' : seat} pending=${incoming.length} last-line=${lastIncomingIndex + 1} last-from=${incoming[incoming.length - 1]?.from ?? '-'} last-ts=${lastTs || 0} cursor=${lines.length} prior-cursor=${sharedSeenStored}`
   try {
     agent.followup(built)
   } catch (error) {

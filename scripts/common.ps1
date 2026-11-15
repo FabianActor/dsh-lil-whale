@@ -183,6 +183,45 @@ function Repair-WorkspaceGrantGaps([object]$Member) {
   return $fixed
 }
 
+# 沙箱贴通行证（grantWrite）要在家根上拿到 WRITE_OWNER —— 而受限令牌能拿到的权限
+# 只来自显式 ACE（Authenticated Users 那条会被 restricting SID 剪掉）。
+# 2026-11-15 第三条鱼出生时撞到这件事：装完的家缺这条 ACE，鱼醒来第一件事是修自己的门。
+# 判据只看"有没有一条给当前用户的 Allow FullControl"（FullControl 含 WRITE_DAC + WRITE_OWNER）。
+function Get-HomeProvisionPrincipal() {
+  return [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+}
+
+function Test-WorkspaceProvisionRights([string]$Path) {
+  try {
+    $me = Get-HomeProvisionPrincipal
+    $acl = Get-Acl -LiteralPath $Path -ErrorAction Stop
+    foreach ($rule in $acl.Access) {
+      if ($rule.AccessControlType -ne 'Allow') { continue }
+      if ($rule.IdentityReference.Value -ne $me) { continue }
+      $rights = [System.Security.AccessControl.FileSystemRights]$rule.FileSystemRights
+      $need = [System.Security.AccessControl.FileSystemRights]::FullControl
+      if (($rights -band $need) -eq $need) { return $true }
+    }
+    return $false
+  } catch {
+    return $false
+  }
+}
+
+function Repair-WorkspaceProvisionRights([string]$Path) {
+  if (Test-WorkspaceProvisionRights $Path) { return $true }
+  try {
+    $me = Get-HomeProvisionPrincipal
+    $acl = Get-Acl -LiteralPath $Path -ErrorAction Stop
+    $rule = [System.Security.AccessControl.FileSystemAccessRule]::new($me, 'FullControl', 'Allow')
+    $acl.AddAccessRule($rule)
+    Set-Acl -LiteralPath $Path -AclObject $acl -ErrorAction Stop
+    return (Test-WorkspaceProvisionRights $Path)
+  } catch {
+    return $false
+  }
+}
+
 # 凭证文件的指纹：sha256 前 12 位十六进制。只记指纹、不记值（CHANGELOG A.68）。
 function Get-FileFingerprint([string]$Path) {
   if (-not $Path -or -not (Test-Path -LiteralPath $Path)) { return '' }

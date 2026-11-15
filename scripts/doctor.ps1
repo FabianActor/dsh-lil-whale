@@ -388,6 +388,49 @@ try {
   Add-Row '生命周期字段' 'WARN' ('核不了：' + $_.Exception.Message)
 }
 
+# 3k. 会话绑定：新鱼第一次开口后要有人把她钉进名册（第三条鱼 2026-11-15 20:25 撞到）
+#     她家里的会话是宿主在网页里建的；建完名册里没有她 —— 群里不认她，第一句话会被拒。
+#     这一格只报"该钉没钉"和"钉了找不到"，不替人钉（名册是宿主的账）。
+try {
+  if ($Cfg.MembersFile -and (Test-Path -LiteralPath $Cfg.MembersFile)) {
+    $rosterBind = (Get-Content -LiteralPath $Cfg.MembersFile -Raw -Encoding utf8 | ConvertFrom-Json).members
+    $pinsFile = Join-Path $Cfg.GroupDir 'pins.json'
+    $pins = $null
+    if (Test-Path -LiteralPath $pinsFile) {
+      try { $pins = Get-Content -LiteralPath $pinsFile -Raw -Encoding utf8 | ConvertFrom-Json } catch { $pins = $null }
+    }
+    foreach ($prop in $rosterBind.PSObject.Properties) {
+      $m = $prop.Value
+      if ($m.kind -ne 'fish' -or $m.role -eq 'watcher' -or -not $m.dshHome) { continue }
+      $fishName = if ($m.name) { [string]$m.name } else { $prop.Name }
+      $sessionsRoot = Join-Path ([string]$m.dshHome) 'sessions'
+      $sessionFiles = @()
+      if (Test-Path -LiteralPath $sessionsRoot) {
+        $sessionFiles = @(Get-ChildItem -LiteralPath $sessionsRoot -Recurse -File -Force -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+      }
+      $bound = @()
+      if ($pins -and ($pins.PSObject.Properties.Name -contains $prop.Name)) { $bound = @($pins.($prop.Name)) }
+      if ($sessionFiles.Count -eq 0 -and $bound.Count -eq 0) {
+        Add-Row ('会话绑定（' + $fishName + '）') 'OK' '还没开口（没有会话，也没钉）'
+      } elseif ($sessionFiles.Count -gt 0 -and $bound.Count -eq 0) {
+        Add-Row ('会话绑定（' + $fishName + '）') 'WARN' ('她家里有 {0} 个会话文件，但没有一段钉在 pins.json 里（群里不认她）' -f $sessionFiles.Count) ('NEXT: pwsh -File scripts/fish.ps1 bind ' + $prop.Name + ' -Session <会话id>')
+      } else {
+        $matched = 0
+        foreach ($bid in $bound) {
+          if (@($sessionFiles | Where-Object { $_ -like ('*' + $bid + '*') }).Count -gt 0) { $matched++ }
+        }
+        if ($matched -eq $bound.Count) {
+          Add-Row ('会话绑定（' + $fishName + '）') 'OK' ('钉了 {0} 段，在她家都能找到' -f $bound.Count)
+        } else {
+          Add-Row ('会话绑定（' + $fishName + '）') 'WARN' ('钉了 {0} 段，只有 {1} 段能在她家找到（会叫错人）' -f $bound.Count, $matched) ('NEXT: 核对 pins.json 与 ' + $sessionsRoot)
+        }
+      }
+    }
+  }
+} catch {
+  Add-Row '会话绑定' 'WARN' ('查不了：' + $_.Exception.Message)
+}
+
 # 4. 名册：群认会话不认名字；登记错了 = 叫错人
 $pinsFile = Join-Path $Cfg.GroupDir 'pins.json'
 if (Test-Path -LiteralPath $pinsFile) {
@@ -714,6 +757,12 @@ try {
         Add-Row ('通行证（' + $fishName + '）') 'WARN' ("{0} 个对象缺 capability SID（文件工具能写、pwsh 不能写）" -f $gaps.Count) ('NEXT: pwsh -File scripts\fish.ps1 acl-repair ' + $prop.Name)
       } else {
         Add-Row ('通行证（' + $fishName + '）') 'OK' ('workspace 子树都有 ' + (Get-WorkspaceSid ([string]$m.home)))
+      }
+      # 2026-11-15：通行证齐全不等于贴得上去 —— 贴要 WRITE_OWNER，而它来自家根上的显式 ACE。
+      if (-not (Test-WorkspaceProvisionRights ([string]$m.home))) {
+        Add-Row ('家根权限（' + $fishName + '）') 'WARN' '家根没有当前用户的完全控制：沙箱贴通行证要 WRITE_OWNER，鱼会连 pwsh 都起不来' ('NEXT: pwsh -File scripts/fish.ps1 acl-repair ' + $prop.Name)
+      } else {
+        Add-Row ('家根权限（' + $fishName + '）') 'OK' '家根有当前用户的完全控制（沙箱贴通行证的前置）'
       }
       if ($m.dshHome) {
         $cred = Join-Path ([string]$m.dshHome) '.credentials.yaml'

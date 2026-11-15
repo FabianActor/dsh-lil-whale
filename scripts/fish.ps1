@@ -20,6 +20,7 @@
 #   pwsh -File fish.ps1 acl-check [whale|all]   查沙箱通行证（文件工具能写、pwsh 不能写 = 缺它）
 #   pwsh -File fish.ps1 acl-repair [whale|all]  补沙箱通行证（补完记 pool\state\acl.log）
 #   pwsh -File fish.ps1 wake <名字|all> [-By 谁] [-Why 为什么]  家长强行叫醒（睡眠窗里也叫得醒；记 sleep.log）
+#   pwsh -File fish.ps1 bind <键> -Session <会话id>   把这段会话钉到那条鱼名下（新鱼第一次开口后由宿主跑）
 #   pwsh -File fish.ps1 help
 #
 # 选项：-Window（开窗起；默认无人值守） -NoBrowser（强制不开） -BrowserMainOnly（只给主 dsh 开窗） -Yes（不停下来问）
@@ -53,6 +54,8 @@ param(
   [string]$InheritKey = '',
   # 谁想养的（留痕用）：比如 whale。
   [string]$RequestedBy = '',
+  # bind 用：要钉给那条鱼的会话 id（session-xxxxxxxx-…）。
+  [string]$Session = '',
   # 人给钥匙用：fish.ps1 key grant <孩子> -From <家长>
   [string]$From = ''
 )
@@ -625,6 +628,7 @@ fish.ps1 -- 鱼群唯一的入口
   pwsh -File fish.ps1 acl-check [whale|all]   查沙箱通行证（文件工具能写、pwsh 不能写 = 缺它）
   pwsh -File fish.ps1 acl-repair [whale|all]  补沙箱通行证（补完记 pool\state\acl.log）
   pwsh -File fish.ps1 wake <名字|all>         家长强行叫醒（睡眠窗里也叫得醒；记 sleep.log）
+  pwsh -File fish.ps1 bind <键> -Session <会话id>   把这段会话钉到那条鱼名下（新鱼第一次开口后由宿主跑）
   pwsh -File fish.ps1 help
 
 选项：-NoBrowser -Window -BrowserMainOnly -Console -Yes -By <谁> -Why <为什么> -Port <n>
@@ -955,6 +959,37 @@ function Invoke-NewFish {
   return $true
 }
 
+# ---------- 把"这段会话"钉给某条鱼（CHANGELOG A.104） ----------
+# 为什么要有这一条：新鱼的家是空的，第一段会话由宿主在网页里建；建完那一刻
+# 名册（pins.json）里没有她 —— 群里不认她，她说的第一句话会被拒。
+# 这一步是宿主的活（名册只有宿主能写），所以做成一条命令，别让鱼自己改文件。
+function Invoke-Bind([string]$key, [string]$sessionId) {
+  if ($key -eq '') { Write-Host 'xx 要指名哪条鱼：bind <键> -Session <会话id>（例：bind xiaoman -Session session-4e31957c-…）'; return $false }
+  if ($sessionId -eq '') { Write-Host 'xx 要给出会话 id：-Session session-xxxxxxxx-…（在她家的 sessions 目录里能看到）'; return $false }
+  if ($sessionId -notmatch '^session-[0-9a-f-]{20,}$') { Write-Host ("xx 会话 id 形状不对：{0}" -f $sessionId); return $false }
+  $m = Get-Fish $key
+  if (-not $m) { Write-Host ("xx 名册里没有这条鱼：{0}" -f $key); return $false }
+  if ($m.Role -eq 'watcher') { Write-Host 'xx 巡守的会话在它自己的 HOME 里，不走这条命令。'; return $false }
+  if (-not $m.DshHome) { Write-Host ("xx 名册里没有 {0} 的家（dshHome）" -f $m.Label); return $false }
+  # 会话必须真的在那个家里：否则"绑"就成了把别人的会话顶到她的名字下（叫错人比叫不动更糟）。
+  $found = $false
+  $sessionsRoot = Join-Path ([string]$m.DshHome) 'sessions'
+  if (Test-Path -LiteralPath $sessionsRoot) {
+    $found = @(Get-ChildItem -LiteralPath $sessionsRoot -Recurse -File -Force -ErrorAction SilentlyContinue |
+      Where-Object { $_.FullName -like ('*' + $sessionId + '*') }).Count -gt 0
+  }
+  if (-not $found) {
+    Write-Host ("xx 在 {0} 的会话目录里找不到 {1} —— 拒绝绑定（先让她在网页里建一段会话）" -f $m.Label, $sessionId)
+    Write-Host ("   看的目录：{0}" -f $sessionsRoot)
+    return $false
+  }
+  & node (Join-Path $Cfg.Root 'scripts/bind-member.mjs') --member $key --id $sessionId
+  if ($LASTEXITCODE -ne 0) { Write-Host 'xx 写名册失败（看上面的 NEXT）'; return $false }
+  Write-Host ("✓ {0} 已钉住这段会话：{1}" -f $m.Label, $sessionId)
+  Write-Host 'NEXT: 在群里跟她说话，或者让她跑一句 group_say 试试；doctor 的「会话绑定」这一格现在该是 OK。'
+  return $true
+}
+
 # ---------- 沙箱通行证：查、补（CHANGELOG A.67） ----------
 # 判据：同一路径、同样内容，文件工具能写而 pwsh 不能写 —— 是"手"缺通行证，不是语法问题。
 function Invoke-AclCmd([string]$action, [string]$name) {
@@ -963,6 +998,23 @@ function Invoke-AclCmd([string]$action, [string]$name) {
   $ok = $true
   foreach ($m in $members) {
     $sid = Get-WorkspaceSid ([string]$m.Home)
+    # 2026-11-15：沙箱给 workspace 贴通行证需要家根上的 WRITE_OWNER。
+    # 缺这条时，鱼第一次调 pwsh 就会失败（Win32 5），外观是"这条鱼坏了"。
+    if (-not (Test-WorkspaceProvisionRights ([string]$m.Home))) {
+      if ($action -eq 'check') {
+        Write-Host ("{0}：家根缺当前用户的完全控制（沙箱贴通行证要 WRITE_OWNER；鱼会连 pwsh 都起不来）" -f $m.Label)
+        Write-Host ("NEXT: pwsh -File scripts/fish.ps1 acl-repair {0}" -f $m.Key)
+        $ok = $false
+        continue
+      }
+      if (Repair-WorkspaceProvisionRights ([string]$m.Home)) {
+        Write-Host ("   补上了家根权限：{0}" -f [System.Security.Principal.WindowsIdentity]::GetCurrent().Name)
+      } else {
+        Write-Host 'xx 家根权限补不上（需要所有者/管理员权限）'
+        $ok = $false
+        continue
+      }
+    }
     $gaps = Get-WorkspaceGrantGaps $m
     if ($gaps.Count -eq 0) {
       Write-Host ("{0}：通行证齐全（{1}）" -f $m.Label, $sid)
@@ -1049,6 +1101,7 @@ try {
     'acl-check'  { if (-not (Invoke-AclCmd 'check' $Name)) { $ok = $false } }
     'acl-repair' { if (-not (Invoke-AclCmd 'repair' $Name)) { $ok = $false } }
     'wake'       { if (-not (Invoke-Wake $Name $By $Why)) { $ok = $false } }
+    'bind'       { $bindKey = if ($Name) { $Name } else { $Key }; if (-not (Invoke-Bind $bindKey $Session)) { $ok = $false } }
     'maintain' { if (-not (Invoke-Maintain $Name)) { $ok = $false } }
     'restore'  { if (-not (Invoke-Restore $Name)) { $ok = $false } }
     'unattended' { if (-not (Invoke-Restore $Name)) { $ok = $false } }
