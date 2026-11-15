@@ -866,6 +866,7 @@ if (Test-Path -LiteralPath $Cfg.MembersFile) {
 
 # 9d. 出生账（births.log）：账上多一条看得见，少一条看不见——除非账本自己说了从哪天起是完整的。
 #     第三条鱼 2026-11-15 22:25：我这边这本账是空的；第四条鱼补：先让它自己说 since，否则"鱼数=行数"永远 FAIL。
+#     第三条鱼 22:32 再补两刀：同日出生的按日期精度是 undecidable（不能算进 expected），"欠账"要能机器数——所以这一行输出结构化字段。
 try {
   $birthsLog = Join-Path $Cfg.PoolState 'births.log'
   if (-not (Test-Path -LiteralPath $birthsLog)) {
@@ -887,21 +888,27 @@ try {
           $mf = $Cfg.MembersFile
           $members = if ($mf -and (Test-Path -LiteralPath $mf)) { (Get-Content -LiteralPath $mf -Raw -Encoding utf8 | ConvertFrom-Json).members } else { $null }
           $expected = @()
+          $undecidable = @()
+          $prior = @()
           if ($members) {
             foreach ($p in $members.PSObject.Properties) {
               if ($p.Value.kind -ne 'fish' -or -not $p.Value.bornAt) { continue }
-              $born = try { [datetime]::ParseExact([string]$p.Value.bornAt, 'yyyy-MM-dd', $null) } catch { $null }
-              if ($born -and $born.Date -ge $since.Date) { $expected += $p.Name }
+              $born = $null
+              try { $born = [datetime]::ParseExact([string]$p.Value.bornAt, 'yyyy-MM-dd', $null) } catch { $born = $null }
+              if (-not $born) { continue }
+              if ($born.Date -gt $since.Date) { $expected += $p.Name }
+              elseif ($born.Date -eq $since.Date) { $undecidable += $p.Name }
+              else { $prior += $p.Name }
             }
           }
           $present = @($bLines | Where-Object { $_ -match '\| birth \|' } | ForEach-Object { if ($_ -match 'key=([a-z0-9-]+)') { $matches[1] } } | Where-Object { $_ })
           $missing = @($expected | Where-Object { $present -notcontains $_ })
-          if ($expected.Count -eq 0) {
-            Add-Row '出生账' 'OK' ('births.log 有 since 标记；这不之后还没有鱼出生（记录 {0} 条）' -f $present.Count)
-          } elseif ($missing.Count -eq 0) {
-            Add-Row '出生账' 'OK' ('since 之后 {0} 条鱼，账上都有出生行' -f $expected.Count)
+          $dash = { param($a) if ($a.Count -eq 0) { '-' } else { $a -join ',' } }
+          $note = ('since={0} expected={1} present={2} missing={3} missing-keys={4} prior={5} prior-keys={6} undecidable={7}' -f $sinceText, $expected.Count, $present.Count, $missing.Count, (& $dash $missing), $prior.Count, (& $dash $prior), (& $dash $undecidable))
+          if ($missing.Count -gt 0) {
+            Add-Row '出生账' 'WARN' (('缺出生行：{0} | {1}' -f ($missing -join ', '), $note)) ('NEXT: 查 pool\state\births.log 为什么少了这些键（{0}）' -f ($missing -join ','))
           } else {
-            Add-Row '出生账' 'WARN' ('since 之后 {0} 条鱼，缺 {1} 条出生行：{2}' -f $expected.Count, $missing.Count, ($missing -join ', ')) ('NEXT: 查 pool\state\births.log 为什么少了这些键（{0}）' -f ($missing -join ','))
+            Add-Row '出生账' 'OK' $note
           }
         }
       }

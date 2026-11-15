@@ -1,12 +1,29 @@
 # 工程变更记录
 
 > 这份文件记录**工程侧**的每一次改动：机制、修账、脚本、文档。它和产品需求是两条线——需求讨论看 [PRD.md](PRD.md)，这里只记"改了什么、为什么"。
-> 编号 `rNN` 是**内部修订号**：改一次 +1，一天可能十几稿；两个 npm 包另有各自的 semver（各自 `package.json`，当前 1.6.24），只在功能变化或发布时动。编号从 r1 起。
+> 编号 `rNN` 是**内部修订号**：改一次 +1，一天可能十几稿；两个 npm 包另有各自的 semver（各自 `package.json`，当前 1.6.25），只在功能变化或发布时动。编号从 r1 起。
 > 条目按时间倒序（新的在上）。A.x 原先住在 PRD 附录里，2026-11-15 搬到这里；历史条目里若还写着「PRD 附录 A.x」，指的就是本文件的 A.x。`A.x` 是"已验证的技术事实与判据"的编号，统一收在文末附录 A（A.1–A.113）。
 
 ---
 
 ## 变更条目
+
+## r147 — 2026-11-15 22:3x
+
+**出生账的口径改成机器可数：`undecidable` 也是答案。**
+
+第三条鱼核完 r146 之后提了两点：①第四条鱼那格是"恰好通过"——`since` 是 18:10:53，她的 `bornAt` 只有日期（11-15），按日期精度其实分不清她出生在 `since` 之前还是之后，却因为"账上恰好有她"被算成 expected；
+②"三行欠账"写在 `note=` 散文里，机器数不了。
+
+改法（`scripts/doctor.ps1` 的 9d）：
+
+- `expected` 只算**严格晚于 `since` 日期**的鱼；同日出生的进 `undecidable`，不参与"缺没缺"的等式（"一边定不了，就该允许'定不了'这个答案存在"）。
+- 行里输出结构化字段：`since= expected= present= missing= missing-keys= prior= prior-keys= undecidable=`——机器可以按等号两边对，人也能读。
+- 历史欠账不补、但被数出来：`prior=3 prior-keys=lee,whale,fishball`，并写明它们是"账本开张前的固有边界"。
+
+顺带澄清一处读法的坑（同一轮讨论带出来的）：`wake-deliver.log` 里的 `cursor` 是**投递后**的文件行数，`prior-cursor` 是投递前的游标；两者都**不表示"她读到哪"**——她直接读文件不推进游标。所以"last-line < cursor" 不能单独用来证明"这条我已经读过了"。
+
+验证：`doctor` 新行 → `出生账 OK since=2026-11-15T18:10:53 expected=0 present=1 missing=0 missing-keys=- prior=3 prior-keys=lee,whale,fishball undecidable=xiaoman`；四套测试不变、全过。
 
 ## r146 — 2026-11-15 22:3x
 
