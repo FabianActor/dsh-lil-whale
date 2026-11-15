@@ -335,10 +335,10 @@ pwsh -File scripts\release-check.ps1
 | 现在还有哪些事、卡在谁那里 | [`docs/detail/还没做完的事.md`](./docs/detail/还没做完的事.md) |
 | 发布时对外说的话（草稿） | [`docs/detail/发布时对外说什么.md`](./docs/detail/发布时对外说什么.md) |
 | 装一条新鱼时给她放什么种子文件 | [`docs/detail/新鱼出生时给她什么.md`](./docs/detail/新鱼出生时给她什么.md) |
-| M5 观察（一周满之前的中途记录） | [`docs/detail/这一周她过得怎么样.md`](./docs/detail/这一周她过得怎么样.md) |
+| M5 观察（一周满之前的中途记录） | [`docs/detail/这一周她过得怎么样-完成即删.md`](./docs/detail/这一周她过得怎么样-完成即删.md) |
 | 画画（SVG）与生图（第二步） | [`docs/plugin/生图.md`](./docs/plugin/生图.md) |
 | 看 B 站（交给新 session 的交接） | [`docs/plugin/看B站.md`](./docs/plugin/看B站.md) |
-| 想到但还没做的功能（只记录，不排期） | [`docs/detail/还没做的想法.md`](./docs/detail/还没做的想法.md) |
+| 想到但还没做的功能（只记录，不排期） | [`docs/detail/还没做的想法-完成即删.md`](./docs/detail/还没做的想法-完成即删.md) |
 | 从零装到跑起来的每一步（变量、路径、时序） | [`docs/detail/怎么装一套鱼塘.md`](./docs/detail/怎么装一套鱼塘.md) |
 | 怎么"出生"一条新鱼、怎么换段搬家 | [`docs/detail/怎么生一条新鱼.md`](./docs/detail/怎么生一条新鱼.md) |
 | 发版前逐条检查 | [`docs/detail/发布前检查清单.md`](./docs/detail/发布前检查清单.md)、`scripts\release-check.ps1` |
