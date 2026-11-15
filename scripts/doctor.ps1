@@ -977,13 +977,17 @@ try {
         if (@($rTail | Where-Object { $_ -match '\| log-format \| fmt=3' }).Count -gt 0) { $rotatedWithFmt = $true; break }
       }
     } catch { }
-    # 2026-11-16 02:15（第四条鱼 + 第二条鱼）：判"缺"之前先比"启动版本 vs 磁盘版本"，不写版本号阈值；
-    # plugin-boot.log 是共享的，按 home 取这一家最近一条 boot 行，不能用"最后一行"；一家从没启动过是第三种状态。
-    $diskVer9c = $null
-    try {
-      $pkgPath9c = Join-Path $Cfg.Root 'plugin\dsh-lil-whale-group\package.json'
-      if (Test-Path -LiteralPath $pkgPath9c) { $diskVer9c = (Get-Content -LiteralPath $pkgPath9c -Raw -Encoding UTF8 | ConvertFrom-Json).version }
-    } catch { }
+    # 2026-11-16 02:19（第四条鱼 #724 收回 + 判据更正）：不拿"启动版本 vs 磁盘版本"当"写者在不在"——
+    # 磁盘版本会因为跟分界无关的改动上涨（改一句文案也算），版本不同只在"一次改动恰好重合"时等于"写者不在"。
+    # 改成绑"写者引入的那一刻"：LOG_FORMAT_SINCE；并把版本写成有名字的常量（数字不会说话，注解会）。
+    $logFormatSince = '1.6.39'   # 自这一版起：每个进程在 apply() 开头各写自己那份 log-format
+    function Test-VerAtLeast([string]$ver, [string]$atLeast) {
+      try {
+        $v = [version]($ver -replace '[+-].*$', '')
+        $a = [version]($atLeast -replace '[+-].*$', '')
+        return ($v -ge $a)
+      } catch { return $null }
+    }
     $bootVer9c = $null
     $bootSeen9c = $false
     try {
@@ -994,7 +998,7 @@ try {
           try {
             $o9c = $ln9c | ConvertFrom-Json
             if (-not $o9c.pkg) { continue }
-            if ($myHome9c -and $o9c.home -and (([string]$o9c.home).TrimEnd('\') -ieq $myHome9c.TrimEnd('\'))) {
+            if ($myHome9c -and $o9c.home -and (([string]$o9c.home).TrimEnd('') -ieq $myHome9c.TrimEnd(''))) {
               $bootVer9c = [string]$o9c.pkg -replace '^.*@', ''
               $bootSeen9c = $true
             }
@@ -1005,11 +1009,15 @@ try {
     if ($rotatedWithFmt) {
       Add-Row '格式分界' 'OK' ($label + '：分界行在被轮转的旧文件里（轮转后新文件不重复写）')
     } elseif (-not $bootSeen9c) {
-      Add-Row '格式分界' 'INFO' ($label + '：本文件还没有分界行，这一家也还没有启动痕迹（第三种状态）——没有可比较的启动版本，等它先启动一次')
-    } elseif ($diskVer9c -and $bootVer9c -and $bootVer9c -ne $diskVer9c) {
-      Add-Row '格式分界' 'INFO' ($label + '：本文件还没有分界行——进程还是旧代码（启动时 ' + $bootVer9c + ' / 磁盘 ' + $diskVer9c + '），属"还没到"，重启后自愈')
+      Add-Row '格式分界' 'INFO' ($label + '：本文件还没有分界行，这一家也还没有启动痕迹（第三种状态）——等它先启动一次')
+    } elseif (-not $bootVer9c) {
+      Add-Row '格式分界' 'INFO' ($label + '：本文件还没有分界行——启动版本读不到，判不了"还没到"还是"丢了"（不猜）')
+    } elseif ($null -eq (Test-VerAtLeast $bootVer9c $logFormatSince)) {
+      Add-Row '格式分界' 'INFO' ($label + '：本文件还没有分界行——启动版本 ' + $bootVer9c + ' 解析不了，判不了')
+    } elseif (-not (Test-VerAtLeast $bootVer9c $logFormatSince)) {
+      Add-Row '格式分界' 'INFO' ($label + '：本文件还没有分界行——进程还是旧代码（启动 ' + $bootVer9c + '，分界写者自 ' + $logFormatSince + ' 起才有），属"还没到"，重启后自愈')
     } else {
-      Add-Row '格式分界' 'WARN' ($label + '：进程已经是新代码（启动 ' + $bootVer9c + ' = 磁盘 ' + $diskVer9c + '）却没有 log-format 分界行——这不像"还没到"，像真丢了') 'NEXT: 重启这一条鱼（fish.ps1 down <键> -Yes; fish.ps1 up <键> -NoBrowser）'
+      Add-Row '格式分界' 'WARN' ($label + '：进程已经是带分界的代码（启动 ' + $bootVer9c + ' ≥ ' + $logFormatSince + '）却没有 log-format 行——这不像"还没到"，像真丢了') 'NEXT: 重启这一条鱼（fish.ps1 down <键> -Yes; fish.ps1 up <键> -NoBrowser）'
     }
   }
 } catch { Add-Row '格式分界' 'WARN' ('核不了：{0}' -f $_.Exception.Message) }

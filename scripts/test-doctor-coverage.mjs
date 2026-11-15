@@ -138,13 +138,23 @@ for (const p of dynamicOwner.keys()) if (!seenDynamic.has(p)) warn.push('登记�
 // 4) 整族消失不是改名，是少了一个检查 —— FAIL（第三条鱼 02:14 实测：删掉一整格后旧版还印 OK）。
 //    但若这一族刚被上面的"改名配对"认领，就不要再报一次——一次改名只算一个问题。
 const goneFamilies = new Set()
+// 删除和改名的分水岭：有没有"陌生人"出现（第二条鱼 #726）——有新名字 = 可能是改名（WARN，需人判）；
+// 没有新名字 = 少了检查（FAIL）。机器现在有这个名字，就不许再用 WARN 把两种兜在一起。
+const strangers = [
+  ...freshStatics.filter((x) => !pairedFresh.has(x)),
+  ...[...seenDynamic].filter((p) => !dynamicOwner.has(p)).map((p) => p + '…'),
+]
 for (const f of FAMILIES) {
   if (renamedFamilies.has(f.name)) continue
   const hasStatic = (f.static || []).some((s) => seenStatic.has(s))
   const hasDynamic = (f.dynamicPrefix || []).some((p) => seenDynamic.has(p))
   if (!hasStatic && !hasDynamic) {
     goneFamilies.add(f.name)
-    fail.push('整族消失：' + f.name + '（覆盖缩水，不是改名——代码里这一族一种形态都没有了）')
+    if (strangers.length === 0) {
+      fail.push('整族消失：' + f.name + '（没有新名字出现——这是少了检查，不是改名）')
+    } else {
+      warn.push('整族消失：' + f.name + '（同时出现了 ' + strangers.length + ' 个新名字：' + strangers.join('、') + '——可能是改名，需人判配的是谁）')
+    }
   }
 }
 // 整族消失时，那一族每个静态名缺失的 WARN 不再重复报——一次删除只算一行。
@@ -153,21 +163,30 @@ for (let i = warn.length - 1; i >= 0; i--) {
   if (m && goneFamilies.has(m[1])) warn.splice(i, 1)
 }
 
+const detailWarn = warn.map((w) => 'WARN ' + w)
+const detailFail = fail.map((f) => 'FAIL ' + f)
 console.log('静态格 ' + seenStatic.size + ' 个 / 登记 ' + staticOwner.size)
 console.log('动态族 ' + seenDynamic.size + ' 个 / 登记 ' + dynamicOwner.size)
 console.log('族 ' + FAMILIES.length + ' 个')
-for (const w of warn) console.log('WARN ' + w)
-for (const f of fail) console.log('FAIL ' + f)
+for (const l of detailWarn) console.log(l)
+for (const l of detailFail) console.log(l)
 
-// 结论必须由明细聚合（第二条鱼 02:14）：末行不许是写死的 OK。
-const nFail = fail.length
-const nWarn = warn.length
+// 结论必须由明细聚合（第二条鱼 #723/#725）：末行不许是写死的 OK；并且断言"末行的数 = 明细行数"，
+// 这样它下一次自打脸会先打自己。
+const nWarn = detailWarn.length
+const nFail = detailFail.length
+const countedWarn = detailWarn.filter((l) => l.startsWith('WARN ')).length
+const countedFail = detailFail.filter((l) => l.startsWith('FAIL ')).length
+if (countedWarn !== nWarn || countedFail !== nFail) {
+  console.log(`FAIL 汇总与明细不符：明细 WARN×${countedWarn} FAIL×${countedFail}，摘要 WARN×${nWarn} FAIL×${nFail}`)
+  process.exit(1)
+}
 if (nFail > 0) {
-  console.log(`doctor 覆盖面：FAIL×${nFail}（明细 FAIL 行 ${nFail} 条）、WARN×${nWarn}——覆盖表与代码不一致，不能发`)
+  console.log(`doctor 覆盖面：FAIL×${nFail}、WARN×${nWarn}——覆盖表与代码不一致，不能发`)
   process.exit(1)
 }
 if (nWarn > 0) {
-  console.log(`doctor 覆盖面：WARN×${nWarn}（明细 WARN 行 ${nWarn} 条）——不是 OK，有格子可能被删/改名，需人看`)
+  console.log(`doctor 覆盖面：WARN×${nWarn}——不是 OK，有格子可能被删/改名，需人看`)
   process.exit(0)
 }
 console.log('doctor 覆盖面 OK（FAIL×0 / WARN×0；每族至少一种形态、没有未登记的格）')
