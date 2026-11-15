@@ -107,6 +107,19 @@ check(
   true,
 )
 
+// ---- 一次性睡眠覆盖默认窗（2026-11-15 小肥鱼设"睡到明早 07:00"，默认窗 00:00–08:00）----
+const nightly = { fromAt: '2026-11-14T19:12:08+08:00', toAt: '2026-11-15T07:00:00+08:00', reason: '睡到明早七点' }
+check('覆盖：07:00:30 醒着（默认窗里已按她的点结束）', sleepStateOf({ oneOff: nightly, preference: prefDefault }, at('2026-11-15T07:00:30+08:00')).sleeping, false)
+check('覆盖：来源 one-off-ended', sleepStateOf({ oneOff: nightly, preference: prefDefault }, at('2026-11-15T07:00:30+08:00')).source, 'one-off-ended')
+check('覆盖：前一晚 23:00 还在睡', sleepStateOf({ oneOff: nightly, preference: prefDefault }, at('2026-11-14T23:00:00+08:00')).sleeping, true)
+check('覆盖：07:59 仍是醒着', sleepStateOf({ oneOff: nightly, preference: prefDefault }, at('2026-11-15T07:59:00+08:00')).sleeping, false)
+check('覆盖：第二晚默认窗照常生效', sleepStateOf({ oneOff: nightly, preference: prefDefault }, at('2026-11-16T03:00:00+08:00')).sleeping, true)
+check('覆盖：过期的一觉不误伤（结束点在窗外）', sleepStateOf({ oneOff: { fromAt: '2026-11-14T14:00:00+08:00', toAt: '2026-11-14T15:00:00+08:00' }, preference: prefDefault }, at('2026-11-15T03:00:00+08:00')).sleeping, true)
+check('覆盖：窗中间小睡按她的点醒（01:00–03:00）', sleepStateOf({ oneOff: { fromAt: '2026-11-15T01:00:00+08:00', toAt: '2026-11-15T03:00:00+08:00' }, preference: prefDefault }, at('2026-11-15T03:00:05+08:00')).sleeping, false)
+check('覆盖：结束点正好等于窗尾不误判', sleepStateOf({ oneOff: { fromAt: '2026-11-14T20:00:00+08:00', toAt: '2026-11-15T08:00:00+08:00' }, preference: prefDefault }, at('2026-11-15T03:00:00+08:00')).sleeping, true)
+check('覆盖：跨午夜窗（22–07）在 06:30 按她的点醒', sleepStateOf({ oneOff: { fromAt: '2026-11-14T23:00:00+08:00', toAt: '2026-11-15T06:00:00+08:00' }, preference: prefNight }, at('2026-11-15T06:30:00+08:00')).sleeping, false)
+check('覆盖：强制叫醒仍最高优先', sleepStateOf({ oneOff: nightly, preference: prefDefault, awakeUntil: '2026-11-15T07:30:00+08:00' }, at('2026-11-15T07:10:00+08:00')).source, 'forced-awake')
+
 // ---- 家长强制叫醒 ----
 const awake = { awakeUntil: '2026-11-14T09:00:00+08:00' }
 check('强制叫醒期内不算睡', sleepStateOf({ preference: prefDefault, ...awake }, at('2026-11-14T03:00:00+08:00')).sleeping, false)

@@ -79,7 +79,7 @@ function parseInstant(value) {
  *           awakeUntil?: string|null,
  *           preference?: {from?:string,to?:string,enabled?:boolean}|null }} input
  * @param {Date} now
- * @returns {{ sleeping: boolean, source: 'forced-awake'|'one-off'|'preference'|'awake',
+ * @returns {{ sleeping: boolean, source: 'forced-awake'|'one-off'|'one-off-ended'|'preference'|'awake',
  *             untilAt: string|null, forcedUntil?: string|null, upcomingAt?: string|null, reason?: string }}
  */
 export function sleepStateOf(input, now = new Date()) {
@@ -91,11 +91,14 @@ export function sleepStateOf(input, now = new Date()) {
     return { sleeping: false, source: 'forced-awake', untilAt: null, forcedUntil: state.awakeUntil }
   }
 
+  // 一次性睡眠的结束点（有效才算）：它落在默认窗里时，窗的后半段让位（2026-11-15）。
+  let oneOffEndMs = null
   const oneOff = state.oneOff ?? null
   if (oneOff !== null && typeof oneOff === 'object') {
     const fromMs = parseInstant(oneOff.fromAt ?? null)
     const toMs = parseInstant(oneOff.toAt ?? null)
     if (fromMs !== null && toMs !== null && toMs > fromMs) {
+      oneOffEndMs = toMs
       if (nowMs >= fromMs && nowMs < toMs) {
         return {
           sleeping: true,
@@ -118,6 +121,20 @@ export function sleepStateOf(input, now = new Date()) {
     // 偏好写坏了（"nope" 这种）就退回默认窗：一个坏文件不该把她变成"永远醒着"。
     const win = windowFor(fromHm, toHm, now) ?? windowFor(DEFAULT_SLEEP_FROM, DEFAULT_SLEEP_TO, now)
     if (win !== null && nowMs >= win.fromAt.getTime() && nowMs < win.toAt.getTime()) {
+      // 她开口设的一觉就是这一段的完整作息：结束点落在当前窗里 ⇒ 窗的后半段让位。
+      // 判据是"结束点落在窗里"，不是"有过 oneOff"——过期的 oneOff 不许误伤下一晚（2026-11-15）。
+      if (
+        oneOffEndMs !== null &&
+        oneOffEndMs > win.fromAt.getTime() &&
+        oneOffEndMs < win.toAt.getTime()
+      ) {
+        return {
+          sleeping: false,
+          source: 'one-off-ended',
+          untilAt: null,
+          endedAt: new Date(oneOffEndMs).toISOString(),
+        }
+      }
       return { sleeping: true, source: 'preference', untilAt: win.toAt.toISOString() }
     }
   }
