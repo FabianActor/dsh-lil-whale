@@ -1988,7 +1988,8 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
         })
       }, [])
       const submit = useCallback(async () => {
-        const value = (inputRef.current?.value ?? '').trim()
+        const rawValue = inputRef.current?.value ?? ''
+        const value = rawValue.trim()
         if ((value === '' && pendingImages.length === 0) || sending) return
         setSending(true)
         try {
@@ -2019,12 +2020,25 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
             body: JSON.stringify(body),
           })
           if (!response.ok) throw new Error(`HTTP ${response.status}`)
-          if (inputRef.current) inputRef.current.value = ''
-          setHasText(false)
-          writeDraft(GROUP_DRAFT_KEY, '')
+          // 发送成功才清；而且只在"输入框里还是刚才发出去的那段"时才清——
+          // 上传大图时要等几秒，这几秒里用户可能已经在打下一句了（2026-11-15 r151）。
+          const stillSame = (inputRef.current?.value ?? '') === rawValue
+          if (stillSame) {
+            if (inputRef.current) inputRef.current.value = ''
+            setHasText(false)
+            writeDraft(GROUP_DRAFT_KEY, '')
+          } else {
+            setHasText((inputRef.current?.value ?? '').trim() !== '')
+          }
           setPendingImages([])
           await refresh()
         } catch (e) {
+          // 发失败别把人刚打的字吞掉：输入框空着时把原文放回去（草稿已经按输入存过了）。
+          if (inputRef.current && !inputRef.current.value) {
+            inputRef.current.value = rawValue
+            setHasText(rawValue.trim() !== '')
+            writeDraft(GROUP_DRAFT_KEY, rawValue)
+          }
           setError(String(e?.message ?? e))
         } finally {
           setSending(false)
@@ -3491,7 +3505,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v47 · ui-typing-uncontrolled:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v48 · ui-typing-uncontrolled:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')
