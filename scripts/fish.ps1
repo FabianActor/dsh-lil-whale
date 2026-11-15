@@ -1,4 +1,4 @@
-#requires -Version 7.0
+﻿#requires -Version 7.0
 # fish.ps1 -- 鱼群唯一的入口。ASCII 文件名 + UTF-8 BOM。
 #
 # 为什么要有它：鱼一多，"开/停/体检"三件事各有各的脚本，每加一条鱼就多一套参数。
@@ -790,7 +790,7 @@ function Invoke-NewFish {
   $childName = ([string]$Name).Trim()
   $parentKey = ([string]$Parent).Trim()
   $reserved = @('lee', 'whale', 'fishball', 'fabian', 'all', 'main', 'app', 'pool', 'homes', 'acl', 'dsh')
-  if ($key -notmatch '^[a-z][a-z0-9-]{1,15}$') {
+  if ($key -cnotmatch '^[a-z][a-z0-9-]{1,15}$') {
     Write-Host ("xx 成员键「{0}」不合规：小写字母开头，后面是小写字母/数字/短横线，2-16 位。" -f $key)
     Write-Host 'NEXT: 换个键（比如 xiaoxingxing）；名字放 -Name，键只用来认人。'
     return $false
@@ -914,6 +914,13 @@ function Invoke-NewFish {
     } else {
       try {
         Copy-Item -LiteralPath $srcCred -Destination $dstCred -Force
+        # 2026-11-15 补：继承也是钥匙的一次变动，必须进 keys.log（以前只复制、不记账）
+        try {
+          $inheritFp = Get-FileFingerprint $dstCred
+          $sourceFp = Get-FileFingerprint $srcCred
+          $keyLog = Join-Path $Cfg.PoolState 'keys.log'
+          Add-Content -LiteralPath $keyLog -Value ('{0} | key-inherit | fmt=2 child={1} from={2} via=fish.ps1 fp={3} from-fp={4} requestedBy={5}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $key, $planInherit, $inheritFp, $sourceFp, $RequestedBy) -Encoding utf8
+        } catch { Write-Host ('!! keys.log 没记上：{0}' -f $_.Exception.Message) }
         $keyInherited = $planInherit
         Write-Host ''
         Write-Host ("!! 已把「{0}」的 API key 复制给「{1}」—— 花的是它的额度（人明确要求的继承）。" -f $MEMBERS[$planInherit].Label, $childName)

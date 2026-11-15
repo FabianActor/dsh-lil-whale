@@ -106,6 +106,19 @@ if (Test-Path -LiteralPath $membersProbe) {
     foreach ($p in $probe.members.PSObject.Properties) {
       if ($p.Value.port) { $registeredPorts[[int]$p.Value.port] = $p.Name }
     }
+    # 2026-11-15 补：鱼数上限在这里也查一次。以前只有 fish.ps1 new 查，绕过它直接跑 install 就能超员。
+    $fishCount = @($probe.members.PSObject.Properties | Where-Object { $_.Value.kind -eq 'fish' }).Count
+    $maxFish = 5
+    $settingsProbe = Join-Path $PoolRoot 'state\settings.json'
+    if (Test-Path -LiteralPath $settingsProbe) {
+      try {
+        $st = Get-Content -LiteralPath $settingsProbe -Raw -Encoding utf8 | ConvertFrom-Json
+        if ($st.maxFish) { $maxFish = [int]$st.maxFish }
+      } catch { }
+    }
+    if ($fishCount -ge $maxFish) {
+      Die ("鱼已经 {0} 条，到了上限 {1} 条（pool\state\settings.json 的 maxFish）。" -f $fishCount, $maxFish) "先归档一条不用的鱼（scripts\archive-fish.ps1），或者改上限"
+    }
   } catch { Warn "members.json 读不了（$membersProbe）：这次不查端口登记" }
 }
 $port = Find-FreePort $portWanted
@@ -255,6 +268,12 @@ $cfg['dmDir'] = (Join-Path $PoolRoot 'dm')
 $cfg['membersFile'] = (Join-Path $PoolRoot 'members.json')
 Write-Utf8NoBom $cfgPath ($cfg | ConvertTo-Json -Depth 5)
 Ok $cfgPath
+# 2026-11-15 补：Step 6/7 的 node 脚本（render-env / gen-family / sleep-cli）都按
+# LIL_WHALE_CONFIG → 仓库根 → 默认 的顺序找配置。用 -ConfigPath 试装时，它们会读到
+# 真的那份配置、把种子和谱系写进真的家和真名册（2026-11-15 彩排踩到过）。
+# 所以从这行开始，把"这次要装的那份配置"直接指给它们，脚本结束再还原。
+$savedCfgEnv = $env:LIL_WHALE_CONFIG
+$env:LIL_WHALE_CONFIG = $cfgPath
 Note "这份配置是这台机器的真源；装完别删。要装到别的目录，用 -ConfigPath 指到别处"
 
 Step '6. 种子文件（不写性格、不写期望）'
@@ -482,6 +501,9 @@ try {
 } finally {
   $env:DSH_HOME = $savedHome
 }
+
+# 还原给子进程看的环境变量（试装时指向临时配置，别让它留在这台机器的会话里）。
+if ($null -eq $savedCfgEnv) { Remove-Item Env:LIL_WHALE_CONFIG -ErrorAction SilentlyContinue } else { $env:LIL_WHALE_CONFIG = $savedCfgEnv }
 
 Say ""
 Say "  装好了。接下来的四件事脚本替不了：" -ForegroundColor Green
