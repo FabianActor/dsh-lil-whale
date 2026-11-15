@@ -49,6 +49,7 @@ function parseArgs(argv) {
     else if (a === '--profile') out.profile = next()
     else if (a === '--pool-dir') out.poolDir = next()
     else if (a === '--her-port') out.herPort = Number(next())
+    else if (a === '--config') out.config = next()
     else if (a === '--deploy-date') out.deployDate = next()
     else if (a === '--child-name') out.childName = next()
     else if (a === '--child-id') out.childId = next()
@@ -168,27 +169,38 @@ if (existsSync(toolsScript)) {
 
 // ---- 叫醒参数：从代码里读，别在纸上写第二份 ----
 // 纸上写死 60/12/60，代码一改就变成"说明书和事实各说各话"。
-function wakeNumbers() {
-  const fallback = { cooldownSec: 60, perHour: 12, perDay: 60, quietFromHour: 0, quietToHour: 8 }
+function wakeNumbers(cfgPathOverride) {
+  // 三层：代码里的默认值 → 配置覆盖 → 真源是进程读的那一份。
+  // 2026-11-15：闸改成可配置后，旧的 `const WAKE = { perHour: 12 }` 形态没了，
+  // 正则读不到就退回写死的 fallback，于是纸一直印 12/60 —— 小肥鱼 08:40 抓到"纸在骗人"。
+  const nums = { cooldownSec: 15, perHour: 40, perDay: 200 }
   try {
     const src = readFileSync(join(REPO_ROOT, 'plugin', 'dsh-lil-whale-group', 'lib', 'index.js'), 'utf8')
+    // 新形态：numSetting(CFG.wake?.perHour, 40)
+    for (const m of src.matchAll(/numSetting\(CFG\.wake\?\.(\w+),\s*(\d+)\)/g)) {
+      if (m[1] in nums) nums[m[1]] = Number(m[2])
+    }
+    // 旧形态（万一回退到写死的 WAKE）
     const block = src.match(/const WAKE = \{[\s\S]*?\n\}/)?.[0] ?? ''
-    const num = (name) => {
-      const m = block.match(new RegExp(`${name}\\s*:\\s*(\\d+)`))
-      return m ? Number(m[1]) : fallback[name]
+    for (const key of Object.keys(nums)) {
+      const m = block.match(new RegExp(`${key}\\s*:\\s*(\\d+)`))
+      if (m) nums[key] = Number(m[1])
     }
-    return {
-      cooldownSec: num('cooldownSec'),
-      perHour: num('perHour'),
-      perDay: num('perDay'),
-      quietFromHour: num('quietFromHour'),
-      quietToHour: num('quietToHour'),
+  } catch {}
+  // 配置覆盖：跟进程读同一份文件（LIL_WHALE_CONFIG → 仓库根）
+  try {
+    const cfgPath = cfgPathOverride || process.env.LIL_WHALE_CONFIG || join(REPO_ROOT, 'lil-whale.config.json')
+    if (existsSync(cfgPath)) {
+      const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'))
+      for (const key of Object.keys(nums)) {
+        const v = Number(cfg?.wake?.[key])
+        if (Number.isFinite(v) && v > 0) nums[key] = v
+      }
     }
-  } catch {
-    return fallback
-  }
+  } catch {}
+  return nums
 }
-const wake = wakeNumbers()
+const wake = wakeNumbers(args.config ? resolve(args.config) : '')
 
 // ---- 模板与指纹 ----
 const templatePath = join(REPO_ROOT, 'templates', '环境.md.tpl')

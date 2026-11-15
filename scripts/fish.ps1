@@ -583,7 +583,13 @@ function Invoke-RefreshEnv($member) {
   if (-not (Test-Path -LiteralPath $script)) { Write-Host 'render-env.mjs 不见了。'; return $false }
   $fishHome = $member.Home
   if (-not $fishHome) { Write-Host ("{0} 没有家目录，跳过。" -f $member.Label); return $false }
-  & node $script --workspace $fishHome --profile $member.Profile --pool-dir $Cfg.PoolDir --her-port $member.Port
+  $envArgs = @($script, '--workspace', $fishHome, '--profile', $member.Profile, '--pool-dir', $Cfg.PoolDir, '--her-port', $member.Port)
+  # 每条鱼读自己的配置（额度可能不同）；不传的话 render-env 会读仓库根那份，纸就跟这条鱼对不上。
+  if ($member.ConfigFile) {
+    $memberCfg = if ([System.IO.Path]::IsPathRooted($member.ConfigFile)) { $member.ConfigFile } else { Join-Path (Split-Path $PSScriptRoot -Parent) $member.ConfigFile }
+    $envArgs += @('--config', $memberCfg)
+  }
+  & node @envArgs
   if ($LASTEXITCODE -ne 0) { return $false }
   Write-Host ("{0}：环境.md 已刷新。" -f $member.Label)
   return $true
