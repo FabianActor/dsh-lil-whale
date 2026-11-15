@@ -81,8 +81,16 @@ for (const id of WANT) {
 }
 if (blocks.length > 0) {
   copyFileSync(childPath, childPath + '.bak-before-model-' + Date.now())
-  if (!childText.endsWith('\n')) childText += eol
-  childText += eol + blocks.join(eol) + eol
+  // 空 profile 的补丁是"注释 + 一行 []"（空 YAML 列表）。直接往后面接 `- id:` 会变成
+  // 两个 YAML 文档 → dsh 解析报 "end of the stream or a document separator is expected"。
+  // 所以有 `[]` 就替换掉它，没有才追加。（2026-11-15 21:0x，干净装机检查抓到的。）
+  const emptyList = /^\[\]\s*$/m
+  if (emptyList.test(childText)) {
+    childText = childText.replace(emptyList, blocks.join(eol))
+  } else {
+    if (!childText.endsWith('\n')) childText += eol
+    childText += eol + blocks.join(eol) + eol
+  }
   writeFileSync(childPath, childText, 'utf8')
   console.log('已补模型配置：' + added.join(', '))
 } else {
