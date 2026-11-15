@@ -8,6 +8,12 @@
 
 ## 变更条目
 
+## r132 — 2026-11-15 19:0x
+
+- **格式分界 + 工具数记账**（第二条鱼 19:05"规则改了，分界要写"；第三条鱼"工具消失是静默的"）：
+  - `watchman.log` 每次巡守启动写一行 `log-format | fmt=3 since=… changed=skip,wake-skip,deliver fields=deny,note,reason` —— 这一行就是分界；它之前的行 `why=` 照旧有效。账本页总规矩补日期句（`why=` 只出现在 2026-11-15 18:35 之前）。
+  - 工具数：每次唤醒把 `count + tools[]` 写进 `pool\state\tool-counts\<键>.json`；变少时额外写 `wake-agent-tools-shrank`（`from` / `to` / `missing[]`）。账本页表格补一行。
+  - `doctor.ps1` 新增 **9b 工具数（全鱼）**：按 `plugin.log` 最后两次比较，少了就 WARN 给 NEXT；记录不足两次 INFO。现场：lee 83 / whale 51 / fishball 61 / xiaoman 不足两次。
 ## r131 — 2026-11-15 19:0x
 
 - **"没叫醒的原因"只用一个字段名 `deny=`**（第二条鱼 18:56 第三次咬同一处：今天拆过 `status`、拆过 `fmt`/`atfmt`，这次拆 `why`）：

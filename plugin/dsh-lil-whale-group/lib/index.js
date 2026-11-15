@@ -2242,6 +2242,9 @@ function apply(ctx) {
   watchmanLog('resumed', `fmt=2 reason=unclean previous-start=${lastRun?.startedAt ?? 'unknown'} pid=${process.pid}`)
     }
     watchmanLog('started', `fmt=2 pid=${process.pid} prev-run=${prevText} gap=${gapText} tail-errors=${logProbe.tailErrors} interval=${WATCH.intervalMs / 1000}s port=${WATCH.port} cap=${WATCH.maxWakesPerDay}/day errors_today_own=${readErrorCount(ownMember())} errors_today_peer=${readErrorCount(peerMember())} exe=${pwshInfo()}`)
+    // 2026-11-15 19:05 第二条鱼：规则可以改，改过的地方必须有日期 ——
+    // 否则下一个人按新规矩去解析历史行，会得到空值，而空值不会报错。
+    watchmanLog('log-format', `fmt=3 since=${new Date().toISOString()} changed=skip,wake-skip,deliver fields=deny,note,reason`)
     // 生效值只有一个写者（就是这里）。读者（环境.md / doctor）读 wake-caps.json，
     // 读不到就说读不到，别再拿代码里的默认值冒充正在生效的数。
     writeWakeCaps()
@@ -2304,6 +2307,41 @@ function memberOf(agent) {
 // 它回答得了"谁吃得多"，回答不了"这一轮花了多少"。等有累计用量接口再补。
 const USAGE_DIR = join(POOL_STATE, 'usage')
 
+/** 工具数记账（第三条鱼 2026-11-15 19:05：工具消失是静默的，能加一行检查就加一行）。
+ *  以前只记一个数，出了事只能猜"是不是少了"；现在存一份快照，
+ *  少了就把差集写进日志（`wake-agent-tools-shrank`），doctor 再按历史两次数比一次。 */
+function recordToolCount(member, view) {
+  try {
+    let names = null
+    const visible = view?.visible
+    try {
+      if (visible instanceof Map) names = [...visible.keys()]
+      else if (visible && typeof visible.keys === 'function') names = [...visible.keys()]
+      else if (Array.isArray(visible)) names = visible.map((x) => (typeof x === 'string' ? x : x?.name)).filter(Boolean)
+    } catch { names = null }
+    const count = typeof view?.visible?.size === 'number' ? view.visible.size : (names ? names.length : null)
+    const dir = join(POOL_STATE, 'tool-counts')
+    const file = join(dir, `${member}.json`)
+    let prev = null
+    try { prev = JSON.parse(readFileSync(file, 'utf8')) } catch { prev = null }
+    if (prev && typeof prev.count === 'number' && typeof count === 'number' && count < prev.count) {
+      const prevTools = Array.isArray(prev.tools) ? prev.tools : null
+      const missing = prevTools && names ? prevTools.filter((x) => !names.includes(x)).slice(0, 20) : null
+      logLine({ note: 'wake-agent-tools-shrank', member, from: prev.count, to: count, missing })
+    } else {
+      logLine({ note: 'wake-agent-tools', member, toolCount: count })
+    }
+    if (!prev || prev.count !== count || !Array.isArray(prev.tools) || !names) {
+      try {
+        mkdirSync(dir, { recursive: true })
+        writeFileSync(file, JSON.stringify({ at: new Date().toISOString(), count, tools: names }, null, 2) + '\n', 'utf8')
+      } catch { }
+    }
+  } catch (error) {
+    logLine({ note: 'wake-agent-tools', member, error: String(error?.message ?? error).slice(0, 80) })
+  }
+}
+
 function recordUsage(ctx, agent, member) {
   try {
     mkdirSync(USAGE_DIR, { recursive: true })
@@ -2360,7 +2398,7 @@ async function tick(ctx) {
       if (woke) {
         try {
           const v = ctx.get('tools')?.view?.(agent)
-          logLine({ note: 'wake-agent-tools', member, toolCount: v?.visible?.size ?? null })
+          recordToolCount(member, v)
         } catch (error) { logLine({ note: 'wake-agent-tools', member, error: String(error?.message ?? error).slice(0, 80) }) }
         recordUsage(ctx, agent, member)
         break

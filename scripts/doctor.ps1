@@ -815,6 +815,33 @@ if (Test-Path -LiteralPath $Cfg.MembersFile) {
   Add-Row '全鱼' 'WARN' '名册不存在（还是"一条鱼"的时代）' 'NEXT: node scripts\migrate-members.mjs 生成 pool\members.json'
 }
 
+# 9b. 工具数（每条鱼）：账本里只有数字，但"变少"本身就是一条该报的事。
+#     第三条鱼 2026-11-15 19:05：工具消失是静默的，能加一行检查就加一行。
+try {
+  $plugLog = Join-Path $Cfg.GroupDir 'plugin.log'
+  if ((Test-Path -LiteralPath $plugLog) -and $Cfg.MembersFile -and (Test-Path -LiteralPath $Cfg.MembersFile)) {
+    $toolRows = @(Get-Content -LiteralPath $plugLog -Encoding utf8 -Tail 4000 | ForEach-Object {
+      try { $_ | ConvertFrom-Json } catch { $null }
+    } | Where-Object { $_ -and $_.note -eq 'wake-agent-tools' -and $_.member })
+    $tm = (Get-Content -LiteralPath $Cfg.MembersFile -Raw -Encoding utf8 | ConvertFrom-Json).members
+    foreach ($p in $tm.PSObject.Properties) {
+      if ($p.Value.kind -ne 'fish') { continue }
+      $k = $p.Name
+      $mine = @($toolRows | Where-Object { $_.member -eq $k })
+      if ($mine.Count -lt 2) {
+        Add-Row '工具数（全鱼）' 'INFO' ('{0}（{1}）：记录不足两次，看不出增减' -f $p.Value.name, $k)
+        continue
+      }
+      $prevN = [int]$mine[-2].toolCount; $curN = [int]$mine[-1].toolCount
+      if ($curN -lt $prevN) {
+        Add-Row '工具数（全鱼）' 'WARN' ('{0}（{1}）：{2} → {3}，少了 {4} 件（{5}）' -f $p.Value.name, $k, $prevN, $curN, ($prevN - $curN), ([string]$mine[-1].at)) 'NEXT: dsh --profile <键> --dump-config | Select-String dsh-lil-whale-group（看她插件掉没掉）'
+      } else {
+        Add-Row '工具数（全鱼）' 'OK' ('{0}（{1}）：{2} 件（上次 {3}）' -f $p.Value.name, $k, $curN, $prevN)
+      }
+    }
+  }
+} catch { Add-Row '工具数（全鱼）' 'WARN' ('核不了：{0}' -f $_.Exception.Message) }
+
 # ---- 输出 ----
 Write-Host ''
 Write-Host '小肥鱼体检' -ForegroundColor Cyan
