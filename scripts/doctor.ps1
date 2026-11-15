@@ -739,10 +739,11 @@ if (Test-Path -LiteralPath $Cfg.MembersFile) {
         if ($ids.Count -gt 0) { $pinText = ('会话 {0} 段' -f $ids.Count) }
       }
 
-      # 常驻鱼应该开着；实验鱼允许关着（这正是"不承诺一直醒着"）。
+      # 严重度只看事实，不看出身：归档的跳过，活着的端口不通就是 FAIL。
       $state = 'OK'
       $why = @()
-      if (-not $portOk) { if ([string]$m.status -eq 'experiment') { $state = 'WARN' } else { $state = 'FAIL' }; $why += '端口不通' }
+      if ([string]$m.lifecycle -eq 'archived') { $state = 'INFO'; $why += '已归档，不查' }
+      elseif (-not $portOk) { $state = 'FAIL'; $why += '端口不通' }
       if ($pinText -eq '名册里没有会话') { $state = 'FAIL'; $why += '名册缺会话' }
       $evidence = ('{0}（{1}）｜端口 {2}｜{3}｜{4}｜{5}' -f $name, $key, $portText, $presenceText, $bootText, $pinText)
       $next = if ($state -eq 'OK') { '' } else { ('NEXT: pwsh -File scripts\fish.ps1 up {0}（看 logs\plugin-boot.log 里 home={1} 的那条）' -f $key, $m.home) }

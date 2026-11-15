@@ -8,7 +8,7 @@
 //        --port 3083 --home <她的家> \
 //        --dshHome <她的家>\dsh-home \
 //        --profile fishball --configFile lil-whale.config.fishball.json \
-//        --status experiment [--dry-run]
+//        --lifecycle active|archived [--dry-run]
 //
 // 失败时最后一行是 NEXT:，退出码 1。
 
@@ -49,11 +49,11 @@ function opt(name) {
 }
 const dryRun = args.includes('--dry-run')
 // 未知参数拒绝：以前写错一个参数名也会照常跑完（拿默认值把名册写坏）。
-const maKnown = ['--key', '--name', '--parent', '--port', '--home', '--dshHome', '--profile', '--configFile', '--status', '--bornAt', '--dry-run']
+const maKnown = ['--key', '--name', '--parent', '--port', '--home', '--dshHome', '--profile', '--configFile', '--lifecycle', '--bornAt', '--dry-run']
 const maUnknown = args.filter((a) => a.startsWith('--') && !maKnown.includes(a))
 if (maUnknown.length > 0) {
   console.error('未知参数：' + maUnknown.join(' '))
-  console.error('用法：node scripts\\members-add.mjs --key <键> --name <名字> [--parent lee] [--port 3083] [--home <家>] [--dshHome <家>\\dsh-home] [--profile <p>] [--status experiment] [--dry-run]')
+  console.error('用法：node scripts\\members-add.mjs --key <键> --name <名字> [--parent lee] [--port 3083] [--home <家>] [--dshHome <家>\\dsh-home] [--profile <p>] [--lifecycle active|archived] [--dry-run]')
   process.exit(2)
 }
 
@@ -87,7 +87,7 @@ const now = {
   cwd: opt('cwd') || prev.cwd || opt('home') || prev.home || null,
   sessionId: opt('sessionId') || prev.sessionId || null,
   configFile: opt('configFile') || prev.configFile || null,
-  status: opt('status') || prev.status || 'experiment',
+  lifecycle: opt('lifecycle') || prev.lifecycle || 'active',
 }
 
 // 父必须存在（除了人类和根）
@@ -109,5 +109,5 @@ const tmp = membersFile + '.tmp-' + process.pid
 writeFileSync(tmp, JSON.stringify(raw, null, 2) + '\n', 'utf8')
 const { renameSync } = await import('node:fs')
 renameSync(tmp, membersFile)
-console.log(`✓ ${key} -> ${now.name}（${now.role} / ${now.port ?? '无端口'} / ${now.status}）写进 ${membersFile}`)
+console.log(`✓ ${key} -> ${now.name}（${now.role} / ${now.port ?? '无端口'} / ${now.lifecycle}）写进 ${membersFile}`)
 if (prev.name && prev.name !== now.name) console.log(`  注意：名字从「${prev.name}」改成了「${now.name}」—— 改名史要记进 family.json（gen-family.mjs 会读）`)

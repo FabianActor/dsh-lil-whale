@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 归档一条实验鱼（2026-11-13 他要的）：
+// 归档一条鱼（2026-11-13 他要的；2026-11-15 去掉「实验鱼」这个说法）：
 //
 //   node scripts/archive-fish.mjs --member fishball [--dry-run] [--mark-archived] [--subtree]
 //
@@ -231,7 +231,7 @@ if (args.markArchived) {
     // gen-family.mjs 的节点在 family.nodes 下（早期版本写过 members/fishes，一起兼容）
     const node = family?.nodes?.[args.member] ?? family?.members?.[args.member] ?? family?.fishes?.[args.member]
     if (node && typeof node === 'object') {
-      node.status = 'archived'
+      node.lifecycle = 'archived'
       node.archivedAt = manifest.archivedAt
       node.archivePath = archiveDir
       writeFileSync(familyFile, JSON.stringify(family, null, 2) + '\n', 'utf8')

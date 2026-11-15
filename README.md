@@ -96,7 +96,7 @@ pwsh -File scripts\fish.ps1 new -Key xiaoxing -Name 小星星 -Parent whale
 - **API key 只有两种来法，都由你决定**（PRD 附录 CHANGELOG A.65）：在她自己的网页里填，或者你明确说"继承某条鱼的"——
   `pwsh -File scripts\fish.ps1 key grant -Key xiaoxing -From whale`（花的是 whale 的额度；回收用 `key revoke`）。
 - 新鱼出生后还要三步：`fish.ps1 maintain <键>` 开窗填 key → 群里说第一句话 → `fish.ps1 restore <键>` 回无人值守。
-- 实验鱼（`status: experiment`）也能当家长，但归档时会连同孩子一起归档（`archive-fish.mjs --subtree`）。
+- 任何活着的鱼（`lifecycle: active`）都能当家长；**归档不会连带**——要连孩子一起归档，显式跑 `archive-fish.mjs --subtree`。
 
 ## 重启后先跑这个
 
@@ -131,7 +131,7 @@ pwsh -File scripts\doctor.ps1 -IncludeLee  # 连你的窗一起看
 | 投递账本 | `wake-deliver.log` 最近一次递话 |
 | 群投影 / 私聊可读版 | `群.md`、`私聊-*.md` 是不是跟得上 jsonl |
 | 窗口留痕 | `close.log` 有没有开门/关门记录 |
-| 全鱼 | 每条鱼一行：名字 / 端口 / 心跳 / 启动痕迹 / 名册；常驻鱼关着算 FAIL，实验鱼关着只算 WARN——"不承诺一直醒着" |
+| 全鱼 | 每条鱼一行：名字 / 端口 / 心跳 / 启动痕迹 / 名册；**严重度看事实不看身份**——已归档的跳过，活着的端口不通就是 FAIL |
 
 全过 exit 0；有 FAIL exit 1，每条 FAIL 带一条 `NEXT:` 告诉你下一步做什么。
 
@@ -213,7 +213,8 @@ pwsh -File scripts\fish.ps1 doctor       # 体检
 |---|---|
 | 3080 | 你（大肥鱼的 web） |
 | 3082 | 小肥鱼 |
-| 3083 | 小鱼丸（实验鱼） |
+| 3083 | 小鱼丸 |
+| 3084 | 小满 |
 
 `3081` 不占 —— 常见插件会抢。
 

@@ -58,7 +58,7 @@ if (existsSync(familyFile)) {
       name: m.name || key,
       parent: m.parent ?? null,
       bornAt: m.bornAt ?? null,
-      status: m.status || 'resident',
+      lifecycle: m.lifecycle || (m.status === 'archived' ? 'archived' : 'active'),
       note: '',
       renames: [],
     }
@@ -71,7 +71,7 @@ if (existsSync(familyFile)) {
 let added = 0
 for (const [key, m] of Object.entries(members)) {
   if (!family.nodes[key]) {
-    family.nodes[key] = { name: m.name || key, parent: m.parent ?? null, bornAt: m.bornAt ?? null, status: m.status || 'resident', note: '', renames: [] }
+    family.nodes[key] = { name: m.name || key, parent: m.parent ?? null, bornAt: m.bornAt ?? null, lifecycle: m.lifecycle || (m.status === 'archived' ? 'archived' : 'active'), note: '', renames: [] }
     added++
   }
 }
@@ -108,14 +108,28 @@ if (errors.length) {
 const root = fishRoots[0] || roots[0]
 const childrenOf = (key) => Object.entries(family.nodes).filter(([, n]) => n.parent === key).map(([k]) => k).sort()
 
+// 公开口径：这份文档会发布出去，只写 宿主 / 第 N 条鱼，不写真名。
+const pubNames = (() => {
+  const map = {}
+  const keys = Object.keys(family.nodes)
+  for (const key of keys) {
+    if ((members[key] || {}).kind === 'human') map[key] = '宿主'
+  }
+  const CN = '一二三四五六七八九十'
+  const fish = keys.filter((k) => (members[k] || {}).kind !== 'human')
+  fish.sort((a, b) => String(family.nodes[a].bornAt || '').localeCompare(String(family.nodes[b].bornAt || '')) || a.localeCompare(b))
+  fish.forEach((k, i) => { map[k] = `第${CN[i] || i + 1}条鱼` })
+  return map
+})()
+function pubName(key) { return pubNames[key] || key }
+
 function label(key) {
   const f = family.nodes[key]
   const m = members[key] || {}
-  const bits = [f.name || key]
+  const bits = [pubName(key)]
   if (m.kind === 'human') bits.push('人类')
   else if (m.role === 'watcher') bits.push('巡守')
-  if (f.status === 'experiment') bits.push('实验')
-  if (f.status === 'archived') bits.push('已归档')
+  if (f.lifecycle === 'archived') bits.push('已归档')
   if (m.port) bits.push(String(m.port))
   return `${bits[0]}<br/>${bits.slice(1).join(' · ')}`
 }
@@ -124,6 +138,7 @@ const lines = []
 lines.push('# 谱系', '')
 lines.push('> 这份文件是**生成的**，别手改。真源是 `pool\\family.json`（谁是谁的爹）+ `pool\\members.json`（现在叫什么、在不在跑）。')
 lines.push('> 重新生成：`node scripts\\gen-family.mjs`', '')
+lines.push('> 名字是公开口径：宿主，以及按出生顺序的「第 N 条鱼」；真名只住在名册里。', '')
 
 lines.push('## 图', '', '```mermaid', 'graph TD')
 for (const key of Object.keys(family.nodes).sort()) {
@@ -141,12 +156,11 @@ function draw(key, prefix, isLast, isRoot) {
   const tags = []
   if (m.kind === 'human') tags.push('人类')
   else if (m.role === 'watcher') tags.push('巡守')
-  if (f.status === 'experiment') tags.push('实验')
-  if (f.status === 'archived') tags.push('已归档')
+  if (f.lifecycle === 'archived') tags.push('已归档')
   if (m.port) tags.push(`:${m.port}`)
   const tag = tags.length ? `  [${tags.join(' ')}]` : ''
-  if (isRoot) lines.push(`${f.name || key} (${key})${tag}`)
-  else lines.push(`${prefix}${isLast ? '└─ ' : '├─ '}${f.name || key} (${key})${tag}`)
+  if (isRoot) lines.push(`${pubName(key)} (${key})${tag}`)
+  else lines.push(`${prefix}${isLast ? '└─ ' : '├─ '}${pubName(key)} (${key})${tag}`)
   const kids = childrenOf(key)
   kids.forEach((kid, i) => {
     const childPrefix = isRoot ? '' : prefix + (isLast ? '   ' : '│  ')
@@ -156,10 +170,10 @@ function draw(key, prefix, isLast, isRoot) {
 for (const r of roots) draw(r, '', true, true)
 lines.push('```', '')
 
-lines.push('## 名册', '', '| 键 | 名字 | 爹 | 出生 | 端口 | 角色 | 状态 |', '|---|---|---|---|---|---|---|')
+lines.push('## 名册', '', '| 键 | 名字 | 爹 | 出生 | 端口 | 角色 | 生命周期 |', '|---|---|---|---|---|---|---|')
 for (const [key, node] of Object.entries(family.nodes).sort((a, b) => (a[1].bornAt || '').localeCompare(b[1].bornAt || '') || a[0].localeCompare(b[0]))) {
   const m = members[key] || {}
-  lines.push(`| \`${key}\` | ${node.name || m.name || key} | ${node.parent ? '`' + node.parent + '`' : '—'} | ${node.bornAt || '—'} | ${m.port ?? '—'} | ${m.role || m.kind || '—'} | ${node.status} |`)
+  lines.push(`| \`${key}\` | ${pubName(key)} | ${node.parent ? '`' + node.parent + '`' : '—'} | ${node.bornAt || '—'} | ${m.port ?? '—'} | ${m.role || m.kind || '—'} | ${node.lifecycle} |`)
 }
 lines.push('')
 

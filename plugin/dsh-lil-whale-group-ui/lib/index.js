@@ -635,7 +635,7 @@ async function pondStatus() {
       key,
       name: typeof member?.name === 'string' ? member.name : key,
       role: member?.role === 'watcher' ? 'watcher' : 'member',
-      status: member?.status ?? 'resident',
+      lifecycle: member?.lifecycle ?? (member?.status === 'archived' ? 'archived' : 'active'),
       parent: member?.parent ?? null,
       generation: generationOf(key, members),
       bornAt: typeof member?.bornAt === 'string' ? member.bornAt : null,

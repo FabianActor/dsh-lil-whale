@@ -496,13 +496,13 @@ if (-not (Test-Path $membersPath)) {
   $members[$ParentMemberId] = [ordered]@{
     name = '大肥鱼'; kind = 'fish'; role = 'watcher'; parent = $null
     port = $leePort; home = $leeHome; dshHome = $leeHome
-    profile = $ParentProfile; status = 'resident'; bornAt = $null
+    profile = $ParentProfile; lifecycle = 'active'; bornAt = $null
   }
   $members[$HumanMemberId] = [ordered]@{ name = 'Fabian'; kind = 'human'; role = 'human'; parent = $null }
   $members[$childMember] = [ordered]@{
     name = $ChildName; kind = 'fish'; role = 'member'; parent = $ParentMemberId
     port = $port; home = $Workspace; dshHome = $DshHome
-    profile = $ChildProfile; status = 'experiment'; bornAt = $nowIso
+    profile = $ChildProfile; lifecycle = 'active'; bornAt = $nowIso
   }
   $rawMembers = [ordered]@{ version = 1; updatedAt = $nowIso; members = $members }
   Write-Utf8NoBom $membersPath (($rawMembers | ConvertTo-Json -Depth 8) + "`n")
@@ -515,7 +515,7 @@ if (-not (Test-Path $membersPath)) {
   if (Test-Path $membersAdd) {
     $addArgs = @($membersAdd, '--key', $childMember, '--name', $ChildName, '--parent', $ParentMemberId,
       '--port', [string]$port, '--home', $Workspace, '--dshHome', $DshHome,
-      '--profile', $ChildProfile, '--configFile', $cfgName, '--status', 'experiment')
+      '--profile', $ChildProfile, '--configFile', $cfgName)
     $addOut = & node @addArgs 2>&1
     if ($LASTEXITCODE -eq 0) { Ok "members.json 已更新：$($addOut | Select-Object -Last 1)" }
     else { Warn "新鱼没写进名册：$($addOut | Select-Object -Last 3) —— 手动跑 node scripts\members-add.mjs --key $childMember ..." }

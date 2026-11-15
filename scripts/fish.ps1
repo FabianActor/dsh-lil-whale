@@ -109,7 +109,7 @@ function Get-Members {
           Port    = if ($m.port) { [int]$m.port } else { 0 }
           Cwd     = if ($m.cwd) { [string]$m.cwd } else { $null }
           ConfigFile = if ($m.configFile) { [string]$m.configFile } else { $null }
-          Status  = if ($m.status) { [string]$m.status } else { $null }
+          Lifecycle = if ($m.lifecycle) { [string]$m.lifecycle } elseif ([string]$m.status) { if ([string]$m.status -eq 'archived') { 'archived' } else { 'active' } } else { 'active' }
           Parent  = if ($m.parent) { [string]$m.parent } else { $null }
           BornAt  = if ($m.bornAt) { [string]$m.bornAt } else { $null }
         }
@@ -119,8 +119,8 @@ function Get-Members {
     }
   }
   if ($out.Count -eq 0) {
-    $out['lee'] = [pscustomobject]@{ Key = 'lee'; Label = '大肥鱼'; Kind = 'fish'; Role = 'watcher'; Home = $Cfg.LeeHome; DshHome = $Cfg.LeeHome; Profile = $Cfg.LeeProfile; Port = $Cfg.LeePort; Cwd = $Cfg.LeeStartCwd; Status = $null; Parent = $null; BornAt = $null }
-    $out['whale'] = [pscustomobject]@{ Key = 'whale'; Label = '小肥鱼'; Kind = 'fish'; Role = 'member'; Home = $Cfg.HerHome; DshHome = $Cfg.HerDshHome; Profile = $Cfg.WhaleProfile; Port = $Cfg.HerPort; Cwd = $Cfg.WhaleCwd; Status = $null; Parent = $null; BornAt = $null }
+    $out['lee'] = [pscustomobject]@{ Key = 'lee'; Label = '大肥鱼'; Kind = 'fish'; Role = 'watcher'; Home = $Cfg.LeeHome; DshHome = $Cfg.LeeHome; Profile = $Cfg.LeeProfile; Port = $Cfg.LeePort; Cwd = $Cfg.LeeStartCwd; Lifecycle = 'active'; Parent = $null; BornAt = $null }
+    $out['whale'] = [pscustomobject]@{ Key = 'whale'; Label = '小肥鱼'; Kind = 'fish'; Role = 'member'; Home = $Cfg.HerHome; DshHome = $Cfg.HerDshHome; Profile = $Cfg.WhaleProfile; Port = $Cfg.HerPort; Cwd = $Cfg.WhaleCwd; Lifecycle = 'active'; Parent = $null; BornAt = $null }
   }
   return $out
 }
@@ -827,10 +827,11 @@ function Invoke-NewFish {
     Write-Host ("xx 名册里没有「{0}」这条鱼。" -f $parentKey)
     return $false
   }
-  if ($parent.Status -eq 'experiment') {
-    # 2026-11-13 他改了口径：实验鱼可以当家长（小鱼丸的孩子是二代的第一次实验），
-    # 试验结束后和孩子一起归档。这里只提醒，不拦。
-    Write-Host ("  注意：家长「{0}」还是实验鱼 —— 它的孩子会跟着它一起归档。" -f $parent.Label)
+  if ($parent.Lifecycle -eq 'archived') {
+    # 2026-11-15：status 不再表示身份；"归档连带"只由 archive-fish --subtree 决定，
+    # 所以这里不是提醒，而是一条拦截：归档的鱼不能再当家长。
+    Write-Host ("  xx 家长「{0}」已经归档了 —— 归档的鱼不能再养新的。" -f $parent.Label)
+    return $false
   }
   $fishCount = @($MEMBERS.Values | Where-Object { $_.Kind -eq 'fish' }).Count
   $maxFish = 5
@@ -931,9 +932,9 @@ function Invoke-NewFish {
     }
   }
   $birthLog = Join-Path $Cfg.PoolState 'births.log'
-  $parentStatus = if ($parent.Status) { $parent.Status } else { 'resident' }
+  $parentLifecycle = if ($parent.Lifecycle) { $parent.Lifecycle } else { 'active' }
   $keyPart = if ($keyInherited) { ' keyInherited=' + $keyInherited } else { '' }
-  $line = '{0} | birth | fmt=1 key={1} name={2} parent={3} by={4} port={5} status=experiment parentStatus={6} requestedBy={7}{8}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $key, $childName, $parent.Key, $By, $realPort, $parentStatus, $RequestedBy, $keyPart
+  $line = '{0} | birth | fmt=2 key={1} name={2} parent={3} by={4} port={5} parentLifecycle={6} requestedBy={7}{8}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $key, $childName, $parent.Key, $By, $realPort, $parentLifecycle, $RequestedBy, $keyPart
   try { Add-Content -LiteralPath $birthLog -Value $line -Encoding utf8 } catch { Write-Host ('!! birth 没记上：{0}' -f $_.Exception.Message) }
   Write-Host ''
   Write-Host ('{0} 出生了：{1}（{2}），端口 {3}。' -f $parent.Label, $childName, $key, $realPort)
