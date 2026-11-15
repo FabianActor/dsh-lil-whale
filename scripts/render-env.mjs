@@ -219,17 +219,19 @@ const capsAtLocal = capsInfo.ok
   : ''
 // 纸不该"自述"路径，该"转抄"路径（小肥鱼 2026-11-15 08:51）：
 // 转抄 wake-caps.json 里巡守自己写的 source —— 转述有出处，自述只有自信。
+// 数字只有一份（CAPS_TEXT）；下面这段只说来源，不再重复数字（小肥鱼 2026-11-15 08:54）。
+// 兜底那一档不写路径：兜底的定义就是"没有文件参与"（鱼丸）。
 const capsOverrides = Array.isArray(capsInfo.raw?.source?.overrides) ? capsInfo.raw.source.overrides : []
-const capsSourceText = capsOverrides.length ? `配置覆盖了 ${capsOverrides.join('、')}` : '配置里没有 wake 键 → 用默认值'
+const capsSourceText = capsOverrides.length ? '配置覆盖了 ' + capsOverrides.join('、') : '配置里没有 wake 键 → 用默认值'
 const capsCfgPath = String(capsInfo.raw?.source?.configFile ?? '')
-const capsSourceLine = caps
-  ? (capsCfgPath
-      ? `读自：${capsCfgPath}（${capsSourceText}）；巡守于 ${capsAtLocal} 写出（pid ${capsInfo.raw?.pid ?? '?'}）`
-      : `巡守没记下它读的是哪份配置（source.configFile 空）；巡守于 ${capsAtLocal} 写出（pid ${capsInfo.raw?.pid ?? '?'}）`)
-  : ''
+const capsText = '两次之间至少隔 ' + wake.cooldownSec + ' 秒、每人每小时最多 ' + wake.perHour + ' 次、每天最多 ' + wake.perDay + ' 次、全池每天最多 ' + wake.totalPerDay + ' 次、巡守推门最多 ' + wake.maxWakesPerDay + ' 次'
+const capsAtText = capsAtLocal
+const capsPid = capsInfo.raw?.pid ?? '?'
 const capsNote = caps
-  ? `生效值：间隔 ${caps.cooldownSec} 秒 / 每小时 ${caps.perHour} 次 / 每天 ${caps.perDay} 次 / 全池 ${caps.totalPerDay} 次 / 推门 ${caps.maxWakesPerDay} 次·天；${capsSourceLine}`
-  : `读不到巡守写出的生效值（${capsInfo.why}）——下面这几个数只是代码默认值，可能不是正在生效的；没有来源路径可抄，等巡守写出 wake-caps.json 再刷新这张纸`
+  ? (capsCfgPath
+      ? '（来源：转抄 pool/state/wake-caps.json 的 source —— 巡守读的是 ' + capsCfgPath + '（' + capsSourceText + '），于 ' + capsAtText + ' 写出，pid ' + capsPid + '）'
+      : '（来源：巡守没记下它读的是哪份配置（source.configFile 空），于 ' + capsAtText + ' 写出，pid ' + capsPid + '）')
+  : '（读不到巡守写出的生效值：' + capsInfo.why + ' —— 上面这几个数是代码默认值，可能不是正在生效的；没有来源路径可抄，等巡守写出 wake-caps.json 再刷新这张纸）'
 
 // ---- 模板与指纹 ----
 const templatePath = join(REPO_ROOT, 'templates', '环境.md.tpl')
@@ -261,9 +263,7 @@ const values = {
   GROUP_DIR: groupDir,
   POOL_DIR: poolDir,
   CAPS_NOTE: capsNote,
-  COOLDOWN: String(wake.cooldownSec),
-  PER_HOUR: String(wake.perHour),
-  PER_DAY: String(wake.perDay),
+  CAPS_TEXT: capsText,
   TOKEN_PER_TURN: '180-200',
   CHILD_NAME: me?.name ?? myKey,
   CHILD_ID: myKey,
