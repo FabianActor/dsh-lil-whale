@@ -27,6 +27,10 @@ import { fileURLToPath } from 'node:url'
 import { biliSectionOf } from './bili-section.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
+// 2026-11-15：默认值和"默认值+覆盖"只在 wake-config.js 里写一份。
+// 以前这里用正则读 index.js 的文字形状 —— 形态一改就静默退回硬编码（小肥鱼抓到的"纸在骗人"）。
+import { resolveWake } from '../plugin/dsh-lil-whale-group/lib/wake-config.js'
+
 const REPO_ROOT = resolve(HERE, '..')
 
 function die(message) {
@@ -167,40 +171,18 @@ if (existsSync(toolsScript)) {
   }
 }
 
-// ---- 叫醒参数：从代码里读，别在纸上写第二份 ----
-// 纸上写死 60/12/60，代码一改就变成"说明书和事实各说各话"。
-function wakeNumbers(cfgPathOverride) {
-  // 三层：代码里的默认值 → 配置覆盖 → 真源是进程读的那一份。
-  // 2026-11-15：闸改成可配置后，旧的 `const WAKE = { perHour: 12 }` 形态没了，
-  // 正则读不到就退回写死的 fallback，于是纸一直印 12/60 —— 小肥鱼 08:40 抓到"纸在骗人"。
-  const nums = { cooldownSec: 15, perHour: 40, perDay: 200 }
+// ---- 叫醒参数：用共享定义；输入路径要写在纸上（小肥鱼 08:48） ----
+function readCfgForPaper(cfgPathOverride) {
+  const cfgPath = cfgPathOverride || process.env.LIL_WHALE_CONFIG || join(REPO_ROOT, 'lil-whale.config.json')
   try {
-    const src = readFileSync(join(REPO_ROOT, 'plugin', 'dsh-lil-whale-group', 'lib', 'index.js'), 'utf8')
-    // 新形态：numSetting(CFG.wake?.perHour, 40)
-    for (const m of src.matchAll(/numSetting\(CFG\.wake\?\.(\w+),\s*(\d+)\)/g)) {
-      if (m[1] in nums) nums[m[1]] = Number(m[2])
-    }
-    // 旧形态（万一回退到写死的 WAKE）
-    const block = src.match(/const WAKE = \{[\s\S]*?\n\}/)?.[0] ?? ''
-    for (const key of Object.keys(nums)) {
-      const m = block.match(new RegExp(`${key}\\s*:\\s*(\\d+)`))
-      if (m) nums[key] = Number(m[1])
-    }
-  } catch {}
-  // 配置覆盖：跟进程读同一份文件（LIL_WHALE_CONFIG → 仓库根）
-  try {
-    const cfgPath = cfgPathOverride || process.env.LIL_WHALE_CONFIG || join(REPO_ROOT, 'lil-whale.config.json')
-    if (existsSync(cfgPath)) {
-      const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'))
-      for (const key of Object.keys(nums)) {
-        const v = Number(cfg?.wake?.[key])
-        if (Number.isFinite(v) && v > 0) nums[key] = v
-      }
-    }
-  } catch {}
-  return nums
+    const cfg = existsSync(cfgPath) ? JSON.parse(readFileSync(cfgPath, 'utf8')) : {}
+    return { cfg, path: cfgPath, readOk: true, error: null }
+  } catch (error) {
+    return { cfg: {}, path: cfgPath, readOk: false, error: error.message }
+  }
 }
-const wake = wakeNumbers(args.config ? resolve(args.config) : '')
+const cfgInfo = readCfgForPaper(args.config ? resolve(args.config) : '')
+const wake = resolveWake(cfgInfo.cfg)
 
 // ---- 生效值：唯一写者是巡守进程（2026-11-15 小肥鱼/小鱼丸） ----
 // 代码里的是默认值、配置能覆盖；只有跑起来的那个进程知道真正的数。
@@ -220,12 +202,7 @@ function readWakeCaps() {
   }
 }
 const capsInfo = readWakeCaps()
-if (capsInfo.ok && capsInfo.raw?.caps) {
-  for (const key of ['cooldownSec', 'perHour', 'perDay']) {
-    const v = Number(capsInfo.raw.caps[key])
-    if (Number.isFinite(v) && v > 0) wake[key] = v
-  }
-}
+const caps = capsInfo.ok && capsInfo.raw?.caps ? capsInfo.raw.caps : null
 const pad2 = (n) => String(n).padStart(2, '0')
 const capsAtLocal = capsInfo.ok
   ? (() => {
@@ -234,12 +211,15 @@ const capsAtLocal = capsInfo.ok
     })()
   : ''
 const capsOverrides = Array.isArray(capsInfo.raw?.source?.overrides) ? capsInfo.raw.source.overrides : []
-const capsSource = capsInfo.ok
-  ? (capsOverrides.length ? `配置覆盖了 ${capsOverrides.join('、')}` : '代码默认值（配置没覆盖）')
-  : ''
+const capsSourceText = capsInfo.ok
+  ? (capsOverrides.length ? `配置覆盖了 ${capsOverrides.join('、')}` : '配置里没有 wake 键 → 用默认值')
+  : '代码默认值'
+const readFromText = cfgInfo.readOk
+  ? `${cfgInfo.path}（${capsSourceText}）`
+  : `${cfgInfo.path}（读不出来：${cfgInfo.error ?? '文件不存在'}）`
 const capsNote = capsInfo.ok
-  ? `生效值：巡守于 ${capsAtLocal} 写出（pid ${capsInfo.raw?.pid ?? '?'}；${capsSource}）。下面的数字就是它当时用的。`
-  : `读不到巡守写出的生效值（${capsInfo.why}）——下面的数字是代码里的默认值，可能不是正在生效的。`
+  ? `生效值：间隔 ${caps.cooldownSec} 秒 / 每小时 ${caps.perHour} 次 / 每天 ${caps.perDay} 次 / 全池 ${caps.totalPerDay} 次 / 推门 ${caps.maxWakesPerDay} 次·天；读自：${readFromText}；巡守于 ${capsAtLocal} 写出（pid ${capsInfo.raw?.pid ?? '?'}）`
+  : `读不到巡守写出的生效值（${capsInfo.why}）——下面是默认值：间隔 ${wake.cooldownSec} 秒 / 每小时 ${wake.perHour} 次 / 每天 ${wake.perDay} 次 / 全池 ${wake.totalPerDay} 次 / 推门 ${wake.maxWakesPerDay} 次·天；读自：${readFromText}`
 
 // ---- 模板与指纹 ----
 const templatePath = join(REPO_ROOT, 'templates', '环境.md.tpl')
@@ -274,8 +254,6 @@ const values = {
   COOLDOWN: String(wake.cooldownSec),
   PER_HOUR: String(wake.perHour),
   PER_DAY: String(wake.perDay),
-  QUIET_FROM: `${pad(wake.quietFromHour)}:00`,
-  QUIET_TO: `${pad(wake.quietToHour)}:00`,
   TOKEN_PER_TURN: '180-200',
   CHILD_NAME: me?.name ?? myKey,
   CHILD_ID: myKey,

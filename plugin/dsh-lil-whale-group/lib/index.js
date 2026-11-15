@@ -16,6 +16,7 @@ import { randomUUID, createHash } from 'node:crypto'
 import { spawn, execFileSync } from 'node:child_process'
 import { connect } from 'node:net'
 import { config } from './config.js'
+import { resolveWake, wakeCapsText } from './wake-config.js'
 import {
   todayKey,
   planFileOf as planFileOfCore,
@@ -160,7 +161,7 @@ const WATCH = {
   port: CFG.selfPort,
   // 巡守推门（计划 / 条件）的上限：这是"它替她推门"的次数，不是聊天。
   // 2026-11-15 从 8 提到 24，让一天里多次条件触发不用抢额度。
-  maxWakesPerDay: numSetting(CFG.watch?.maxWakesPerDay, 24),
+  maxWakesPerDay: resolveWake(CFG).maxWakesPerDay,
   maxConsecutiveFailures: 3,
 }
 const SELF_HOME = CFG.selfHome
@@ -819,7 +820,7 @@ function writeWakeCaps() {
 }
 
 function wakeCapsLine() {
-  return 'caps=' + WAKE.cooldownSec + 's/' + WAKE.perHour + 'h/' + WAKE.perDay + 'd/' + WAKE.totalPerDay + 'total cap=' + WATCH.maxWakesPerDay + '/day'
+  return 'caps=' + wakeCapsText({ ...WAKE_RESOLVED, maxWakesPerDay: WATCH.maxWakesPerDay })
 }
 
 function watchmanLog(result, why) {
@@ -1079,18 +1080,20 @@ function numSetting(value, fallback) {
   return Number.isFinite(n) && n >= 0 ? n : fallback
 }
 
+// 2026-11-15：默认值和"默认值+覆盖"的算法搬进 wake-config.js —— 纸（render-env）
+// 和进程（这里）用同一份定义，不再有人去正则读源码的文字形状。
+// 小鱼丸补的那一半：这里读 CFG、纸读 member.ConfigFile；**输入是不是同一份，得让纸写出来**。
+const WAKE_RESOLVED = resolveWake(CFG)
 const WAKE = {
   intervalMs: 1000,      // 扫得勤一点，debounce 才有分辨率
   quietMs: 3000,         // 最后一条之后再安静这么久才发车（她的提议）
   maxWaitMs: 10000,      // 一直在来也不能一直憋着
   quietFromHour: 0,     // 他 2026-11-09 定：静默段 00:00–08:00（原 02:00）
   quietToHour: 8,
-  // 2026-11-15：聊天路径的三条闸放宽（旧值 60 / 12 / 60 / 120）。
-  // 现场：三个人连着聊，十几分钟就把"每小时 12 次"撞满了，消息被扣到下一小时。
-  cooldownSec: numSetting(CFG.wake?.cooldownSec, 15),
-  perHour: numSetting(CFG.wake?.perHour, 40),
-  perDay: numSetting(CFG.wake?.perDay, 200),
-  totalPerDay: numSetting(CFG.wake?.totalPerDay, 400),  // 全池今天加起来的上限（每条鱼各自还有 perHour/perDay）
+  cooldownSec: WAKE_RESOLVED.cooldownSec,
+  perHour: WAKE_RESOLVED.perHour,
+  perDay: WAKE_RESOLVED.perDay,
+  totalPerDay: WAKE_RESOLVED.totalPerDay,  // 全池今天加起来的上限（每条鱼各自还有 perHour/perDay）
   backlogTier: 8,        // 积压超过这个数，唤醒词换成"先看最后三条"
 }
 const BOOT_AT = Date.now() // 本进程起来多久了：太早挂载会挂出没有工具的空壳
