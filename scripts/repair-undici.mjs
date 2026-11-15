@@ -15,7 +15,7 @@
 //   node scripts/repair-undici.mjs           # 同 --check
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, copyFileSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, copyFileSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -55,8 +55,20 @@ function installedVersion(dir) {
   }
 }
 
+// 在，不等于能用（2026-11-15 小肥鱼补的）：
+// 0 字节、被截断、从别的版本拷来的文件，existsSync 都报 true。
+// 今天坏掉的形态是"文件根本没在"，所以先拦最常见的那种（空文件）；
+// sha256 校验等真的出现"补错版本"再上——判据按已经发生过的错来配。
 function missingFiles(dir) {
-  return REQUIRED.filter((rel) => !existsSync(join(dir, rel)))
+  return REQUIRED.filter((rel) => {
+    const p = join(dir, rel)
+    try {
+      const st = statSync(p)
+      return !st.isFile() || st.size === 0
+    } catch {
+      return true
+    }
+  })
 }
 
 function fix(root, dir, version, missing) {
@@ -102,7 +114,7 @@ if (missing.length === 0) {
   process.exit(0)
 }
 
-console.log(`WARN undici@${version} 缺 ${missing.length} 个文件：`)
+console.log(`WARN undici@${version} 缺（或空）${missing.length} 个文件：`)
 for (const rel of missing) console.log(`  - ${rel}`)
 
 if (mode !== 'fix') {
