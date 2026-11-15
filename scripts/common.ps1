@@ -56,7 +56,8 @@ function Get-WhaleConfig {
     SelfProfile  = & $pickSelf 'selfProfile' 'whaleProfile' 'whale'
     SelfCwd      = & $pickSelf 'selfCwd' 'whaleCwd' $selfHome
     # 共享区（在鱼的家之外）。
-    PoolDir      = $poolDir
+    PondRoot     = $pondRoot
+  PoolDir      = $poolDir
     PoolState    = & $pick 'poolStateDir' (Join-Path $poolDir 'state')
     GroupDir     = & $pick 'groupDir' (Join-Path $poolDir 'group')
     DmDir        = & $pick 'dmDir' (Join-Path $poolDir 'dm')

@@ -4,6 +4,12 @@
 > 它与两个 npm 包的版本（各自 `package.json` 里的 semver，如 `1.2.0`）是**两条线**：包版本只在功能或破坏性变化、发布时才动。
 > 编号从 r1 开始（第一稿就是 r1）。2026-11-13 之前这些号写作 `v1.0.NN`，本次统一改名，编号不变。
 
+## r119 — 2026-11-15 09:1x
+
+- **体检两个自坑**：`doctor.ps1` 的「生效值」检查——①日志路径写成 `pool\homes`（真实是鱼塘根下的 `homes`），`common.ps1` 的 `$Cfg` 补 `PondRoot`；②`ConvertFrom-Json` 把 ISO 转成 `[datetime]` 后再按字符串 Parse，差 8 小时，改 `([datetime]$caps.at).ToUniversalTime()`。
+- **PRD**：新增 **附录 A.96 补记 5**（两个坑/判据三条/教训"先证明体检器看见了你以为它在看的那份文件"）。
+- **包**：两包 1.6.9（无版本变化，只修体检）。
+
 ## r118 — 2026-11-15 08:5x
 
 - **一份纸里两个口径**：`templates\环境.md.tpl` 的「不会」那句（三个手写占位符）换成唯一的 `{{CAPS_TEXT}}`；`render-env.mjs` 只生成一份 `capsText`（五项全在），CAPS_NOTE 只写来源、不再重复数字；删掉 `COOLDOWN`/`PER_HOUR`/`PER_DAY` 三个值。

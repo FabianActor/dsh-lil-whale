@@ -262,7 +262,7 @@ if (Test-Path -LiteralPath $pluginLog) {
   #   日志里没有 wake-caps 行 → 版本还没到，等重启；
   #   日志里有那行、文件却不在 → 写失败（权限/路径/盘），要查。
   $capsLogSeen = $false
-  $homesRoot = Join-Path $Cfg.PoolDir 'homes'
+  $homesRoot = Join-Path $Cfg.PondRoot 'homes'
   if (Test-Path -LiteralPath $homesRoot) {
     foreach ($h in @(Get-ChildItem -LiteralPath $homesRoot -Directory -ErrorAction SilentlyContinue)) {
       $lg = Join-Path $h.FullName 'logs\watchman.log'
@@ -278,8 +278,13 @@ if (Test-Path -LiteralPath $pluginLog) {
   } else {
     try {
       $caps = Get-Content -LiteralPath $capsFile -Raw -Encoding UTF8 | ConvertFrom-Json
-      $atText = [string]$caps.at
-      $atMs = if ($atText) { [DateTimeOffset]::Parse($atText).ToUnixTimeMilliseconds() } else { 0 }
+      $atMs = 0
+      if ($null -ne $caps.at) {
+        try {
+          $atUtc = ([datetime]$caps.at).ToUniversalTime()
+          $atMs = [DateTimeOffset]::new($atUtc).ToUnixTimeMilliseconds()
+        } catch { $atMs = 0 }
+      }
       $ageMin = if ($atMs -gt 0) { [Math]::Round(((Get-Date).ToUniversalTime() - [DateTimeOffset]::FromUnixTimeMilliseconds($atMs).UtcDateTime).TotalMinutes) } else { -1 }
       $capText = "间隔 $($caps.caps.cooldownSec)s / 每小时 $($caps.caps.perHour) / 每天 $($caps.caps.perDay) / 全池 $($caps.caps.totalPerDay) / 推门 $($caps.caps.maxWakesPerDay)"
       $overrides = @($caps.source.overrides)
