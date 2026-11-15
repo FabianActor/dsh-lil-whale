@@ -2243,7 +2243,9 @@ function apply(ctx) {
   // 此前只有巡守写（下面那一支），鱼自己的日志里全是新规矩的行、却没有分界——
   // 账本按进程分文件，分界就得按文件写，否则“这份日志的哪一段该按新规矩读”没有答案，
   // 而且 doctor 会为鱼自己的日志报一条假 WARN（它们的文件里本来就没有那个写者）。
-  watchmanLog('log-format', `fmt=3 since=${new Date().toISOString()} changed=skip,wake-skip,deliver fields=deny,note,reason`)
+  // 账本行要自证归属：谁写的（pid）、写给谁（to）——2026-11-16 第三条鱼 #754。
+  // 旧行没有这两个字段，不能拿它们反推写者（判据 §37）。
+  watchmanLog('log-format', `fmt=3 since=${new Date().toISOString()} changed=skip,wake-skip,deliver fields=deny,note,reason pid=${process.pid} to=${ownMember()}`)
 
   if (isMainProcess()) {
     // 自启动：开关在 pool\state\settings.json，默认关；开着的用户才走这一支。
