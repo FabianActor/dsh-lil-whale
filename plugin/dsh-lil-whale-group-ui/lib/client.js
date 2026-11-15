@@ -1037,6 +1037,22 @@ function Bubble({ config, message, onMention, animate = false }) {
      * 圆用内嵌 SVG 画而不是 `border-radius`：这个壳上 `border-radius` 出过两次
      * "样式算对了、画出来还是圆角矩形"，改用 `<circle>` 之后一次就对了（见 PRD 附录 A.10/A.11）。
      */
+    /**
+     * 浮在聊天区上的文字条。两个"跳转"按钮共用这一份——样式只写一次，
+     * 以后改圆角/阴影/颜色只改这里（2026-11-15 他要求"素材复用，保持设计统一"）。
+     */
+    function FloatingPill({ children }) {
+      return h('span', {
+        style: {
+          height: 34, display: 'flex', alignItems: 'center',
+          padding: '0 10px', borderRadius: 999, fontSize: 12, whiteSpace: 'nowrap',
+          color: 'var(--dsw-alias-label-secondary, rgba(0,0,0,0.62))',
+          background: 'var(--dsw-alias-button-floating-fill, #ffffff)',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.10), 0 4px 12px rgba(0,0,0,0.10)',
+        },
+      }, children)
+    }
+
     function JumpToBottom({ onClick, rightInset, hint }) {
       // hint：翻历史时底下来了新消息，就在按钮左边写一句（2026-11-13 他要的）。
       // 不用红点、不改 tab 标题 —— 人在看群聊时不该被 "(1)" 提醒，只有"底下有东西"这一件事值得说。
@@ -1047,15 +1063,7 @@ function Bubble({ config, message, onMention, animate = false }) {
         },
       },
       hint
-        ? h('span', {
-          style: {
-            marginTop: -34, marginRight: 8, height: 34, display: 'flex', alignItems: 'center',
-            padding: '0 10px', borderRadius: 999, fontSize: 12, whiteSpace: 'nowrap',
-            color: 'var(--dsw-alias-label-secondary, rgba(0,0,0,0.62))',
-            background: 'var(--dsw-alias-button-floating-fill, #ffffff)',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.10), 0 4px 12px rgba(0,0,0,0.10)',
-          },
-        }, hint)
+        ? h('span', { style: { marginTop: -34, marginRight: 8, display: 'flex' } }, h(FloatingPill, null, hint))
         : null,
       h('button', {
         type: 'button',
@@ -1090,13 +1098,15 @@ function Bubble({ config, message, onMention, animate = false }) {
      * 进来时视角在底部（新的在眼前），可"上次看到哪儿"在头顶上面；
      * 没有这个按钮，人只能自己往上滚去找那条线。线在视口上方才出现，滚到它跟前就消失。
      */
-    function JumpToHistory({ onClick, rightInset }) {
+    function JumpToHistory({ onClick, rightInset, hint }) {
       return h('div', {
         style: {
           position: 'absolute', left: 0, right: 0, top: 10, height: 0,
-          display: 'flex', justifyContent: 'flex-end', pointerEvents: 'none', zIndex: 8,
+          display: 'flex', justifyContent: 'flex-end', alignItems: 'center', pointerEvents: 'none', zIndex: 8,
         },
-      }, h('button', {
+      },
+      hint ? h('span', { style: { marginRight: 8, display: 'flex' } }, h(FloatingPill, null, hint)) : null,
+      h('button', {
         type: 'button',
         onClick,
         title: '回到上次看到的位置',
@@ -1998,7 +2008,7 @@ function Bubble({ config, message, onMention, animate = false }) {
                 },
               },
                 item.key === 'group'
-                  ? (tab !== 'group' && unread.group > 0 ? item.label + ' (' + unread.group + ')' : item.label)
+                  ? (unread.group > 0 && !(tab === 'group' && atBottom) ? item.label + ' (' + unread.group + ')' : item.label)
                   : item.key === 'dm'
                     ? (dmTotal(unread) > 0 ? item.label + ' (' + dmTotal(unread) + ')' : item.label)
                     : item.label,
@@ -2087,6 +2097,7 @@ function Bubble({ config, message, onMention, animate = false }) {
           historyAbove ? h(JumpToHistory, {
             onClick: jumpToHistory,
             rightInset: `calc(${(100 - widthPct) / 2}% + 10px)`,
+            hint: '回到历史未读',
           }) : null,
           // 回到底部：翻历史时才出现；和上面那个向上的按钮是一对
           atBottom ? null : h(JumpToBottom, {
@@ -3322,7 +3333,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v43 · hard-breaks:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v44 · unread-tab-history-hint:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')
