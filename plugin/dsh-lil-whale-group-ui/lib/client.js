@@ -634,7 +634,7 @@ function insertNewline(el, value, setValue) {
     growTextarea(el)
   })
 }
-function Bubble({ config, message, onMention, animate = false }) {
+const Bubble = React.memo(function Bubble({ config, message, onMention, animate = false }) {
       // 只在挂载时决定「要不要动画」：否则后续每次重渲染都会让老消息重新弹一遍。
       const animateOnMount = useRef(animate).current
       // 点图片打开官方看图器（大图、点外面关）。
@@ -712,7 +712,7 @@ function Bubble({ config, message, onMention, animate = false }) {
           })
           : null,
       )
-    }
+    })
 
     /**
      * 消息区两侧的拖拽热区。
@@ -1698,6 +1698,8 @@ function Bubble({ config, message, onMention, animate = false }) {
       const [messages, setMessages] = useState([])
       const [text, setText] = useState(() => readDraft(GROUP_DRAFT_KEY))
       const [to, setTo] = useState('all')
+      // @ 面板选中人的回调要稳定：Bubble 是 memo 的，每次渲染新函数会让 120 个气泡全部重渲染。
+      const mentionTo = useCallback((id) => setTo(id), [])
       const [error, setError] = useState(null)
       const [sending, setSending] = useState(false)
       // 待发送的图（data URL）。上传在 submit 里做，这里只存"用户选了哪张"。
@@ -1764,6 +1766,14 @@ function Bubble({ config, message, onMention, animate = false }) {
       const bottom = useRef(null)
       const scrollRef = useRef(null)
       const inputRef = useRef(null)
+      // 消息多时的渲染窗口：只挂最近 N 条，往上翻再点「加载更早」（2026-11-15 他报 500 多条卡顿）。
+      // 数据仍然一次拿全（后端不用动）；省的是「600 个气泡 + 每个气泡一次 markdown 解析」。
+      const [renderLimit, setRenderLimit] = useState(120)
+      const pendingScrollRef = useRef(null)
+      const pendingHistoryRef = useRef(null)
+      const messagesSigRef = useRef('')
+      const presenceSigRef = useRef('')
+      const seatsSigRef = useRef('')
       // 发送后按内容重算高度（同 DmPage）。
       useEffect(() => { resetTextareaHeight(inputRef.current) }, [text])
       // "回到上次看到的位置"：群页刚打开时视角在底部，历史线在头顶上面。
@@ -1791,18 +1801,35 @@ function Bubble({ config, message, onMention, animate = false }) {
         historyVisitedRef.current = true
         if (historyAboveRef.current) { historyAboveRef.current = false; setHistoryAbove(false) }
         const line = dividerRef.current
+        if (line) {
+          const top = line.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - 8
+          el.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
+          return
+        }
+        // 线不在当前窗口里（消息多、只挂了最近 N 条）：先把窗口扩到线那里，渲染完再滚。
+        const seen = String(seenGroupRef.current ?? '')
+        const idx = seen ? messages.findIndex((m) => String(m?.ts ?? '') > seen) : -1
+        if (idx >= 0) {
+          pendingHistoryRef.current = true
+          setRenderLimit((n) => Math.max(n, messages.length - idx + 40))
+          return
+        }
         // 没有线（没有新消息）就跳到最早的一条：两种情况下这个按钮都得做事。
-        if (!line) { el.scrollTo({ top: 0, behavior: 'smooth' }); return }
-        const top = line.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - 8
-        el.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
-      }, [])
+        el.scrollTo({ top: 0, behavior: 'smooth' })
+      }, [messages])
 
       const refresh = useCallback(async () => {
         try {
           const response = await fetch('/group/api/messages', { headers: { accept: 'application/json' } })
           if (!response.ok) throw new Error(`HTTP ${response.status}`)
           const data = await response.json()
-          setMessages(Array.isArray(data.messages) ? data.messages : [])
+          const incoming = Array.isArray(data.messages) ? data.messages : []
+          // 内容没变就不 set：每 3 秒换一个新数组 = 让全部气泡重渲染一遍（窗口化之后是 120 个）。
+          const sig = `${incoming.length}|${incoming.length ? String(incoming[incoming.length - 1]?.ts ?? '') : ''}`
+          if (sig !== messagesSigRef.current) {
+            messagesSigRef.current = sig
+            setMessages(incoming)
+          }
           setTimeout(() => { animateRef.current = true }, 0)
           setError(null)
           const counts = await loadUnread()
@@ -1823,7 +1850,12 @@ function Bubble({ config, message, onMention, animate = false }) {
           const response = await fetch('/group/api/presence', { headers: { accept: 'application/json' } })
           if (response.ok) {
             const data = await response.json()
-            setPresence(data?.members ?? {})
+            const fresh = data?.members ?? {}
+            const freshSig = JSON.stringify(fresh)
+            if (freshSig !== presenceSigRef.current) {
+              presenceSigRef.current = freshSig
+              setPresence(fresh)
+            }
           }
         } catch {
           // 存在感掉了就当没人说话，宁可安静
@@ -1833,7 +1865,13 @@ function Bubble({ config, message, onMention, animate = false }) {
           const response = await fetch('/group/api/seats', { headers: { accept: 'application/json' } })
           if (response.ok) {
             const data = await response.json()
-            if (Array.isArray(data?.seats)) setSeats(data.seats)
+            if (Array.isArray(data?.seats)) {
+              const seatsSig = JSON.stringify(data.seats)
+              if (seatsSig !== seatsSigRef.current) {
+                seatsSigRef.current = seatsSig
+                setSeats(data.seats)
+              }
+            }
           }
         } catch {
           // 拿不到就不列座位，只保留"叫这个人"
@@ -1864,6 +1902,35 @@ function Bubble({ config, message, onMention, animate = false }) {
 
       // 贴底 / 翻历史 / 回到底部：跟私聊页共用一套（见 useFollowTail）。
       const { atBottom, measureBottom, jumpToBottom } = useFollowTail(scrollRef, [messages.length, tab, splash])
+
+      // 「加载更早」之后保持眼睛原来的位置：上面新增了多少高度，就把滚动条往下推多少。
+      useEffect(() => {
+        const anchor = pendingScrollRef.current
+        const el = scrollRef.current
+        if (anchor && el) {
+          pendingScrollRef.current = null
+          const delta = el.scrollHeight - anchor.height
+          if (delta > 0) el.scrollTop = anchor.top + delta
+        }
+        if (pendingHistoryRef.current) {
+          pendingHistoryRef.current = null
+          const line = dividerRef.current
+          if (line && el) {
+            const top = line.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - 8
+            el.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
+          }
+        }
+      }, [renderLimit])
+
+      // 用户翻在上面时来了新消息：把窗口一起往上挪，否则他会看到"消息自己跳了一下"。
+      const prevCountRef = useRef(0)
+      useEffect(() => {
+        const prev = prevCountRef.current
+        prevCountRef.current = messages.length
+        if (prev > 0 && messages.length > prev && !atBottom) {
+          setRenderLimit((n) => n + (messages.length - prev))
+        }
+      }, [messages.length, atBottom])
 
       // 看过 1.5 秒才算读过：让红点有出现的余地，也不至于一闪就没。
       // 依赖里必须有 atBottom：翻历史回到底部的那一下才是"看见了"；
@@ -1966,15 +2033,41 @@ function Bubble({ config, message, onMention, animate = false }) {
 
       // 打字时不该重排两百多条气泡（2026-11-13 他报"连续快速输入/删除会卡"）。
       // 列表只跟消息、分割线、宽度、配置有关；输入框里的文字不是它的输入。
+      // 只渲染最近 N 条：500+ 条时，600 个气泡每 3 秒重排一次就是卡顿的来源。
+      const visibleStart = Math.max(0, messages.length - renderLimit)
+      const visibleMessages = visibleStart > 0 ? messages.slice(visibleStart) : messages
+      const loadEarlier = useCallback(() => {
+        const el = scrollRef.current
+        if (el) pendingScrollRef.current = { height: el.scrollHeight, top: el.scrollTop }
+        setRenderLimit((n) => n + 120)
+      }, [])
       const groupListNode = useMemo(
-        () => withDivider(messages, seenGroup, (message, index) => h(Bubble, {
-          key: `${message.ts}-${index}`,
-          config,
-          message,
-          animate: animateRef.current,
-          onMention: (id) => setTo(id),
-        }), dividerRef),
-        [messages, seenGroup, config, widthPct, setTo],
+        () => {
+          const nodes = withDivider(visibleMessages, seenGroup, (message, index) => h(Bubble, {
+            key: `${message.ts}-${index}`,
+            config,
+            message,
+            animate: animateRef.current,
+            onMention: mentionTo,
+          }), dividerRef)
+          if (visibleStart === 0) return nodes
+          const earlier = h(
+            'div',
+            { key: 'load-earlier', style: { display: 'flex', justifyContent: 'center', padding: '6px 0 10px' } },
+            h('button', {
+              onClick: loadEarlier,
+              style: {
+                height: 28, padding: '0 12px', borderRadius: 999,
+                border: '0.5px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12))',
+                background: 'var(--dsw-alias-bg-layer-3, rgba(0,0,0,0.04))',
+                color: 'var(--dsw-alias-label-secondary, rgba(0,0,0,0.6))',
+                fontSize: 12, fontFamily: 'inherit', cursor: 'pointer',
+              },
+            }, `加载更早的 ${Math.min(120, visibleStart)} 条（还有 ${visibleStart} 条）`),
+          )
+          return [earlier, ...nodes]
+        },
+        [visibleMessages, visibleStart, seenGroup, config, widthPct, mentionTo, loadEarlier],
       )
 
       return h('div', {
@@ -3364,7 +3457,7 @@ function Bubble({ config, message, onMention, animate = false }) {
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v45 · ui-five-fixes:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v46 · ui-window-120:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')
