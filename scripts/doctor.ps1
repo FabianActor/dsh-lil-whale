@@ -303,6 +303,51 @@ if (Test-Path -LiteralPath $pluginLog) {
     }
   }
 
+# 3i. 默认值有没有被配置钉死（小鱼丸 2026-11-15 09:1x）
+# 判据：配置里只留确实偏离默认的项；等于默认的就删掉，否则默认值会被静默劫持。
+$wakeConfigJs = Join-Path $Cfg.Root 'plugin\dsh-lil-whale-group\lib\wake-config.js'
+if (-not (Test-Path -LiteralPath $wakeConfigJs)) {
+  Add-Row '默认值' 'WARN' "找不到 wake-config.js（$wakeConfigJs）——这条检查没法做，不是通过" 'NEXT: 看 plugin\dsh-lil-whale-group\lib\ 下有没有这个文件'
+} else {
+  $cfgUrl = 'file:///' + ($wakeConfigJs -replace '\\', '/')
+  $defJson = & node -e "import(process.argv[1]).then(m=>console.log(JSON.stringify(m.WAKE_DEFAULTS)))" $cfgUrl 2>$null
+  $defaults = $null
+  try { $defaults = $defJson | ConvertFrom-Json } catch { }
+  if ($null -eq $defaults) {
+    Add-Row '默认值' 'WARN' '读不出 WAKE_DEFAULTS（wake-config.js 导入失败）' 'NEXT: 手工跑一次 node -e "import(...)" 看报错'
+  } elseif (-not ($Cfg.MembersFile -and (Test-Path -LiteralPath $Cfg.MembersFile))) {
+    Add-Row '默认值' 'WARN' '没有名册，没法查每条鱼的配置' 'NEXT: 先有 pool\members.json'
+  } else {
+    $pinned = @()
+    $roster = (Get-Content -LiteralPath $Cfg.MembersFile -Raw -Encoding utf8 | ConvertFrom-Json).members
+    foreach ($prop in $roster.PSObject.Properties) {
+      $m = $prop.Value
+      if ($m.kind -ne 'fish' -or $m.role -eq 'watcher') { continue }
+      $cfgRel = [string]$m.configFile
+      if (-not $cfgRel) { continue }
+      $cfgPath = if ([System.IO.Path]::IsPathRooted($cfgRel)) { $cfgRel } else { Join-Path $Cfg.Root $cfgRel }
+      if (-not (Test-Path -LiteralPath $cfgPath)) { continue }
+      try { $cfg = Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json } catch { continue }
+      foreach ($section in @('wake', 'watch')) {
+        $sec = $cfg.$section
+        if ($null -eq $sec) { continue }
+        foreach ($p in $sec.PSObject.Properties) {
+          if ($p.Name -like '_*') { continue }
+          $defVal = $defaults.($p.Name)
+          if ($null -ne $defVal -and [string]$p.Value -eq [string]$defVal) {
+            $pinned += "$($prop.Name).$section.$($p.Name)=$($p.Value)"
+          }
+        }
+      }
+    }
+    if ($pinned.Count -gt 0) {
+      Add-Row '默认值' 'WARN' ("配置里钉着等于默认值的键：" + ($pinned -join '、') + '（等于默认就该删，否则以后改默认不生效）') 'NEXT: 删掉这些键，只留真正偏离默认的项'
+    } else {
+      Add-Row '默认值' 'OK' '配置里没有等于默认值的覆盖项（默认值改得动）'
+    }
+  }
+}
+
 # 4. 名册：群认会话不认名字；登记错了 = 叫错人
 $pinsFile = Join-Path $Cfg.GroupDir 'pins.json'
 if (Test-Path -LiteralPath $pinsFile) {
