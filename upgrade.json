@@ -1,0 +1,16 @@
+{
+  "_schema": 1,
+  "_说明": "升级单：每个【已经发布出去、并且需要用户动手】的版本一条。装包只会换代码；环境.md 这类生成物、沙箱权限/完整性标签、profile、名册不会自己变，所以要在这里写清楚。发布前的版本不要写进来（用户还没有旧版本，无从升级）。用户（或用户的代理）跑 `pwsh -File app/scripts/fish.ps1 upgrade-check` 读它。",
+  "_字段": {
+    "version": "发出去的版本号（不高于当前包版本）",
+    "at": "发布日期 yyyy-mm-dd",
+    "summary": "一句话：这个版本改了什么（人看）",
+    "requires": "要用户做的动作，取自 package / restart / refresh-env / acl-repair / seed-profile / custom 六个词",
+    "restart": "要重启谁：main 或鱼键，也可以写 all",
+    "commands": "可选，逐条要用户执行的命令（放进代码块，别写散文）",
+    "verify": "验收判据，逐条写『看哪个文件/哪一行/应是什么』；最后一条默认是 doctor 全过",
+    "breaking": "不兼容项；空数组 = 旧数据照旧可读",
+    "note": "给人看的补充（为什么、做漏了会怎样）"
+  },
+  "entries": []
+}

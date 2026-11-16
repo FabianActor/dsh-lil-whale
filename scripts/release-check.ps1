@@ -172,6 +172,17 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '工具清单退化' (($envToolsOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '工具清单退化' '算不出时沿用上一次纸上的清单（test-env-tools.mjs）' }
   } else { Fail '工具清单退化' 'scripts\test-env-tools.mjs 不在包里' }
+  # ── 4j. 升级单（2026-11-16，CHANGELOG r186）────────────────────
+  $upgTest = Join-Path $pkg 'scripts\test-upgrade-json.mjs'
+  $upgFile = Join-Path $pkg 'upgrade.json'
+  if (Test-Path $upgTest) {
+    if (-not (Test-Path $upgFile)) { Fail '升级单' 'upgrade.json 不在包里（用户升级时没有可读的单）' }
+    else {
+      $upgOut = & node $upgTest 2>&1
+      if ($LASTEXITCODE -ne 0) { Fail '升级单' (($upgOut | Select-Object -Last 4) -join ' / ') }
+      else { Ok '升级单' 'upgrade.json 格式与判据齐全（test-upgrade-json.mjs）' }
+    }
+  } else { Fail '升级单' 'scripts\test-upgrade-json.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {

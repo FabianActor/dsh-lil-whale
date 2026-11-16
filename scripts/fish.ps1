@@ -22,6 +22,8 @@
 #   pwsh -File fish.ps1 wake <名字|all> [-By 谁] [-Why 为什么]  家长强行叫醒（睡眠窗里也叫得醒；记 sleep.log）
 #   pwsh -File fish.ps1 bind <键> -Session <会话id>   把这段会话钉到那条鱼名下（新鱼第一次开口后由宿主跑）
 #   pwsh -File fish.ps1 promote <键> [-Why 为什么]     转正：只记一笔账（pool\state\lifecycle.log）；身份不是字段，别靠改字段
+#   pwsh -File fish.ps1 upgrade-check                 读包里的升级单：这个版本要用户做哪几步、做完看什么
+#   pwsh -File fish.ps1 upgrade-check -Mark <版本>     动作做完并验收后记一笔（pool\state\upgrade-applied.json）
 #   pwsh -File fish.ps1 help
 #
 # 选项：-Window（开窗起；默认无人值守） -NoBrowser（强制不开） -BrowserMainOnly（只给主 dsh 开窗） -Yes（不停下来问）
@@ -58,7 +60,9 @@ param(
   # bind 用：要钉给那条鱼的会话 id（session-xxxxxxxx-…）。
   [string]$Session = '',
   # 人给钥匙用：fish.ps1 key grant <孩子> -From <家长>
-  [string]$From = ''
+  [string]$From = '',
+  # 升级单（r186）：upgrade-check -Mark <版本> 表示这个版本的动作已做完并验收。
+  [string]$Mark = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -670,6 +674,8 @@ fish.ps1 -- 鱼群唯一的入口
   pwsh -File fish.ps1 wake <名字|all>         家长强行叫醒（睡眠窗里也叫得醒；记 sleep.log）
   pwsh -File fish.ps1 bind <键> -Session <会话id>   把这段会话钉到那条鱼名下（新鱼第一次开口后由宿主跑）
   pwsh -File fish.ps1 promote <键> [-Why 为什么]     转正：只记一笔账（pool\state\lifecycle.log）
+  pwsh -File fish.ps1 upgrade-check                 读包里的升级单（要做什么、做完看什么）
+  pwsh -File fish.ps1 upgrade-check -Mark <版本>     动作做完并验收后记一笔
   pwsh -File fish.ps1 help
 
 选项：-NoBrowser -Window -BrowserMainOnly -Console -Yes -By <谁> -Why <为什么> -Port <n>
@@ -1147,6 +1153,116 @@ function Invoke-Wake([string]$name, [string]$by = 'fish.ps1', [string]$why = '')
   return $ok
 }
 
+# ---------- 升级单（CHANGELOG r186）----------
+# 包只会换代码。环境.md / AGENTS.md / START.md 是生成物、profile 是装出来的、
+# 沙箱的通行证与完整性标签是 ACL、名册是数据 —— 这些都不会因为"装包"自己变。
+# 所以每个【发布出去以后需要用户动手】的版本，在 app\upgrade.json 里写一条；
+# 这个命令把"要不要做、做什么、做完看什么"打成清单，交给宿主（或宿主的代理）执行。
+# 不自动重启、不自动改用户的机器：重启归宿主，改权限要人点头。
+function Invoke-UpgradeCheck([string]$MarkVersion) {
+  $specFile = Join-Path $Cfg.Root 'upgrade.json'
+  $stateFile = Join-Path $Cfg.PoolState 'upgrade-applied.json'
+  $pkgFile = Join-Path $Cfg.Root 'plugin\dsh-lil-whale-group\package.json'
+  if (-not (Test-Path -LiteralPath $specFile)) {
+    Write-Host ('xx 包里没有升级单：{0}（这个包不完整，重装）' -f $specFile)
+    return $false
+  }
+  try { $spec = Get-Content -LiteralPath $specFile -Raw -Encoding utf8 | ConvertFrom-Json }
+  catch { Write-Host ('xx 升级单读不了：{0}' -f $_.Exception.Message); return $false }
+  $entries = @($spec.entries)
+  $current = ''
+  if (Test-Path -LiteralPath $pkgFile) {
+    try { $current = [string](Get-Content -LiteralPath $pkgFile -Raw -Encoding utf8 | ConvertFrom-Json).version } catch { }
+  }
+  $applied = ''
+  $appliedAt = ''
+  if (Test-Path -LiteralPath $stateFile) {
+    try {
+      $st = Get-Content -LiteralPath $stateFile -Raw -Encoding utf8 | ConvertFrom-Json
+      $applied = [string]$st.lastApplied
+      $appliedAt = [string]$st.at
+    } catch { }
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($MarkVersion)) {
+    $v = $MarkVersion.Trim()
+    if ($v -notmatch '^\d+\.\d+\.\d+$') { Write-Host ('xx -Mark 要写成 x.y.z：{0}' -f $v); return $false }
+    if ($entries.Count -gt 0 -and -not ($entries | Where-Object { [string]$_.version -eq $v })) {
+      Write-Host ('xx 升级单里没有 {0} 这一条——别为一个没做过的版本记账' -f $v)
+      return $false
+    }
+    $at = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    $obj = [ordered]@{
+      lastApplied = $v
+      at          = $at
+      by          = $By
+      note        = '按升级单执行并验收后记录（fish.ps1 upgrade-check -Mark）'
+    }
+    $dir = Split-Path -Parent $stateFile
+    if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    $tmp = $stateFile + '.tmp-' + $PID
+    Set-Content -LiteralPath $tmp -Value ($obj | ConvertTo-Json -Compress) -Encoding utf8
+    Move-Item -LiteralPath $tmp -Destination $stateFile -Force
+    Write-Host ('已记：{0} 的动作已做完并验收（{1}，by={2}）' -f $v, $at, $By)
+    return $true
+  }
+
+  Write-Host ('当前包版本：{0}' -f ($(if ($current) { $current } else { '（读不到）' })))
+  if ($applied) { Write-Host ('上次应用到的版本：{0}（{1}）' -f $applied, $appliedAt) }
+  else { Write-Host '上次应用到的版本：（没有记录）' }
+
+  if ($entries.Count -eq 0) {
+    Write-Host '升级单是空的：目前没有"发布后需要用户动手"的版本。'
+    Write-Host '（发布后，第一个需要动手的更新才会写进 app\upgrade.json；在那之前装包 + 重启就够了。）'
+    return $true
+  }
+
+  $todo = @()
+  foreach ($e in $entries) {
+    $take = $true
+    if ($applied) {
+      try { if (-not ([version][string]$e.version -gt [version]$applied)) { $take = $false } }
+      catch { }
+    }
+    if ($take) { $todo += $e }
+  }
+  if ($todo.Count -eq 0) {
+    Write-Host '没有待做的升级动作（已应用的版本不低于升级单里最新一条）。'
+    return $true
+  }
+
+  $labels = @{
+    'package'       = '装包：在每个 profile 里装新的包版本（或按你原来的装法升级）'
+    'restart'       = '重启进程：重启后才生效（重启归宿主，不能替你做）'
+    'refresh-env'   = '重生成说明书：pwsh -File app\scripts\fish.ps1 refresh all'
+    'acl-repair'    = '修沙箱权限：pwsh -File app\scripts\fish.ps1 acl-check all，有缺口再 acl-repair all'
+    'seed-profile'  = '补 profile：scripts\seed-child-profile.mjs（新鱼）或 apply-neutral-preset.mjs（老鱼）'
+    'custom'        = '按下面 commands 逐条执行'
+  }
+  foreach ($e in $todo) {
+    Write-Host ''
+    Write-Host ('=== {0}   {1}' -f $e.version, $e.summary)
+    if ($e.note) { Write-Host ('    {0}' -f $e.note) }
+    $i = 0
+    foreach ($r in @($e.requires)) {
+      $i++
+      $key = [string]$r
+      $label = if ($labels.ContainsKey($key)) { $labels[$key] } else { $key }
+      Write-Host ('  {0}. {1}' -f $i, $label)
+    }
+    if ($e.restart) { Write-Host ('     要重启：{0}' -f (@($e.restart) -join '、')) }
+    if ($e.commands) { foreach ($c in @($e.commands)) { Write-Host ('     > {0}' -f $c) } }
+    if ($e.breaking -and @($e.breaking).Count -gt 0) { Write-Host ('     !! 不兼容：{0}' -f (@($e.breaking) -join '；')) }
+    Write-Host '  验收：'
+    foreach ($v in @($e.verify)) { Write-Host ('     - {0}' -f $v) }
+    Write-Host '     - pwsh -File app\scripts\fish.ps1 doctor（应全过）'
+    Write-Host ('  做完并验收后记一笔：pwsh -File app\scripts\fish.ps1 upgrade-check -Mark {0}' -f $e.version)
+  }
+  Write-Host ''
+  Write-Host 'NEXT: 按上面逐条做。别凭印象跳过"重生成纸"和"修权限"——那两步不会因为装包自己发生。'
+  return $true
+}
+
 # ---------- 分发 ----------
 $ok = $true
 $locked = $false
@@ -1181,6 +1297,9 @@ try {
     'wake'       { if (-not (Invoke-Wake $Name $By $Why)) { $ok = $false } }
     'bind'       { $bindKey = if ($Name) { $Name } else { $Key }; if (-not (Invoke-Bind $bindKey $Session)) { $ok = $false } }
     'promote'    { if (-not (Invoke-Promote $Name $Why)) { $ok = $false } }
+    'upgrade-check' { if (-not (Invoke-UpgradeCheck $Mark)) { $ok = $false } }
+    'upgrade'       { if (-not (Invoke-UpgradeCheck $Mark)) { $ok = $false } }
+    'upgrade-mark'  { $mv = if ($Name) { $Name } else { $Mark }; if (-not (Invoke-UpgradeCheck $mv)) { $ok = $false } }
     'maintain' { if (-not (Invoke-Maintain $Name)) { $ok = $false } }
     'restore'  { if (-not (Invoke-Restore $Name)) { $ok = $false } }
     'unattended' { if (-not (Invoke-Restore $Name)) { $ok = $false } }

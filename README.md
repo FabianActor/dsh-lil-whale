@@ -169,7 +169,7 @@ pwsh -File scripts\doctor.ps1 -IncludeLee  # 连你的窗一起看
 lil-whale/                      鱼塘根（不在 git 里；装第二条鱼时这里长出新的一层）
   app/                          工程（这个仓库）
      docs/                       产品文档与工程记录：PRD.md（产品设想）+ CHANGELOG.md（工程变更 + 附录 A）
-     docs/detail/                基座自己的文档：怎么装、怎么生、种子、起停、打包、发布清单、发布说明、待办、观察、谱系、判据、账本、自主触发、能力、想法
+     docs/detail/                基座自己的文档：怎么装、怎么生、种子、起停、打包、发布清单、发布说明、升级、待办、观察、谱系、判据、账本、自主触发、能力、想法
      docs/plugin/                外部能力：看B站（只读眼睛）、生图（第二步）
      docs/archive/               历史记录（开工交接、交接演练、评审意见、过期方案、建议稿）——归档不删；文件名带日期
     plugin/dsh-lil-whale-group/           宿主半边：群发言工具 + 跨进程唤醒（她的 profile 也装）
@@ -353,6 +353,7 @@ pwsh -File scripts\release-check.ps1
 | 从零装到跑起来的每一步（变量、路径、时序） | [`docs/detail/怎么装一套鱼塘.md`](./docs/detail/怎么装一套鱼塘.md) |
 | 怎么"出生"一条新鱼、怎么换段搬家 | [`docs/detail/怎么生一条新鱼.md`](./docs/detail/怎么生一条新鱼.md) |
 | 发版前逐条检查 | [`docs/detail/发布前检查清单.md`](./docs/detail/发布前检查清单.md)、`scripts\release-check.ps1` |
+| 升级到新版本后要做什么（给部署方的代理） | [`docs/detail/怎么升级.md`](./docs/detail/怎么升级.md) |
 | 打包/编码/发布注意事项 | [`docs/detail/怎么打包给别人.md`](./docs/detail/怎么打包给别人.md) |
 | 她"能做什么"的目录 | [`docs/detail/她能做什么.md`](./docs/detail/她能做什么.md) |
 | 她的自主分级与判据 | [`docs/archive/2026-11-09-自主回合问题清单.md`](./docs/archive/2026-11-09-自主回合问题清单.md)、[`docs/detail/怎么判断与起名.md`](./docs/detail/怎么判断与起名.md) |
