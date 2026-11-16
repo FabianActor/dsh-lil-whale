@@ -90,14 +90,14 @@ if (existsSync(membersFile)) {
   // 为什么允许这样：环境.md 是装完就该有的东西；不能因为"共享区还没建名册"就让她的家里缺一页。
   const childId = args.childId || args.profile
   const childName = args.childName || childId
-  const parentId = args.parentId || 'lee'
+  const parentId = args.parentId || 'host'
   roster = {
     version: 1,
     updatedAt: new Date().toISOString(),
     members: {
-      [parentId]: { name: '大肥鱼', kind: 'fish', role: 'watcher', parent: null, profile: 'web' },
+      [parentId]: { name: '宿主', kind: 'fish', role: 'watcher', parent: null, profile: 'web' },
       [childId]: { name: childName, kind: 'fish', role: 'member', parent: parentId, profile: args.profile, home: workspace, dshHome: join(workspace, 'dsh-home') },
-      fabian: { name: 'Fabian', kind: 'human', role: 'human', parent: null },
+      human: { name: '人类', kind: 'human', role: 'human', parent: null },
     },
   }
   console.error(`render-env: 还没有 ${membersFile}，按安装参数拼了一份临时名册（${Object.keys(roster.members).join(' / ')}）`)
@@ -113,7 +113,7 @@ if (
 ) {
   const childId = args.childId || args.profile
   const childName = args.childName || childId
-  const parentId = args.parentId || 'lee'
+  const parentId = args.parentId || 'host'
   members[childId] = {
     name: childName, kind: 'fish', role: 'member', parent: parentId,
     profile: args.profile, home: workspace, dshHome: join(workspace, 'dsh-home'),
@@ -352,8 +352,8 @@ const values = {
   TOKEN_PER_TURN: '180-200',
   CHILD_NAME: me?.name ?? myKey,
   CHILD_ID: myKey,
-  PARENT_ID: me?.parent ?? 'lee',
-  HUMAN_ID: Object.keys(members).find((k) => members[k]?.kind === 'human') ?? 'fabian',
+  PARENT_ID: me?.parent ?? 'host',
+  HUMAN_ID: Object.keys(members).find((k) => members[k]?.kind === 'human') ?? 'human',
   TOOLS: toolsText,
   TOOLS_META: toolsMeta,
   MEMBERS_TABLE: membersTable,

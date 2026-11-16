@@ -127,8 +127,8 @@ function Get-Members {
     }
   }
   if ($out.Count -eq 0) {
-    $out['lee'] = [pscustomobject]@{ Key = 'lee'; Label = '大肥鱼'; Kind = 'fish'; Role = 'watcher'; Home = $Cfg.LeeHome; DshHome = $Cfg.LeeHome; Profile = $Cfg.LeeProfile; Port = $Cfg.LeePort; Cwd = $Cfg.LeeStartCwd; Lifecycle = 'active'; Parent = $null; BornAt = $null }
-    $out['whale'] = [pscustomobject]@{ Key = 'whale'; Label = '小肥鱼'; Kind = 'fish'; Role = 'member'; Home = $Cfg.HerHome; DshHome = $Cfg.HerDshHome; Profile = $Cfg.WhaleProfile; Port = $Cfg.HerPort; Cwd = $Cfg.WhaleCwd; Lifecycle = 'active'; Parent = $null; BornAt = $null }
+    $out['lee'] = [pscustomobject]@{ Key = 'lee'; Label = '宿主'; Kind = 'fish'; Role = 'watcher'; Home = $Cfg.LeeHome; DshHome = $Cfg.LeeHome; Profile = $Cfg.LeeProfile; Port = $Cfg.LeePort; Cwd = $Cfg.LeeStartCwd; Lifecycle = 'active'; Parent = $null; BornAt = $null }
+    $out['whale'] = [pscustomobject]@{ Key = 'whale'; Label = '第二条鱼'; Kind = 'fish'; Role = 'member'; Home = $Cfg.HerHome; DshHome = $Cfg.HerDshHome; Profile = $Cfg.WhaleProfile; Port = $Cfg.HerPort; Cwd = $Cfg.WhaleCwd; Lifecycle = 'active'; Parent = $null; BornAt = $null }
   }
   return $out
 }
@@ -840,7 +840,7 @@ function Invoke-NewFish {
   $key = ([string]$Key).Trim()
   $childName = ([string]$Name).Trim()
   $parentKey = ([string]$Parent).Trim()
-  $reserved = @('lee', 'whale', 'fishball', 'fabian', 'all', 'main', 'app', 'pool', 'homes', 'acl', 'dsh')
+  $reserved = @('host', 'human', 'all', 'main', 'app', 'pool', 'homes', 'acl', 'dsh')
   if ($key -cnotmatch '^[a-z][a-z0-9-]{1,15}$') {
     Write-Host ("xx 成员键「{0}」不合规：小写字母开头，后面是小写字母/数字/短横线，2-16 位。" -f $key)
     Write-Host 'NEXT: 换个键（比如 xiaoxingxing）；名字放 -Name，键只用来认人。'

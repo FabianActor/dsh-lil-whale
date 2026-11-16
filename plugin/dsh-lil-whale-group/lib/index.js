@@ -641,6 +641,25 @@ function peerMember() {
   return own === 'lee' ? 'whale' : 'lee'
 }
 
+/** 巡守那一方的成员键：按名册 role=watcher 找；找不到就退回自己（主进程本来就是巡守）。
+ *  2026-11-16 r197：原来这里写死 'lee'——那是我们自己的鱼名，发行版不该带。 */
+function watcherKey() {
+  try {
+    const found = Object.entries(MEMBERS).find(([, m]) => m && m.role === 'watcher')
+    if (found) return found[0]
+  } catch {}
+  return ownMember()
+}
+
+/** 人的成员键：按名册 kind=human 找；找不到用兜底键 'human'（不再是某个人的名字）。 */
+function humanKey() {
+  try {
+    const found = Object.entries(MEMBERS).find(([, m]) => m && m.kind === 'human')
+    if (found) return found[0]
+  } catch {}
+  return 'human'
+}
+
 // ---------- 自启动（2026-11-12 23:55 他要的） ----------
 // 主 dsh 起来后等 8 秒，再走 `fish.ps1 up all -NoBrowser` 把其他鱼唤醒：
 // ①与命令行、鱼塘是同一条路（A.42 的边界：不在这里重写起停逻辑）；
@@ -2897,7 +2916,7 @@ function selfPlanTick(ctx) {
       if (privateResult) {
         watchmanLog('deliver', `reason=self-plan-private to=${self} plan=${item.id}${privateResult === 'queued' ? ' queued=1' : ''}`)
       } else {
-        say('lee', self, planDeliveryPublicText(job))
+        say(watcherKey(), self, planDeliveryPublicText(job))
         watchmanLog('deliver', `reason=self-plan-public-fallback to=${self} plan=${item.id}`)
       }
       watchmanLog('woke', `trigger=self to=${self} plan=${item.id} at=${item.at}`)
@@ -3133,7 +3152,7 @@ async function intentTick(member, st, now) {
       `wid=${wid} kind=intent reason=intent:${spec.id} to=${member.key} gate=pass(hour=${counts.hour}/${WAKE.perHour},day=${counts.day}/${WAKE.perDay}) hb-age=${hbAge === null ? 'none' : `${hbAge}s`} deliver=msg at=${localStampOf(s.happenedAt ?? s.firstTrueAt)} atfmt=2`,
     )
     try {
-      say('lee', member.key, intentDeliveryPublicText(spec, probe.evidence))
+      say(watcherKey(), member.key, intentDeliveryPublicText(spec, probe.evidence))
       // lag = 发现比发生晚了多少（事情发生的时刻 → 递出去的时刻），不是"决定→插入"。
       const happenedMs = Date.parse(String(s.happenedAt ?? s.firstTrueAt ?? ''))
       const lagSec = Number.isFinite(happenedMs) ? Math.max(0, Math.round((now.getTime() - happenedMs) / 1000)) : null
@@ -3272,7 +3291,7 @@ async function watchOne(member, st) {
         // 2026-11-16：公共记录只留"到点了"，理由不进记录（进她自己表）。
         const text = planDeliveryPublicText(job)
         try {
-          say('lee', member.key, text)
+          say(watcherKey(), member.key, text)
           watchmanLog(
             'woke',
             dueAt === null
@@ -3313,7 +3332,7 @@ async function watchOne(member, st) {
         )
         markWake(member.key, 'plan')
         try {
-          say('lee', member.key, planDeliveryPublicText(job))
+          say(watcherKey(), member.key, planDeliveryPublicText(job))
           watchmanLog('deliver', `reason=plan-after-wake ${job.tag}（窗是推开的，话已递进去）`)
         } catch (error) {
           watchmanLog(
@@ -3360,7 +3379,7 @@ async function watchOne(member, st) {
         // （selfPlanTick）会在宽限期内再递一次。声明一下，两边只留一条。
         if (claimPlanDelivery(member, job.key)) {
           try {
-            say('lee', member.key, planDeliveryPublicText(job))
+            say(watcherKey(), member.key, planDeliveryPublicText(job))
             watchmanLog('deliver', `reason=plan-after-wake ${job.tag}（窗是推开的，话已递进去）`)
           } catch (error) {
             watchmanLog('error', `note=plan-deliver-failed detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)} ${job.tag}`)
@@ -3484,7 +3503,7 @@ function auditRoster(now = new Date()) {
   watchmanLog('error', `note=roster-mismatch ${problems.join(' ')}`)
   // 只告诉人（fabian）：名册外的鱼叫不动，能看见这件事的只有人。
   try {
-    say('lee', 'fabian', `巡守自检：名册和家对不上（${problems.join('；')}）。这条是巡守自己发现的，不是谁在说话。`)
+    say(watcherKey(), humanKey(), `巡守自检：名册和家对不上（${problems.join('；')}）。这条是巡守自己发现的，不是谁在说话。`)
   } catch { /* 递不出去也还有日志 */ }
 }
 
@@ -3521,7 +3540,7 @@ async function crashNotify() {
       continue
     }
     try {
-      say('lee', 'fabian', `巡守：${labelOf(member.key)} 上次没正常退出（最后记录 ${at}，没写 stopped）。它现在起没起来，鱼塘里能看到。`)
+      say(watcherKey(), humanKey(), `巡守：${labelOf(member.key)} 上次没正常退出（最后记录 ${at}，没写 stopped）。它现在起没起来，鱼塘里能看到。`)
       watchmanLog('note', `note=crash-notified member=${member.key} at=${at}`)
     } catch (error) {
       watchmanLog('error', `note=crash-notify-failed member=${member.key} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 80)}`)

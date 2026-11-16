@@ -15,11 +15,11 @@
 param(
   [string]$Workspace = '',
   [string]$DshHome = '',
-  [string]$ChildProfile = 'whale',
-  [string]$ChildName = '小鲸鱼',      # 她的名字：只写进 AGENTS.md 的一行，不写进性格
+  [string]$ChildProfile = 'fish',
+  [string]$ChildName = '小鱼',      # 她的名字：只写进 AGENTS.md 的一行，不写进性格
   [string]$ChildMemberId = '',    # 名册里的键；空 = 跟 profile 同名
-  [string]$ParentMemberId = 'lee', # 父辈的成员键（递归装第二代时改它）
-  [string]$HumanMemberId = 'fabian', # 人类的成员键
+  [string]$ParentMemberId = 'host', # 家长/巡守的成员键（递归装第二代时改它）
+  [string]$HumanMemberId = 'human', # 人类的成员键
   [string]$ParentProfile = 'web',
   [int]$ChildPort = 0,                 # 0 = 从 3082 起找第一个空口
   [string]$ParentSessionId = '',
@@ -393,9 +393,21 @@ if (-not $SkipParent) {
 Step '5. 写配置'
 # 合并写，不是覆盖写：已有的字段（repoRoot / selfWaker / pwshExe …）原样留着，
 # 否则在装好的机器上重跑一次 install，会把这份配置里手写的东西全丢掉。
-# 一条鱼一份配置：鱼塘里第一条（whale）用 lil-whale.config.json，其余用 lil-whale.config.<键>.json。
+# 一条鱼一份配置：标准名 lil-whale.config.json 给"占着它的那条鱼"，其余用 lil-whale.config.<键>.json。
+# 2026-11-16 r197：原来判据写死 $childKey -ne 'whale'（我们自己的鱼名）；改成看标准配置文件里的 selfHome 是不是这条鱼。
 $cfgName = 'lil-whale.config.json'
-if ($InPond -and $childKey -ne 'whale') { $cfgName = "lil-whale.config.$childKey.json" }
+if ($InPond) {
+  $baseCfg = Join-Path $RepoRoot 'lil-whale.config.json'
+  $baseOwnsMe = -not (Test-Path $baseCfg)
+  if (-not $baseOwnsMe) {
+    try {
+      $baseJson = [System.IO.File]::ReadAllText($baseCfg) | ConvertFrom-Json -AsHashtable
+      $baseHome = if ($baseJson.Contains('selfHome')) { [string]$baseJson['selfHome'] } else { '' }
+      if ($baseHome) { $baseOwnsMe = ([System.IO.Path]::GetFullPath($baseHome).TrimEnd('\') -ieq $Workspace.TrimEnd('\')) }
+    } catch { $baseOwnsMe = $false }
+  }
+  if (-not $baseOwnsMe) { $cfgName = "lil-whale.config.$childKey.json" }
+}
 $cfgPath = if ($ConfigPath -ne '') { $ConfigPath } else { Join-Path $RepoRoot $cfgName }
 if ((Test-Path $cfgPath) -and -not $Force) {
   try {
@@ -631,11 +643,11 @@ if (-not (Test-Path $membersPath)) {
   $leeHome = if ($cfg.Contains('leeHome')) { [string]$cfg['leeHome'] } else { Join-Path $env:USERPROFILE '.dsh' }
   $leePort = if ($cfg.Contains('leePort')) { [int]$cfg['leePort'] } else { 3080 }
   $members[$ParentMemberId] = [ordered]@{
-    name = '大肥鱼'; kind = 'fish'; role = 'watcher'; parent = $null
+    name = '宿主'; kind = 'fish'; role = 'watcher'; parent = $null
     port = $leePort; home = $leeHome; dshHome = $leeHome
     profile = $ParentProfile; lifecycle = 'active'; bornAt = $null
   }
-  $members[$HumanMemberId] = [ordered]@{ name = 'Fabian'; kind = 'human'; role = 'human'; parent = $null }
+  $members[$HumanMemberId] = [ordered]@{ name = '人类'; kind = 'human'; role = 'human'; parent = $null }
   $members[$childMember] = [ordered]@{
     name = $ChildName; kind = 'fish'; role = 'member'; parent = $ParentMemberId
     port = $port; home = $Workspace; dshHome = $DshHome

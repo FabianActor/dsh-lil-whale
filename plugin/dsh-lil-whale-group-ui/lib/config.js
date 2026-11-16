@@ -32,13 +32,13 @@ const DEFAULTS = {
   repoRoot: REPO_ROOT,
   // 鱼塘布局（2026-11-13 起）：<pond>\app 是仓库，鱼在 <pond>\homes\<键>。
   // 配置丢了也不该指回旧布局（`<repo>\..\lil-whale` 那种），否则"默认值"会把新装的人带进老结构。
-  selfHome: resolve(REPO_ROOT, '..', 'homes', 'whale'),
+  selfHome: resolve(REPO_ROOT, '..', 'homes', 'fish'),
   selfWaker: join(REPO_ROOT, 'scripts', 'wake-fish.ps1'),
   wakeMetrics: join(REPO_ROOT, 'logs', 'wake-metrics.log'),
   pwshExe: process.platform === 'win32' ? 'pwsh.exe' : 'pwsh',
   leeCwd: REPO_ROOT,
   leeProfile: 'web',
-  selfProfile: 'whale',
+  selfProfile: 'fish',
   // 这条鱼的进程开的端口。巡守要推门时敲的就是它；改端口必须同时改这里，否则巡守会去敲一扇没人的门。
   selfPort: 3082,
 }

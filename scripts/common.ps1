@@ -24,7 +24,7 @@ function Get-WhaleConfig {
   }
 
   # 默认布局（鱼塘）：<pond>\app 是仓库，鱼在 <pond>\homes\<键>，共享区在 <pond>\pool。
-  $defaultHome = Join-Path (Join-Path (Split-Path $script:WhaleRoot -Parent) 'homes') 'whale'
+  $defaultHome = Join-Path (Join-Path (Split-Path $script:WhaleRoot -Parent) 'homes') 'fish'
 
   # 配置里有的字段优先；没有的按默认推。
   # 旧名字（her* / whale*）仍然认，新名字（self*）优先 —— 单鱼时代写的配置不用改也能跑。
@@ -53,7 +53,7 @@ function Get-WhaleConfig {
     SelfDshHome  = & $pickSelf 'selfDshHome' 'herDshHome' (Join-Path $selfHome 'dsh-home')
     SelfWaker    = & $pickSelf 'selfWaker' 'herWaker' (Join-Path $script:WhaleRoot 'scripts\wake-fish.ps1')
     SelfPort     = [int](& $pickSelf 'selfPort' 'herPort' 3082)
-    SelfProfile  = & $pickSelf 'selfProfile' 'whaleProfile' 'whale'
+    SelfProfile  = & $pickSelf 'selfProfile' 'whaleProfile' 'fish'
     SelfCwd      = & $pickSelf 'selfCwd' 'whaleCwd' $selfHome
     # 共享区（在鱼的家之外）。
     PondRoot     = $pondRoot
@@ -77,7 +77,7 @@ function Get-WhaleConfig {
     HerDshHome   = & $pickSelf 'selfDshHome' 'herDshHome' (Join-Path $selfHome 'dsh-home')
     HerWaker     = & $pickSelf 'selfWaker' 'herWaker' (Join-Path $script:WhaleRoot 'scripts\wake-fish.ps1')
     HerPort      = [int](& $pickSelf 'selfPort' 'herPort' 3082)
-    WhaleProfile = & $pickSelf 'selfProfile' 'whaleProfile' 'whale'
+    WhaleProfile = & $pickSelf 'selfProfile' 'whaleProfile' 'fish'
     WhaleCwd     = & $pickSelf 'selfCwd' 'whaleCwd' $selfHome
   }
 }

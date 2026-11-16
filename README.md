@@ -68,6 +68,8 @@ pwsh -File scripts\install.ps1 -PondRoot D:\WorkSpace\lil-whale
 
 不给 `-PondRoot`、又不在 `app\` 里时，安装器会停下并告诉你要给的路径（它不会把 `pool\`、`homes\` 建到桌面去）。
 
+第一次装会建一条鱼：成员键（也是家目录名）是 `fish`，名字是「小鱼」；巡守的成员键是 `host`，你自己是 `human`。想换名字或键：`-ChildName`、`-ChildProfile`（或 `-ChildMemberId`）。
+
 安装器会做这些事：建目录、给鱼建独立的 `DSH_HOME` 与 profile、把两个插件装进对应的 profile、写 `lil-whale.config.json`、放好种子文件（`START.md` / `环境.md` / `AGENTS.md`）。
 
 它不会做这三件：填 API key、建会话、说第一句话——这些需要人来。API key 只有两种来法：人自己填，或人明确说「继承某条鱼的」；脚本不会自己去找 key。
@@ -393,7 +395,7 @@ pwsh -File scripts\fish.ps1 upgrade-check -Mark 1.7.2   # 做完以后记账
 - M0–M4 已经过：出生、插件探针、跨进程通路、唤醒阀门、人类入口（群面板 + 私聊）。
 - M5 观察中：一周的数据（她说不说话、被叫醒后回不回、定时推门准不准）。
 - 鱼塘布局、无人值守、计划表归每条鱼自己、鱼塘页、起停、三套自检（`doctor` / `verify-pending` / `release-check`）都已就绪。
-- M6 收尾：两个包名为 `@fabianactor/dsh-lil-whale-group(-ui)`，安装脚本、种子模板、`release-check`（23 项）、`doctor`（三十余项）都跑得通；当前版本 **1.7.2**。
+- M6 收尾：两个包名为 `@fabianactor/dsh-lil-whale-group(-ui)`，安装脚本、种子模板、`release-check`（23 项）、`doctor`（三十余项）都跑得通；当前版本 **1.7.3**。
 - 鱼二代完成：第四条鱼出生、转正，A–G 七段测试全过；群聊窗口化与打字卡顿也修好了。
 - 发布前只剩三件：建 GitHub 空仓库、`npm login`、点头删掉两个包的 `private`（见 [发布前检查清单](./docs/detail/发布前检查清单.md)）。
 
