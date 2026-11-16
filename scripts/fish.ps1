@@ -20,6 +20,7 @@
 #   pwsh -File fish.ps1 acl-check [whale|all]   查沙箱通行证（文件工具能写、pwsh 不能写 = 缺它）
 #   pwsh -File fish.ps1 acl-repair [whale|all]  补沙箱通行证（补完记 pool\state\acl.log）
 #   pwsh -File fish.ps1 wake <名字|all> [-By 谁] [-Why 为什么]  家长强行叫醒（睡眠窗里也叫得醒；记 sleep.log）
+#   pwsh -File fish.ps1 sessions [键|all]   列出候选会话（id / 最后写时间 / 所在工作区）——给 bind 用，别用"安装这段"顶替
 #   pwsh -File fish.ps1 bind <键> -Session <会话id>   把这段会话钉到那条鱼名下（新鱼第一次开口后由宿主跑）
 #   pwsh -File fish.ps1 promote <键> [-Why 为什么]     转正：只记一笔账（pool\state\lifecycle.log）；身份不是字段，别靠改字段
 #   pwsh -File fish.ps1 upgrade-check                 读包里的升级单：这个版本要用户做哪几步、做完看什么
@@ -672,6 +673,7 @@ fish.ps1 -- 鱼群唯一的入口
   pwsh -File fish.ps1 acl-check [whale|all]   查沙箱通行证（文件工具能写、pwsh 不能写 = 缺它）
   pwsh -File fish.ps1 acl-repair [whale|all]  补沙箱通行证（补完记 pool\state\acl.log）
   pwsh -File fish.ps1 wake <名字|all>         家长强行叫醒（睡眠窗里也叫得醒；记 sleep.log）
+  pwsh -File fish.ps1 sessions [键|all]   列出候选会话（id / 最后写时间 / 所在工作区）
   pwsh -File fish.ps1 bind <键> -Session <会话id>   把这段会话钉到那条鱼名下（新鱼第一次开口后由宿主跑）
   pwsh -File fish.ps1 promote <键> [-Why 为什么]     转正：只记一笔账（pool\state\lifecycle.log）
   pwsh -File fish.ps1 upgrade-check                 读包里的升级单（要做什么、做完看什么）
@@ -1037,6 +1039,55 @@ function Invoke-Bind([string]$key, [string]$sessionId) {
   return $true
 }
 
+# ---------- 列出候选会话：让用户自己选哪段算谁（2026-11-16 宿主提） ----------
+# 为什么要有这一条：安装脚本不该替用户选会话——尤其不能拿"安装这次开的那段"顶替。
+# 会话 id 是身份绑定（pins.json）：选错 = 叫错人，比叫不动难查。所以这里只列候选，由人选，再用 bind 落定。
+function Invoke-Sessions([string]$key) {
+  $targets = @()
+  if ($key -eq '' -or $key -eq 'all') {
+    $all = Get-Members
+    foreach ($k in @($all.Keys)) { $m = $all[$k]; if ($m.Kind -eq 'fish') { $targets += $m } }
+    $targets = @($targets | Sort-Object { if ($_.Role -eq 'watcher') { 0 } else { 1 } })
+  } else {
+    $m = Get-Fish $key
+    if (-not $m) { Write-Host ("xx 名册里没有这条鱼：{0}" -f $key); Write-Host 'NEXT: pwsh -File scripts\fish.ps1 list'; return $false }
+    $targets = @($m)
+  }
+  $pinsPath = Join-Path (Join-Path $Cfg.PoolDir 'group') 'pins.json'
+  $pins = $null
+  if (Test-Path -LiteralPath $pinsPath) { try { $pins = [System.IO.File]::ReadAllText($pinsPath) | ConvertFrom-Json -AsHashtable } catch { $pins = $null } }
+  $any = $false
+  foreach ($m in $targets) {
+    $root = Join-Path ([string]$m.DshHome) 'sessions'
+    $rows = @()
+    if (Test-Path -LiteralPath $root) {
+      foreach ($ws in (Get-ChildItem -LiteralPath $root -Directory -Force -ErrorAction SilentlyContinue)) {
+        foreach ($sd in (Get-ChildItem -LiteralPath $ws.FullName -Directory -Force -ErrorAction SilentlyContinue)) {
+          if ($sd.Name -notmatch '^session-[0-9a-f-]{20,}$') { continue }
+          $files = @(Get-ChildItem -LiteralPath $sd.FullName -Recurse -File -Force -ErrorAction SilentlyContinue)
+          $lastFile = $files | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          $bytes = ($files | Measure-Object -Property Length -Sum).Sum
+          $bound = $false
+          if ($pins -and ($pins.Keys -contains $m.Key)) { $bound = @(@($pins[$m.Key]) | Where-Object { [string]$_ -eq $sd.Name }).Count -gt 0 }
+          $rows += [pscustomobject]@{ Id = $sd.Name; Workspace = $ws.Name; LastWrite = $(if ($lastFile) { $lastFile.LastWriteTime } else { $sd.LastWriteTime }); MB = [math]::Round(($bytes / 1MB), 1); Bound = $bound }
+        }
+      }
+    }
+    if ($rows.Count -eq 0) { Write-Host ("{0}：家里还没有会话（先打开它的网页，新建一段对话）。" -f $m.Label); continue }
+    $any = $true
+    Write-Host ("{0}（{1}）：" -f $m.Label, $m.Key)
+    $i = 0
+    foreach ($r in ($rows | Sort-Object LastWrite -Descending)) {
+      $i++
+      Write-Host ("  {0}. {1}{2}" -f $i, $r.Id, $(if ($r.Bound) { '   [当前已钉]' } else { '' }))
+      Write-Host ("     最后写 {0}；{1} MB；工作区 {2}" -f $r.LastWrite.ToString('yyyy-MM-dd HH:mm'), $r.MB, $r.Workspace)
+    }
+    Write-Host ("  选定后：pwsh -File scripts\fish.ps1 bind {0} -Session <上面那串 id>" -f $m.Key)
+  }
+  if (-not $any) { Write-Host '没有可选的会话。先在鱼塘页面里给要绑的那条鱼新建一段对话。'; return $false }
+  return $true
+}
+
 # ---------- 沙箱通行证：查、补（CHANGELOG A.67） ----------
 # 判据：同一路径、同样内容，文件工具能写而 pwsh 不能写 —— 是"手"缺通行证，不是语法问题。
 function Invoke-Promote([string]$key, [string]$why) {
@@ -1295,6 +1346,7 @@ try {
     'acl-check'  { if (-not (Invoke-AclCmd 'check' $Name)) { $ok = $false } }
     'acl-repair' { if (-not (Invoke-AclCmd 'repair' $Name)) { $ok = $false } }
     'wake'       { if (-not (Invoke-Wake $Name $By $Why)) { $ok = $false } }
+    'sessions'   { if (-not (Invoke-Sessions $Name)) { $ok = $false } }
     'bind'       { $bindKey = if ($Name) { $Name } else { $Key }; if (-not (Invoke-Bind $bindKey $Session)) { $ok = $false } }
     'promote'    { if (-not (Invoke-Promote $Name $Why)) { $ok = $false } }
     'upgrade-check' { if (-not (Invoke-UpgradeCheck $Mark)) { $ok = $false } }

@@ -29,6 +29,12 @@ ok('会建 <鱼塘根>\\app 并复制仓库', install.includes("$target = Join-P
 ok('复制完从新位置继续装', install.includes('从复制过去的那份继续安装'));
 ok('装插件前检查 pnpm', install.includes('Get-Command pnpm') && install.includes('npm install --global pnpm@10'));
 
+// 2026-11-16 r198：会话由用户选，安装脚本不替人挑（更不许拿"安装这段会话"顶替）。
+const fish = read('scripts/fish.ps1');
+ok('有 sessions 命令（列候选会话）', fish.includes('function Invoke-Sessions') && fish.includes("'sessions'"));
+ok('安装说明：会话由用户决定，脚本不替挑', install.includes('这两段由用户决定，安装脚本不替你挑'));
+ok('安装说明指向 fish.ps1 sessions', install.includes('fish.ps1 sessions $ParentMemberId'));
+
 const fail = checks.filter((c) => !c.pass);
 for (const c of checks) console.log(`${c.pass ? 'PASS' : 'FAIL'}  ${c.name}${c.detail ? ' — ' + c.detail : ''}`);
 if (fail.length) {

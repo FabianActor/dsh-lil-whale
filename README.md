@@ -81,8 +81,8 @@ pwsh -File scripts\install.ps1 -PondRoot D:\WorkSpace\lil-whale
 | `-Workspace D:\fish` | 鱼的家放在哪（默认是鱼塘里的 `homes\<成员键>`） |
 | `-PoolDir D:\pool` | 共享区放在哪（默认是鱼塘的 `pool\`） |
 | `-ChildPort 3082` | 鱼的网页端口（默认从 3082 起找第一个空口，装好后写进配置，运行期不再变） |
-| `-ChildSessionId session-…` | 装的时候就把她的会话 id 写进名册 |
-| `-ParentSessionId session-…` | 同上，写你自己那一段 |
+| `-ChildSessionId session-…` | 可选：装的时候就把她的会话 id 写进名册（不传就装完用 `fish.ps1 sessions` 选） |
+| `-ParentSessionId session-…` | 可选：同上，写你自己那一段（别拿"安装这段会话"顶替，装完用 `sessions` 选） |
 | `-SkipParent` | 只装鱼，不动你这边的主 profile |
 
 装完按它打印的步骤走。`lil-whale.config.json` 里是本机的绝对路径，**它不进版本库**（模板是 `lil-whale.config.example.json`）。
@@ -95,10 +95,10 @@ pwsh -File scripts\install.ps1 -PondRoot D:\WorkSpace\lil-whale
 2. 在她的网页里填**她自己的** key：设置 → Models
 3. 添加工作区（选她的家目录），然后在里面新建一段会话
 4. **第一句话由你说**。她没有预设的性格，第一次醒来是什么样，取决于你写了什么、没写什么
-5. 出生之后，两段会话 id 要进群名册：
-   - 侧边栏选中那段对话 → `···` → 复制 Session ID
-   - 她的写进 `group\pins.json` 的 `whale` 数组，你的写进 `lee` 数组
-   - 装的时候用 `-ChildSessionId` / `-ParentSessionId` 也能直接写好
+5. 出生之后，两段会话 id 要进群名册。**这两段由你选，安装脚本不替你挑**（也别拿安装这次开的那段会话顶替父辈）：
+   - 先看候选：`pwsh -File scripts\fish.ps1 sessions all`（列出 id / 最后写时间 / 所在工作区）
+   - 选定后：`pwsh -File scripts\fish.ps1 bind <键> -Session <选中的 id>`（父辈与她的都一样）
+   - 装的时候也可以显式传 `-ChildSessionId` / `-ParentSessionId`——只在你已经知道是哪段时传
 
 ## 想再养一条
 
@@ -395,7 +395,7 @@ pwsh -File scripts\fish.ps1 upgrade-check -Mark 1.7.2   # 做完以后记账
 - M0–M4 已经过：出生、插件探针、跨进程通路、唤醒阀门、人类入口（群面板 + 私聊）。
 - M5 观察中：一周的数据（她说不说话、被叫醒后回不回、定时推门准不准）。
 - 鱼塘布局、无人值守、计划表归每条鱼自己、鱼塘页、起停、三套自检（`doctor` / `verify-pending` / `release-check`）都已就绪。
-- M6 收尾：两个包名为 `@fabianactor/dsh-lil-whale-group(-ui)`，安装脚本、种子模板、`release-check`（23 项）、`doctor`（三十余项）都跑得通；当前版本 **1.7.3**。
+- M6 收尾：两个包名为 `@fabianactor/dsh-lil-whale-group(-ui)`，安装脚本、种子模板、`release-check`（23 项）、`doctor`（三十余项）都跑得通；当前版本 **1.8.0**。
 - 鱼二代完成：第四条鱼出生、转正，A–G 七段测试全过；群聊窗口化与打字卡顿也修好了。
 - 发布前只剩三件：建 GitHub 空仓库、`npm login`、点头删掉两个包的 `private`（见 [发布前检查清单](./docs/detail/发布前检查清单.md)）。
 
