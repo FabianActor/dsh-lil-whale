@@ -190,6 +190,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '身份纸护栏' (($agentsOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '身份纸护栏' 'AGENTS.md 的家只认名册、有自检与 -RepairAgents（test-install-agents.mjs）' }
   } else { Fail '身份纸护栏' 'scripts\test-install-agents.mjs 不在包里' }
+  # ── 4l. 宿主包定位（2026-11-16，CHANGELOG r195）─────────────────────
+  $anchorTest = Join-Path $pkg 'scripts\test-host-anchors.mjs'
+  if (Test-Path $anchorTest) {
+    $anchorOut = & node $anchorTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '宿主包定位' (($anchorOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '宿主包定位' 'npx 缓存里的 dsh 也能找到（test-host-anchors.mjs）' }
+  } else { Fail '宿主包定位' 'scripts\test-host-anchors.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {
@@ -205,6 +212,7 @@ if ($root) {
   New-Item -ItemType Directory -Force -Path $homeDir, $dshHome, $pool | Out-Null
   $installLog = Join-Path $work 'install.log'
   & pwsh -NoProfile -File (Join-Path $pkg 'scripts\install.ps1') `
+    -PondRoot (Join-Path $work 'pond') `
     -Workspace $homeDir -DshHome $dshHome -PoolDir $pool -ChildProfile xfish -ChildName 小测试 `
     -SkipParent -ConfigPath $cfg -Force *>&1 | Tee-Object -FilePath $installLog | Out-Null
   $installExit = $LASTEXITCODE

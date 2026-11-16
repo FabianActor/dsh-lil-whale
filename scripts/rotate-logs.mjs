@@ -8,16 +8,46 @@
 // 用法：
 //   node scripts\rotate-logs.mjs           真转
 //   node scripts\rotate-logs.mjs --dry-run 只看会转什么
-import { readdirSync, statSync, renameSync, unlinkSync } from 'node:fs'
-import { join, dirname, basename } from 'node:path'
+import { readdirSync, statSync, renameSync, unlinkSync, readFileSync, existsSync } from 'node:fs'
+import { join, dirname, basename, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url)) // <app>\scripts
 const APP = dirname(HERE)                            // <app>
-const POND = dirname(APP)                            // 鱼塘根
+const POND_BY_CODE = dirname(APP)                    // 按脚本位置推的鱼塘根
 const MAX_BYTES = 1024 * 1024
 const KEEP = 3
 const DRY = process.argv.includes('--dry-run')
+
+// 2026-11-16 r195：日志在哪儿，不能只按"脚本被放在哪"推。
+// 写日志的插件读 lil-whale.config.json（或 LIL_WHALE_CONFIG）；自定义布局时两套推导会分叉，
+// 轮转就永远扫不到真正在长的日志（第三方装机实测 P6）。配置读得到就按配置，读不到才退回按位置推。
+function rootsFromConfig() {
+  const file = process.env.LIL_WHALE_CONFIG || join(APP, 'lil-whale.config.json')
+  if (!existsSync(file)) return null
+  try {
+    const cfg = JSON.parse(readFileSync(file, 'utf8'))
+    const poolDir = cfg.poolDir || (cfg.selfHome ? resolve(cfg.selfHome, '..', '..', 'pool') : null)
+    if (!poolDir) return null
+    const membersFile = cfg.membersFile || join(poolDir, 'members.json')
+    const homes = []
+    try {
+      const roster = JSON.parse(readFileSync(membersFile, 'utf8'))
+      for (const m of Object.values(roster?.members ?? {})) {
+        if (m?.home) homes.push(m.home)
+      }
+    } catch {
+      // 名册读不到就只扫 pool，不影响轮转
+    }
+    return { pond: resolve(poolDir, '..'), poolDir: resolve(poolDir), homes }
+  } catch {
+    return null
+  }
+}
+
+const cfgRoots = rootsFromConfig()
+const POND = cfgRoots?.pond ?? POND_BY_CODE
+const POOL = cfgRoots?.poolDir ?? join(POND, 'pool')
 
 function listLogs(dir) {
   try {
@@ -28,6 +58,7 @@ function listLogs(dir) {
 }
 
 function homes() {
+  if (cfgRoots) return cfgRoots.homes
   try {
     return readdirSync(join(POND, 'homes')).map((n) => join(POND, 'homes', n))
   } catch {
@@ -36,10 +67,10 @@ function homes() {
 }
 
 const targets = [
-  ...listLogs(join(POND, 'pool', 'group')),
-  ...listLogs(join(POND, 'pool', 'state')),
-  ...listLogs(join(POND, 'pool', 'state', 'runs')),
-  ...listLogs(join(POND, 'pool', 'state', 'usage')),
+  ...listLogs(join(POOL, 'group')),
+  ...listLogs(join(POOL, 'state')),
+  ...listLogs(join(POOL, 'state', 'runs')),
+  ...listLogs(join(POOL, 'state', 'usage')),
   ...listLogs(join(APP, 'logs')),
   ...homes().flatMap((home) => listLogs(join(home, 'logs'))),
 ]
@@ -106,4 +137,4 @@ for (const file of targets) {
   }
 }
 
-console.log(`${DRY ? 'dry-run ' : ''}done rotated=${rotated} dropped=${dropped} scanned=${targets.length}`)
+console.log(`${DRY ? 'dry-run ' : ''}done rotated=${rotated} dropped=${dropped} scanned=${targets.length} roots=${cfgRoots ? 'config' : 'code'}`)

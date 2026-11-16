@@ -27,6 +27,8 @@ param(
   [switch]$SkipParent,
   [switch]$Force,
   [switch]$RepairAgents,  # 只重写身份纸 AGENTS.md，其余一概不碰（2026-11-16 r190）
+  [string]$PondRoot = '',  # 鱼塘根；空 = 按仓库位置推（仓库必须在 <鱼塘根>\app 里）（2026-11-16 r195）
+  [switch]$RepoPrepared,   # 内部用：从复制过去的仓库继续装，别再复制一次
   [string]$ConfigPath = '',  # 配置写到哪；空 = <仓库根>\lil-whale.config.json。试装必须指到临时目录
   [string]$PoolDir = ''      # 共享区（群/账本/私聊）；空 = 她家旁边同级的 lil-whale-pool
 )
@@ -45,6 +47,47 @@ function Die([string]$text, [string]$next) {
   Write-Host ""
   Write-Host ("   NEXT: " + $next) -ForegroundColor Yellow
   exit 1
+}
+
+# --- 2026-11-16 r195：装之前先确认鱼塘根（P4/P10） ---
+# 这个项目要装在 <鱼塘根>app 里：pool/ 与 homes/ 是它的兄弟目录。
+# 从桌面直接下载、在仓库里就装，会把 pool/ 与 homes/ 建到桌面去（第三方装机实测）。
+if (-not $RepoPrepared) {
+  $repoLeaf = Split-Path $RepoRoot -Leaf
+  if ($repoLeaf -ne 'app') {
+    if ([string]::IsNullOrWhiteSpace($PondRoot)) {
+      Die "这个项目要装在 <鱼塘根>\app 里，当前仓库在：$RepoRoot" "先确认鱼塘根（例如 D:\lil-whale），再运行：pwsh -File scripts\install.ps1 -PondRoot <鱼塘根>"
+    }
+    $pond = [System.IO.Path]::GetFullPath($PondRoot).TrimEnd('\')
+    $target = Join-Path $pond 'app'
+    if (-not (Test-Path $pond)) { New-Item -ItemType Directory -Path $pond -Force | Out-Null; Say "已新建鱼塘根：$pond" }
+    if (-not (Test-Path $target)) { New-Item -ItemType Directory -Path $target -Force | Out-Null; Say "已新建仓库目录：$target" }
+    $skipNames = @('pool', 'homes', 'logs', 'dist', 'tmp', '.git')
+    $copied = 0
+    Get-ChildItem -LiteralPath $RepoRoot -Force | Where-Object { $skipNames -notcontains $_.Name } | ForEach-Object {
+      Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $target $_.Name) -Recurse -Force
+      $copied += 1
+    }
+    Ok "已把仓库内容复制到 $target（$copied 项；跳过 pool/homes/logs/dist/tmp/.git）"
+    $newScript = Join-Path $target 'scripts\install.ps1'
+    if (-not (Test-Path $newScript)) {
+      Die "复制后找不到 $newScript" "手动把仓库放到 $target 再运行 install.ps1"
+    }
+    $passArgs = @('-NoLogo', '-NoProfile', '-File', $newScript, '-PondRoot', $pond, '-RepoPrepared')
+    foreach ($k in $PSBoundParameters.Keys) {
+      if ($k -in @('PondRoot', 'RepoPrepared')) { continue }
+      $v = $PSBoundParameters[$k]
+      if ($v -is [System.Management.Automation.SwitchParameter]) {
+        if ($v.IsPresent) { $passArgs += ('-' + $k) }
+      } elseif ($null -ne $v -and ([string]$v) -ne '') {
+        $passArgs += @(('-' + $k), [string]$v)
+      }
+    }
+    Say ("从复制过去的那份继续安装：" + $newScript)
+    & pwsh @passArgs
+    exit $LASTEXITCODE
+  }
+  Note "鱼塘根：$(Split-Path $RepoRoot -Parent)（仓库就在 <鱼塘根>\app 里）"
 }
 
 # 只有 .json 不能带 BOM（dsh 的加载器会拒绝），其它都按 UTF-8 无 BOM 写。
@@ -229,9 +272,13 @@ try {
   }
 
   Step '3. 把群插件装进她的 profile'
+  # 2026-11-16 r195：dsh 装插件时固定调 pnpm add，而 DSH 不自带 pnpm。
+  if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
+    Die "找不到 pnpm：dsh 装插件时固定调用 pnpm add（DSH 不自带它）。" "先运行 npm install --global pnpm@10，再重跑 install.ps1"
+  }
   $add = & dsh plugin --profile $ChildProfile add "link:$RepoRoot\plugin\dsh-lil-whale-group" 2>&1
   if ($LASTEXITCODE -ne 0) {
-    Die "装插件失败：$($add | Select-Object -Last 5)" "进 $DshHome\profiles\$ChildProfile 手动跑 dsh plugin add 看完整报错"
+    Die "装插件失败：$($add | Select-Object -Last 5)" "进 $DshHome\profiles\$ChildProfile 手动跑 dsh plugin add 看完整报错（若提示找不到 pnpm，先 npm install --global pnpm@10）"
   }
   Ok '@fabianactor/dsh-lil-whale-group'
 } finally {

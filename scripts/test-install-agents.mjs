@@ -21,6 +21,14 @@ ok('写后自检：没有 START.md 就 Die', install.includes('AGENTS.md 指向�
 ok('doctor 有四路对齐格', doctor.includes("Add-Row ('身份纸（"));
 ok('doctor 的 NEXT 指向 -RepairAgents', doctor.includes('-RepairAgents -ChildMemberId'));
 
+// 2026-11-16 r195：装前必须确认鱼塘根、必须有 pnpm（第三方装机实测 P4/P10/P2）。
+ok('有 -PondRoot 参数', /\[string\]\$PondRoot = ''/.test(install));
+ok('有 -RepoPrepared 内部开关（防止复制后递归）', /\[switch\]\$RepoPrepared/.test(install));
+ok('不在 app 布局时要求 -PondRoot', install.includes('这个项目要装在 <鱼塘根>\\app 里'));
+ok('会建 <鱼塘根>\\app 并复制仓库', install.includes("$target = Join-Path $pond 'app'") && install.includes('已把仓库内容复制到'));
+ok('复制完从新位置继续装', install.includes('从复制过去的那份继续安装'));
+ok('装插件前检查 pnpm', install.includes('Get-Command pnpm') && install.includes('npm install --global pnpm@10'));
+
 const fail = checks.filter((c) => !c.pass);
 for (const c of checks) console.log(`${c.pass ? 'PASS' : 'FAIL'}  ${c.name}${c.detail ? ' — ' + c.detail : ''}`);
 if (fail.length) {

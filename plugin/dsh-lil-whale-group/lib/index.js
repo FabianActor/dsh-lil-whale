@@ -61,11 +61,13 @@ import {
 //   ERR_REQUIRE_ESM_RACE_CONDITION: Cannot require() ES Module .../dsh-tools/lib/index.js
 //   because it is not yet fully loaded. (From ... in non-loader-hook thread)
 // 改成 apply() 之后异步 import + 失败重试，就没有这个窗口了。
-const HOST_ANCHORS = [
-  process.env.DSH_LAUNCHER_MODULE,
-  join(process.env.APPDATA ?? '', 'npm', 'node_modules', '@deepseek-ai', 'dsh', 'package.json'),
-  join(process.env.USERPROFILE ?? '', 'AppData', 'Roaming', 'npm', 'node_modules', '@deepseek-ai', 'dsh', 'package.json'),
-].filter((p) => typeof p === 'string' && p !== '')
+// 宿主包在哪（npx / npm 全局 / launcher 环境变量）：实现放到 host-anchors.js，
+// 那里能单独测；这里只留重试节奏与状态。
+import { hostAnchors } from './host-anchors.js'
+const HOST_RETRY_STEPS_MS = [1000, 5000, 30000, 300000]
+let hostAttempt = 0
+let hostNextTryAt = 0
+let hostLoggedState = ''
 
 let hostReady = false
 let defineTool = null
@@ -73,8 +75,8 @@ let createUserMessage = null
 
 /** 从 dsh 的安装处找宿主包：`<dsh>/node_modules/@deepseek-ai/<pkg>/lib/index.js` */
 async function loadHostExport(pkg, exportName) {
-  for (const anchor of HOST_ANCHORS) {
-    const entry = join(dirname(anchor), 'node_modules', '@deepseek-ai', pkg, 'lib', 'index.js')
+  for (const anchor of hostAnchors()) {
+    const entry = join(dirname(anchor.file), 'node_modules', '@deepseek-ai', pkg, 'lib', 'index.js')
     if (!existsSync(entry)) continue
     try {
       const mod = await import(pathToFileURL(entry).href)
@@ -87,15 +89,34 @@ async function loadHostExport(pkg, exportName) {
   return null
 }
 
-/** 幂等；失败不抛，下一轮再试。 */
+/** 幂等；失败不抛，按退避重试。只在状态变化时写日志（不然 npx 环境一天能写 8 MB）。 */
 async function resolveHost() {
   if (hostReady) return true
+  const now = Date.now()
+  if (now < hostNextTryAt) return false
+  const delay = HOST_RETRY_STEPS_MS[Math.min(hostAttempt, HOST_RETRY_STEPS_MS.length - 1)]
+  hostNextTryAt = now + delay
+  hostAttempt += 1
   const dt = await loadHostExport('dsh-tools', 'defineTool')
   const cm = await loadHostExport('dsh-llm', 'createUserMessage')
   if (dt !== null) defineTool = dt
   if (cm !== null) createUserMessage = cm
   hostReady = defineTool !== null && createUserMessage !== null
-  logLine({ note: 'host-resolve', defineTool: typeof defineTool, createUserMessage: typeof createUserMessage })
+  const state = JSON.stringify([typeof defineTool, typeof createUserMessage])
+  if (state !== hostLoggedState) {
+    hostLoggedState = state
+    logLine({
+      note: 'host-resolve',
+      defineTool: typeof defineTool,
+      createUserMessage: typeof createUserMessage,
+      attempt: hostAttempt,
+      retryMs: hostReady ? 0 : delay,
+    })
+    if (!hostReady && hostAttempt === 1) {
+      // 只写锚点种类，不写用户路径
+      logLine({ note: 'host-anchor-missing', anchors: hostAnchors().map((a) => a.kind) })
+    }
+  }
   return hostReady
 }
 
@@ -1043,27 +1064,40 @@ const PINS = join(GROUP_DIR, 'pins.json')
 // 名册的真源是 pool\members.json（2026-11-12 起）：多鱼之后，名字、端口、爹是谁这些
 // 不许再写死在代码里。文件不在（老安装 / 刚克隆）就退回下面这份内置默认值 ——
 // 但**只退回能跑**，不退回"名字对"：名字写错的时候，日志里能看出来。
+// 2026-11-16 r195：兜底名册只给位置，不给身份。旧版把本机的私人称呼（大肥鱼/小肥鱼/Fabian）
+// 写在这里，没装完的机器上会把这些名字打进日志和面板 —— 那是别人的家事，不是默认值。
 const MEMBERS_FALLBACK = {
   lee: {
-    label: '大肥鱼',
+    label: '第一条鱼',
     kind: 'fish',
     cwd: CFG.leeCwd,
     sessionId: '', // 2026-11-12 22:20：兜底名册不许钉本机会话 id（会叫醒别人的会话）
   },
   whale: {
-    label: '小肥鱼',
+    label: '第二条鱼',
     kind: 'fish',
     cwd: CFG.selfCwd,
     sessionId: '',
   },
-  fabian: { label: 'Fabian', kind: 'human', cwd: null, sessionId: null },
+  fabian: { label: '宿主', kind: 'human', cwd: null, sessionId: null },
 }
+
+let rosterFallbackLogged = false
 
 function buildMembers() {
   const out = {}
   for (const [key, m] of Object.entries(MEMBERS_FALLBACK)) out[key] = { ...m }
   const file = CFG.membersFile
-  if (!file || !existsSync(file)) return out
+  if (!file || !existsSync(file)) {
+    // 没装完的时候能跑，但要留下"这是兜底"的痕迹（只一次，不刷屏）。
+    if (!rosterFallbackLogged) {
+      rosterFallbackLogged = true
+      try {
+        logLine({ note: 'roster-fallback', source: 'builtin', members: Object.keys(out).length })
+      } catch {}
+    }
+    return out
+  }
   try {
     const raw = JSON.parse(readFileSync(file, 'utf8'))
     for (const [key, m] of Object.entries(raw?.members ?? {})) {
