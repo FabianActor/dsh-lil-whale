@@ -50,13 +50,26 @@ function Die([string]$text, [string]$next) {
 }
 
 # --- 2026-11-16 r195：装之前先确认鱼塘根（P4/P10） ---
-# 这个项目要装在 <鱼塘根>app 里：pool/ 与 homes/ 是它的兄弟目录。
+# 这个项目要装在 <鱼塘根>\app 里：pool/ 与 homes/ 是它的兄弟目录。
 # 从桌面直接下载、在仓库里就装，会把 pool/ 与 homes/ 建到桌面去（第三方装机实测）。
 if (-not $RepoPrepared) {
   $repoLeaf = Split-Path $RepoRoot -Leaf
   if ($repoLeaf -ne 'app') {
     if ([string]::IsNullOrWhiteSpace($PondRoot)) {
-      Die "这个项目要装在 <鱼塘根>\app 里，当前仓库在：$RepoRoot" "先确认鱼塘根（例如 D:\lil-whale），再运行：pwsh -File scripts\install.ps1 -PondRoot <鱼塘根>"
+      # 2026-11-16 r199：安装目录不许静默选。能交互就问用户；不能交互（被 agent / 管道调用）就停下，
+      # 并明确要求"先问用户"——第三方装机实测的 bug：agent 会把仓库和解出来的 pool/homes
+      # 一起放进当前会话工作区（<workspace>\whale-src\），因为没人问过它该放哪。
+      if ([Console]::IsInputRedirected) {
+        Die "这个项目要装在 <鱼塘根>\app 里，当前仓库在：$RepoRoot" "先问用户：把鱼塘放在哪个目录（不要用当前会话的工作区，也别用下载目录），再运行：pwsh -File scripts\install.ps1 -PondRoot <鱼塘根>"
+      }
+      Say '这个项目要装在 <鱼塘根>\app 里：pool\ 与 homes\ 是它的兄弟目录。'
+      Say '先定鱼塘根——不要装进当前会话的工作区，也别装进下载目录。'
+      $defaultPond = Join-Path $env:USERPROFILE 'lil-whale'
+      $answer = Read-Host "鱼塘根目录（直接回车用默认：$defaultPond）"
+      if ([string]::IsNullOrWhiteSpace($answer)) { $answer = $defaultPond }
+      $PondRoot = $answer
+      if ([string]::IsNullOrWhiteSpace($PondRoot)) { Die '没有给出鱼塘根。' '重跑并指定 -PondRoot <目录>' }
+      Say "鱼塘根：$PondRoot"
     }
     $pond = [System.IO.Path]::GetFullPath($PondRoot).TrimEnd('\')
     $target = Join-Path $pond 'app'

@@ -5,10 +5,10 @@
 //
 // 这个测试不启动 DSH，只验"候选锚点是否包含 npx 缓存里的那份 dsh"。
 
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { hostAnchors, dshPkgFromEntry } from '../plugin/dsh-lil-whale-group/lib/host-anchors.js'
+import { hostAnchors, dshPkgFromEntry, hostExportEntryCandidates } from '../plugin/dsh-lil-whale-group/lib/host-anchors.js'
 
 const problems = []
 function check(name, ok, detail) {
@@ -46,7 +46,19 @@ try {
   writeFileSync(join(tmp, 'fake', 'package.json'), JSON.stringify({ name: 'not-dsh' }), 'utf8')
   check('别的包名不会被当成 dsh', dshPkgFromEntry(fake) === null)
 
-  // 4) 没有 npm_config_cache 与 LOCALAPPDATA 时，npx 扫描安静地返回空
+  // 4) 宿主包入口候选：嵌套（npm 全局）与兄弟（npx/pnpm hoisted）都要在（2026-11-16 r199）
+  const cands = hostExportEntryCandidates(pkgJson, 'dsh-tools')
+  const nestedOk = join(pkgDir, 'node_modules', '@deepseek-ai', 'dsh-tools', 'lib', 'index.js')
+  const hoistedOk = join(dirname(pkgDir), 'dsh-tools', 'lib', 'index.js')
+  check('候选含嵌套布局', cands.some((c) => c.layout === 'nested' && c.file === nestedOk), JSON.stringify(cands))
+  check('候选含兄弟布局', cands.some((c) => c.layout === 'hoisted' && c.file === hoistedOk), JSON.stringify(cands))
+  // 兄弟布局真的存在时，候选路径也得指向一个存在的文件（不需要能 import）。
+  const flatLib = join(dirname(pkgDir), 'dsh-tools', 'lib')
+  mkdirSync(flatLib, { recursive: true })
+  writeFileSync(join(flatLib, 'index.js'), 'export const ok = true\n', 'utf8')
+  check('兄弟布局真实文件可被候选命中', cands.some((c) => c.layout === 'hoisted' && existsSync(c.file)))
+
+  // 5) 没有 npm_config_cache 与 LOCALAPPDATA 时，npx 扫描安静地返回空
   delete process.env.npm_config_cache
   const savedLocal = process.env.LOCALAPPDATA
   delete process.env.LOCALAPPDATA
@@ -68,4 +80,4 @@ if (problems.length) {
   for (const p of problems) console.log('  - ' + p)
   process.exit(1)
 }
-console.log('PASS test-host-anchors（4 组）')
+console.log('PASS test-host-anchors（6 组）')

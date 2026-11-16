@@ -48,6 +48,20 @@ export function npxDshPkgFiles() {
   }
 }
 
+/**
+ * 宿主包的入口候选（2026-11-16 r199，第三方 npx 装机实测 P5）：
+ *  - npm 全局：`<...>\node_modules\@deepseek-ai\dsh\node_modules\@deepseek-ai\<pkg>\lib\index.js`（嵌套）
+ *  - npx / pnpm hoisted：`<...>\node_modules\@deepseek-ai\<pkg>\lib\index.js`（与 dsh 兄弟）
+ * 只拼前一种时，npx 机器上永远找不到 dsh-tools/dsh-llm，插件降级成裸对象注册。
+ */
+export function hostExportEntryCandidates(anchorFile, pkg) {
+  const dshDir = dirname(anchorFile) // ...\node_modules\@deepseek-ai\dsh
+  return [
+    { layout: 'nested', file: join(dshDir, 'node_modules', '@deepseek-ai', pkg, 'lib', 'index.js') },
+    { layout: 'hoisted', file: join(dirname(dshDir), pkg, 'lib', 'index.js') },
+  ]
+}
+
 /** 返回 [{ kind, file }]；kind 进日志，file 只在进程里用（不把用户路径写进账本）。 */
 export function hostAnchors() {
   const out = []

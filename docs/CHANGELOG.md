@@ -1,12 +1,24 @@
 # 工程变更记录
 
 > 这份文件记录**工程侧**的每一次改动：机制、修账、脚本、文档。它和产品需求是两条线——需求讨论看 [PRD.md](PRD.md)，这里只记"改了什么、为什么"。
-> 编号 `rNN` 是**内部修订号**：改一次 +1，一天可能十几稿；两个 npm 包另有各自的 semver（各自 `package.json`，当前 1.8.0），只在功能变化或发布时动。版本规则（2026-11-16 宿主定）：**大版本保持在 1**（不出特大更新不升）；**第二位加新功能**，**第三位修 bug**。编号从 r1 起。
-> 条目按时间倒序（新的在上）。A.x 原先住在 PRD 附录里，2026-11-15 搬到这里；历史条目里若还写着「PRD 附录 A.x」，指的就是本文件的 A.x。`A.x` 是"已验证的技术事实与判据"的编号，统一收在文末附录 A（A.1–A.137）。
+> 编号 `rNN` 是**内部修订号**：改一次 +1，一天可能十几稿；两个 npm 包另有各自的 semver（各自 `package.json`，当前 1.8.1），只在功能变化或发布时动。版本规则（2026-11-16 宿主定）：**大版本保持在 1**（不出特大更新不升）；**第二位加新功能**，**第三位修 bug**。编号从 r1 起。
+> 条目按时间倒序（新的在上）。A.x 原先住在 PRD 附录里，2026-11-15 搬到这里；历史条目里若还写着「PRD 附录 A.x」，指的就是本文件的 A.x。`A.x` 是"已验证的技术事实与判据"的编号，统一收在文末附录 A（A.1–A.138）。
 
 ---
 
 ## 变更条目
+
+## r199 — 2026-11-16 15:5x–16:0x
+
+**症状（宿主 15:39 + 16:02 两份装机沉淀）**：①用户默认安装时，agent 不问"鱼塘放哪"，直接装进会话工作区：`<workspace>\whale-src\{dsh-lil-whale-main,homes,pool}`，与我们要求的 `<鱼塘根>\app` 不一致；②npx/pnpm **hoisted** 安装的机器上，插件找不到宿主包 `dsh-tools`/`dsh-llm`（`host-resolve defineTool=object createUserMessage=object`，实际是 `null`），工具以裸对象注册、唤醒消息缺 id。
+
+**根因**：①文档只写"必须放在 `<鱼塘根>\app`"，没写**由谁来决定这个根**；`install.ps1` 只在"不是 app 布局"时 `Die`，没有"先问用户"的声明，代装 agent 的默认动作就是在自己的会话工作区动手。②`loadHostExport()` 用 `join(dirname(anchor.file),'node_modules','@deepseek-ai',pkg,…)` 只覆盖 **npm 全局的嵌套布局**；npx 缓存 / pnpm hoisted 里 `@deepseek-ai/dsh-tools` 与 `dsh` 是**兄弟**，路径不存在就直接 `continue`，连失败都不记。
+
+**改动**：①`README.md`「装起来」开头加「装之前先做一件事：问用户"鱼塘放哪个目录"」；`install.ps1` 在非 app 布局且没给 `-PondRoot` 时——能交互就 `Read-Host` 问鱼塘根（默认 `%USERPROFILE%\lil-whale`），被 agent/管道调用（stdin 重定向）则 `Die` 并给 `NEXT: 先问用户…`；②`host-anchors.js` 新增 `hostExportEntryCandidates(anchorFile, pkg)`（nested + hoisted 两种布局），`index.js` 的 `loadHostExport` 两种都试，全找不到记一次 `host-entry-missing`（只写锚点种类、不写用户路径），导入失败记 `host-import-failed` 带 `layout`/`anchor`；③`test-host-anchors.mjs` 4→**6 组**、`test-install-agents.mjs` 17→**20 项**；安装文档 §2.3 同步。
+
+**验证**：临时目录模拟"仓库名不是 app"且无 `-PondRoot` ⇒ exit 1，文案先问用户；`test-host-anchors` 6 组 PASS（含兄弟布局真实文件命中）；`test-install-agents` 20 项 PASS；十套 JS 测试全过；`doctor` 仅 1 条预期 WARN（进程 1.8.0 ≠ 磁盘 1.8.1）；`release-check` 23 项 WARN 0。
+
+**用户可见**：安装会先问鱼塘根；npx/pnpm 装的机器不再降级（`plugin.log` 的 `host-resolve` 应为 `function/function`）。
 
 ## r198 — 2026-11-16 15:2x
 
@@ -3941,3 +3953,16 @@ sleep-tools-register-failed: tool "sleep" must declare output { schema, render, 
 **判据**：①干净安装后，`git grep -n "whale\|小鲸鱼" -- . ':!docs/CHANGELOG.md'` 应只剩历史记录与示例里的通用说明；②名册/配置齐全时，插件日志里不出现 `lee`/`fabian`（除旧账本）；③改默认值时，README/安装文档的示例路径一起改，否则用户照着文档建出来的又是旧名字。
 
 **教训**：**自己机器上"能跑"，不等于别人机器上"干净"**。默认值是给陌生人用的第一份礼物，署了自己的名字就不叫礼物了。
+
+## 附录 A.138 路径不是字符串，是布局的函数（2026-11-16）
+
+**症状**：同一份插件，npm 全局装能拿到宿主包，npx 装的机器拿不到；日志里没有任何"找不到"，只有 `host-anchor-missing`（说明锚点对了，问题在后一步）。
+
+**根因**：`loadHostExport()` 把"@deepseek-ai/dsh 在哪"和"它的兄弟包在哪"算成同一个固定形状。npm 全局是嵌套（`dsh\node_modules\@deepseek-ai\dsh-tools`），npx/pnpm hoisted 是兄弟（`@deepseek-ai\dsh-tools`）。路径不存在时直接 `continue`，于是"没找到"和"这里没有"长得一样。
+
+**做法**：①候选路径抽成纯函数 `hostExportEntryCandidates(anchorFile, pkg)`，按布局列：nested、hoisted；②逐个试，失败留痕（`layout`、`anchor` 种类）；③全都不在时记 `host-entry-missing`，只记锚点种类，不把用户路径写进账本。
+
+**判据**：①npx 机器上 `host-resolve` 为 `defineTool=function createUserMessage=function`；②候选函数的单测能指出"两种布局各自的期望路径"；③路径不存在时日志里区分"锚点没找到"与"锚点找到了但包不在这个布局"。
+
+**教训**：**路径不是字符串，是布局的函数**。靠记忆拼路径，只在自己那一台机器上是对的。
+

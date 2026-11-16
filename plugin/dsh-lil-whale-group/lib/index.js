@@ -63,7 +63,7 @@ import {
 // 改成 apply() 之后异步 import + 失败重试，就没有这个窗口了。
 // 宿主包在哪（npx / npm 全局 / launcher 环境变量）：实现放到 host-anchors.js，
 // 那里能单独测；这里只留重试节奏与状态。
-import { hostAnchors } from './host-anchors.js'
+import { hostAnchors, hostExportEntryCandidates } from './host-anchors.js'
 const HOST_RETRY_STEPS_MS = [1000, 5000, 30000, 300000]
 let hostAttempt = 0
 let hostNextTryAt = 0
@@ -75,17 +75,21 @@ let createUserMessage = null
 
 /** 从 dsh 的安装处找宿主包：`<dsh>/node_modules/@deepseek-ai/<pkg>/lib/index.js` */
 async function loadHostExport(pkg, exportName) {
-  for (const anchor of hostAnchors()) {
-    const entry = join(dirname(anchor.file), 'node_modules', '@deepseek-ai', pkg, 'lib', 'index.js')
-    if (!existsSync(entry)) continue
-    try {
-      const mod = await import(pathToFileURL(entry).href)
-      if (typeof mod?.[exportName] === 'function') return mod[exportName]
-      logLine({ note: 'host-export-missing', pkg, exportName, keys: Object.keys(mod ?? {}).slice(0, 8) })
-    } catch (error) {
-      logLine({ note: 'host-import-failed', pkg, error: String(error?.message ?? error) })
+  const anchors = hostAnchors()
+  for (const anchor of anchors) {
+    // 2026-11-16 r199：npm 全局是嵌套布局，npx/pnpm hoisted 是兄弟布局，两种都要试（第三方装机 P5）。
+    for (const candidate of hostExportEntryCandidates(anchor.file, pkg)) {
+      if (!existsSync(candidate.file)) continue
+      try {
+        const mod = await import(pathToFileURL(candidate.file).href)
+        if (typeof mod?.[exportName] === 'function') return mod[exportName]
+        logLine({ note: 'host-export-missing', pkg, exportName, layout: candidate.layout, keys: Object.keys(mod ?? {}).slice(0, 8) })
+      } catch (error) {
+        logLine({ note: 'host-import-failed', pkg, layout: candidate.layout, anchor: anchor.kind, error: String(error?.message ?? error) })
+      }
     }
   }
+  logLine({ note: 'host-entry-missing', pkg, anchors: anchors.map((a) => a.kind) })
   return null
 }
 

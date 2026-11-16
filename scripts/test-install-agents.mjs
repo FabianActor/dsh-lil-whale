@@ -30,6 +30,12 @@ ok('复制完从新位置继续装', install.includes('从复制过去的那份�
 ok('装插件前检查 pnpm', install.includes('Get-Command pnpm') && install.includes('npm install --global pnpm@10'));
 
 // 2026-11-16 r198：会话由用户选，安装脚本不替人挑（更不许拿"安装这段会话"顶替）。
+// 2026-11-16 r199：安装目录不许静默选（第三方装机实测：agent 把仓库和 pool/homes 塞进会话工作区）。
+const readme = read('README.md');
+ok('install.ps1 能交互地问鱼塘根', install.includes('Read-Host "鱼塘根目录'));
+ok('install.ps1 明确要求先问用户', install.includes('先问用户：把鱼塘放在哪个目录'));
+ok('README 装了「先问用户目录」的声明', readme.includes('装之前先做一件事：问用户'));
+
 const fish = read('scripts/fish.ps1');
 ok('有 sessions 命令（列候选会话）', fish.includes('function Invoke-Sessions') && fish.includes("'sessions'"));
 ok('安装说明：会话由用户决定，脚本不替挑', install.includes('这两段由用户决定，安装脚本不替你挑'));
