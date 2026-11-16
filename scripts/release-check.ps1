@@ -1,4 +1,4 @@
-﻿#requires -Version 7.0
+#requires -Version 7.0
 # scripts\release-check.ps1 —— 拟发版检查
 #
 # 为什么要有它：平时所有验证都在**工作目录**里做，而工作目录里混着本机配置、临时脚本、
@@ -158,6 +158,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '体检覆盖面' (($covOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '体检覆盖面' 'doctor 的格名都有登记（test-doctor-coverage.mjs）' }
   } else { Fail '体检覆盖面' 'scripts\test-doctor-coverage.mjs 不在包里' }
+  # ── 4h. 字段契约（2026-11-16，CHANGELOG r179）────────────────────
+  $fieldTest = Join-Path $pkg 'scripts\test-log-fields.mjs'
+  if (Test-Path $fieldTest) {
+    $fieldOut = & node $fieldTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '字段契约' (($fieldOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '字段契约' '代码里不再写 why=（autostart.log 一处豁免）' }
+  } else { Fail '字段契约' 'scripts\test-log-fields.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {

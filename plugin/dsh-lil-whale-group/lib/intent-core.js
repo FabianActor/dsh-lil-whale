@@ -113,7 +113,7 @@ export function normalizeIntent(it, notes = [], opts = {}) {
     }
     const allowed = pathAllowed(spec.path, { insideHome: spec.insideHome, ownKey: opts.ownKey ?? null })
     if (!allowed.ok) {
-      notes.push(`intent-path-rejected id=${id} path=${spec.path} why=${allowed.why}`)
+      notes.push(`intent-path-rejected id=${id} path=${spec.path} reason=${allowed.why}`)
       return null
     }
   }

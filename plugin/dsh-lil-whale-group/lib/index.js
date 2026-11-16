@@ -556,7 +556,7 @@ function claimPlanDelivery(member, jobKey) {
   } catch (error) {
     if (error?.code === 'EEXIST') return false
     // 写不进去（目录权限之类）不能当成"已递"：宁可重复递一次，也不能让她整天空等。
-    watchmanLog('note', `why=claim-failed to=${member.key} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 100)} plan=${jobKey}`)
+    watchmanLog('note', `note=claim-failed to=${member.key} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 100)} plan=${jobKey}`)
     return true
   }
 }
@@ -836,7 +836,7 @@ function writeWakeCaps() {
     if (!wakeCapsSince) wakeCapsSince = nowIso
     writeJson(WAKE_CAPS_FILE, wakeCapsSnapshot(nowIso))
   } catch (error) {
-    watchmanLog('note', 'why=wake-caps-write-failed detail=' + String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120))
+    watchmanLog('note', 'note=wake-caps-write-failed detail=' + String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120))
   }
 }
 
@@ -2097,7 +2097,7 @@ function apply(ctx) {
         // 现在：真睡着才动状态；清掉一次性睡眠后若还在作息窗里，才需要"醒到本窗结束"。
         const before = sleepStateOfMember(member, now)
         if (!before.sleeping) {
-          sleepLog('sleep-noop', `member=${member} why=not-sleeping by=self`)
+          sleepLog('sleep-noop', `member=${member} reason=not-sleeping by=self`)
           return { awakeUntil: '', changed: false }
         }
         const state = readSleepStateOf(member)
@@ -2186,7 +2186,7 @@ function apply(ctx) {
       // 所以异常也写一行。吵一点，总比沉默好。
       console.error(`[${name}] tick 失败：`, error)
       const short = String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 160)
-      watchmanLog('error', `why=${error?.name ?? 'Error'}:${short} tick#=wake`)
+      watchmanLog('error', `note=${error?.name ?? 'Error'}:${short} tick#=wake`)
     })
   }, WAKE.intervalMs)
   timer.unref?.()
@@ -2200,7 +2200,7 @@ function apply(ctx) {
       try {
         selfPlanTick(ctx)
       } catch (error) {
-        watchmanLog('error', `why=self-plan-tick-failed detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)}`)
+        watchmanLog('error', `note=self-plan-tick-failed detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)}`)
       }
     }, 60_000)
     selfTimer.unref?.()
@@ -2252,7 +2252,7 @@ function apply(ctx) {
     scheduleAutoStart(ctx)
     const watchTimer = setInterval(() => {
       void watchmanTick().catch((error) => {
-        watchmanLog('note', `why=tick-error detail=${String(error?.message ?? error).replace(/\s+/g, ' ')}`)
+        watchmanLog('note', `note=tick-error detail=${String(error?.message ?? error).replace(/\s+/g, ' ')}`)
       })
     }, WATCH.intervalMs)
     watchTimer.unref?.()
@@ -2823,7 +2823,7 @@ function deliverToSelf(ctx, self, text) {
     agent.followup(built)
     return wasBusy ? 'queued' : 'ok'
   } catch (error) {
-    watchmanLog('error', `why=self-plan-private-failed to=${self} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)}`)
+    watchmanLog('error', `note=self-plan-private-failed to=${self} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)}`)
     return false
   }
 }
@@ -2847,7 +2847,7 @@ function selfPlanTick(ctx) {
   try {
     due = planDue(member, { planFired: {} }, now, SELF_PLAN_GRACE_MIN)
   } catch (error) {
-    watchmanLog('error', `why=self-plan-read-failed to=${self} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)}`)
+    watchmanLog('error', `note=self-plan-read-failed to=${self} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)}`)
     return
   }
   for (const item of due) {
@@ -2869,7 +2869,7 @@ function selfPlanTick(ctx) {
       watchmanLog('woke', `trigger=self to=${self} plan=${item.id} at=${item.at}`)
       markWake(self, 'plan')
     } catch (error) {
-      watchmanLog('error', `why=self-plan-deliver-failed to=${self} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)} plan=${item.id}`)
+      watchmanLog('error', `note=self-plan-deliver-failed to=${self} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)} plan=${item.id}`)
     }
   }
 }
@@ -2892,7 +2892,7 @@ function writeIntentState(member, state) {
     mkdirSync(INTENT_DIR, { recursive: true })
     writeJson(intentStateFileOf(member), state)
   } catch (error) {
-    watchmanLog('error', `why=intent-state-write-failed to=${member.key} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 100)}`)
+    watchmanLog('error', `note=intent-state-write-failed to=${member.key} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 100)}`)
   }
 }
 
@@ -3096,7 +3096,7 @@ async function intentTick(member, st, now) {
     const hbAge = presenceAgeOf(member.key)
     watchmanLog(
       'wake-try',
-      `wid=${wid} kind=intent why=intent:${spec.id} to=${member.key} gate=pass(hour=${counts.hour}/${WAKE.perHour},day=${counts.day}/${WAKE.perDay}) hb-age=${hbAge === null ? 'none' : `${hbAge}s`} deliver=msg at=${localStampOf(s.happenedAt ?? s.firstTrueAt)} atfmt=2`,
+      `wid=${wid} kind=intent reason=intent:${spec.id} to=${member.key} gate=pass(hour=${counts.hour}/${WAKE.perHour},day=${counts.day}/${WAKE.perDay}) hb-age=${hbAge === null ? 'none' : `${hbAge}s`} deliver=msg at=${localStampOf(s.happenedAt ?? s.firstTrueAt)} atfmt=2`,
     )
     try {
       say('lee', member.key, intentDeliveryPublicText(spec, probe.evidence))
@@ -3146,7 +3146,7 @@ async function watchOne(member, st) {
     } else {
       // 进程刚起时心跳文件还是上一轮留下的（stale），下一轮又新鲜了 ——
       // 那不是"谁叫醒了她"，是"会话自己挂上了"。记 note，不冒充 woke（2026-11-13 他要求的）。
-      watchmanLog('note', `why=session-mounted member=${member.key} hb-age=0s`)
+      watchmanLog('note', `note=session-mounted member=${member.key} hb-age=${hbNow}s`)
     }
     delete st.pendingWake
     saveWatchState()
@@ -3168,7 +3168,7 @@ async function watchOne(member, st) {
   try {
     await intentTick(member, st, new Date())
   } catch (error) {
-    watchmanLog('error', `why=intent-tick-failed to=${member.key} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)}`)
+    watchmanLog('error', `note=intent-tick-failed to=${member.key} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)}`)
   }
   if (jobs.length === 0) return
 
@@ -3217,7 +3217,7 @@ async function watchOne(member, st) {
       // 她要求"就在做决定那一刻写，别事后补"：事后补的只能证明结果，证明不了当时判的是什么。
       if (firstTry) watchmanLog(
         'wake-try',
-        `wid=${wid} kind=plan why=plan:${job.key} to=${member.key} gate=${gate} hb-age=${hbAge === null ? 'none' : `${hbAge}s`} deliver=${awake ? 'msg' : 'push'} at=${dueAt === null ? '?' : localStampOf(dueAt)} atfmt=2`,
+        `wid=${wid} kind=plan reason=plan:${job.key} to=${member.key} gate=${gate} hb-age=${hbAge === null ? 'none' : `${hbAge}s`} deliver=${awake ? 'msg' : 'push'} at=${dueAt === null ? '?' : localStampOf(dueAt)} atfmt=2`,
       )
 
       const totalNow = totalWakesToday()
@@ -3249,7 +3249,7 @@ async function watchOne(member, st) {
         } catch (error) {
           watchmanLog(
             'wake-skip',
-            `wid=${wid} why=deliver-failed detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)}`,
+            `wid=${wid} deny=deliver-failed detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)}`,
           )
         }
         continue
@@ -3258,12 +3258,12 @@ async function watchOne(member, st) {
       // 门没挂上：推门。端口通也算没醒 —— 这是今天新加的判据。
       if (st.wakes >= WATCH.maxWakesPerDay) {
         watchmanLog('wake-skip', `wid=${wid} deny=daily-cap wakes=${st.wakes}/${WATCH.maxWakesPerDay}`)
-        noteSkip(`why=daily-cap wakes=${st.wakes}`)
+        noteSkip(`deny=daily-cap wakes=${st.wakes}`)
         continue
       }
       if (st.fails >= WATCH.maxConsecutiveFailures) {
         watchmanLog('wake-skip', `wid=${wid} deny=too-many-failures fails=${st.fails}`)
-        noteSkip(`why=too-many-failures fails=${st.fails}`)
+        noteSkip(`deny=too-many-failures fails=${st.fails}`)
         continue
       }
       const night = withinQuietHours()
@@ -3284,7 +3284,7 @@ async function watchOne(member, st) {
         } catch (error) {
           watchmanLog(
             'error',
-            `why=plan-deliver-failed detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)} ${job.tag}`,
+            `note=plan-deliver-failed detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)} ${job.tag}`,
           )
         }
       } else {
@@ -3300,22 +3300,22 @@ async function watchOne(member, st) {
       continue
     }
     if (st.wakes >= WATCH.maxWakesPerDay) {
-      noteSkip(`why=daily-cap wakes=${st.wakes}`)
+      noteSkip(`deny=daily-cap wakes=${st.wakes}`)
       continue
     }
     if (st.fails >= WATCH.maxConsecutiveFailures) {
-      noteSkip(`why=too-many-failures fails=${st.fails}`)
+      noteSkip(`deny=too-many-failures fails=${st.fails}`)
       continue
     }
     // 夜里（静默段）也照推 —— 他 2026-11-09 定：静默段只管"别打扰别人"，不管"她自己的时间"。
     const night = withinQuietHours()
-    watchmanLog('wake', `why=${job.why} ${job.tag} night=${night}`)
+    watchmanLog('wake', `reason=${job.why} ${job.tag} night=${night}`)
     const res = await startHer(member)
     if (res.ok) {
       st.wakes += 1
       st.fails = 0
       saveWatchState()
-      watchmanLog('woke', `ok wakes-today=${st.wakes} why=${res.detail} night=${night} ${job.tag}`)
+      watchmanLog('woke', `ok wakes-today=${st.wakes} reason=${res.detail} night=${night} ${job.tag}`)
       // 推门也算叫醒过一次：15 分钟后回看她有没有开口（A7 判据）。
       markWake(member.key, 'plan')
       // 窗是被"推"开的，里面还没人接话：所以把同一句话也递进群，
@@ -3329,16 +3329,16 @@ async function watchOne(member, st) {
             say('lee', member.key, planDeliveryPublicText(job))
             watchmanLog('deliver', `reason=plan-after-wake ${job.tag}（窗是推开的，话已递进去）`)
           } catch (error) {
-            watchmanLog('error', `why=plan-deliver-failed detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)} ${job.tag}`)
+            watchmanLog('error', `note=plan-deliver-failed detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)} ${job.tag}`)
           }
         } else {
-          watchmanLog('note', `why=plan-claim-lost ${job.tag}（鱼自己的闹钟先递了）`)
+          watchmanLog('note', `note=plan-claim-lost ${job.tag}（鱼自己的闹钟先递了）`)
         }
       }
     } else {
       st.fails += 1
       saveWatchState()
-      watchmanLog('woke', `failed fails=${st.fails} why=${res.detail} ${job.tag}`)
+      watchmanLog('woke', `failed fails=${st.fails} reason=${res.detail} ${job.tag}`)
     }
   }
 }
@@ -3447,7 +3447,7 @@ function auditRoster(now = new Date()) {
     appendFileSync(ROSTER_AUDIT_LOG, `${line}\n`)
   } catch { /* 日志写不了不该炸巡守 */ }
   if (problems.length === 0) return
-  watchmanLog('error', `why=roster-mismatch ${problems.join(' ')}`)
+  watchmanLog('error', `note=roster-mismatch ${problems.join(' ')}`)
   // 只告诉人（fabian）：名册外的鱼叫不动，能看见这件事的只有人。
   try {
     say('lee', 'fabian', `巡守自检：名册和家对不上（${problems.join('；')}）。这条是巡守自己发现的，不是谁在说话。`)
@@ -3483,14 +3483,14 @@ async function crashNotify() {
       alive = portOpen || (hb !== null && hb <= WAKE_STALE_SEC)
     } catch { alive = false }
     if (alive) {
-      watchmanLog('note', `why=crash-alive member=${member.key} at=${at} port=${portOpen ? 'open' : 'closed'} hb-age=${hb === null ? 'none' : `${hb}s`}`)
+      watchmanLog('note', `note=crash-alive member=${member.key} at=${at} port=${portOpen ? 'open' : 'closed'} hb-age=${hb === null ? 'none' : `${hb}s`}`)
       continue
     }
     try {
       say('lee', 'fabian', `巡守：${labelOf(member.key)} 上次没正常退出（最后记录 ${at}，没写 stopped）。它现在起没起来，鱼塘里能看到。`)
-      watchmanLog('note', `why=crash-notified member=${member.key} at=${at}`)
+      watchmanLog('note', `note=crash-notified member=${member.key} at=${at}`)
     } catch (error) {
-      watchmanLog('error', `why=crash-notify-failed member=${member.key} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 80)}`)
+      watchmanLog('error', `note=crash-notify-failed member=${member.key} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 80)}`)
     }
   }
   if (changed) {
@@ -3521,7 +3521,7 @@ async function watchmanTick() {
     const carried = Object.values(prev.members ?? {}).reduce((sum, m) => sum + (Number(m?.wakes) || 0), 0)
     watchState = { day, members: {} }
     saveWatchState()
-    watchmanLog('note', `why=new-day counter-reset carried-wakes=${carried} pid=${process.pid}`)
+    watchmanLog('note', `note=new-day counter-reset carried-wakes=${carried} pid=${process.pid}`)
   }
   watchState.members ??= {}
   for (const member of watchedMembers()) {
@@ -3540,7 +3540,7 @@ async function watchmanTick() {
     try {
       await watchOne(member, watchState.members[member.key])
     } catch (error) {
-      watchmanLog('error', `why=watch-member-failed to=${member.key} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)}`)
+      watchmanLog('error', `note=watch-member-failed to=${member.key} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)}`)
     }
   }
   try { await crashNotify() } catch { /* 报警失败不该炸巡守 */ }

@@ -1,12 +1,21 @@
 # 工程变更记录
 
 > 这份文件记录**工程侧**的每一次改动：机制、修账、脚本、文档。它和产品需求是两条线——需求讨论看 [PRD.md](PRD.md)，这里只记"改了什么、为什么"。
-> 编号 `rNN` 是**内部修订号**：改一次 +1，一天可能十几稿；两个 npm 包另有各自的 semver（各自 `package.json`，当前 1.6.42），只在功能变化或发布时动。编号从 r1 起。
-> 条目按时间倒序（新的在上）。A.x 原先住在 PRD 附录里，2026-11-15 搬到这里；历史条目里若还写着「PRD 附录 A.x」，指的就是本文件的 A.x。`A.x` 是"已验证的技术事实与判据"的编号，统一收在文末附录 A（A.1–A.126）。
+> 编号 `rNN` 是**内部修订号**：改一次 +1，一天可能十几稿；两个 npm 包另有各自的 semver（各自 `package.json`，当前 1.6.43），只在功能变化或发布时动。编号从 r1 起。
+> 条目按时间倒序（新的在上）。A.x 原先住在 PRD 附录里，2026-11-15 搬到这里；历史条目里若还写着「PRD 附录 A.x」，指的就是本文件的 A.x。`A.x` 是"已验证的技术事实与判据"的编号，统一收在文末附录 A（A.1–A.127）。
 
 ---
 
 ## 变更条目
+
+## r179 — 2026-11-16 08:3x
+
+- **`why=` 在格式分界之后还活着**：2026-11-15 18:35 定的规矩（`skip` / `wake-skip` 的原因用 `deny=`、观察与异常用 `note=`、细分用 `reason=`，不再写 `why=`）到 2026-11-16 08:19 才被现场抓到——`homes\whale\logs\watchman.log` 里 `note | why=session-mounted member=fishball hb-age=0s`：既用了该退场的字段，`hb-age=0s` 还是写死的假数（`index.js:3149`，`hbNow` 就在上面几行，却没传进去）。
+- **全扫 32 处**：`note` / `error` 事件 → `note=`；`wake-try` 的 `why=intent:` / `why=plan:` → `reason=`；`wake` / `woke` → `reason=`；`noteSkip` 的两支（`daily-cap` / `too-many-failures`）→ `deny=`；`wake-skip why=deliver-failed` → `deny=`；`sleepLog` 的 `why=not-sleeping` → `reason=`；`intent-core.js` 的 `intent-path-rejected … why=` → `reason=`；`index.js:3149` 的 `hb-age=0s` → `hb-age=${hbNow}s`。唯一保留的 `why=` 在 `autostartLog()`（另一本账 `pool\state\autostart.log`，`fmt=1` 旧写法）。
+- **静态检查 `scripts/test-log-fields.mjs`**：扫 `plugin/dsh-lil-whale-group/lib/*.js` 里所有 `why=`，只放行"整行含 `autostartLog`"；其余点名 `文件:行号` 并 exit 1。接进 `release-check` 4h。负样本：临时塞一行 `why=probe` 注释 ⇒ exit 1 并点名；还原 ⇒ PASS（`why=` 共 1 处，全部豁免）。
+- **文档**：`docs/detail/日志都记在哪.md` 把"`why=` 只出现在 18:35 之前"改成"另有例外窗口（18:35 – 11-16 08:2x 之间仍有 31 处写者漏改，r179 补齐）"，并在「字段级版本」登记 `why=` 的退场与 `autostart.log` 豁免。
+- 判据（附录 A.127）：分界行是写给**读**的人的边界，它不会让**写**的人自动守规矩；写了 `fields=` 之后，还要有东西去检查写者。**边界不是闸。**
+- **验证**：`node --check`；五套测试 26/26 / 75/75 / 32/32 / 30/30 / 覆盖 OK；`doctor` 全过；`release-check` 18 项（新增 4h）。
 
 ## r178 — 2026-11-16 07:1x
 
@@ -3609,3 +3618,11 @@ sleep-tools-register-failed: tool "sleep" must declare output { schema, render, 
 - **改法**：`deliverToSelf()` 在 agent 忙时返回 `queued`，投递行写 `queued=1`；不忙写普通行。
 - **边界**：投递账只能证明"递的那一下她在忙"；"她什么时候真正读到"在会话日志里，投递账没有第二个时间，不编。
 - **判据**：①排队要有账，"晚到"与"没发生"不能共用一个空账；②一个字段只能证明它能证明的那件事，多一步都不写。
+
+## 附录 A.127 分界行是承诺，不是机制（2026-11-16）
+
+- **症状**：2026-11-15 18:35 的 `log-format | fmt=3 … fields=deny,note,reason` 写进了每本 `watchman.log`，但代码里仍有 31 处在写 `why=`；直到 2026-11-16 08:19 有人在现场日志里看到 `note | why=session-mounted` 才发现。契约比实现早二十小时。
+- **根因**：分界行约束的是"读的人怎么读"，不约束"写的人怎么写"。写完 `fields=` 之后，没有任何东西去检查写者是否换成了新字段；漏改的写者照样编译过、跑起来也不报。
+- **改法**：①按语义把 32 处补齐（`note=` / `reason=` / `deny=` 三选一）；②新增静态检查 `scripts/test-log-fields.mjs`（release-check 4h）——扫写者代码里的 `why=`，除 `autostart.log` 一处豁免外必须为 0；③文档登记例外窗口（18:35 – 11-16 08:2x）与退场时间。
+- **判据**：①改格式的提交必须同时改"读者"与"写者"，并带一条能自动发现写者漏改的检查；②检查要放在"写的地方"（代码），不要只放在"读的地方"（日志）；③例外窗口要写进纸里——历史行不会自己变成新格式，读者需要知道哪一段是混的。
+- **教训**：**边界不是闸。** 画一条线只说明"从这儿以后按新规矩"，不说明"没人还在按旧规矩写"。线画完要回头数一遍写者，再让机器年年数。
