@@ -197,6 +197,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '宿主包定位' (($anchorOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '宿主包定位' 'npx 缓存里的 dsh 也能找到（test-host-anchors.mjs）' }
   } else { Fail '宿主包定位' 'scripts\test-host-anchors.mjs 不在包里' }
+  # ── 4m. 面板写请求守卫（2026-11-16，CHANGELOG r204）──────────────────
+  $guardTest = Join-Path $pkg 'scripts\test-http-guard.mjs'
+  if (Test-Path $guardTest) {
+    $guardOut = & node $guardTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '写请求守卫' (($guardOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '写请求守卫' '面板写请求要 x-llw-panel 且同源（test-http-guard.mjs）' }
+  } else { Fail '写请求守卫' 'scripts\test-http-guard.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {

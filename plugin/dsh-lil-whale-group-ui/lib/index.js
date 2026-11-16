@@ -226,6 +226,47 @@ function sendJson(res, status, value) {
   res.end(body)
 }
 
+// 2026-11-16 r204（P6）：插件的 /group/api/* 不在 dsh web 的鉴权链里。
+// 写请求只接受"面板页面"发来的：必须带自定义头 x-llw-panel: 1
+// （跨站表单设不了自定义头，浏览器会先预检而我们不回 CORS 头），
+// 带 Origin 时还必须与本站同源。不满足就 403，并在 plugin.log 留一行（同一路径每分钟至多一行）。
+// 边界：这只防浏览器里的跨站请求；本机其它进程同一账户本来就同权限，文档里写明了，不假装防得住。
+const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+const securityRejectAt = new Map()
+
+function sameOriginOf(req) {
+  const origin = req.headers?.origin
+  if (!origin) return true
+  try {
+    const parsed = new URL(String(origin))
+    return parsed.host === String(req.headers?.host ?? '')
+  } catch {
+    return false
+  }
+}
+
+function logSecurityReject(reason, path) {
+  try {
+    const line = JSON.stringify({ at: new Date().toISOString(), note: 'security-reject', reason, path }) + '\n'
+    appendFileSync(join(GROUP_DIR, 'plugin.log'), line, 'utf8')
+  } catch {
+    // 留痕失败不该让 403 失效。
+  }
+}
+
+function guardWrite(req, res, path) {
+  if (!WRITE_METHODS.has(String(req.method ?? '').toUpperCase())) return true
+  const panel = String(req.headers?.['x-llw-panel'] ?? '') === '1'
+  if (panel && sameOriginOf(req)) return true
+  const now = Date.now()
+  if (now - (securityRejectAt.get(path) ?? 0) > 60_000) {
+    securityRejectAt.set(path, now)
+    logSecurityReject(panel ? 'origin' : 'panel-header', path)
+  }
+  sendJson(res, 403, { error: 'forbidden', detail: '写请求只接受面板页面发来的（需要 x-llw-panel: 1 且同源）' })
+  return false
+}
+
 function readConfig() {
   const names = {}
   const avatars = {}
@@ -753,6 +794,7 @@ export function apply(ctx) {
     kind: 'exact',
     path: '/group/api/config',
     async handler(req, res) {
+      if (!guardWrite(req, res, '/group/api/config')) return
       if (req.method === 'GET') {
         sendJson(res, 200, readConfig())
         return
@@ -812,6 +854,7 @@ export function apply(ctx) {
     kind: 'exact',
     path: '/group/api/avatar',
     async handler(req, res) {
+      if (!guardWrite(req, res, '/group/api/avatar')) return
       const url = new URL(req.url ?? '/', 'http://localhost')
       // member 既可以从 query 给，也可以从 body 给。只认其中一路的话，
       // 另一路会收到一个没有解释的 400 —— 这个坑现场踩过（2026-11-11）。
@@ -1008,6 +1051,7 @@ export function apply(ctx) {
     kind: 'exact',
     path: '/group/api/image',
     async handler(req, res) {
+      if (!guardWrite(req, res, '/group/api/image')) return
       const url = new URL(req.url ?? '/', 'http://127.0.0.1')
       if (req.method === 'GET') {
         // path / algo 由记录带过来（面板的 img 请求会把它们拼在 URL 上）：读取端优先认记录自己的说法，
@@ -1068,6 +1112,7 @@ export function apply(ctx) {
     kind: 'exact',
     path: '/group/api/send',
     async handler(req, res) {
+      if (!guardWrite(req, res, '/group/api/send')) return
       if (req.method !== 'POST') {
         sendJson(res, 405, { error: 'method-not-allowed' })
         return
@@ -1143,6 +1188,7 @@ export function apply(ctx) {
     kind: 'exact',
     path: '/group/api/dm',
     async handler(req, res) {
+      if (!guardWrite(req, res, '/group/api/dm')) return
       const url = new URL(req.url ?? '/', 'http://127.0.0.1')
       if (req.method === 'GET') {
         const peer = dmPeerOf(url.searchParams.get('peer'))
@@ -1255,6 +1301,7 @@ export function apply(ctx) {
     kind: 'exact',
     path: '/group/api/read',
     async handler(req, res) {
+      if (!guardWrite(req, res, '/group/api/read')) return
       if (req.method !== 'POST') {
         sendJson(res, 405, { error: 'method-not-allowed' })
         return
@@ -1308,6 +1355,7 @@ export function apply(ctx) {
     kind: 'exact',
     path: '/pond/api/settings',
     async handler(req, res) {
+      if (!guardWrite(req, res, '/pond/api/settings')) return
       if (req.method === 'GET') {
         sendJson(res, 200, { ok: true, settings: readPondSettings() })
         return
@@ -1359,6 +1407,7 @@ export function apply(ctx) {
     kind: 'exact',
     path: '/pond/api/action',
     async handler(req, res) {
+      if (!guardWrite(req, res, '/pond/api/action')) return
       if (req.method !== 'POST') {
         sendJson(res, 405, { error: 'method-not-allowed' })
         return

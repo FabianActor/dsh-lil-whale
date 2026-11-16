@@ -1,12 +1,26 @@
 # 工程变更记录
 
 > 这份文件记录**工程侧**的每一次改动：机制、修账、脚本、文档。它和产品需求是两条线——需求讨论看 [PRD.md](PRD.md)，这里只记"改了什么、为什么"。
-> 编号 `rNN` 是**内部修订号**：改一次 +1，一天可能十几稿；两个 npm 包另有各自的 semver（各自 `package.json`，当前 1.8.2），只在功能变化或发布时动。版本规则（2026-11-16 宿主定）：**大版本保持在 1**（不出特大更新不升）；**第二位加新功能**，**第三位修 bug**。编号从 r1 起。
-> 条目按时间倒序（新的在上）。A.x 原先住在 PRD 附录里，2026-11-15 搬到这里；历史条目里若还写着「PRD 附录 A.x」，指的就是本文件的 A.x。`A.x` 是"已验证的技术事实与判据"的编号，统一收在文末附录 A（A.1–A.138）。
+> 编号 `rNN` 是**内部修订号**：改一次 +1，一天可能十几稿；两个 npm 包另有各自的 semver（各自 `package.json`，当前 1.8.3），只在功能变化或发布时动。版本规则（2026-11-16 宿主定）：**大版本保持在 1**（不出特大更新不升）；**第二位加新功能**，**第三位修 bug**。编号从 r1 起。
+> 条目按时间倒序（新的在上）。A.x 原先住在 PRD 附录里，2026-11-15 搬到这里；历史条目里若还写着「PRD 附录 A.x」，指的就是本文件的 A.x。`A.x` 是"已验证的技术事实与判据"的编号，统一收在文末附录 A（A.1–A.139）。
 
 ---
 
 ## 变更条目
+
+## r204 — 2026-11-16 17:0x
+
+**来源**：宿主转来的第三份装机沉淀（同一台 npx 机、最小安装）P6——插件自己注册的 `/group/api/*` 路由在 3080 上没有鉴权，本机任意进程、任意网页都能读群消息、冒充成员发言。
+
+**根因**：DSH 的登录态校验只在 web 外壳 / 宿主连接载体里（`dsh-client-connection` 的 `BrowserAuth`：launch token 换签名 cookie，`authorizeIndex`/`authorizeConnect` 挂在 web 外壳和 HostConnectionService 上）；插件的 `ctx.webServer.register(route)` 由 `@deepseek-ai/dsh-host-webserver` 直接挂到监听上，`register()` 没有鉴权参数、也没有中间件链。二者平行，所以"`/` 要登录、`/group/api/*` 不用"不是配置漏了，是结构上没有这一层。
+
+**做法**：①插件的全部写路由（`/group/api/config`、`avatar`、`image`、`send`、`dm`、`read`、`/pond/api/settings`、`action`）统一过 `guardWrite(req,res,path)`：要求自定义头 `x-llw-panel: 1`（跨站表单设不了自定义头，浏览器会先预检，而插件不回 CORS 头），带 `Origin` 时必须与本站同源；不满足 403，并在 `plugin.log` 记 `security-reject`（同路径每分钟至多一行）。②客户端 10 处写请求统一带这个头。③新增 `scripts/test-http-guard.mjs` + `release-check` 4m，防止以后新加写路由时忘了守卫。
+
+**边界**：只防浏览器里的跨站请求；**不防本机其它进程**——同一台机器同一账户本来就同权限，README 里写明了，不假装防得住。
+
+**判据**：①不带 `x-llw-panel` 的 POST 返回 403（GET 不受影响）；②面板自身操作不受影响；③`security-reject` 只在被拒时出现、同一路径不刷屏。
+
+**用户可见**：有（第三方脚本站不住写接口了）；版本 1.8.3。
 
 ## r203 — 2026-11-16 16:3x
 
@@ -4010,3 +4024,15 @@ sleep-tools-register-failed: tool "sleep" must declare output { schema, render, 
 
 **教训**：**路径不是字符串，是布局的函数**。靠记忆拼路径，只在自己那一台机器上是对的。
 
+
+## 附录 A.139 插件的 HTTP 路由不在宿主鉴权链里（2026-11-16）
+
+**症状**：`GET /` 返回 401「dsh web authentication required」，但同一端口上 `GET /group/api/messages` 返回 200，`GET /group/api/config` 还把成员名字一起吐出来；`POST /group/api/send` 能进到参数校验层。
+
+**根因**：鉴权是一种"载体"的事，不是"端口"的事。DSH 的登录态在 `dsh-client-connection` 的 `BrowserAuth` 里（launch token 换签名 cookie，`authorizeIndex`/`authorizeConnect` 挂在 web 外壳与 HostConnectionService 上）；插件的路由由 `dsh-host-webserver` 的 `WebServer.register()` 直接登记，接口上没有 auth 参数、也没有中间件链。两条注册路径平行，所以"外壳要登录"不会自动传导到插件路由。
+
+**做法**：不假设宿主会替插件挡人，自己在写路由上加最小闸：自定义头 + 同源 `Origin` 校验 + 403 留痕；只读路由保持只读（跨站 JS 读不到 JSON 响应）。
+
+**判据**：①新增写路由必须同时加守卫（静态测试点名每个路由）；②拒绝时有一条 `security-reject`，成功请求不产生该行；③文档写明"不防本机进程"，不把边界吹大。
+
+**教训**：**"要登录"是路由的属性，不是端口的属性**。把两组路由挂在同一个监听上，只说明它们共用一个端口，不说明它们共用一个守卫。

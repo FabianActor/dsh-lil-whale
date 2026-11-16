@@ -111,7 +111,7 @@ window.__ModuleLoader__.load({
     async function saveConfig(next) {
       const response = await fetch('/group/api/config', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'x-llw-panel': '1' },
         body: JSON.stringify(next),
       })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
@@ -882,7 +882,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       try {
         await fetch('/group/api/read', {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/json', 'x-llw-panel': '1' },
           body: JSON.stringify({ channel, peer }),
         })
       } catch {
@@ -1363,7 +1363,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
           for (const dataUrl of pendingImages) {
             const uploaded = await fetch('/group/api/image', {
               method: 'POST',
-              headers: { 'content-type': 'application/json' },
+              headers: { 'content-type': 'application/json', 'x-llw-panel': '1' },
               body: JSON.stringify({ dataUrl }),
             })
             const result = await uploaded.json().catch(() => null)
@@ -1372,7 +1372,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
           }
           const response = await fetch('/group/api/dm', {
             method: 'POST',
-            headers: { 'content-type': 'application/json' },
+            headers: { 'content-type': 'application/json', 'x-llw-panel': '1' },
             body: JSON.stringify({ peer: activePeer, text: value, ...(images.length === 0 ? {} : { images }) }),
           })
           if (!response.ok) throw new Error(`HTTP ${response.status}`)
@@ -2028,7 +2028,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
           for (const dataUrl of pendingImages) {
             const uploaded = await fetch('/group/api/image', {
               method: 'POST',
-              headers: { 'content-type': 'application/json' },
+              headers: { 'content-type': 'application/json', 'x-llw-panel': '1' },
               body: JSON.stringify({ dataUrl }),
             })
             const result = await uploaded.json().catch(() => null)
@@ -2046,7 +2046,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
             }
           const response = await fetch(endpoint, {
             method: 'POST',
-            headers: { 'content-type': 'application/json' },
+            headers: { 'content-type': 'application/json', 'x-llw-panel': '1' },
             body: JSON.stringify(body),
           })
           if (!response.ok) throw new Error(`HTTP ${response.status}`)
@@ -2681,7 +2681,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
         reader.onload = () => {
           fetch(`/group/api/avatar?member=${encodeURIComponent(member)}`, {
             method: 'POST',
-            headers: { 'content-type': 'application/json' },
+            headers: { 'content-type': 'application/json', 'x-llw-panel': '1' },
             body: JSON.stringify({ member, dataUrl: reader.result }),
           })
             .then((response) => response.json().catch(() => ({})).then((data) => ({ ok: response.ok, status: response.status, data })))
@@ -2709,7 +2709,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       const clearAvatar = (member) => {
         fetch(`/group/api/avatar?member=${encodeURIComponent(member)}`, {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/json', 'x-llw-panel': '1' },
           body: JSON.stringify({ member, clear: true }),
         })
           .then((response) => response.json().catch(() => ({})).then((data) => ({ ok: response.ok, status: response.status, data })))
@@ -3107,7 +3107,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
         try {
           const response = await fetch('/pond/api/settings', {
             method: 'POST',
-            headers: { 'content-type': 'application/json' },
+            headers: { 'content-type': 'application/json', 'x-llw-panel': '1' },
             body: JSON.stringify({ autoStartFish: next }),
           })
           const data = await response.json()
@@ -3127,7 +3127,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
           try {
             const response = await fetch('/pond/api/action', {
               method: 'POST',
-              headers: { 'content-type': 'application/json' },
+              headers: { 'content-type': 'application/json', 'x-llw-panel': '1' },
               body: JSON.stringify({ action, key }),
             })
             const data = await response.json()
