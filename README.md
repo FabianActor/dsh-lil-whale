@@ -188,7 +188,7 @@ pwsh -File scripts\fish.ps1 doctor             # 体检
 ```
 lil-whale/                      鱼塘根（不在 git 里）
   app/                          工程（这个仓库）
-     docs/                      产品文档与工程记录：PRD.md、CHANGELOG.md
+     docs/                      产品文档（PRD.md 等）；变更记录在仓库根 CHANGELOG.md
      docs/detail/               基座自己的文档：安装、出生、种子、起停、打包、发布、升级、待办、观察、谱系、判据、账本、自主触发、能力、想法
      docs/plugin/               外部能力的接入说明（默认不装）
      docs/archive/              历史记录（交接、演练、评审、过期方案）——只归档，不删
@@ -368,7 +368,7 @@ pwsh -File scripts\fish.ps1 upgrade-check -Mark 1.7.2   # 做完以后记账
 | 她「能做什么」的目录 | [她能做什么](./docs/detail/她能做什么.md) |
 | 她的自主分级与判据 | [怎么判断与起名](./docs/detail/怎么判断与起名.md) |
 | 谁是谁的家长 | [鱼塘谱系](./docs/detail/鱼塘谱系.md)（生成的） |
-| 每一版改了什么、为什么 | [`docs/CHANGELOG.md`](docs/CHANGELOG.md) |
+| 每一版改了什么、为什么 | [`CHANGELOG.md`](CHANGELOG.md) |
 | 账本有哪些、每一版 `fmt` 是什么意思 | [日志都记在哪](./docs/detail/日志都记在哪.md) |
 | 自主触发做到哪了（给外部读者的一页现状） | [她自己怎么醒来](./docs/detail/她自己怎么醒来.md) |
 
