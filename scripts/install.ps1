@@ -136,7 +136,11 @@ function Render-Template([string]$templatePath, [hashtable]$values) {
 # 仓库就在 <pond>\app 里时，新鱼装到 <pond>\homes\<成员键>，共享区用 <pond>\pool；
 # 仓库不在 app\ 下（单克隆/老布局），退回"家旁边一个共享区"。
 $PondRoot = Split-Path $RepoRoot -Parent
-$InPond = ((Split-Path $RepoRoot -Leaf) -eq 'app') -and (Test-Path (Join-Path $PondRoot 'pool'))
+# 2026-11-16 第四份沉淀 P1：以前还要求 pool 目录已存在才认鱼塘布局——
+# 首次安装时 pool 正是本脚本要建的，于是 $InPond 恒为 false，家落到 <鱼塘根>\lil-whale、
+# 共享区落到同级 lil-whale-pool，巡守按 <鱼塘根>\homes 对账就会报"名册和家对不上"。
+# 判据只看仓库在不在 app\ 里（pool 由本脚本创建）。
+$InPond = ((Split-Path $RepoRoot -Leaf) -eq 'app')
 $childKey = if ($ChildMemberId) { $ChildMemberId } else { $ChildProfile }
 if (-not $Workspace) {
   if ($InPond) { $Workspace = Join-Path (Join-Path $PondRoot 'homes') $childKey }
@@ -669,6 +673,20 @@ if (-not (Test-Path $membersPath)) {
   $rawMembers = [ordered]@{ version = 1; updatedAt = $nowIso; members = $members }
   Write-Utf8NoBom $membersPath (($rawMembers | ConvertTo-Json -Depth 8) + "`n")
   Ok 'members.json（共享区，新建：父辈 + 人 + 这条鱼）'
+
+  # 首鱼也要出生账（2026-11-16 第四份沉淀 P4）：fish.ps1 new 一直记，这条安装路径以前漏了。
+  # 账本要先有 log-format 分界行，否则 doctor 只说"记不了少"（9d 的判据）。
+  $installBirthLog = Join-Path $PoolRoot 'state\births.log'
+  try {
+    if (-not (Test-Path -LiteralPath $installBirthLog)) {
+      $sinceIso = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
+      $fmtLine = '{0} | log-format | fmt=1 since={1} note=install.ps1 写的第一行（首鱼出生账）' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $sinceIso
+      Write-Utf8NoBom $installBirthLog ($fmtLine + [Environment]::NewLine)
+    }
+    $installBirthLine = '{0} | birth | fmt=3 key={1} name={2} parent={3} by=install.ps1 parentLifecycle=active requestedBy=' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $childMember, $ChildName, $ParentMemberId
+    Add-Content -LiteralPath $installBirthLog -Value $installBirthLine -Encoding utf8
+    Ok 'births.log（首鱼出生账）'
+  } catch { Warn ("首鱼出生账没记上：{0}" -f $_.Exception.Message) }
 } else {
   # 名册已存在（鱼塘里已经有别的鱼）：把这条新鱼加进去，别让用户再手跑一次。
   # 2026-11-13 17:0x 修：原来这里只打印"用 members-add.mjs"，装第二条鱼时新鱼不在名册里，

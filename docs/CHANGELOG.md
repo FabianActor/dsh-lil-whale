@@ -1,13 +1,39 @@
 # 工程变更记录
 
 > 这份文件记录**工程侧**的每一次改动：机制、修账、脚本、文档。它和产品需求是两条线——需求讨论看 [PRD.md](PRD.md)，这里只记"改了什么、为什么"。
-> 编号 `rNN` 是**内部修订号**：改一次 +1，一天可能十几稿；两个 npm 包另有各自的 semver（各自 `package.json`，当前 1.8.6），只在功能变化或发布时动。版本规则（2026-11-16 宿主定）：**大版本保持在 1**（不出特大更新不升）；**第二位加新功能**，**第三位修 bug**。编号从 r1 起。
+> 编号 `rNN` 是**内部修订号**：改一次 +1，一天可能十几稿；两个 npm 包另有各自的 semver（各自 `package.json`，当前 1.8.7），只在功能变化或发布时动。版本规则（2026-11-16 宿主定）：**大版本保持在 1**（不出特大更新不升）；**第二位加新功能**，**第三位修 bug**。编号从 r1 起。
 > 条目按时间倒序（新的在上）。A.x 原先住在 PRD 附录里，2026-11-15 搬到这里；历史条目里若还写着「PRD 附录 A.x」，指的就是本文件的 A.x。`A.x` 是"已验证的技术事实与判据"的编号，统一收在文末附录 A（A.1–A.139）。
 
 ---
 
 ## 变更条目
 
+## r208 — 2026-11-16 17:5x
+
+**来源**：第四份第三方装机沉淀（npx 版 dsh、zip 解压、`install.ps1 -PondRoot`；17:21–17:45）。安装本身成功，问题都在安装器/体检脚本自己的判据上。
+
+**P1（高，已修）**：首次安装把家落到 `<鱼塘根>\lil-whale`、共享区落到 `<鱼塘根>\lil-whale-pool`，并触发"名册和家对不上"的假警报。
+- 根因：`scripts/install.ps1` 的 `$InPond` 要求 `<鱼塘根>\pool` 已存在——而首次安装时 `pool` 正是本脚本要建的，于是恒为 false，走旧布局兜底。
+- 改法：判据只看仓库是不是在 `<鱼塘根>\app` 里；`pool`、`homes` 由安装器创建。
+- 验证：假仓库冒烟 — 打印"她的家（工作区）…\mypond\homes\fish"，落盘只有 `app\`，没有 `lil-whale` / `lil-whale-pool`。
+
+**P2（中，已修）**：doctor 的 undici 检查在 npx 安装上恒 FAIL、证据列为空。
+- 根因：`scripts/repair-undici.mjs` 的 `dshRoot()` 只探 npm 全局三处；npx 缓存在 `%LOCALAPPDATA%\npm-cache\_npx\<hash>\node_modules\@deepseek-ai\dsh`。
+- 改法：加 `npxDshRoots()`（扫 `_npx\*`）；doctor 收集输出时也收 `^FAIL` 行，证据不再为空。
+
+**P3（中，已修）**：doctor 的「她的心跳」写死 `presence\whale.json`，默认键 `fish` 的机器上恒 FAIL。
+- 改法：从 `members.json` 取第一条 `kind=fish && role!=watcher && lifecycle!=archived` 的键；提示文案也用这个键。
+
+**P4（低，已修）**：`install.ps1` 出生的首鱼不记 `births.log`（`fish.ps1 new` 一直记）。
+- 改法：名册写完后追加 `birth` 行；文件不存在时先写 `log-format | fmt=1 since=…` 分界行，否则 doctor 9d 只会说"记不了少"。
+
+**P5（记录，不改代码）**：`group_say` 等工具仍是 `via:"raw"`——同步注册发生在宿主 `defineTool` 解析前，是旧版兜底路径；判据看 `plugin.log` 的 `host-resolve`（`function/function`），不看 `via:"raw"`。
+
+**现场复核（第四份沉淀第 8 节）**：写接口无头 403 / 带头不再是 403、面板同构请求 200 并落库、`layout-warning` 为 0、面板显示真名——四条都通过。
+
+**测试**：`test-install-agents` 22→25 项（布局判据不依赖 pool、首鱼出生账、repair-undici 扫 npx）；`test-doctor-coverage` 仍 OK；`release-check` 24 项。
+
+**用户可见**：是（首次安装目录布局与 README 一致；doctor 心跳行按名册取键；npx 机器 undici 行不再恒 FAIL）。版本 1.8.7。
 ## r207 — 2026-11-16 17:3x
 
 **来源**：宿主"应该禁止用户不完全安装"（2026-11-16 17:12）。真正禁止写在 DSH 层做不到——插件管理器允许任何人把任意 bundle add 进 profile；能做的是让"没装完"这个状态**不能装成正常鱼塘**。

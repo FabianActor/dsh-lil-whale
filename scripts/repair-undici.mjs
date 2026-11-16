@@ -15,7 +15,7 @@
 //   node scripts/repair-undici.mjs           # 同 --check
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, copyFileSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, copyFileSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -31,11 +31,26 @@ const REQUIRED = [
   'lib/web/cache/util.js',
 ]
 
+// 2026-11-16 第四份沉淀 P2：npx 装的 dsh 落在 %LOCALAPPDATA%\npm-cache\_npx\<hash>\node_modules\@deepseek-ai\dsh，
+// 以前只探三个 npm 全局位置 ⇒ npx 机器上恒 FAIL（且 --fix 也跑不起来）。
+function npxDshRoots() {
+  const base = process.env.npm_config_cache || join(process.env.LOCALAPPDATA || '', 'npm-cache')
+  const out = []
+  try {
+    for (const name of readdirSync(join(base, '_npx'))) {
+      const dir = join(base, '_npx', name, 'node_modules', '@deepseek-ai', 'dsh')
+      if (existsSync(join(dir, 'package.json'))) out.push(dir)
+    }
+  } catch { }
+  return out
+}
+
 function dshRoot() {
   const candidates = [
     process.env.DSH_LAUNCHER_MODULE ? dirname(process.env.DSH_LAUNCHER_MODULE) : '',
     join(process.env.APPDATA || '', 'npm', 'node_modules', '@deepseek-ai', 'dsh'),
     join(process.env.USERPROFILE || '', 'AppData', 'Roaming', 'npm', 'node_modules', '@deepseek-ai', 'dsh'),
+    ...npxDshRoots(),
   ].filter(Boolean)
   for (const c of candidates) {
     if (existsSync(join(c, 'package.json'))) return c

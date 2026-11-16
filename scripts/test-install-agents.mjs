@@ -43,7 +43,13 @@ ok('安装说明指向 fish.ps1 sessions', install.includes('fish.ps1 sessions $
 
 // 2026-11-16 r201：-SkipParent 的名字与说明不能让人读成"只装鱼、不装宿主"。
 ok('SkipParent 有更明确的名字 SkipParentPlugins', install.includes("Alias('SkipParentPlugins')"));
-ok('SkipParent 的说明写明第一次安装别用', install.includes('第一次安装别用'));
+ok('SkipParent 的说明写明第一次安装别用', install.includes('第一次安装别用'))
+
+// 2026-11-16 第四份沉淀（P1/P2/P4）：布局判据、首鱼出生账、npx 探测。
+const repairUndici = read('scripts/repair-undici.mjs');
+ok('鱼塘布局判据不依赖 pool 目录是否已存在', !install.includes("Test-Path (Join-Path $PondRoot 'pool')"));
+ok('首鱼也写 births.log', install.includes('births.log（首鱼出生账）'));
+ok('repair-undici 会扫 npx 缓存', repairUndici.includes('_npx'));;
 
 const fail = checks.filter((c) => !c.pass);
 for (const c of checks) console.log(`${c.pass ? 'PASS' : 'FAIL'}  ${c.name}${c.detail ? ' — ' + c.detail : ''}`);

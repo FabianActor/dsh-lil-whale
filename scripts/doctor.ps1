@@ -88,7 +88,20 @@ if ($IncludeLee) {
 }
 
 # 2. 心跳：进程活着 ≠ 她会醒（11-09 踩过：进程起来但会话没被打开）
-$presenceFile = Join-Path $Cfg.PoolState 'presence\whale.json'
+# 2026-11-16 第四份沉淀 P3：这里原来写死 presence\whale.json，默认键是 fish 的机器上恒 FAIL。
+# 判据：心跳看的是"名册里第一条非巡守的鱼"，键名从名册来，不从作者自己的鱼名来。
+$presenceKey = $null
+if ($Cfg.MembersFile -and (Test-Path -LiteralPath $Cfg.MembersFile)) {
+  try {
+    $mjP = Get-Content -LiteralPath $Cfg.MembersFile -Raw -Encoding utf8 | ConvertFrom-Json
+    $pair = @($mjP.members.PSObject.Properties | Where-Object {
+        $_.Value.kind -eq 'fish' -and $_.Value.role -ne 'watcher' -and $_.Value.lifecycle -ne 'archived'
+      }) | Select-Object -First 1
+    if ($pair) { $presenceKey = $pair.Name }
+  } catch { }
+}
+if (-not $presenceKey) { $presenceKey = 'whale' }
+$presenceFile = Join-Path $Cfg.PoolState ("presence\{0}.json" -f $presenceKey)
 if (Test-Path -LiteralPath $presenceFile) {
   try {
     $p = Get-Content -LiteralPath $presenceFile -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -98,10 +111,10 @@ if (Test-Path -LiteralPath $presenceFile) {
     Add-Row '她的心跳' $state ("status={0}，最后心跳 {1}" -f $p.status, (Format-Age $age))
     if ($state -eq 'WARN') { Add-Row '她的心跳（说明）' 'WARN' '心跳超过 24 小时没动：可能只是没人叫她（她不是常驻的），也可能是会话没被打开' }
   } catch {
-    Add-Row '她的心跳' 'FAIL' ("pool\state\presence\whale.json 读不了：{0}" -f $_.Exception.Message) 'NEXT: 看 state\presence\ 下的文件是不是坏 JSON'
+    Add-Row '她的心跳' 'FAIL' (("pool\state\presence\{0}.json 读不了：{1}") -f $presenceKey, $_.Exception.Message) 'NEXT: 看 state\presence\ 下的文件是不是坏 JSON'
   }
 } else {
-  Add-Row '她的心跳' 'FAIL' 'pool\state\presence\whale.json 不存在' 'NEXT: 她的会话从没被打开过——开窗后要在网页里进那段会话'
+  Add-Row '她的心跳' 'FAIL' (("pool\state\presence\{0}.json 不存在") -f $presenceKey) 'NEXT: 她的会话从没被打开过——开窗后要在网页里进那段会话'
 }
 
 # 3. 工具注册：哑 8 小时那次的判据（有 host-resolve 却没有 group_say-registered）
@@ -257,7 +270,7 @@ if (Test-Path -LiteralPath $pluginLog) {
     if ($undiciCode -eq 0) {
       Add-Row 'undici 文件' 'OK' (($undiciOut | Select-Object -Last 1).Trim())
     } else {
-      Add-Row 'undici 文件' 'FAIL' (($undiciOut | Where-Object { $_ -match '^WARN|^  - ' } | Select-Object -First 3) -join ' ') 'NEXT: node scripts/repair-undici.mjs --fix'
+      Add-Row 'undici 文件' 'FAIL' (($undiciOut | Where-Object { $_ -match '^WARN|^FAIL|^  - ' } | Select-Object -First 3) -join ' ') 'NEXT: node scripts/repair-undici.mjs --fix'
     }
   } else {
     Add-Row 'undici 文件' 'WARN' '没有 scripts\repair-undici.mjs' 'NEXT: 从仓库同步这个脚本'
