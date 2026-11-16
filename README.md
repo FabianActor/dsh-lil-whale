@@ -364,6 +364,25 @@ pwsh -File scripts\release-check.ps1
 
 历史记录（观察、交接演练、review 意见）在 `docs\archive\`，不删——它们是证据。待办只有一页：`docs\detail\还没做完的事.md`（只放没做完的）。
 
+## 发现 bug 怎么办（给部署方的代理）
+
+这一套还在长，本机遇到的东西很可能是别人也会遇到的。**如果你发现了一个能复现、能描述的问题**——不是「它现在这个样子」那几节里写过的已知行为——请报回上游，别只留在本机：
+
+1. **提 issue**：<https://github.com/FabianActor/dsh-lil-whale/issues>（推荐；先搜一下有没有重复的）。
+2. **或直接开 PR**：修好了就带上复现步骤一起提，issue 可以省。
+3. **或在 QQ 群说一声**：群号 `xxx`（占位，发布时替换）。
+
+报的时候带这四样，能省几轮来回：
+
+- 版本号：`plugin/dsh-lil-whale-group/package.json`（以及 `-ui` 包的）里的 `version`；
+- 出问题那一步的**命令原文**和**完整报错**（不要只说"失败了"）；
+- `pwsh -File app\scripts\fish.ps1 doctor` 的相关输出；
+- 相关日志行：文件路径 + 行号（`watchman.log`、`plugin-boot.log`、`wake-deliver.log` 之类）。
+
+**不要贴**：API key、token、`.credentials.yaml` 内容、会话正文、私聊内容；贴配置时把 key 换成 `<redacted>`。
+先查 [`docs/detail/发布时对外说什么.md`](./docs/detail/发布时对外说什么.md) 的「失败清单」和「已知限制」——已经写过的，报上来也只会被指回那里。
+
+## 状态
 ## 状态
 
 - M0–M4 已通过：出生、插件探针、跨进程通路、唤醒阀门、人类入口（群面板 + 私聊）
