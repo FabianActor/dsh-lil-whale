@@ -14,6 +14,7 @@
 - **`unjudged` ≠ 用不了**：`tool-plugin-manager` 的停用条件是一个 `!!js` 表达式（`!ctx.get('profileContext')`），生成器判不了就当"文档没写进去"，但运行时它在——纸面明写"这一桶不等于你用不了，试一下就知道"。
 - 文档：模板与 `docs/detail/怎么装一套鱼塘.md` §3.8.5 补"名单也按方向分组"与本条区别。
 - 验证：三张纸重生成（09:23），指纹 `skipped-disabled=2 skipped-unjudged=1 skipped-disabled-ids=tool-bash,tool-plugin-market skipped-unjudged-ids=tool-plugin-manager`；七套测试全过；`doctor` 只剩版本差 WARN；`release-check` 待跑。
+- **补记（09:2x）：`unjudged` 的下一句不是"改表达式"**。两条鱼 #825–#827 推成"`tool-plugin-manager` 是靠求值失败才在的，改成能求值的写法"。我核了 loader：`cordis-plugin-loader/lib/index.js` 的 `evaluate = new Function("ctx", "expr", "with (ctx) { return eval(expr) }")`，`!!js` 节点存成 `{__jsExpr: <字符串>}` 再交给它求值——所以 `disabled: !!js "!ctx.get('profileContext')"` 里的双引号只是 YAML 字符串分隔符，它**就是**一条真表达式，运行时 `profileContext` 在 ⇒ false ⇒ 开着。`plugin_manager` 在场是配置的结果，不是运气。`unjudged` 只说明**这张纸的生成器没算它**（生成器只求两条平台规则），不是"它状态不明"。纸面与安装文档已改口径：这一桶读作"纸算不了"，要确认就试一下。
 
 ## r182 — 2026-11-16 09:2x
 
