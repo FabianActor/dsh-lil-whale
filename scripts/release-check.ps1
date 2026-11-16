@@ -227,7 +227,7 @@ if ($root) {
   $installLog = Join-Path $work 'install.log'
   & pwsh -NoProfile -File (Join-Path $pkg 'scripts\install.ps1') `
     -PondRoot (Join-Path $work 'pond') `
-    -Workspace $homeDir -DshHome $dshHome -PoolDir $pool -ChildProfile xfish -ChildName 小测试 `
+    -Workspace $homeDir -DshHome $dshHome -PoolDir $pool -ChildName 小测试 `
     -ParentName 大测试 -HumanName 本机 -ParentMemberId host -HumanMemberId human `
     -SkipParent -ConfigPath $cfg -Force *>&1 | Tee-Object -FilePath $installLog | Out-Null
   $installExit = $LASTEXITCODE
@@ -256,7 +256,7 @@ if ($root) {
     } else {
       $pins = Get-Content $pinsFile -Raw -Encoding utf8 | ConvertFrom-Json
       $keys = @($pins.PSObject.Properties.Name)
-      if ($keys -notcontains 'xfish') { Fail '名册' "pins.json 里没有新鱼的键（有：$($keys -join ', ')）" }
+      if ($keys -notcontains 'fish') { Fail '名册' "pins.json 里没有新鱼的键（有：$($keys -join ', ')）" }
       elseif ($keys -contains 'whale') { Warn '名册' 'pins.json 里出现了 whale —— 干净安装不该有（只有父辈 + 新鱼）' }
       else { Ok '名册' "pins.json 键 = $($keys -join ', ')" }
     }
