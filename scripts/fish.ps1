@@ -128,8 +128,9 @@ function Get-Members {
     }
   }
   if ($out.Count -eq 0) {
-    $out['lee'] = [pscustomobject]@{ Key = 'lee'; Label = '宿主'; Kind = 'fish'; Role = 'watcher'; Home = $Cfg.LeeHome; DshHome = $Cfg.LeeHome; Profile = $Cfg.LeeProfile; Port = $Cfg.LeePort; Cwd = $Cfg.LeeStartCwd; Lifecycle = 'active'; Parent = $null; BornAt = $null }
-    $out['whale'] = [pscustomobject]@{ Key = 'whale'; Label = '第二条鱼'; Kind = 'fish'; Role = 'member'; Home = $Cfg.HerHome; DshHome = $Cfg.HerDshHome; Profile = $Cfg.WhaleProfile; Port = $Cfg.HerPort; Cwd = $Cfg.WhaleCwd; Lifecycle = 'active'; Parent = $null; BornAt = $null }
+    # 2026-11-16 r215：兜底键也用中性的 host / fish（以前是作者家的鱼名，新装机器上会冒出"巡守 id 是 lee"）。
+    $out['host'] = [pscustomobject]@{ Key = 'host'; Label = '宿主'; Kind = 'fish'; Role = 'watcher'; Home = $Cfg.LeeHome; DshHome = $Cfg.LeeHome; Profile = $Cfg.LeeProfile; Port = $Cfg.LeePort; Cwd = $Cfg.LeeStartCwd; Lifecycle = 'active'; Parent = $null; BornAt = $null }
+    $out['fish'] = [pscustomobject]@{ Key = 'fish'; Label = '第二条鱼'; Kind = 'fish'; Role = 'member'; Home = $Cfg.HerHome; DshHome = $Cfg.HerDshHome; Profile = $Cfg.WhaleProfile; Port = $Cfg.HerPort; Cwd = $Cfg.WhaleCwd; Lifecycle = 'active'; Parent = $null; BornAt = $null }
   }
   return $out
 }
@@ -1018,7 +1019,7 @@ function Invoke-Bind([string]$key, [string]$sessionId) {
   if ($sessionId -notmatch '^session-[0-9a-f-]{20,}$') { Write-Host ("xx 会话 id 形状不对：{0}" -f $sessionId); return $false }
   $m = Get-Fish $key
   if (-not $m) { Write-Host ("xx 名册里没有这条鱼：{0}" -f $key); return $false }
-  if ($m.Role -eq 'watcher') { Write-Host 'xx 巡守的会话在它自己的 HOME 里，不走这条命令。'; return $false }
+  # 2026-11-16 r216：巡守也能 bind —— 它的会话在 %USERPROFILE%\.dsh 里，同样要校验"会话真的在它家"。
   if (-not $m.DshHome) { Write-Host ("xx 名册里没有 {0} 的家（dshHome）" -f $m.Label); return $false }
   # 会话必须真的在那个家里：否则"绑"就成了把别人的会话顶到她的名字下（叫错人比叫不动更糟）。
   $found = $false

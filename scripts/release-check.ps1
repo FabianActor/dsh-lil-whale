@@ -228,6 +228,7 @@ if ($root) {
   & pwsh -NoProfile -File (Join-Path $pkg 'scripts\install.ps1') `
     -PondRoot (Join-Path $work 'pond') `
     -Workspace $homeDir -DshHome $dshHome -PoolDir $pool -ChildProfile xfish -ChildName 小测试 `
+    -ParentName 大测试 -HumanName 本机 -ParentMemberId host -HumanMemberId human `
     -SkipParent -ConfigPath $cfg -Force *>&1 | Tee-Object -FilePath $installLog | Out-Null
   $installExit = $LASTEXITCODE
   if ($installExit -ne 0) {

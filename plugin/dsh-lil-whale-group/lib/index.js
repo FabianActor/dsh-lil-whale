@@ -629,11 +629,25 @@ function ownMember() {
     }
     return byPath[1]
   }
+  // 2026-11-16 r215：兜底不再猜作者家的键——那在别人的安装里根本不存在，
+  // 只会让账本上出现一个"巡守 id 是 lee"的怪东西。按名册的角色认：主进程是巡守，其余算第一条鱼。
+  try {
+    const watcher = Object.entries(MEMBERS).find(([, m]) => m && m.role === 'watcher')
+    const firstFish = Object.entries(MEMBERS).find(([, m]) => m && m.kind === 'fish' && m.role !== 'watcher')
+    const guess = isMainProcess() ? (watcher?.[0] ?? firstFish?.[0]) : (firstFish?.[0] ?? watcher?.[0])
+    if (guess) {
+      if (!ownMemberNoteLogged) {
+        ownMemberNoteLogged = true
+        try { logLine({ note: 'own-member-by-role', member: guess, home: home.slice(-100) }) } catch {}
+      }
+      return guess
+    }
+  } catch {}
   if (!ownMemberNoteLogged) {
     ownMemberNoteLogged = true
     try { logLine({ note: 'own-member-guess', home: home.slice(-100) }) } catch {}
   }
-  return home.toLowerCase().includes('lil-whale') ? 'whale' : 'lee'
+  return 'fish'
 }
 
 /** 对端 = 我的爹；根节点（lee）没有爹，退回另一条鱼。 */
@@ -1799,11 +1813,17 @@ function apply(ctx) {
   // 让旧实例在下一拍自己停表——不依赖 dispose，也不依赖配置路径（旧配置早指向别处了）。
   const instanceGuard = registerInstance({
     selfHome: CFG.selfHome,
+    poolDir: CFG.poolDir,
     configFile: CFG._path ?? null,
     profile: process.env.DSH_PROFILE ?? null,
   })
   // false = 已被同进程里更新的实例顶替：停掉全部定时器，不再写任何状态。
   const stillPrimary = () => {
+    // 纯卸载没有"更新的实例"可发现，只能看它脚下的鱼塘还在不在（第五份沉淀 §16）。
+    if (instanceGuard.isOrphaned()) {
+      instanceGuard.retire()
+      return false
+    }
     if (!instanceGuard.isGhost()) return true
     instanceGuard.retire()
     return false

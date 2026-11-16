@@ -51,6 +51,20 @@ ok('鱼塘布局判据不依赖 pool 目录是否已存在', !install.includes("
 ok('首鱼也写 births.log', install.includes('births.log（首鱼出生账）'));
 ok('repair-undici 会扫 npx 缓存', repairUndici.includes('_npx'));;
 
+// 2026-11-16 r215：第一次安装必须先问名字与成员键，不许替用户决定。
+ok('有 -ParentName 参数', install.includes('-ParentName'));
+ok('有 -HumanName 参数', install.includes('-HumanName'));
+ok('非交互时会停下并列出该问什么', install.includes('第一次安装前先问用户这几件事'));
+ok('交互时会真问（用了 Read-Host）', /第一次安装[\s\S]{0,4000}?Read-Host/.test(install));
+ok('名册里的父辈名不再写死"宿主"', !install.includes("name = '宿主'; kind = 'fish'"));
+ok('名册里的人类名不再写死"人类"', !install.includes("name = '人类'; kind = 'human'"));
+
+// 2026-11-16 r216：第一条鱼的键固定 fish；bind 也接受宿主。
+ok('首次安装固定第一条鱼的键为 fish', install.includes('第一条鱼的成员键固定是 fish'));
+ok('提问列表里不再询问小鱼键', !install.includes("Var = 'ChildMemberId'"));
+ok('README 写清小鱼键固定 fish', readme.includes('小鱼的成员键固定为'));
+ok('README 写清 bind 对宿主也适用', readme.includes('宿主与她的都一样'));
+
 const fail = checks.filter((c) => !c.pass);
 for (const c of checks) console.log(`${c.pass ? 'PASS' : 'FAIL'}  ${c.name}${c.detail ? ' — ' + c.detail : ''}`);
 if (fail.length) {

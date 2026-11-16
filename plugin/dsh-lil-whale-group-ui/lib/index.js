@@ -31,8 +31,8 @@ function dmReadableOf(peer) {
 function dmFileOf(peer) {
   return join(DM_DIR, [HUMAN_ID, peer].sort().join('__') + '.jsonl')
 }
-// 列表里只放"鱼"：fabian 是他自己，lee 是大肥鱼（他就在 3080 里跟 Leea 说话，不用再开一页）
-const DM_HIDDEN = new Set(['lee'])
+// 人类自己不开私聊页；巡守那条（主进程里跟他说话的那位）也不再列一页。
+// 2026-11-16 r215：别写死那个名字 —— 那是作者家的键，新装机器上它根本不存在。
 const UI_CONFIG = join(GROUP_DIR, 'ui-config.json')
 // 「看到哪儿了」的游标：只在面板里看，不影响她那边读群的游标
 const UI_READ = join(GROUP_DIR, 'ui-read.json')
@@ -167,9 +167,9 @@ const AVATAR_TYPES = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp' }
 // 名字必须中性：这里曾经写着 大肥鱼/小肥鱼/Fabian，等于把作者家的成员名
 // 漏进别人的安装里（2026-11-16 第三份装机沉淀 P11，r206）。
 const UI_MEMBERS_FALLBACK = {
-  lee: { name: '第一条鱼', kind: 'fish' },
-  whale: { name: '第二条鱼', kind: 'fish' },
-  fabian: { name: '宿主', kind: 'human' },
+  host: { name: '宿主', kind: 'fish', role: 'watcher' },
+  fish: { name: '第二条鱼', kind: 'fish', role: 'member' },
+  human: { name: '人类', kind: 'human', role: 'human' },
 }
 
 function loadUiMembers() {
@@ -179,7 +179,7 @@ function loadUiMembers() {
     const out = {}
     for (const [key, m] of Object.entries(raw?.members ?? {})) {
       const name = typeof m?.name === 'string' && m.name.trim() ? m.name.trim().slice(0, 16) : key
-      out[key] = { name, kind: m?.kind === 'human' ? 'human' : 'fish' }
+      out[key] = { name, kind: m?.kind === 'human' ? 'human' : 'fish', role: m?.role === 'watcher' ? 'watcher' : (m?.kind === 'human' ? 'human' : 'member') }
     }
     if (Object.keys(out).length) return out
   } catch {
@@ -190,6 +190,9 @@ function loadUiMembers() {
 }
 
 const MEMBERS = loadUiMembers()
+/** 巡守的成员键：按 role 找，不按名字猜。 */
+const WATCHER_ID = Object.keys(MEMBERS).find((id) => MEMBERS[id].role === 'watcher') ?? null
+const DM_HIDDEN = new Set(WATCHER_ID ? [WATCHER_ID] : [])
 const LABEL = Object.fromEntries(Object.entries(MEMBERS).map(([key, m]) => [key, m.name]))
 /** 能私聊的对象：鱼，不含人类自己，也不含明确隐藏的。 */
 const KNOWN_PEERS = Object.keys(MEMBERS).filter((id) => MEMBERS[id].kind === 'fish' && !DM_HIDDEN.has(id))
@@ -318,6 +321,8 @@ function readConfig() {
     avatars[key] = normalizeAvatar(raw?.avatars?.[key], defaultAvatarOf(key))
   }
   return {
+    /** 人类成员的 id（气泡左右判断、@ 面板过滤都用它；不再让客户端猜 fabian）。 */
+    humanId: HUMAN_ID,
     panelLabel: typeof raw?.panelLabel === 'string' && raw.panelLabel.trim() ? raw.panelLabel.trim() : DEFAULT_CONFIG.panelLabel,
     notifyScope: raw?.notifyScope === 'mentions' ? 'mentions' : 'all',
     names,

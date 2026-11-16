@@ -9,7 +9,7 @@
 // 每拍检查：表里若有比自己"新"的实例，就把自己的定时器全停掉，并写一行幽灵实例的记录。
 // 不依赖 dispose，也不依赖配置文件的位置——旧实例的配置早就指向别处了。
 
-import { appendFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 
@@ -51,6 +51,7 @@ export function registerInstance(info = {}) {
     at: Date.now(),
     pid,
     selfHome: info.selfHome ?? null,
+    poolDir: info.poolDir ?? null,
     configFile: info.configFile ?? null,
     profile: info.profile ?? null,
   }
@@ -86,6 +87,25 @@ export function registerInstance(info = {}) {
           appendFileSync(LOG_FILE, `${new Date().toISOString()} | ${line}\n`, 'utf8')
         } catch {}
         console.error(`[lil-whale] ${line} —— 同一进程里有更新的实例，本实例已停表`)
+      }
+      return true
+    },
+    // 纯卸载（只删、没有新实例登记）时 isGhost() 永远为假——1.8.10 的防护覆盖不到。
+    // 2026-11-16 第五份沉淀 §16：旧实例会继续重建已删掉的 pool。
+    // 判据：它登记的家与共享区都不在了 ⇒ 这个鱼塘被删了/搬走了，该停表。
+    isOrphaned() {
+      if (retired) return true
+      const missing = (p) => !p || !existsSync(p)
+      if (!(missing(entry.selfHome) && missing(entry.poolDir))) return false
+      retired = true
+      if (!logged) {
+        logged = true
+        const line = `instance-orphaned | pid=${pid} id=${id} selfHome=${entry.selfHome} poolDir=${entry.poolDir}`
+        try {
+          mkdirSync(LOG_DIR, { recursive: true })
+          appendFileSync(LOG_FILE, `${new Date().toISOString()} | ${line}\n`, 'utf8')
+        } catch {}
+        console.error(`[lil-whale] ${line} —— 它的家与共享区都不在了，本实例已停表`)
       }
       return true
     },

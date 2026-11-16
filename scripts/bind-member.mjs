@@ -60,7 +60,7 @@ try { roster = JSON.parse(fs.readFileSync(membersFile, 'utf8')); } catch (e) { d
 
 const member = roster?.members?.[memberKey];
 if (!member) die(`members.json 里没有成员：${memberKey}`);
-if (member.role === 'watcher') die('巡守的会话在它自己的 HOME 里，不走这条命令');
+// 2026-11-16 r216：巡守也能绑（它的会话在自己的 HOME 里；成员是否存在上面已核对）。
 if (member.kind !== 'fish') die(`${memberKey} 不是鱼（kind=${member.kind}）`);
 
 const before = JSON.stringify(pins[memberKey] ?? null);

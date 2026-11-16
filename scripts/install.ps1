@@ -17,6 +17,8 @@ param(
   [string]$DshHome = '',
   [string]$ChildProfile = 'fish',
   [string]$ChildName = '小鱼',      # 她的名字：只写进 AGENTS.md 的一行，不写进性格
+  [string]$ParentName = '宿主',     # 大鱼（巡守/宿主）在群里的显示名（第一次安装会问，别替用户决定）
+  [string]$HumanName = '人类',      # 用户自己在群里的显示名（第一次安装会问）
   [string]$ChildMemberId = '',    # 名册里的键；空 = 跟 profile 同名
   [string]$ParentMemberId = 'host', # 家长/巡守的成员键（递归装第二代时改它）
   [string]$HumanMemberId = 'human', # 人类的成员键
@@ -141,6 +143,57 @@ $PondRoot = Split-Path $RepoRoot -Parent
 # 共享区落到同级 lil-whale-pool，巡守按 <鱼塘根>\homes 对账就会报"名册和家对不上"。
 # 判据只看仓库在不在 app\ 里（pool 由本脚本创建）。
 $InPond = ((Split-Path $RepoRoot -Leaf) -eq 'app')
+
+# 2026-11-16 r215：第一次安装先问名字与成员键。
+# 以前直接套默认值（小鱼 / 宿主 / 人类 + fish / host / human），代装的 agent 一句不问，
+# 用户事后才发现"我群里叫人类"、巡守 id 是别人的鱼名。非交互（agent/管道）时不猜：
+# 把该问的列出来并停下，让人先问用户，再带着参数重跑。
+$earlyPool = if ($PoolDir -ne '') { $PoolDir } elseif ($InPond) { Join-Path $PondRoot 'pool' } else { Join-Path $PondRoot 'lil-whale-pool' }
+$isFirstInstall = -not (Test-Path -LiteralPath (Join-Path $earlyPool 'members.json'))
+if ($isFirstInstall -and -not $RepairAgents) {
+  $interactiveInstall = -not [Console]::IsInputRedirected
+  $childKeyAsked = if ($ChildMemberId) { $ChildMemberId } elseif ($PSBoundParameters.ContainsKey('ChildProfile')) { $ChildProfile } else { '' }
+  # 2026-11-16 r216：第一条鱼的成员键固定为 fish（键=家目录，改它等于换家；第一次安装不开放）。
+  if ($childKeyAsked -and $childKeyAsked -cne 'fish') {
+    Die ('第一次安装时，第一条鱼的成员键固定是 fish（换它=换家目录）。你传了：{0}' -f $childKeyAsked) '装好之后再加鱼：pwsh -File scripts\fish.ps1 new -Key <键>'
+  }
+  if ($PSBoundParameters.ContainsKey('ChildProfile') -and $ChildProfile -cne 'fish') {
+    Die ('第一次安装时，第一条鱼的 profile 也固定是 fish。你传了：{0}' -f $ChildProfile) '显示名用 -ChildName；profile 与家目录绑在一起，第一次安装不开放'
+  }
+  $ChildMemberId = 'fish'
+  $asks = @(
+    [pscustomobject]@{ Var = 'ChildName'; Label = '小鱼的名字（群里显示用，可以中文）'; Default = $ChildName; Have = $(if ($PSBoundParameters.ContainsKey('ChildName')) { $ChildName } else { '' }) },
+    [pscustomobject]@{ Var = 'ParentName'; Label = '大鱼（巡守/宿主）的名字'; Default = $ParentName; Have = $(if ($PSBoundParameters.ContainsKey('ParentName')) { $ParentName } else { '' }) },
+    [pscustomobject]@{ Var = 'ParentMemberId'; Label = '大鱼的成员键'; Default = $ParentMemberId; Have = $(if ($PSBoundParameters.ContainsKey('ParentMemberId')) { $ParentMemberId } else { '' }) },
+    [pscustomobject]@{ Var = 'HumanName'; Label = '你自己在群里叫什么'; Default = $HumanName; Have = $(if ($PSBoundParameters.ContainsKey('HumanName')) { $HumanName } else { '' }) },
+    [pscustomobject]@{ Var = 'HumanMemberId'; Label = '你自己的成员键'; Default = $HumanMemberId; Have = $(if ($PSBoundParameters.ContainsKey('HumanMemberId')) { $HumanMemberId } else { '' }) }
+  )
+  $missingAsk = @()
+  foreach ($item in $asks) {
+    $val = [string]$item.Have
+    if ($val -eq '') {
+      if (-not $interactiveInstall) { $missingAsk += ('{0}（默认通常是：{1}）' -f $item.Label, $item.Default); continue }
+      $ans = Read-Host ('{0}（直接回车用默认：{1}）' -f $item.Label, $item.Default)
+      $val = if ([string]::IsNullOrWhiteSpace($ans)) { [string]$item.Default } else { $ans.Trim() }
+    }
+    Set-Variable -Name $item.Var -Value $val
+  }
+  if ($missingAsk.Count -gt 0) {
+    Die ('第一次安装前先问用户这几件事，不要替他决定：
+  - ' + ($missingAsk -join '
+  - ')) '问完后带参数重跑：-ChildName <名字> -ParentName <名字> -ParentMemberId <键> -HumanName <名字> -HumanMemberId <键>'
+  }
+  Note '第一条鱼的成员键固定为 fish（profile 同为 fish）；显示名随时可用 -ChildName 改。'
+  foreach ($pair in @(
+    [pscustomobject]@{ Name = 'ChildMemberId'; Rule = '^[a-z][a-z0-9-]{1,15}$' },
+    [pscustomobject]@{ Name = 'ParentMemberId'; Rule = '^[a-z][a-z0-9-]{1,15}$' },
+    [pscustomobject]@{ Name = 'HumanMemberId'; Rule = '^[a-z][a-z0-9-]{1,15}$' }
+  )) {
+    $v = [string](Get-Variable -Name $pair.Name -ValueOnly)
+    if ($v -cnotmatch $pair.Rule) { Die ('成员键不合法：{0}={1}' -f $pair.Name, $v) '成员键用小写字母开头，只能小写字母/数字/连字符，2–16 位' }
+  }
+}
+
 $childKey = if ($ChildMemberId) { $ChildMemberId } else { $ChildProfile }
 if (-not $Workspace) {
   if ($InPond) { $Workspace = Join-Path (Join-Path $PondRoot 'homes') $childKey }
@@ -660,11 +713,11 @@ if (-not (Test-Path $membersPath)) {
   $leeHome = if ($cfg.Contains('leeHome')) { [string]$cfg['leeHome'] } else { Join-Path $env:USERPROFILE '.dsh' }
   $leePort = if ($cfg.Contains('leePort')) { [int]$cfg['leePort'] } else { 3080 }
   $members[$ParentMemberId] = [ordered]@{
-    name = '宿主'; kind = 'fish'; role = 'watcher'; parent = $null
+    name = $ParentName; kind = 'fish'; role = 'watcher'; parent = $null
     port = $leePort; home = $leeHome; dshHome = $leeHome
     profile = $ParentProfile; lifecycle = 'active'; bornAt = $null
   }
-  $members[$HumanMemberId] = [ordered]@{ name = '人类'; kind = 'human'; role = 'human'; parent = $null }
+  $members[$HumanMemberId] = [ordered]@{ name = $HumanName; kind = 'human'; role = 'human'; parent = $null }
   $members[$childMember] = [ordered]@{
     name = $ChildName; kind = 'fish'; role = 'member'; parent = $ParentMemberId
     port = $port; home = $Workspace; dshHome = $DshHome

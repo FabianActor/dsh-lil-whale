@@ -2,8 +2,9 @@
 //
 // 背景：DSH 在同一进程里卸载/重装插件时旧 fiber 的 dispose 不一定触发，旧实例会继续写
 // 旧目录并重建已删除的目录。instance-guard 用 %TEMP% 下按 pid 的登记表让旧实例自己停表。
-import { readFileSync, rmSync, existsSync } from 'node:fs'
+import { readFileSync, rmSync, existsSync, mkdtempSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { registerInstance, registryPathFor } from '../plugin/dsh-lil-whale-group/lib/instance-guard.js'
 
@@ -44,6 +45,20 @@ const reg = registryPathFor()
 if (existsSync(reg)) rmSync(reg, { force: true })
 ok('登记表在 %TEMP% 下，与配置路径无关（可被旧实例发现）')
 
+// ── 一·二、纯卸载：家与共享区都没了 ⇒ isOrphaned ─────────────────────
+const tmpRoot = mkdtempSync(join(tmpdir(), 'llw-orphan-'))
+const orphanHome = join(tmpRoot, 'home')
+const orphanPool = join(tmpRoot, 'pool')
+mkdirSync(orphanHome)
+mkdirSync(orphanPool)
+const c = registerInstance({ selfHome: orphanHome, poolDir: orphanPool, profile: 'c' })
+assert(c.isOrphaned() === false, '家与共享区都在时不算孤儿')
+rmSync(orphanHome, { recursive: true, force: true })
+rmSync(orphanPool, { recursive: true, force: true })
+assert(c.isOrphaned() === true, '纯卸载后（家与共享区都没了）判孤儿并停表')
+c.unregister()
+rmSync(tmpRoot, { recursive: true, force: true })
+
 // ── 二、静态契约：代码里真的接线了 ────────────────────────────────────
 const indexJs = read('plugin/dsh-lil-whale-group/lib/index.js')
 assert(indexJs.includes("from './instance-guard.js'"), 'index.js 引入了 instance-guard')
@@ -65,6 +80,13 @@ assert(doctorPs1.includes("undiciLine -match '^SKIP'"), 'doctor 的 undici SKIP 
 
 const releaseCheck = read('scripts/release-check.ps1')
 assert(releaseCheck.includes('4n. 进程内单实例防护'), 'release-check 纳入单实例防护测试')
+
+const guardJs = read('plugin/dsh-lil-whale-group/lib/instance-guard.js')
+assert(guardJs.includes('instance-orphaned'), '孤儿实例会写 instance-orphaned')
+assert(indexJs.includes('instanceGuard.isOrphaned()'), 'stillPrimary 也检查孤儿状态')
+assert(!read('scripts/fish.ps1').includes('巡守的会话在它自己的 HOME 里'), 'bind 不再拒绝巡守')
+assert(!read('scripts/bind-member.mjs').includes("role === 'watcher') die"), 'bind-member 不再拒绝巡守')
+assert(installPs1.includes('第一条鱼的成员键固定是 fish'), '首次安装固定第一条鱼的键为 fish')
 
 // ── 汇总 ─────────────────────────────────────────────────────────────
 console.log('')
