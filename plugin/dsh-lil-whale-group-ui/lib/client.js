@@ -3054,9 +3054,12 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
         fontWeight: 500,
         fontFamily: 'inherit',
         cursor: 'pointer',
-        border: `0.5px solid ${primary ? 'var(--dsw-alias-brand-primary, #4d6bfe)' : 'var(--dsw-alias-border-l2, rgba(0,0,0,0.12))'}`,
-        background: primary ? 'var(--dsw-alias-brand-primary, #4d6bfe)' : 'transparent',
-        color: primary ? '#fff' : 'var(--dsw-alias-label-primary, inherit)',
+        // 2026-11-16（宿主报的深色模式 bug）：以前底色用 brand-primary、文字写死 #fff——
+        // 深色下 brand-primary 会变浅，于是白底白字。改成官方按钮那一对：
+        // 底 var(--dsw-alias-button-primary-fill)，字 var(--dsw-alias-label-primary-foreground)。
+        border: `0.5px solid ${primary ? 'var(--dsw-alias-button-primary-fill, var(--dsw-alias-brand-primary, #4d6bfe))' : 'var(--dsw-alias-border-l2, rgba(0,0,0,0.12))'}`,
+        background: primary ? 'var(--dsw-alias-button-primary-fill, var(--dsw-alias-brand-primary, #4d6bfe))' : 'transparent',
+        color: primary ? 'var(--dsw-alias-label-primary-foreground, #fff)' : 'var(--dsw-alias-label-primary, inherit)',
         transition: 'opacity .15s ease',
       }
     }
