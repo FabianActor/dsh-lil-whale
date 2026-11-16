@@ -19,7 +19,7 @@
   - 翻历史时记 `historyTopRef`（`onScroll` 距离底部 >40 才记），消息或窗口一变就用 `useLayoutEffect` 在绘制前把 `scrollTop` 放回去；「加载更早」「跳历史线」自带补偿，这条让路。
   - 气泡 key 改用"整条消息里的绝对位置"（`visibleStart + index`），窗口往前挪时一条消息的 key 不再变。
   - 控制台自报 `client build v50 · history-no-flash`。
-- 验证：`node --check` 0 错；浏览器端待宿主刷新后按三个场景验收（贴底收消息仍跟到底 / 翻历史收消息视口不动 / 「加载更早」眼睛不跳）。
+- 验证：`node --check` 0 错；宿主 10:59 验收：控制台 `client build v50 · history-no-flash`，三个场景均正常（贴底收消息仍跟到底 / 翻历史收消息视口不动 / 「加载更早」眼睛不跳）。
 
 ## r184 — 2026-11-16 09:3x
 
