@@ -161,12 +161,13 @@ if ($isFirstInstall -and -not $RepairAgents) {
     Die ('第一次安装时，第一条鱼的 profile 也固定是 fish。你传了：{0}' -f $ChildProfile) '显示名用 -ChildName；profile 与家目录绑在一起，第一次安装不开放'
   }
   $ChildMemberId = 'fish'
+  Note '下面问两种东西：名字=群里怎么称呼（随意改）；成员键=数据主键（小写 ASCII，进文件路径）。两项都能自定义，默认值只是省事。'
   $asks = @(
-    [pscustomobject]@{ Var = 'ChildName'; Label = '小鱼的名字（群里显示用，可以中文）'; Default = $ChildName; Have = $(if ($PSBoundParameters.ContainsKey('ChildName')) { $ChildName } else { '' }) },
-    [pscustomobject]@{ Var = 'ParentName'; Label = '大鱼（巡守/宿主）的名字'; Default = $ParentName; Have = $(if ($PSBoundParameters.ContainsKey('ParentName')) { $ParentName } else { '' }) },
-    [pscustomobject]@{ Var = 'ParentMemberId'; Label = '大鱼的成员键'; Default = $ParentMemberId; Have = $(if ($PSBoundParameters.ContainsKey('ParentMemberId')) { $ParentMemberId } else { '' }) },
-    [pscustomobject]@{ Var = 'HumanName'; Label = '你自己在群里叫什么'; Default = $HumanName; Have = $(if ($PSBoundParameters.ContainsKey('HumanName')) { $HumanName } else { '' }) },
-    [pscustomobject]@{ Var = 'HumanMemberId'; Label = '你自己的成员键'; Default = $HumanMemberId; Have = $(if ($PSBoundParameters.ContainsKey('HumanMemberId')) { $HumanMemberId } else { '' }) }
+    [pscustomobject]@{ Var = 'ChildName'; Label = '小鱼的名字（群里怎么称呼她；默认「小鱼」，可改成别的中文名）'; Default = $ChildName; Have = $(if ($PSBoundParameters.ContainsKey('ChildName')) { $ChildName } else { '' }) },
+    [pscustomobject]@{ Var = 'ParentName'; Label = '大鱼/巡守的名字（群里怎么称呼主 dsh；默认「宿主」，可改）'; Default = $ParentName; Have = $(if ($PSBoundParameters.ContainsKey('ParentName')) { $ParentName } else { '' }) },
+    [pscustomobject]@{ Var = 'ParentMemberId'; Label = '大鱼/巡守的成员键（数据主键，小写 ASCII；默认 host，可自定义如 keeper）'; Default = $ParentMemberId; Have = $(if ($PSBoundParameters.ContainsKey('ParentMemberId')) { $ParentMemberId } else { '' }) },
+    [pscustomobject]@{ Var = 'HumanName'; Label = '你自己的名字（群里怎么称呼你；默认「人类」，可改）'; Default = $HumanName; Have = $(if ($PSBoundParameters.ContainsKey('HumanName')) { $HumanName } else { '' }) },
+    [pscustomobject]@{ Var = 'HumanMemberId'; Label = '你自己的成员键（数据主键，小写 ASCII；默认 human，可自定义如 fabian、keeper）'; Default = $HumanMemberId; Have = $(if ($PSBoundParameters.ContainsKey('HumanMemberId')) { $HumanMemberId } else { '' }) }
   )
   $missingAsk = @()
   foreach ($item in $asks) {
@@ -179,9 +180,13 @@ if ($isFirstInstall -and -not $RepairAgents) {
     Set-Variable -Name $item.Var -Value $val
   }
   if ($missingAsk.Count -gt 0) {
-    Die ('第一次安装前先问用户这几件事，不要替他决定：
-  - ' + ($missingAsk -join '
-  - ')) '问完后带参数重跑：-ChildName <名字> -ParentName <名字> -ParentMemberId <键> -HumanName <名字> -HumanMemberId <键>'
+    Die ('第一次安装前先问用户这几件事，不要替他决定。—— 名字和成员键是两件事，都可以自定义：
+  - 小鱼的名字（群里显示的称呼；默认「小鱼」）
+  - 大鱼/巡守的名字（默认「宿主」）
+  - 大鱼/巡守的成员键（数据主键，小写 ASCII；默认 host，例如 keeper）
+  - 你自己的名字（默认「人类」）
+  - 你自己的成员键（数据主键；默认 human，例如 fabian、keeper）
+  （小鱼的成员键固定为 fish，不用问。）') '问完后带参数重跑：-ChildName <名字> -ParentName <名字> -ParentMemberId <键> -HumanName <名字> -HumanMemberId <键>'
   }
   Note '第一条鱼的成员键固定为 fish（profile 同为 fish）；显示名随时可用 -ChildName 改。'
   foreach ($pair in @(

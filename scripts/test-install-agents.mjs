@@ -57,6 +57,8 @@ ok('有 -HumanName 参数', install.includes('-HumanName'));
 ok('非交互时会停下并列出该问什么', install.includes('第一次安装前先问用户这几件事'));
 ok('交互时会真问（用了 Read-Host）', /第一次安装[\s\S]{0,4000}?Read-Host/.test(install));
 ok('名册里的父辈名不再写死"宿主"', !install.includes("name = '宿主'; kind = 'fish'"));
+ok('安装器讲清“名字与成员键是两件事”', install.includes('名字和成员键是两件事'));
+ok('每个提问都注明显示名可改/成员键可自定义', install.includes('可改成别的中文名') && install.includes('可自定义如 keeper'));
 ok('名册里的人类名不再写死"人类"', !install.includes("name = '人类'; kind = 'human'"));
 
 // 2026-11-16 r216：第一条鱼的键固定 fish；bind 也接受宿主。
