@@ -3,7 +3,7 @@
 #
 #   pwsh -File install.ps1                                 装到仓库旁边的 lil-whale/
 #   pwsh -File install.ps1 -Workspace D:\fish               装到指定目录
-#   pwsh -File install.ps1 -ChildSessionId session-xxx      顺手把她的会话 id 写进名册
+#   pwsh -File install.ps1 -ChildSessionId session-xxx      顺手把小鱼的会话 id 写进名册
 #   pwsh -File install.ps1 -SkipParent                      不把两个插件装进你的主 profile（已有鱼塘加鱼、试装用；第一次安装别用）
 #   pwsh -File install.ps1 -Force                           目标目录已经像"她的家"时仍然继续
 #

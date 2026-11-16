@@ -86,8 +86,8 @@ pwsh -File scripts\install.ps1 -PondRoot D:\WorkSpace\lil-whale
 | `-Workspace D:\fish` | 鱼的家放在哪（默认是鱼塘里的 `homes\<成员键>`） |
 | `-PoolDir D:\pool` | 共享区放在哪（默认是鱼塘的 `pool\`） |
 | `-ChildPort 3082` | 鱼的网页端口（默认从 3082 起找第一个空口，装好后写进配置，运行期不再变） |
-| `-ChildSessionId session-…` | 可选：装的时候就把她的会话 id 写进名册（不传就装完用 `fish.ps1 sessions` 选） |
-| `-ParentSessionId session-…` | 可选：同上，写你自己那一段（别拿"安装这段会话"顶替，装完用 `sessions` 选） |
+| `-ChildSessionId session-…` | 可选：装的时候就把**小鱼**的会话 id 写进名册（不传就装完用 `fish.ps1 sessions` 选） |
+| `-ParentSessionId session-…` | 可选：装的时候就把**要进鱼塘的宿主会话** id 写进名册。要进鱼塘的不一定是"安装这一段的会话"；不传就装完用 `sessions` 选 |
 | `-SkipParent`（别名 `-SkipParentPlugins`） | **不把两个插件装进主 profile**。第一次安装**别用**——用了界面就看不到鱼群；给已有鱼塘再加一条鱼、或只试装鱼这边时用 |
 
 装完按它打印的步骤走。`lil-whale.config.json` 里是本机的绝对路径，**它不进版本库**（模板是 `lil-whale.config.example.json`）。
@@ -103,7 +103,7 @@ pwsh -File scripts\install.ps1 -PondRoot D:\WorkSpace\lil-whale
 5. 出生之后，两段会话 id 要进群名册。**这两段由你选，安装脚本不替你挑**（也别拿安装这次开的那段会话顶替父辈）：
    - 先看候选：`pwsh -File scripts\fish.ps1 sessions all`（列出 id / 最后写时间 / 所在工作区）
    - 选定后：`pwsh -File scripts\fish.ps1 bind <键> -Session <选中的 id>`（父辈与她的都一样）
-   - 装的时候也可以显式传 `-ChildSessionId` / `-ParentSessionId`——只在你已经知道是哪段时传
+   - 装的时候也可以显式传 `-ChildSessionId` / `-ParentSessionId`——只在你已经知道"要进鱼塘的是哪段"时传；它不要求是安装时开的那段
 
 ## 想再养一条
 
