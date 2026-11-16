@@ -41,6 +41,10 @@ ok('有 sessions 命令（列候选会话）', fish.includes('function Invoke-Se
 ok('安装说明：会话由用户决定，脚本不替挑', install.includes('这两段由用户决定，安装脚本不替你挑'));
 ok('安装说明指向 fish.ps1 sessions', install.includes('fish.ps1 sessions $ParentMemberId'));
 
+// 2026-11-16 r201：-SkipParent 的名字与说明不能让人读成"只装鱼、不装宿主"。
+ok('SkipParent 有更明确的名字 SkipParentPlugins', install.includes("Alias('SkipParentPlugins')"));
+ok('SkipParent 的说明写明第一次安装别用', install.includes('第一次安装别用'));
+
 const fail = checks.filter((c) => !c.pass);
 for (const c of checks) console.log(`${c.pass ? 'PASS' : 'FAIL'}  ${c.name}${c.detail ? ' — ' + c.detail : ''}`);
 if (fail.length) {

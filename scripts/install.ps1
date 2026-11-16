@@ -4,7 +4,7 @@
 #   pwsh -File install.ps1                                 装到仓库旁边的 lil-whale/
 #   pwsh -File install.ps1 -Workspace D:\fish               装到指定目录
 #   pwsh -File install.ps1 -ChildSessionId session-xxx      顺手把她的会话 id 写进名册
-#   pwsh -File install.ps1 -SkipParent                      只装她，不动你这边的主 profile
+#   pwsh -File install.ps1 -SkipParent                      不把两个插件装进你的主 profile（已有鱼塘加鱼、试装用；第一次安装别用）
 #   pwsh -File install.ps1 -Force                           目标目录已经像"她的家"时仍然继续
 #
 # 它做什么：建目录 -> 建她自己的 DSH_HOME 与 profile -> 装插件 -> 写配置 -> 放种子文件 -> 验一遍。
@@ -24,7 +24,7 @@ param(
   [int]$ChildPort = 0,                 # 0 = 从 3082 起找第一个空口
   [string]$ParentSessionId = '',
   [string]$ChildSessionId = '',
-  [switch]$SkipParent,
+  [Alias('SkipParentPlugins')][switch]$SkipParent,
   [switch]$Force,
   [switch]$RepairAgents,  # 只重写身份纸 AGENTS.md，其余一概不碰（2026-11-16 r190）
   [string]$PondRoot = '',  # 鱼塘根；空 = 按仓库位置推（仓库必须在 <鱼塘根>\app 里）（2026-11-16 r195）
@@ -390,7 +390,7 @@ if (-not $SkipParent) {
     $env:DSH_HOME = $savedHome
     $add1 = & dsh plugin --profile $ParentProfile add "link:$RepoRoot\plugin\dsh-lil-whale-group" 2>&1
     if ($LASTEXITCODE -ne 0) {
-      Die "装 @fabianactor/dsh-lil-whale-group 失败：$($add1 | Select-Object -Last 5)" "确认你的 profile 名对（默认 web），或用 -SkipParent 只装她"
+      Die "装 @fabianactor/dsh-lil-whale-group 失败：$($add1 | Select-Object -Last 5)" "确认 profile 名（默认 web）；如果是给已有鱼塘加鱼或试装，可以用 -SkipParentPlugins 跳过这一步"
     }
     $add2 = & dsh plugin --profile $ParentProfile add "link:$RepoRoot\plugin\dsh-lil-whale-group-ui" 2>&1
     if ($LASTEXITCODE -ne 0) {
