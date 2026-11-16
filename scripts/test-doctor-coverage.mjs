@@ -38,6 +38,7 @@ const FAMILIES = [
   { name: '通行证', static: ['通行证'], dynamicPrefix: ['通行证（'], why: 'workspace 子树 capability SID 是否齐全；静态兜底名=整体查不了' },
   { name: '家根权限', dynamicPrefix: ['家根权限（'], why: '家根是否有当前用户完全控制（贴标签的前置）' },
   { name: '完整性标签', dynamicPrefix: ['完整性标签（'], why: '家目录树是否都带 Low 完整性标签' },
+  { name: '身份纸', static: ['身份纸'], dynamicPrefix: ['身份纸（'], why: '名册 home / AGENTS.md 的家 / START.md 所在家 / 运行 selfHome 四路是否对齐；静态兜底名=这一族整体查不了' },
   { name: '条件', dynamicPrefix: ['条件（'], why: '该鱼 wake-on 条件表形状与条数' },
   { name: '工具数（全鱼）', static: ['工具数（全鱼）'], why: '每条鱼可见工具数比上次少没少' },
   { name: '全鱼', static: ['全鱼'], why: '每条鱼一行（端口/心跳/启动痕迹）' },

@@ -26,6 +26,7 @@ param(
   [string]$ChildSessionId = '',
   [switch]$SkipParent,
   [switch]$Force,
+  [switch]$RepairAgents,  # 只重写身份纸 AGENTS.md，其余一概不碰（2026-11-16 r190）
   [string]$ConfigPath = '',  # 配置写到哪；空 = <仓库根>\lil-whale.config.json。试装必须指到临时目录
   [string]$PoolDir = ''      # 共享区（群/账本/私聊）；空 = 她家旁边同级的 lil-whale-pool
 )
@@ -94,6 +95,38 @@ elseif ($InPond) { $PoolRoot = Join-Path $PondRoot 'pool' }
 else { $PoolRoot = Join-Path (Split-Path $Workspace -Parent) 'lil-whale-pool' }
 $PoolRoot = [System.IO.Path]::GetFullPath($PoolRoot)
 $DshHome = [System.IO.Path]::GetFullPath($DshHome)
+
+# -RepairAgents：只重写身份纸（<dshHome>\AGENTS.md），别的文件一概不碰。
+# 为什么单独一个开关（2026-11-16 三条鱼指出）：-Force 会一起重写 START.md(434)、环境.md(442)、
+# pins.json(498)，其中 pins.json 是会话绑定，重建可能让巡守叫错人。修一行路径不该拆四扇门。
+if ($RepairAgents) {
+  $membersFileRA = Join-Path $PoolRoot 'members.json'
+  if (-not (Test-Path -LiteralPath $membersFileRA)) {
+    Die "没有名册：$membersFileRA" '先跑一次完整安装，或用 -ChildMemberId 指明是哪条鱼'
+  }
+  $rosterRA = $null
+  try { $rosterRA = Get-Content -LiteralPath $membersFileRA -Raw -Encoding utf8 | ConvertFrom-Json }
+  catch { Die "名册读不了：$($_.Exception.Message)" '先修好 pool\members.json（合法 JSON）再重跑' }
+  $meRA = $rosterRA.members.$childKey
+  if (-not $meRA) {
+    Die "名册里没有成员键 $childKey。" ('现有：' + (($rosterRA.members.PSObject.Properties.Name) -join '、'))
+  }
+  if (-not $meRA.home) { Die "名册里 $childKey 没有 home 字段。" '先补名册再重跑' }
+  $repairHome = [System.IO.Path]::GetFullPath([string]$meRA.home).TrimEnd('\')
+  $repairDsh = if ($meRA.dshHome) { [System.IO.Path]::GetFullPath([string]$meRA.dshHome) } else { Join-Path $repairHome 'dsh-home' }
+  $agentsRepairFile = Join-Path $repairDsh 'AGENTS.md'
+  $repairName = if ($meRA.name) { [string]$meRA.name } else { $ChildName }
+  if (-not (Test-Path -LiteralPath $repairHome)) { Die "名册里 $childKey 的家不存在：$repairHome" '先修名册里的 home，或恢复这个家' }
+  if (-not (Test-Path -LiteralPath $repairDsh)) { Die "这个家没有 dsh-home：$repairDsh" '缺 dsh-home 不是一句路径能修的，先完整安装一次' }
+  $repairValues = @{ HER_HOME = $repairHome; CHILD_NAME = $repairName }
+  Write-Utf8NoBom $agentsRepairFile (Render-Template (Join-Path $TemplateRoot 'AGENTS.md.tpl') $repairValues)
+  Ok ("身份纸已重写：" + $agentsRepairFile)
+  Note ("第一行：" + (Get-Content -LiteralPath $agentsRepairFile -Encoding utf8 -TotalCount 1))
+  if (-not (Test-Path -LiteralPath (Join-Path $repairHome 'START.md'))) {
+    Die "写完了，但它指的家没有 START.md：$(Join-Path $repairHome 'START.md')" '先恢复 START.md（或完整安装一次），再回来重跑'
+  }
+  exit 0
+}
 
 $portWanted = if ($ChildPort -gt 0) { $ChildPort } else { 3082 }
 # 端口登记查重（2026-11-13 他要的）：先读共享区已登记的口，再找空口。
@@ -459,9 +492,40 @@ if (-not (Test-Path $envPath) -or $Force) {
 }
 
 $agentsPath = Join-Path $DshHome 'AGENTS.md'
-if (-not (Test-Path $agentsPath)) {
+# 2026-11-16 r190：身份纸里的家必须和名册同源。
+# 原来这里用 $Workspace（安装参数），而 render-env.mjs:328 用名册的 home —— 同一件事两个来源，
+# 于是 环境.md 对、AGENTS.md 错（2026-11-16 三条鱼的身份纸各自指向三种错家）。
+# 判据：传进来的会漂，存下来的不会 —— 定义只认名册，传参只能核对。
+$agentsHome = $Workspace
+$agentsSource = '安装参数'
+$membersFileForAgents = Join-Path $PoolRoot 'members.json'
+if (Test-Path -LiteralPath $membersFileForAgents) {
+  try {
+    $rosterForAgents = Get-Content -LiteralPath $membersFileForAgents -Raw -Encoding utf8 | ConvertFrom-Json
+    $meForAgents = $rosterForAgents.members.$childMember
+    if ($meForAgents -and $meForAgents.home) {
+      $agentsHome = [System.IO.Path]::GetFullPath([string]$meForAgents.home).TrimEnd('\')
+      $agentsSource = '名册'
+    }
+  } catch {
+    Warn "名册读不了（$membersFileForAgents），身份纸暂按安装参数写：$Workspace"
+  }
+}
+$values.HER_HOME = $agentsHome
+if (-not (Test-Path $agentsPath) -or $Force) {
   Write-Utf8NoBom $agentsPath (Render-Template (Join-Path $TemplateRoot 'AGENTS.md.tpl') $values)
-  Ok 'AGENTS.md'
+  Ok ("AGENTS.md（家来自{0}）" -f $agentsSource)
+  # 写后自检（r190）：纸指的家要真的在、里面要有 START.md。
+  # 少了这一步，一份指错的身份纸会一直"看起来装好了"——一直到她醒来才发现读不到第一页。
+  $agentsStart = Join-Path $agentsHome 'START.md'
+  if (-not (Test-Path -LiteralPath $agentsHome)) {
+    Die "AGENTS.md 指向的家不存在：$agentsHome" '核对 pool\members.json 里这条鱼的 home（或 -ChildMemberId）再重跑'
+  }
+  if (-not (Test-Path -LiteralPath $agentsStart)) {
+    Die "AGENTS.md 指向的家没有 START.md：$agentsStart" '先让完整安装生成 START.md，再重跑；或检查 -Workspace'
+  }
+} else {
+  Ok 'AGENTS.md 已存在，保留（要重写身份纸：install.ps1 -RepairAgents -ChildMemberId <键>）'
 }
 
 # group 是共享区（Junction）时，messages/pins 属于整个鱼群，不属于这个新家。

@@ -183,6 +183,13 @@ if ($root) {
       else { Ok '升级单' 'upgrade.json 格式与判据齐全（test-upgrade-json.mjs）' }
     }
   } else { Fail '升级单' 'scripts\test-upgrade-json.mjs 不在包里' }
+  # ── 4k. 身份纸护栏（2026-11-16，CHANGELOG r190）─────────────────────
+  $agentsTest = Join-Path $pkg 'scripts\test-install-agents.mjs'
+  if (Test-Path $agentsTest) {
+    $agentsOut = & node $agentsTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '身份纸护栏' (($agentsOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '身份纸护栏' 'AGENTS.md 的家只认名册、有自检与 -RepairAgents（test-install-agents.mjs）' }
+  } else { Fail '身份纸护栏' 'scripts\test-install-agents.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {

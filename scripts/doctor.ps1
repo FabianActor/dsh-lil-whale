@@ -806,6 +806,73 @@ try {
   Add-Row '通行证' 'WARN' ('查不了：' + $_.Exception.Message)
 }
 
+# 8f. 身份纸四路对齐（2026-11-16 r190）
+#     三条鱼的身份纸曾各自指向不同的错家：install.ps1 用「安装参数」写 AGENTS.md，
+#     而 render-env.mjs 用「名册」写 环境.md —— 同一件事两个来源；而且那行只在文件不存在时写，
+#     错了就永远是错的。所以这一格不看"某一份纸对不对"，看四路能不能对上：
+#       ① members.json 的 home  ② AGENTS.md 里写出的家  ③ START.md 实际所在的目录  ④ 运行记录里的 selfHome
+#     前三条都是纸（纸可以一致地错），只有 ④ 是"机器实际在哪儿"；④ 自己先要过不变式
+#     （home == selfHome + \dsh-home 且 cwd == selfHome），不成立就别拿它裁决别人。
+try {
+  if ($Cfg.MembersFile -and (Test-Path -LiteralPath $Cfg.MembersFile)) {
+    $rosterIdPaper = (Get-Content -LiteralPath $Cfg.MembersFile -Raw -Encoding utf8 | ConvertFrom-Json).members
+    $bootPathPaper = Join-Path $PSScriptRoot '..\logs\plugin-boot.log'
+    $bootLinesPaper = @()
+    if (Test-Path -LiteralPath $bootPathPaper) {
+      $bootLinesPaper = @(Get-Content -LiteralPath $bootPathPaper -Encoding utf8 | ForEach-Object {
+        try { $_ | ConvertFrom-Json } catch { $null }
+      } | Where-Object { $_ })
+    }
+    # 两边都可能是反引号/引号/中文句号收尾，所以只认"第一个 Windows 绝对路径"。
+    $rxPaperHome = '([A-Za-z]:\\[^' + [char]0x0060 + [char]0x0022 + [char]0x3002 + '\r\n]+)'
+    foreach ($prop in $rosterIdPaper.PSObject.Properties) {
+      $m = $prop.Value
+      if ($m.kind -ne 'fish' -or $m.role -eq 'watcher' -or -not $m.home) { continue }
+      $fishName = if ($m.name) { [string]$m.name } else { $prop.Name }
+      $homePaper = [System.IO.Path]::GetFullPath([string]$m.home).TrimEnd('\')
+      $dshPaper = if ($m.dshHome) { [System.IO.Path]::GetFullPath([string]$m.dshHome) } else { Join-Path $homePaper 'dsh-home' }
+      $agentsPaper = Join-Path $dshPaper 'AGENTS.md'
+
+      $agentsHomePaper = ''
+      if (Test-Path -LiteralPath $agentsPaper) {
+        try {
+          $oneLine = (Get-Content -LiteralPath $agentsPaper -Encoding utf8 -ErrorAction Stop | Where-Object { $_ -match '家在' }) | Select-Object -First 1
+          if ($oneLine -and $oneLine -match $rxPaperHome) { $agentsHomePaper = ([string]$Matches[1]).TrimEnd('\') }
+        } catch { }
+      }
+
+      $bad = @()
+      if (-not (Test-Path -LiteralPath $agentsPaper)) { $bad += '没有 AGENTS.md' }
+      elseif (-not $agentsHomePaper) { $bad += 'AGENTS.md 里解析不出家' }
+      elseif ($agentsHomePaper -ine $homePaper) { $bad += ('身份纸=' + $agentsHomePaper) }
+
+      if (-not (Test-Path -LiteralPath (Join-Path $homePaper 'START.md'))) { $bad += '家里没有 START.md' }
+
+      $bootHomePaper = ''
+      $bootBadPaper = ''
+      $hit = $bootLinesPaper | Where-Object { $_.profile -and ([string]$_.profile) -ieq ([string]$m.profile) -and $_.selfHome } | Select-Object -Last 1
+      if ($hit) {
+        $sh = ([string]$hit.selfHome).TrimEnd('\')
+        $bh = [string]$hit.home
+        $cw = [string]$hit.cwd
+        if ($bh -ieq ($sh + '\dsh-home') -and $cw -ieq $sh) { $bootHomePaper = $sh }
+        else { $bootBadPaper = ('运行记录自身不一致：home={0} cwd={1} selfHome={2}' -f $bh, $cw, $sh) }
+      }
+      if ($bootBadPaper) { $bad += $bootBadPaper }
+      elseif ($bootHomePaper -and $bootHomePaper -ine $homePaper) { $bad += ('运行 selfHome=' + $bootHomePaper) }
+
+      if ($bad.Count -eq 0) {
+        $suffix = if ($bootHomePaper) { '（含运行记录）' } else { '（还没有启动痕迹，只对三路）' }
+        Add-Row ('身份纸（' + $fishName + '）') 'OK' ('四路一致：' + $homePaper + $suffix)
+      } else {
+        Add-Row ('身份纸（' + $fishName + '）') 'WARN' (('名册=' + $homePaper + '；') + ($bad -join '；')) ('NEXT: pwsh -File scripts\install.ps1 -RepairAgents -ChildMemberId ' + $prop.Name)
+      }
+    }
+  }
+} catch {
+  Add-Row '身份纸' 'WARN' ('查不了：' + $_.Exception.Message)
+}
+
 # 9. 全鱼：每条鱼一行（端口 / 心跳 / 启动痕迹 / 名册）
 #    为什么单独一段：上面那些检查只盯"她"（whale）。鱼多了以后，
 #    "第二条鱼没起""她的日志写成了第一条鱼的"这类错，单独看她那张表是看不出来的。

@@ -1,0 +1,30 @@
+// 静态检查：身份纸（AGENTS.md）的写法和修法不许退化（2026-11-16 r190）。
+// 为什么用 grep 而不是跑 install：完整安装会改很多真实文件；这条守的是"代码里还留着那四道护栏"。
+// 它防的是"改回去"：来源又变成安装参数、只在不存在时写、或者把 -RepairAgents 删掉。
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+const app = join(import.meta.dirname, '..');
+const read = (p) => readFileSync(join(app, p), 'utf8');
+const install = read('scripts/install.ps1');
+const doctor = read('scripts/doctor.ps1');
+
+const checks = [];
+const ok = (name, cond, detail = '') => checks.push({ name, pass: !!cond, detail });
+
+ok('开关 -RepairAgents 存在', /\[switch\]\$RepairAgents,/.test(install));
+ok('-RepairAgents 有独立分支（只重写身份纸）', /\nif \(\$RepairAgents\) \{/.test(install));
+ok('身份纸的家从名册取（不再只认安装参数）', install.includes('$rosterForAgents.members.$childMember'));
+ok('写入门槛带 -or $Force', install.includes('if (-not (Test-Path $agentsPath) -or $Force)'));
+ok('写后自检：家不存在就 Die', install.includes('AGENTS.md 指向的家不存在'));
+ok('写后自检：没有 START.md 就 Die', install.includes('AGENTS.md 指向的家没有 START.md'));
+ok('doctor 有四路对齐格', doctor.includes("Add-Row ('身份纸（"));
+ok('doctor 的 NEXT 指向 -RepairAgents', doctor.includes('-RepairAgents -ChildMemberId'));
+
+const fail = checks.filter((c) => !c.pass);
+for (const c of checks) console.log(`${c.pass ? 'PASS' : 'FAIL'}  ${c.name}${c.detail ? ' — ' + c.detail : ''}`);
+if (fail.length) {
+  console.error(`test-install-agents：${checks.length} 项，FAIL ${fail.length} —— 身份纸的护栏被改掉了`);
+  process.exit(1);
+}
+console.log(`PASS test-install-agents（${checks.length} 项：来源 / 覆盖 / 自检 / 修复开关 / 体检格）`);
