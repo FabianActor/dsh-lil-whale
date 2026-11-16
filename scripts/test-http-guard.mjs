@@ -1,7 +1,12 @@
 import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
 
-const SERVER = 'plugin/dsh-lil-whale-group-ui/lib/index.js'
-const CLIENT = 'plugin/dsh-lil-whale-group-ui/lib/client.js'
+// 从脚本位置推仓库根：release-check 会把包解到临时目录再跑这个脚本，
+// 不能用相对路径（cwd 不一定是包根）。
+const ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
+const SERVER = join(ROOT, 'plugin', 'dsh-lil-whale-group-ui', 'lib', 'index.js')
+const CLIENT = join(ROOT, 'plugin', 'dsh-lil-whale-group-ui', 'lib', 'client.js')
 const ROUTES = [
   '/group/api/config',
   '/group/api/avatar',
