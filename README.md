@@ -73,9 +73,9 @@ pwsh -File scripts\install.ps1 -PondRoot D:\WorkSpace\lil-whale
 
 不给 `-PondRoot`、又不在 `app\` 里时，安装器会停下并告诉你要给的路径（它不会把 `pool\`、`homes\` 建到桌面去）。
 
-第一次装会建一条鱼：成员键（也是家目录名）是 `fish`，名字是「小鱼」；巡守的成员键是 `host`，你自己是 `human`。想换名字或键：`-ChildName`、`-ChildProfile`（或 `-ChildMemberId`）。
+**第一次装一定会出生一条鱼**——没有"只装宿主、暂时不生"这种模式（鱼塘的名册、共享区、巡守都需要至少一条鱼才有意义；想晚点养，可以先让她闲着）。她的成员键（也是家目录名）是 `fish`，名字是「小鱼」；巡守的成员键是 `host`，你自己是 `human`。想换名字或键：`-ChildName`、`-ChildProfile`（或 `-ChildMemberId`）。再想养一条时用 `fish.ps1 new`，不用重跑安装。
 
-安装器会做这些事：建目录、给鱼建独立的 `DSH_HOME` 与 profile、把两个插件装进对应的 profile、写 `lil-whale.config.json`、放好种子文件（`START.md` / `环境.md` / `AGENTS.md`）。
+安装器会做这些事：建目录、出生一条鱼（独立的 `DSH_HOME` 与 profile）、把两个插件装进对应的 profile、写 `lil-whale.config.json`、放好种子文件（`START.md` / `环境.md` / `AGENTS.md`）。
 
 它不会做这三件：填 API key、建会话、说第一句话——这些需要人来。API key 只有两种来法：人自己填，或人明确说「继承某条鱼的」；脚本不会自己去找 key。
 
@@ -100,7 +100,7 @@ pwsh -File scripts\install.ps1 -PondRoot D:\WorkSpace\lil-whale
 2. 在她的网页里填**她自己的** key：设置 → Models
 3. 添加工作区（选她的家目录），然后在里面新建一段会话
 4. **第一句话由你说**。她没有预设的性格，第一次醒来是什么样，取决于你写了什么、没写什么
-5. 出生之后，两段会话 id 要进群名册。**这两段由你选，安装脚本不替你挑**（也别拿安装这次开的那段会话顶替父辈）：
+5. 出生之后，两段会话 id 要进群名册。**这两段由你选，安装脚本不替你挑**，它也不假设是你这次安装开的那段：
    - 先看候选：`pwsh -File scripts\fish.ps1 sessions all`（列出 id / 最后写时间 / 所在工作区）
    - 选定后：`pwsh -File scripts\fish.ps1 bind <键> -Session <选中的 id>`（父辈与她的都一样）
    - 装的时候也可以显式传 `-ChildSessionId` / `-ParentSessionId`——只在你已经知道"要进鱼塘的是哪段"时传；它不要求是安装时开的那段
