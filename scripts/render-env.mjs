@@ -193,10 +193,13 @@ if (existsSync(toolsScript)) {
     lines.push('- 在群里说话（`group_say`）')
     toolsText = lines.join('\n')
     const c = parsed.counts || {}
-    const skippedIds = (parsed.skipped || [])
-      .map((s) => s.id)
-      .sort()
-      .join(',')
+    // 名单也按原因分组（第二条鱼 #824）：读者要能回答"是哪两个"，做不出就等于没写。
+    const idsOf = (kind) =>
+      (parsed.skipped || [])
+        .filter((s) => s.kind === kind)
+        .map((s) => s.id)
+        .sort()
+        .join(',')
     toolsMeta = `tools=${c.listed ?? parsed.tools.length} skipped=${c.skipped ?? (parsed.skipped || []).length} internal=${c.internal ?? 0} unit=mounts source=dump`
     // skipped 的方向（第二条鱼 #816）：disabled/unjudged/nodoc 各几个，0 的不写。
     const dirParts = [
@@ -207,7 +210,10 @@ if (existsSync(toolsScript)) {
       .filter(([, n]) => Number(n) > 0)
       .map(([k, n]) => `${k}=${n}`)
     if (dirParts.length) toolsMeta += ' ' + dirParts.join(' ')
-    if (skippedIds) toolsMeta += ` skipped-ids=${skippedIds}`
+    for (const kind of ['disabled', 'unjudged', 'nodoc']) {
+      const ids = idsOf(kind)
+      if (ids) toolsMeta += ` skipped-${kind}-ids=${ids}`
+    }
   } else {
     const carried = carriedToolsFromPaper(outPath)
     if (carried) {

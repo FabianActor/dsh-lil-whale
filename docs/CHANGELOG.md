@@ -1,12 +1,19 @@
 # 工程变更记录
 
 > 这份文件记录**工程侧**的每一次改动：机制、修账、脚本、文档。它和产品需求是两条线——需求讨论看 [PRD.md](PRD.md)，这里只记"改了什么、为什么"。
-> 编号 `rNN` 是**内部修订号**：改一次 +1，一天可能十几稿；两个 npm 包另有各自的 semver（各自 `package.json`，当前 1.6.46），只在功能变化或发布时动。编号从 r1 起。
-> 条目按时间倒序（新的在上）。A.x 原先住在 PRD 附录里，2026-11-15 搬到这里；历史条目里若还写着「PRD 附录 A.x」，指的就是本文件的 A.x。`A.x` 是"已验证的技术事实与判据"的编号，统一收在文末附录 A（A.1–A.130）。
+> 编号 `rNN` 是**内部修订号**：改一次 +1，一天可能十几稿；两个 npm 包另有各自的 semver（各自 `package.json`，当前 1.6.47），只在功能变化或发布时动。编号从 r1 起。
+> 条目按时间倒序（新的在上）。A.x 原先住在 PRD 附录里，2026-11-15 搬到这里；历史条目里若还写着「PRD 附录 A.x」，指的就是本文件的 A.x。`A.x` 是"已验证的技术事实与判据"的编号，统一收在文末附录 A（A.1–A.131）。
 
 ---
 
 ## 变更条目
+
+## r183 — 2026-11-16 09:2x
+
+- **名单按原因分组**（第二条鱼 #824）：r182 的 `skipped-disabled=2 skipped-unjudged=1` 能数回去，但配的是一张平铺的 `skipped-ids`——读者知道"2 个停用、1 个判不了"，却不知道是哪两个。她给出现场证伪：`tool-plugin-manager` 在 skipped 里，而她此刻就能调 `plugin_manager`。改 `scripts/render-env.mjs`：按 `parsed.skipped[].kind` 分组成 `skipped-disabled-ids=` / `skipped-unjudged-ids=` / `skipped-nodoc-ids=`（空的不写），不再写合并列表。
+- **`unjudged` ≠ 用不了**：`tool-plugin-manager` 的停用条件是一个 `!!js` 表达式（`!ctx.get('profileContext')`），生成器判不了就当"文档没写进去"，但运行时它在——纸面明写"这一桶不等于你用不了，试一下就知道"。
+- 文档：模板与 `docs/detail/怎么装一套鱼塘.md` §3.8.5 补"名单也按方向分组"与本条区别。
+- 验证：三张纸重生成（09:23），指纹 `skipped-disabled=2 skipped-unjudged=1 skipped-disabled-ids=tool-bash,tool-plugin-market skipped-unjudged-ids=tool-plugin-manager`；七套测试全过；`doctor` 只剩版本差 WARN；`release-check` 待跑。
 
 ## r182 — 2026-11-16 09:2x
 
@@ -3677,3 +3684,10 @@ sleep-tools-register-failed: tool "sleep" must declare output { schema, render, 
 - **做法**：`skipped` 拆成 `skipped-disabled` / `skipped-unjudged` / `skipped-nodoc`（0 不写）；纸面写清"等式只覆盖默认组合段里的挂载项；群插件与看外面是另一本账"；目录补 `dsh-lil-whale-group`（internal）、`dsh-bili-eyes` / `mcp-bili-readonly`（group）作登记，但它们是根级插件，不进这三个数。
 - **判据**：①数要能回答方向（在里面的为什么在里面）；②等式要写明覆盖范围——"可见集"就写"可见集"，不要用没写边界的等式冒充全集；③已知覆盖边界写进纸，比多算一个数更接近诚实。
 - **教训**：**一条等式不写范围，就等于宣布它覆盖一切。** 范围是等式的一部分，不是注释。
+## 附录 A.131 计数分了组，名单也要分组（2026-11-16）
+
+- **症状**：r182 把 `skipped` 拆出三个方向数（`disabled=2` / `unjudged=1` / `nodoc=0`），但名单仍是一张平铺的 `skipped-ids=tool-bash,tool-plugin-manager,tool-plugin-market`。读者能验加数（2+1+0=3），却回答不了"是哪两个"；第二条鱼现场证伪：`tool-plugin-manager` 在 skipped 里，而她此刻就能调 `plugin_manager`。
+- **根因**：计数和名单是两套粒度——数分组了、名单没分；分组信息在生成器的 `skipped[].kind` 字段里，但没写进纸。读者要"哪两个"，纸只给"三个"。
+- **做法**：`render-env.mjs` 用 `idsOf(kind)` 生成 `skipped-disabled-ids=` / `skipped-unjudged-ids=` / `skipped-nodoc-ids=`（空的不写），删掉合并的 `skipped-ids`；纸面补一句 `unjudged` 只表示"生成器判不了"，不等于运行时用不了。
+- **判据**：①分组计数必须配分组名单，否则读者做不出"是哪几个"，等于没写（第二条鱼原话）；②"判不了"和"被禁用"是两种事实，前者可能此刻正可用，纸不能把不确定翻译成否定；③名单按 id 排序，diff 才有意义。
+- **教训**：**数的粒度变了，名单的粒度也要跟着变。** 只把总数拆开、把明细留在原地，读者会以为两者本来就不是同一件事。
