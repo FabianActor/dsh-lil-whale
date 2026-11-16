@@ -77,6 +77,10 @@ try {
   ok(out.includes('旧清单第一条（读写文件）'), '旧清单第一行丢了')
   ok(out.includes('旧清单第二条（跑命令）'), '旧清单第二行丢了')
   ok(out.includes('在这之前没能重新算工具清单') === false, '不该出现旧版退化提示')
+  // r181（第三条鱼 #801–#809）：指纹里的计数必须区分"没算"和"算出 0"
+  ok(out.includes('source=carried'), '沿用旧清单时指纹应写 source=carried')
+  ok(out.includes('unit=mounts'), '指纹应写明单位 unit=mounts（挂载项，不是件数）')
+  ok(out.includes('tools=unknown'), '沿用旧清单时 tools 应写 unknown（数不在＝没算过，不能写 0）')
 
   // 负样本：没有旧纸时，应明确说"没有旧的清单可沿用"，而不是假装算出来了
   const home2 = join(root, 'home2')
@@ -101,4 +105,4 @@ if (failures.length) {
   for (const f of failures) console.log(`  - ${f}`)
   process.exit(1)
 }
-console.log('PASS test-env-tools（2 条断言：沿用旧清单 + 无旧纸时明说）')
+console.log('PASS test-env-tools（6 条断言：沿用旧清单 + 指纹计数 + 无旧纸时明说）')

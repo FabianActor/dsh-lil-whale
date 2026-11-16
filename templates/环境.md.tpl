@@ -55,6 +55,8 @@
 
 **没列在这里的，不等于你现在没有那只手**——要确认就试一下，或请宿主跑一次 `--dump-config`。反过来，上面这份也只是举例，不是承诺：能力会长，纸会旧；这份纸是生成物，过期了让宿主 refresh。
 
+纸最末那行指纹里有 `tools=` / `skipped=` / `internal=` 三个数。它们数的是**挂载项（组）**，不是"件"——一个插件可能带好几只手，所以这三个数不能跟"你有几只手"放在一起加。`source=dump` 说明这一次真算过；`source=carried` 说明沿用上一次（这次没算成）。
+
 ## 群怎么用
 
 - 消息存在 `{{GROUP_DIR}}\messages.jsonl`，**只追加，没人改它**
@@ -219,4 +221,4 @@ group_say(to:"<对方的 id>", text:"……", channel:"dm")
 - `{{DEPLOY_DATE}}` 安装时生成
 - `{{GENERATED_AT}}` 最近一次重新生成（模板指纹 `{{TEMPLATE_SHA}}`）
 
-<!-- env: template={{TEMPLATE_SHA}} generated={{GENERATED_AT}} -->
+<!-- env: template={{TEMPLATE_SHA}} generated={{GENERATED_AT}} {{TOOLS_META}} -->

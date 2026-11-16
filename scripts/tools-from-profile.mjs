@@ -108,6 +108,7 @@ for (const line of section) {
 }
 
 const enabled = []
+const internal = []
 for (const tool of tools) {
   if (tool.disabled === true) {
     skipped.push({ id: tool.id, why: 'disabled: true' })
@@ -118,8 +119,12 @@ for (const tool of tools) {
     continue
   }
   const entry = catalog[tool.id]
-  // internal：上下文机制，不是"手"，不写进环境.md
-  if (entry && entry.kind === 'internal') continue
+  // internal：上下文机制，不是"手"，不写进环境.md —— 但它也是"挂载项"，
+  // 必须进计数（2026-11-16 第三条鱼：等式里少了 internal 这一桶，差额会被下一个人当 bug 查）。
+  if (entry && entry.kind === 'internal') {
+    internal.push(tool.id)
+    continue
+  }
   if (!entry || !entry.line) {
     skipped.push({ id: tool.id, why: '工具目录里没有它（补一行就行）' })
     continue
@@ -127,4 +132,20 @@ for (const tool of tools) {
   enabled.push({ id: tool.id, line: entry.line, kind: entry.kind === 'group' ? 'group' : 'tool' })
 }
 
-console.log(JSON.stringify({ ok: true, preset: wanted, platform: process.platform, tools: enabled, skipped }, null, 0))
+// 计数单位是"挂载项（组）"，不是"件"（一个插件可能带好几只手）。
+// 2026-11-16 三条鱼的结论：dump-config 只报组、不报每组几件，硬折成件只能靠猜，
+// 所以这里只给同单位能算的数；件数由 wake-agent-tools 那本账单独看变化，不参与这条等式。
+const skippedSorted = [...skipped].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+const counts = {
+  mounts: enabled.length + skipped.length + internal.length,
+  listed: enabled.length,
+  skipped: skipped.length,
+  internal: internal.length,
+}
+console.log(
+  JSON.stringify(
+    { ok: true, preset: wanted, platform: process.platform, counts, tools: enabled, skipped: skippedSorted },
+    null,
+    0,
+  ),
+)
