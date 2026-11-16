@@ -324,7 +324,8 @@ if (Test-Path -LiteralPath $pluginLog) {
         $capPid = $caps.pid
     $capLoaded = ''
     try { if ($caps.source.configMtime) { $capLoaded = ([datetime]$caps.source.configMtime).ToLocalTime().ToString('HH:mm:ss') } } catch { }
-    $capWho = "pid=$capPid" + $(if ($capLoaded) { "，配置于 $capLoaded 加载" } else { '' })
+    # 2026-11-16 第五份沉淀 N3：那是配置文件的 mtime，不是"加载时间"；按事实写。
+    $capWho = "pid=$capPid" + $(if ($capLoaded) { "，配置文件最后修改于 $capLoaded" } else { '' })
     Add-Row '生效值' 'OK' "$capText（$srcText；$capWho；$ageMin 分钟前写出）"
       }
     } catch {
@@ -667,11 +668,65 @@ if ($lastBoot) {
     $pkgPath = Join-Path $Cfg.Root 'plugin\dsh-lil-whale-group\package.json'
     if ($bootObj.pkg -and (Test-Path -LiteralPath $pkgPath)) {
       $diskVer = (Get-Content -LiteralPath $pkgPath -Raw -Encoding UTF8 | ConvertFrom-Json).version
-      $bootVer = ([string]$bootObj.pkg -replace '^.*@', '')
-      if ($bootVer -eq $diskVer) {
-        Add-Row '版本一致' 'OK' ("启动痕迹 {0} = package.json {1}" -f $bootVer, $diskVer)
+      # 2026-11-16 第五份沉淀 N2：只看最后一行会被"刚好重启的那条鱼"骗过——主进程还是旧代码也报 OK。
+      # 改成按每个运行者（selfHome，没有就用 pid）各取最近一条启动行，逐个核。
+      $bootAllVer = @()
+      $bootPathVer = Join-Path $PSScriptRoot '..\logs\plugin-boot.log'
+      if (Test-Path -LiteralPath $bootPathVer) {
+        $bootAllVer = @(Get-Content -LiteralPath $bootPathVer -Encoding utf8 | ForEach-Object {
+          try { $_ | ConvertFrom-Json } catch { $null }
+        } | Where-Object { $_ -and $_.pkg })
+      }
+      # 只认"这一座鱼塘里、现在还在跑的进程"：
+      # ①启动行写的家必须是名册里的家（旧鱼塘根、换过目录的历史行不掺和）；
+      # ②pid 还活着（pid 会被复用，所以还要 ③）；
+      # ③进程启动时间不晚于那条启动行、且相隔不超过 30 分钟（pid 被别的程序复用时会露馅）。
+      $allowedHomes = @{}
+      if ($Cfg.MembersFile -and (Test-Path -LiteralPath $Cfg.MembersFile)) {
+        $rosterVer = (Get-Content -LiteralPath $Cfg.MembersFile -Raw -Encoding utf8 | ConvertFrom-Json).members
+        foreach ($rp in $rosterVer.PSObject.Properties) {
+          if ($rp.Value.home) { $allowedHomes[(([string]$rp.Value.home).TrimEnd('\'))] = $true }
+          if ($rp.Value.dshHome) { $allowedHomes[(([string]$rp.Value.dshHome).TrimEnd('\'))] = $true }
+        }
+      }
+      $liveBoot = @()
+      $seenPid = @{}
+      foreach ($rowVer in $bootAllVer) {
+        $rowPid = [string]$rowVer.pid
+        if (-not $rowPid -or $seenPid.ContainsKey($rowPid)) { continue }
+        $rowHome = ([string]$rowVer.selfHome).TrimEnd('\')
+        if ($allowedHomes.Count -gt 0 -and -not $allowedHomes.ContainsKey($rowHome)) { continue }
+        $seenPid[$rowPid] = $true
+        $procVer = Get-Process -Id ([int]$rowPid) -ErrorAction SilentlyContinue
+        if (-not $procVer) { continue }
+        # pid 会被系统进程复用（svchost/dasHost/SearchFilterHost…）；这里只认 node，
+        # 而且认不出启动时间的（系统进程常拒绝访问）也不拿它当"我们的进程"。
+        if ($procVer.ProcessName -ne 'node') { continue }
+        $startUtc = $null
+        try { $startUtc = $procVer.StartTime.ToUniversalTime() } catch { $startUtc = $null }
+        if (-not $startUtc) { continue }
+        try {
+          $rowAtUtc = ([datetime]$rowVer.at).ToUniversalTime()
+          if ($rowAtUtc -lt $startUtc.AddSeconds(-5) -or ($rowAtUtc - $startUtc).TotalMinutes -gt 30) { continue }
+        } catch { continue }
+        $liveBoot += $rowVer
+      }
+      if ($liveBoot.Count -eq 0) {
+        # 读不到进程表（沙箱等）就退回"每个 selfHome 的最近一行"，并注明口径。
+        $byHomeVer = @{}
+        foreach ($rowVer in $bootAllVer) { $byHomeVer[([string]$rowVer.selfHome).TrimEnd('\')] = $rowVer }
+        $liveBoot = @($byHomeVer.Values)
+        $scopeText = '启动痕迹（读不到进程表）'
       } else {
-        Add-Row '版本一致' 'WARN' ("启动痕迹 {0} ≠ 磁盘 {1}（进程里跑的是旧代码）" -f $bootVer, $diskVer) 'NEXT: 重启她的窗（以及你的），让进程加载新版本'
+        $scopeText = '进程'
+      }
+      $staleRunners = @($liveBoot | Where-Object { ([string]$_.pkg -replace '^.*@', '') -ne $diskVer })
+      if ($staleRunners.Count -eq 0) {
+        $runnerText = (@($liveBoot | ForEach-Object { [string]$_.pkg -replace '^.*@', '' }) | Sort-Object -Unique) -join '/'
+        Add-Row '版本一致' 'OK' ("所有{0}都跑 {1}（磁盘 {2}；{3} 个）" -f $scopeText, $runnerText, $diskVer, $liveBoot.Count)
+      } else {
+        $staleText = ($staleRunners | ForEach-Object { 'pid={0} 启动 {1}' -f $_.pid, ([string]$_.pkg -replace '^.*@', '') }) -join '；'
+        Add-Row '版本一致' 'WARN' ("还有{0}跑着旧代码（磁盘 {1}）：{2}" -f $scopeText, $diskVer, $staleText) 'NEXT: 重启这些进程（主 dsh 与各条鱼），让它们加载新版本'
       }
     } else {
       Add-Row '版本一致' 'WARN' '启动痕迹里没有 pkg，或找不到 plugin\dsh-lil-whale-group\package.json'
@@ -944,8 +999,11 @@ if (Test-Path -LiteralPath $Cfg.MembersFile) {
         })
         # 2026-11-16 第五份沉淀 P6：宿主的启动行 selfHome 也等于鱼的家（宿主用鱼的配置跑），
         # 只按路径取"最后一条"会取到宿主的 pid。鱼自己的行有 profile 字段，优先按它过滤。
-        if ($m.profile) {
-          $hits = @($hits | Where-Object { [string]$_.profile -ieq [string]$m.profile })
+        # 2026-11-16 第五份沉淀 N1：宿主进程可能没设 DSH_PROFILE（启动行 profile 是 "(unset)"，
+        # 早年还可能带着继承来的 "web"）。watcher 整类不过滤 profile，只按家匹配；鱼才按 profile 收窄。
+        if ($m.profile -and $m.role -ne 'watcher') {
+          $byProfile = @($hits | Where-Object { [string]$_.profile -ieq [string]$m.profile })
+          if ($byProfile.Count -gt 0) { $hits = $byProfile }
         }
         $hit = $hits | Select-Object -Last 1
         if ($hit) { $bootText = ('pid={0} pkg={1}' -f $hit.pid, $hit.pkg) }
