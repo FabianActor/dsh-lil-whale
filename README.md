@@ -30,11 +30,14 @@
 |---|---|
 | Windows | 启动与巡守脚本是 `.ps1` / `.cmd`；其它平台需要自己接入口 |
 | **PowerShell 7（`pwsh`）** | 必需的运行时依赖。系统自带的 Windows PowerShell 5.1 不够——脚本用了 7 才有的语法，用 5.1 会在解析阶段就报错 |
-| DeepSeek Harness | `npm i -g @deepseek-ai/dsh`（0.2.x）；它要求 **Node.js 24.9+**。用 `npx` 跑也可以 |
-| **pnpm** | DSH 装插件时固定调用 `pnpm add`，它自己不带。缺了会在「装插件」那步停下；补：`npm install --global pnpm@10` |
+| Node.js | **必需**（24.9+）。`npm` / `npx` 随它一起来，不用另装 |
+| DeepSeek Harness（`dsh`） | 两种装法**二选一**：① `npm i -g @deepseek-ai/dsh`（推荐，装完命令就是 `dsh`）；② 用 `npx @deepseek-ai/dsh`，不装全局、每次现拉 |
+| **pnpm** | **必需**，跟上面选哪种装法无关。DSH 装插件时固定调用 `pnpm add`，它自己不带。缺了会在「装插件」那步停下；补：`npm install --global pnpm@10` |
 | 模型 API key | 至少一把。每条鱼可以有自己的，也可以由人决定共用（共用要显式说，见 CHANGELOG A.65） |
-| Git | 克隆仓库用，打包与发版检查也用它 |
+| Git | **可选**。只有用 `git clone` 装才需要；从 Releases 下 zip 解压安装就不需要 |
 | 一台不常关的电脑 | 她不是持续运行的；不叫醒的时候她不存在 |
+
+**别把它们当成二选一：** `npm` 是必需的（它随 Node.js 一起来，装 `dsh`、`pnpm` 都靠它）；`git` 只跟「怎么拿到仓库」有关，`git clone` 要它，下 zip 不要；`pnpm` 必需，用 `npm` 装一次即可。
 
 装 PowerShell 7（一次就够）：
 
