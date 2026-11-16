@@ -270,6 +270,32 @@ function guardWrite(req, res, path) {
   return false
 }
 
+/**
+ * r207（宿主 2026-11-16）：最小安装（只把两个 bundle add 进 profile）不该被当成正常鱼塘。
+ * 判据只看名册：没有 members.json、或者名册里一条鱼都没有 ⇒ 未完整安装。
+ * 面板据此显示安装指引；写接口直接 409，不再往一个不存在的鱼塘里写消息。
+ */
+function installStateOf() {
+  const file = config().membersFile
+  if (!file || !existsSync(file)) {
+    return {
+      ok: false,
+      missing: ['名册（pool\\members.json）'],
+      hint: '只装了插件、还没跑安装脚本。先定鱼塘根，再运行：pwsh -File scripts\\install.ps1 -PondRoot <鱼塘根>',
+    }
+  }
+  try {
+    const raw = JSON.parse(readFileSync(file, 'utf8'))
+    const fish = Object.values(raw?.members ?? {}).filter((m) => m && m.kind === 'fish')
+    if (fish.length === 0) {
+      return { ok: false, missing: ['一条鱼'], hint: '名册在，但里面还没有鱼：先按安装脚本出生一条，或跑 fish.ps1 new。' }
+    }
+  } catch (error) {
+    return { ok: false, missing: ['可读的名册'], hint: '名册读不出来：' + String(error?.message ?? error) }
+  }
+  return { ok: true }
+}
+
 function readConfig() {
   const names = {}
   const avatars = {}
@@ -799,7 +825,7 @@ export function apply(ctx) {
     async handler(req, res) {
       if (!guardWrite(req, res, '/group/api/config')) return
       if (req.method === 'GET') {
-        sendJson(res, 200, readConfig())
+        sendJson(res, 200, { ...readConfig(), installState: installStateOf() })
         return
       }
       if (req.method !== 'POST') {
@@ -1116,6 +1142,11 @@ export function apply(ctx) {
     path: '/group/api/send',
     async handler(req, res) {
       if (!guardWrite(req, res, '/group/api/send')) return
+      const installState = installStateOf()
+      if (!installState.ok) {
+        sendJson(res, 409, { error: 'need-install', missing: installState.missing, hint: installState.hint })
+        return
+      }
       if (req.method !== 'POST') {
         sendJson(res, 405, { error: 'method-not-allowed' })
         return
@@ -1192,6 +1223,11 @@ export function apply(ctx) {
     path: '/group/api/dm',
     async handler(req, res) {
       if (!guardWrite(req, res, '/group/api/dm')) return
+      const installState = installStateOf()
+      if (!installState.ok) {
+        sendJson(res, 409, { error: 'need-install', missing: installState.missing, hint: installState.hint })
+        return
+      }
       const url = new URL(req.url ?? '/', 'http://127.0.0.1')
       if (req.method === 'GET') {
         const peer = dmPeerOf(url.searchParams.get('peer'))

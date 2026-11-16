@@ -38,6 +38,11 @@ for (const route of ROUTES) check(`写路由有守卫：${route}`, server.includ
 const headerSites = (client.match(/'x-llw-panel': '1'/g) ?? []).length
 check('客户端的写请求都带面板头（>=10 处）', headerSites >= 10, `找到 ${headerSites} 处`)
 check('客户端写请求仍带 JSON content-type', client.includes("'content-type': 'application/json', 'x-llw-panel': '1'"))
+check('未完整安装的判据函数存在', server.includes('function installStateOf('))
+check('名册缺失时写接口回 409 need-install', server.includes("error: 'need-install'"))
+check('installState 出现在 config 响应里', server.includes('installState: installStateOf()'))
+check('面板显示安装未完成横幅', client.includes('这个鱼塘还没装完整'))
+check('写接口两处都挡（send + dm）', (server.match(/error: 'need-install'/g) ?? []).length >= 2)
 
 console.log(failed === 0 ? 'OK 写请求守卫齐全' : `FAIL×${failed} 写请求守卫不全`)
 process.exit(failed === 0 ? 0 : 1)

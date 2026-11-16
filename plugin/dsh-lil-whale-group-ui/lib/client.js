@@ -2114,6 +2114,25 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
         if (el) pendingScrollRef.current = { height: el.scrollHeight, top: el.scrollTop }
         setRenderLimit((n) => n + 120)
       }, [])
+      // r207：未完整安装时不装成正常聊天——服务端 /group/api/config 带 installState，
+      // 这里据它显示一块安装指引（空壳面板是最容易被误当成"装坏了"的状态）。
+      const installIncomplete = Boolean(config?.installState && config.installState.ok === false)
+      const installBanner = installIncomplete
+        ? h('div', {
+            style: {
+              margin: '10px 12px 0', padding: '10px 12px', boxSizing: 'border-box',
+              border: '0.5px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12))',
+              borderRadius: 'var(--dsw-radius-md, 8px)',
+              background: 'var(--dsw-alias-bg-l2, rgba(0,0,0,0.03))',
+              fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-secondary)',
+            },
+          },
+            h('div', { style: { fontWeight: 600, color: 'var(--dsw-alias-label-primary)', marginBottom: 4 } }, '这个鱼塘还没装完整'),
+            h('div', null, '缺：' + (((config.installState.missing || []).join('、')) || '安装步骤')),
+            h('div', { style: { marginTop: 4, wordBreak: 'break-all' } }, config.installState.hint || '按 README 跑一遍 scripts\\install.ps1'),
+          )
+        : null
+
       const groupListNode = useMemo(
         () => {
           const nodes = withDivider(visibleMessages, seenGroup, (message, index) => h(Bubble, {
@@ -2236,7 +2255,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
           ? h(DmPage, { config, presence })
           : tab === 'pond'
             ? h(PondPage, { embedded: true })
-            : h(React.Fragment, null,
+            : h(React.Fragment, null, installBanner,
         h('div', {
           style: { flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' },
         },
