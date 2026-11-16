@@ -420,7 +420,7 @@ pwsh -File scripts\fish.ps1 upgrade-check -Mark 1.7.2   # 做完以后记账
 - M6 收尾：两个包名为 `@fabianactor/dsh-lil-whale-group(-ui)`，安装脚本、种子模板、`release-check`（25 项）、`doctor`（三十余项）都跑得通；当前版本 **1.8.12**。
 - 鱼二代完成：第四条鱼出生、转正，A–G 七段测试全过；群聊窗口化与打字卡顿也修好了。
 - **独立机器从零安装复测通过**（2026-11-16 21:11）：真实用户视角、按 README 从装 dsh 开始走完，宿主反馈"完美运行，没有一丝毛病"。
-- 发布前只剩三件：建 GitHub 空仓库、`npm login`、点头删掉两个包的 `private`（见 [发布前检查清单](./docs/detail/发布前检查清单.md)）。
+- **已发布**（2026-11-16）：两个包在 npm 上 `@fabianactor/dsh-lil-whale-group` / `-ui`（1.8.12）；仓库公开；安装仍从本仓库走（npm 上只有两个 bundle）。
 
 进度和每一条「为什么这样定」都在 `docs/` 里，包括踩过的坑。
 
