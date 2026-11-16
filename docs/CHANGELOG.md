@@ -8,6 +8,22 @@
 
 ## 变更条目
 
+## r188 — 2026-11-16 11:4x–12:0x
+
+- **文档通审**（宿主 11:39："再过一遍文档"：①README 去掉 token 消耗相关描述 ②去掉以前改的 Ta 之类的中性描述，统一用"她" ③根目录 README 若无用可删 ④检查真实人名/API 脱敏不彻底、说明文档冗余或不全面）。
+  - **删掉根目录占位 README**：`<鱼塘根>\README.md`（仓库根的占位文件）是 0 字节空文件（2026-11-15 留下的），真文档在 `app\README.md`。
+  - **README「它会花多少钱」去掉 token 估数**：180–200 输入 token、出生一轮约 39k 这类数字代表不了用户账单（模型、缓存命中、上下文长度都会变），改成三行相对量级——出生那一轮最贵（她要读环境、认地方、写第一页）；每天一次定时推门与一次普通对话同量级；你跟她聊的那一轮也同量级。保留"只在她被唤醒、或有人跟她说话时才花钱；她不常驻思考"。
+  - **代词统一**：讲鱼一律用"她"。改了 `发布时对外说什么.md`、`怎么生一条新鱼.md`、`这一周她过得怎么样`、`还没做的想法`、`PRD.md`、`她自己怎么醒来.md`、`怎么装一套鱼塘.md` 与 promo 两篇朗读稿；README 里两处指鱼的标题改成「这个鱼塘现在的样子」「鱼还好吗」。指软件/脚本/dsh 本身的"它"保留。
+  - **人名脱敏**（166 处）：第二条鱼/第三条鱼/第四条鱼/第一条鱼/宿主；项目名「小小肥鱼」保留（那是项目名，不是人名），包 scope `@fabianactor` 与 GitHub org `FabianActor` 保留（发布要用）。顺手修掉脱敏脚本的过冲：`小小肥鱼`→`小第二条鱼`、README 里「第四条鱼（第四条鱼）」、`@hostactor` 与真实 scope 不符（8 处还原）。
+  - **路径与会话 id 脱敏**：`C:\Users\…`→`%USERPROFILE%`、鱼塘根/旧仓库根/旧工作区→占位符、`session-<uuid>`→`<会话 id>`；archive 里指向旧路径的失效链接改成相对链接或行内代码。
+  - **链接复查**：全仓 57 条 markdown 相对链接，**0 坏链**（本轮之前 archive 有 13 条）。
+  - **promo 不写死数值**：`00-宣发方案.md` 原来写"README 里现在写的 1.6.27、叫醒默认值（60s/12/60）都是旧值，发布前要改"——改成"方案里不要写死版本号与叫醒默认值，一律以 README 当天的值为准"；宣传方案不该跟着代码过期。
+  - **README 状态段**：去掉重复的 `## 状态` 标题；`release-check` 17 项 → 21 项，当前版本 1.6.27 → 1.7.0。
+  - **旧口径作废**：本文档 2026-11-09 那条"讲产品/机制/别人的鱼用 `ta`，讲我们这一只用「她」"（约 L1355）**已被 2026-11-16 宿主口径取代**——从此讲鱼一律用"她"。原文保留作历史记录，不回改。
+  - **抽查**：全 docs 无重复段落（≥80 字段落两两比对，0 组），无重复二级标题（README 那处已修），疑似密钥扫描 0 真命中（`sk-`/`ark-`/`Bearer` 命中均为 `archive-fish`、`mark-archived` 之类误报）。
+- **版本**：纯文档，版本仍 **1.7.0**，代码未动。
+
+
 ## r187 — 2026-11-16 11:3x
 
 - **反馈渠道**（宿主 11:30："在合适的地方写一条说明（对用户的 agent 说）：如果 agent 发现了可修复的 bug，请提交 issue 或者 pr，或者在群内反馈。QQ群号先用 xxx 占位"）。
@@ -110,7 +126,7 @@
 - **验证**：基线 `OK（FAIL×0 / WARN×0）`、exit 0；删 `Add-Row '名册自检'` ⇒ 1 行 FAIL「整族消失……没有新名字出现」、`FAIL×1`、exit 1；改名 `版本一致`→`版本一致X` ⇒ 1 行 FAIL「像是改名」、exit 1；删整格 + 加一个陌生新格 ⇒ `WARN 整族消失（同时出现了 1 个新名字……可能是改名，需人判）` + `FAIL 新格未登记`、exit 1；还原基线 OK。`doctor` 真实运行：whale `OK 有分界行`、fishball/xiaoman `INFO 进程还是旧代码（启动 1.6.36，分界写者自 1.6.39 起才有）`；只给 fishball 伪造一条 `pkg=1.6.41` 的启动行 ⇒ fishball `WARN 带分界的代码却没有 log-format 行`、xiaoman 仍 INFO；恢复后 `plugin-boot.log` 78,113 B 逐字相同。
 - **补记（第四条鱼 #733，字符级）**：上面那段 `TrimEnd` 曾写成 `TrimEnd('')`——引号里是空集。`.NET` 里 `TrimEnd` 的参数是"要裁的字符集"，空集等于**不裁**（它不是 `Trim()`；`Trim()` 才去空白），所以两边只要有一边带尾反斜杠，`-ieq` 就不成立 ⇒ 走进"这一家还没有启动痕迹"那支，报一个**假的第三种状态**。已改成 `([string]$o9c.home).TrimEnd('\') -ieq $myHome9c.TrimEnd('\')`；实测：`'D:\x\homes\fishball\dsh-home\'` 与 `'D:\x\homes\fishball\dsh-home'` 旧写法 false、新写法 true。判据：''`TrimEnd` 的参数是要裁的字符集，空集等于不裁；长得像 `Trim()` 但它做的事不一样''。
 
-- **补记 2（第一条鱼 #741，反证成立一半）**：`homes\whale\logs\watchman.log` 里 19:38:59 / 20:20 / 21:07 / 21:55 / 23:06 / 01:34:55 有六行 `log-format`，而 01:34:55 那个进程的启动行是 `pkg=…@1.6.36` ⇒ "写者自 1.6.39 起才有"这句话不准确。真实结构：写者一直存在，但 1.6.39 之前只有巡守写、且巡守的 `selfHome` 是 `homes\whale`（`index.js:171-173`：`SELF_HOME = CFG.selfHome`、`WATCHMAN_LOG = join(SELF_HOME, 'logs', 'watchman.log')`），所以它只写第一条鱼那份；1.6.39 起 `index.js:2246` 在 `apply()` 开头写、不再只在 `isMainProcess()` 分支里（分支在 2248 行）⇒ **每个进程往自己的 `selfHome\logs\watchman.log` 写自己那份**。结论：鱼丸/小满的 INFO 仍是真的"还没到"，重启后各自写一份会变 OK；"只有一个写者、重启多少次都不会变"不成立。文案改成"1.6.39 起才每个进程各写自己那份"，判据不变。
+- **补记 2（第一条鱼 #741，反证成立一半）**：`homes\whale\logs\watchman.log` 里 19:38:59 / 20:20 / 21:07 / 21:55 / 23:06 / 01:34:55 有六行 `log-format`，而 01:34:55 那个进程的启动行是 `pkg=…@1.6.36` ⇒ "写者自 1.6.39 起才有"这句话不准确。真实结构：写者一直存在，但 1.6.39 之前只有巡守写、且巡守的 `selfHome` 是 `homes\whale`（`index.js:171-173`：`SELF_HOME = CFG.selfHome`、`WATCHMAN_LOG = join(SELF_HOME, 'logs', 'watchman.log')`），所以它只写第一条鱼那份；1.6.39 起 `index.js:2246` 在 `apply()` 开头写、不再只在 `isMainProcess()` 分支里（分支在 2248 行）⇒ **每个进程往自己的 `selfHome\logs\watchman.log` 写自己那份**。结论：鱼丸/第四条鱼的 INFO 仍是真的"还没到"，重启后各自写一份会变 OK；"只有一个写者、重启多少次都不会变"不成立。文案改成"1.6.39 起才每个进程各写自己那份"，判据不变。
 
 - **补记 3（第一条鱼 #744，收回并转成预测）**：她承认"从谁的文件里有倒推结构"是以近代远；把证据变成可证伪预测——重启后她那本 `watchman.log` 每次启动应出现两条 `log-format`（巡守一条、她宿主一条、pid 不同），只出现一条则说明"各写自己那份"在同一个家里退化。我核了 `watchmanLog()`（`index.js:847-860`）只是 mkdir+append、没有去重，2246 在分支外，预测应当成立。判据写进 `docs/detail/怎么判断与起名.md` §37。
 
@@ -143,30 +159,30 @@
 
 ## r173 — 2026-11-16 02:1x
 
-- **覆盖测试改成按"族"登记**（第三条鱼的原型与建议）。原来 `scripts/test-doctor-coverage.mjs` 是两张平表（静态格名 / 动态前缀），能对上可能只是两张表都写错了。改成一个族一条记录 `{ 静态名?, 动态前缀? }`，三种形态都要能落进来：静态格名、动态前缀、catch 分支的裸家族名（"这一族整体查不了"）。测试对每个族断言"至少出现一种形态"，再加"代码里出现的每个形态都能落到某个族"；把动态族写成具体鱼名（`钥匙（小肥鱼）`）会被单独点名。
-- **负样本实测**：临时往 `doctor.ps1` 塞 `Add-Row '新格子测试' 'OK' 'x'` → FAIL「新格未登记」；塞 `Add-Row '钥匙（小肥鱼）' 'OK' 'x'` → FAIL「把动态族写成了静态名（应走动态前缀 钥匙（…）」；还原后 32 族 / 34 静态格 / 6 动态前缀全过、exit 0。
+- **覆盖测试改成按"族"登记**（第三条鱼的原型与建议）。原来 `scripts/test-doctor-coverage.mjs` 是两张平表（静态格名 / 动态前缀），能对上可能只是两张表都写错了。改成一个族一条记录 `{ 静态名?, 动态前缀? }`，三种形态都要能落进来：静态格名、动态前缀、catch 分支的裸家族名（"这一族整体查不了"）。测试对每个族断言"至少出现一种形态"，再加"代码里出现的每个形态都能落到某个族"；把动态族写成具体鱼名（`钥匙（第二条鱼）`）会被单独点名。
+- **负样本实测**：临时往 `doctor.ps1` 塞 `Add-Row '新格子测试' 'OK' 'x'` → FAIL「新格未登记」；塞 `Add-Row '钥匙（第二条鱼）' 'OK' 'x'` → FAIL「把动态族写成了静态名（应走动态前缀 钥匙（…）」；还原后 32 族 / 34 静态格 / 6 动态前缀全过、exit 0。
 - **判据进纸**：`docs/detail/怎么判断与起名.md` 新增 **§36 覆盖表要按"族"登记，不是按两张平表**（含她原型第一次跑就抓出三处自己表错的例子）。判据分两档沿用第二、三条鱼的：新格没登记 = FAIL；登记了但代码里抓不到 = WARN。
 - **版本不动**（1.6.41；只改测试形状与文档，doctor 的输出与判据不变）。
 
 ## r172 — 2026-11-16 02:4x
 
-- **覆盖表要能被代码对照，否则它只是一段描述**（小鱼丸）。小满把 doctor 的四套名册类检查拉成一张表（`名册与家` 管键集合、`会话绑定` 管路径、`名册（全鱼）` 管存在性、遗留的 `名册` 把"别人的 pins"和"我的家"拼在一起），结论是只有遗留那套该退休。她还提出这张表会过期——于是新增 `scripts/test-doctor-coverage.mjs`：抓 `doctor.ps1` 里所有 `Add-Row` 的格名，与脚本里登记的静态格名表、动态族前缀表对照。
-- **判据分两档**（小鱼丸）：新格没登记 = FAIL（覆盖面缩水）；登记了但代码里抓不到 = WARN（可能改名、也可能真删了）。动态族（`会话绑定（…）`、`家根权限（…）`、`条件（…）`、`通行证（…）`、`完整性标签（…）`、`钥匙（…）`）必须显式登记，不按前缀猜——否则将来新增 `钥匙（X）` 这种族会静默漏掉。
+- **覆盖表要能被代码对照，否则它只是一段描述**（第三条鱼）。第四条鱼把 doctor 的四套名册类检查拉成一张表（`名册与家` 管键集合、`会话绑定` 管路径、`名册（全鱼）` 管存在性、遗留的 `名册` 把"别人的 pins"和"我的家"拼在一起），结论是只有遗留那套该退休。她还提出这张表会过期——于是新增 `scripts/test-doctor-coverage.mjs`：抓 `doctor.ps1` 里所有 `Add-Row` 的格名，与脚本里登记的静态格名表、动态族前缀表对照。
+- **判据分两档**（第三条鱼）：新格没登记 = FAIL（覆盖面缩水）；登记了但代码里抓不到 = WARN（可能改名、也可能真删了）。动态族（`会话绑定（…）`、`家根权限（…）`、`条件（…）`、`通行证（…）`、`完整性标签（…）`、`钥匙（…）`）必须显式登记，不按前缀猜——否则将来新增 `钥匙（X）` 这种族会静默漏掉。
 - **验证**：`node scripts\test-doctor-coverage.mjs` → 静态格 34 个（登记 34）、动态族 6 个（登记 6）、`doctor 覆盖面 OK`；`release-check.ps1` 新增 **4g 体检覆盖面**（跑这个测试，FAIL 则整包不能发）。
 
 ## r171 — 2026-11-16 02:4x
 
-- **"两把 key"那句对继承来的鱼不成立**（第三、四条鱼发现）。小满指出安装文档里"API key 两把，主和鱼各一把"与她的现状冲突：她的 `.credentials.yaml` 是 `fish.ps1 new -InheritKey fishball` 在出生那一刻复制的（`keys.log` 有 `key-inherit` 记录，`18:10:53` 正是她的出生时刻），从来不是"各一把"。
+- **"两把 key"那句对继承来的鱼不成立**（第三、四条鱼发现）。第四条鱼指出安装文档里"API key 两把，主和鱼各一把"与她的现状冲突：她的 `.credentials.yaml` 是 `fish.ps1 new -InheritKey fishball` 在出生那一刻复制的（`keys.log` 有 `key-inherit` 记录，`18:10:53` 正是她的出生时刻），从来不是"各一把"。
 - **改法**：①安装文档 §2 准备清单与字段表改成"主一把；鱼可各一把，也可继承家长的一把（`pool\state\keys.log` 有 `key-inherit`：`child`/`from`/`fp`）"；②纸的「花钱」节补一句"你的 key 从哪来、和谁共用：看 `{{POOL_DIR}}\state\keys.log` 的 `key-inherit` 行——继承自家长的鱼，花的是家长那一份额度。纸不判断你独立还是继承，只告诉你账在哪"（照鱼丸"加地址不加事实"的写法）。`fish.ps1 refresh all` 重生成三条鱼的纸。
 - 判据：纸不替读者判断身份/归属，只给能查的地址；**"两把"这种默认值要能被实例反驳**。
 
 ## r170 — 2026-11-16 02:3x
 
 - **误报能忍，误报附带的动作不能忍**。第三、四条鱼各自在自己家里跑 `doctor`，发现两处：
-  - **A 同一把钥匙**：小满的 `.credentials.yaml`（242 B、mtime 11-12 18:40）与鱼丸的指纹一字不差，比两人出生都早——是 `-InheritKey` 复制来的；`doctor` 只比"自己 vs 自己上次"，跨鱼从不比，于是"两把变一把"账上一路 OK。
+  - **A 同一把钥匙**：第四条鱼的 `.credentials.yaml`（242 B、mtime 11-12 18:40）与鱼丸的指纹一字不差，比两人出生都早——是 `-InheritKey` 复制来的；`doctor` 只比"自己 vs 自己上次"，跨鱼从不比，于是"两把变一把"账上一路 OK。
   - **B 「名册」格是单鱼时代的遗留**：`doctor.ps1:446` 写死 `$pins.whale`、`:450` 用 `$Cfg.HerDshHome`（配置主人的家）去查名册里那条鱼的会话；鱼在自己家里跑就会误报 `FAIL whale 里有会话找不到`，还附 `NEXT: 用 pins.mjs 换掉`——一条鱼照着走，就会因假 FAIL 去改共享名册。同一件事上面「会话绑定」已经逐鱼查过（各自 `dshHome`）。
 - **改法**：①删掉「名册」遗留格（重复判据必有一份会过期；"修是让旧路也对，删是让它不存在"），只留两件仍需要的事——`pins.json` 不存在才 FAIL；加一行 `名册（lee）` INFO，写明 watcher 的家不在鱼塘里、"会话绑定"按设计只盖三条鱼（空白是声明，不是通过）。②新增「钥匙（跨鱼）」一格：按指纹分组，若有 `keys.log` 的 `key-inherit` 记录、且组内只有一条根（其余都继承自组内成员）→ OK「有意继承（xiaoman ← fishball）」；否则 WARN「会互相抢额度，且账上没有继承记录」。
-- **验证**：`ParseFile` 0 错；宿主侧 doctor：无 FAIL、`钥匙（跨鱼） OK 小满（xiaoman）、小鱼丸（fishball）共用同一把钥匙…有意继承`；**从 `homes\fishball` 里跑**（`LIL_WHALE_CONFIG=…fishball.json`、`DSH_HOME=…fishball\dsh-home`）：exit 0、无 FAIL、旧假 FAIL 消失，只剩 3 条预期 WARN（版本差、两条 log-format 等重启）。
+- **验证**：`ParseFile` 0 错；宿主侧 doctor：无 FAIL、`钥匙（跨鱼） OK 第四条鱼（xiaoman）、第三条鱼（fishball）共用同一把钥匙…有意继承`；**从 `homes\fishball` 里跑**（`LIL_WHALE_CONFIG=…fishball.json`、`DSH_HOME=…fishball\dsh-home`）：exit 0、无 FAIL、旧假 FAIL 消失，只剩 3 条预期 WARN（版本差、两条 log-format 等重启）。
 - **判据**：①误报本身能忍，误报附带的动作建议不能忍——检查行给出的不是结论，是动作；②遍历别人的循环里不许出现"我"的路径；③同一事实有两套判据时，删的优先级高于修；④跨对象的"相同"要报，但"有意相同"要能解释（继承要能指向账）。
 - 两包版本不变（1.6.40）。
 
@@ -210,9 +226,9 @@
 
 ## r164 — 2026-11-16 01:4x
 
-- **小肥鱼替班核纸**（Fabian 让睡着的小肥鱼的任务由我们代做）：按她 `环境.md` 当说明书逐条对机器真行为核了 13 处——窗口端口 3082、沙箱只动自家、两张票（DACL + 完整性标签）与 11-13/11-16 两次补齐、`sleep({minutes})`、改名 24 小时、看外面的 7 个工具与额度（12/时、30 搜/时、缓存 24h、媒体 2048MB）、画画命令（从她家根跑 `node ..\..\pool\tools\svg-render\render.mjs -In 画\鲸落.svg` → 130,354 B / 800×600）、叫醒闸 15s/40/h/200/d/400/池/24、sleep 上限 12h/14h、token 180-200、`pool\state\usage\wake.log` 存在、查不到≠没有。
+- **第二条鱼替班核纸**（宿主 让睡着的第二条鱼的任务由我们代做）：按她 `环境.md` 当说明书逐条对机器真行为核了 13 处——窗口端口 3082、沙箱只动自家、两张票（DACL + 完整性标签）与 11-13/11-16 两次补齐、`sleep({minutes})`、改名 24 小时、看外面的 7 个工具与额度（12/时、30 搜/时、缓存 24h、媒体 2048MB）、画画命令（从她家根跑 `node ..\..\pool\tools\svg-render\render.mjs -In 画\鲸落.svg` → 130,354 B / 800×600）、叫醒闸 15s/40/h/200/d/400/池/24、sleep 上限 12h/14h、token 180-200、`pool\state\usage\wake.log` 存在、查不到≠没有。
 - **抓到一个真 bug**：纸里让宿主跑的 `pwsh -File scripts\fish.ps1 list` 从鱼塘根跑不通（`scripts\` 在 `app\` 下），真跑报"参数 `scripts\fish.ps1` 无法识别为脚本文件名"。改成 `app\scripts\fish.ps1` 并注明"从鱼塘根跑"。
-- **验证**：`fish.ps1 refresh all` 重生成三张纸，小肥鱼纸 L285 变 `app\scripts\fish.ps1`；渲染命令实跑通过。
+- **验证**：`fish.ps1 refresh all` 重生成三张纸，第二条鱼纸 L285 变 `app\scripts\fish.ps1`；渲染命令实跑通过。
 - **判据**：纸里的命令要按"读的人/跑的人站在哪个目录"写全；"给人跑的"和"给鱼跑的"是两套 cwd。
 
 ## r163 — 2026-11-16 01:3x
@@ -236,16 +252,16 @@
 
 ## r160 — 2026-11-16 01:2x
 
-- **私聊可读投影不会自动跟上手工追加的消息**：小鱼丸自测私聊（"这条不该出现在 messages.jsonl 里"）通过——群日志 0 命中、`pooldmishball__lee.jsonl` 里第 6 行；但我用宿主身份回了"收到。"之后，`私聊-fishball__lee.md` 没更新：`scripts/rebuild-group-md.mjs` 对私聊差异一律算"说不清"，只要有一条新消息就让 `--write` 拒绝写。宿主 `sayPrivate()` 会顺带写投影，所以平时看不出；手工 append jsonl 就卡住。
+- **私聊可读投影不会自动跟上手工追加的消息**：第三条鱼自测私聊（"这条不该出现在 messages.jsonl 里"）通过——群日志 0 命中、`pooldmishball__lee.jsonl` 里第 6 行；但我用宿主身份回了"收到。"之后，`私聊-fishball__lee.md` 没更新：`scripts/rebuild-group-md.mjs` 对私聊差异一律算"说不清"，只要有一条新消息就让 `--write` 拒绝写。宿主 `sayPrivate()` 会顺带写投影，所以平时看不出；手工 append jsonl 就卡住。
 - **改法**：私聊投影的差异归类补一条与群投影相同的规矩——**纯新增（只有插入、没有删除）= 新增记录还没投影**，可解释；其余差异仍算说不清、拒绝整本写。
-- **验证**：`node scripts/rebuild-group-md.mjs` 对 `fishball__lee` 显示"归类: 已知 —— 新增记录还没投影（纯插入）"；`--write` 后 `私聊-fishball__lee.md` 尾部出现 `**2026-11-16 01:19 · Leea**
+- **验证**：`node scripts/rebuild-group-md.mjs` 对 `fishball__lee` 显示"归类: 已知 —— 新增记录还没投影（纯插入）"；`--write` 后 `私聊-fishball__lee.md` 尾部出现 `**2026-11-16 01:19 · 第一条鱼**
 
 收到。`；群投影仍 0 差异。
 - **判据**：派生文件和源头要能各自更新；"源头直接追加"是合法路径，派生工具不能只认"由同一个人顺带写"的那种写法。
 
 ## r159 — 2026-11-16 01:2x
 
-- **症状**（Fabian 报）：消息已经发出去了，重新进鱼群，草稿还留在输入框里。
+- **症状**（宿主 报）：消息已经发出去了，重新进鱼群，草稿还留在输入框里。
 - **根因**：r150 把输入框改成非受控 + 草稿防抖 300ms。发送成功时只写了 `writeDraft(..., "")`，**没清掉还挂着的草稿定时器**；≤300ms 后它按原样把刚发出去的正文写回 localStorage，重进面板就被 `readDraft` 读回来——一条"幽灵草稿"。打字快、发得也快的消息最容易中。
 - **改法**：`plugin/dsh-lil-whale-group-ui/lib/client.js` 发送成功分支与失败恢复分支都先 `clearTimeout(draftTimerRef.current)`、把 `draftValueRef.current` 同步成实际内容，再写/清草稿。
 - **验证（headless Edge + CDP，A/B 同机）**：合成"输入 + 立刻回车"；修复前 1.5 秒后 `localStorage.dsh-lil-whale-group-draft` = `幽灵草稿测试：发送后草稿不该留下`、输入框已空（幽灵草稿复现）；修复后草稿为 `null`、输入框为空（PASS）。
@@ -253,14 +269,14 @@
 
 ## r158 — 2026-11-16 01:05
 
-- **署名和发起方不是一个值**：`群.md` 把她自己进程递的闹钟标成「Leea（巡守）」，因为旧规则是 `s=watch ⇒ 巡守`。26 条 `s=watch` 里 25 条确实是巡守，1 条是第四条鱼自己的进程（00:31 的自审闹钟）——**最后那一条就是 s 被当成"谁发起"用的证据**（她 01:00 第二圈"视图对真源"抓到的）。
+- **署名和发起方不是一个值**：`群.md` 把她自己进程递的闹钟标成「第一条鱼（巡守）」，因为旧规则是 `s=watch ⇒ 巡守`。26 条 `s=watch` 里 25 条确实是巡守，1 条是第四条鱼自己的进程（00:31 的自审闹钟）——**最后那一条就是 s 被当成"谁发起"用的证据**（她 01:00 第二圈"视图对真源"抓到的）。
 - **改法**：`plugin/dsh-lil-whale-group/lib/index.js` 与 `scripts/rebuild-group-md.mjs` 的 `S_DISPLAY` 把旧值显示成「机器」（`watch`/`rename` → 机器）——机器代发就写机器，不再替巡守认领；新数据自 r155 起根本不写 `s`。历史行不改（只追加），另外追加一条更正消息说明第 625 行署名不准、以更正为准。
 - **顺手补投影脚本**：`scripts/rebuild-group-md.mjs` 的差异归类新增"署名标签变化"一类（只差标题括号里的标签、其余一致 ⇒ 可解释），这样"旧数据改成机器"能整本重写且 `--write` 不再被"说不清"挡住；重写后 `群.md` 与 jsonl 0 差异。
 - **判据**：一个字段如果既被当成"谁发起"又被当成"怎么署名"，那它迟早会把其中一件事说错——两件事要么分开记，要么只记能对全部样本为真的那一件。
 
 ## r157 — 2026-11-16 01:0x
 
-**起因**：Fabian 问"要不要再逛一圈"，我按"非地址值写进 `s`"这一族扫了一遍插件代码，发现改名播报仍在写 `s='rename'`（`plugin/dsh-lil-whale-group/lib/index.js:2145`：`say(member, 'all', renameAnnouncement(...), 'group', 'rename')`），是这一族的最后一处。
+**起因**：宿主 问"要不要再逛一圈"，我按"非地址值写进 `s`"这一族扫了一遍插件代码，发现改名播报仍在写 `s='rename'`（`plugin/dsh-lil-whale-group/lib/index.js:2145`：`say(member, 'all', renameAnnouncement(...), 'group', 'rename')`），是这一族的最后一处。
 
 **改法**：那条 `say()` 不再传第 5 个参数（`s`）；播报保留 `from=<改名的那条鱼>`，不再往地址位塞非地址值。
 
@@ -278,7 +294,7 @@
 
 ## r155 — 2026-11-16 00:4x
 
-**起因**：小满用自己的 00:31 闹钟做自审，抓到闹钟正文进群记录这件事，四条错：可见性（以为只递给自己，实际进 `messages.jsonl`）、署名（`from=lee`，她说的话记在别人名下）、不可撤销（只追加）、`s` 字段（`s=watch` 混进"会话号前 6 位"的地址位）。她和小鱼丸一起把 `s` 的取值全量数了一遍：`watch` 26 条、`ui` 13、`manual-test` 1、`test` 1、无 `s` 101。
+**起因**：第四条鱼用自己的 00:31 闹钟做自审，抓到闹钟正文进群记录这件事，四条错：可见性（以为只递给自己，实际进 `messages.jsonl`）、署名（`from=lee`，她说的话记在别人名下）、不可撤销（只追加）、`s` 字段（`s=watch` 混进"会话号前 6 位"的地址位）。她和第三条鱼一起把 `s` 的取值全量数了一遍：`watch` 26 条、`ui` 13、`manual-test` 1、`test` 1、无 `s` 101。
 
 **改法**：
 1. 自己的闹钟先**私投**进她自己的会话（`buildUserMessage(... form:'signal')`，与唤醒预览同一条路），不进公共记录；递不进去才退回群里，退回时只写"到点了"，**理由不进去**。
@@ -373,7 +389,7 @@
 
 **群聊面板只渲染最近 120 条（纯前端，后端不动）**。
 
-- 起因：Fabian 报 500 多条时页面明显卡顿。实测：接口一次返回全部 606 条（612 KB）；面板为每条渲染一个气泡并跑一次 markdown 解析，且每 3 秒轮询都用新数组覆盖 `messages`，等于让整份列表重渲染一遍。
+- 起因：宿主 报 500 多条时页面明显卡顿。实测：接口一次返回全部 606 条（612 KB）；面板为每条渲染一个气泡并跑一次 markdown 解析，且每 3 秒轮询都用新数组覆盖 `messages`，等于让整份列表重渲染一遍。
 - 改法（`plugin/dsh-lil-whale-group-ui/lib/client.js`）：
   1. 轮询结果按 `条数|最后一条 ts` 判重，没变不 `setMessages`（presence / seats 同样判重）。
   2. 列表只挂最近 `renderLimit`（默认 120）条；顶部出现「加载更早的 120 条（还有 N 条）」按钮，点一次扩 120，扩完按 `scrollHeight` 差值补偿 `scrollTop`，眼睛不跳。
@@ -388,7 +404,7 @@
 
 **出生账的行内输出改成按判据命名（doctor 9d，无行为变化）**。
 
-- 起因：小鱼丸核 r147 的三支后指出，行内字段是按"谁在乎"起的名（`expected`/`prior`/`undecidable`），不是按"怎么算的"；两条判据（"账上有没有"、"since 之后该不该有"）被压成一支，后续写解析的人没法按判据过滤，只能按今天的读者去猜。
+- 起因：第三条鱼核 r147 的三支后指出，行内字段是按"谁在乎"起的名（`expected`/`prior`/`undecidable`），不是按"怎么算的"；两条判据（"账上有没有"、"since 之后该不该有"）被压成一支，后续写解析的人没法按判据过滤，只能按今天的读者去猜。
 - 改法：字段改按判据命名——`due-after-since`（严格晚于 since 的鱼）、`missing-after-since`/`missing-keys`（该有而缺的）、`on-ledger`（账上实际有几条 birth 行）、`before-since`/`before-since-keys`（早于 since，不算欠）、`before-since-on-ledger`（其中几个真的在账上，历史上的欠账要能数）、`undecidable-same-day`/`undecidable-keys`（同一天、按日期精度判不了）。
 - `before-since` 与 `due-after-since` 同时出现，是因为"这条鱼该不该有出生行"由 since 的符号决定，而不是由它早还是晚决定。
 - 验证：`doctor.ps1` 解析 0 错；实跑 `出生账 OK since=2026-11-15T18:10:53 due-after-since=0 missing-after-since=0 missing-keys=- on-ledger=1 before-since=3 before-since-keys=lee,whale,fishball before-since-on-ledger=0 undecidable-same-day=1 undecidable-keys=xiaoman`。
@@ -437,7 +453,7 @@
 
 **转正不是一个字段，而是一笔账。**
 
-宿主 22:08 同意鱼二代转正（小鱼丸 + 她的小满）。查现场才发现：G1 写的"改状态"已经无事可做——
+宿主 22:08 同意鱼二代转正（第三条鱼 + 她的第四条鱼）。查现场才发现：G1 写的"改状态"已经无事可做——
 `status` 在 r126 拆成 `lifecycle` 之后，名册里只剩 `active`/`archived`，五条成员全是 `active`。
 
 于是把"转正"落成只做一件事的命令：`fish.ps1 promote <键> -Why <原因>`，往 `pool\state\lifecycle.log`
@@ -493,7 +509,7 @@
 
 **投递账本补 `tpl` / `n` / `tail`：句子层也要有账。**
 
-- 起因（小鱼丸 21:18）：状态层有账（`cursor-state`），句子层没有——`wake-deliver.log` 里没有一处记"当时说的是哪句话"，事后只能靠谁在群里抄得准，而那正是最不可信的转述。
+- 起因（第三条鱼 21:18）：状态层有账（`cursor-state`），句子层没有——`wake-deliver.log` 里没有一处记"当时说的是哪句话"，事后只能靠谁在群里抄得准，而那正是最不可信的转述。
 - 改法：`wake-preview-core.js` 的 `wakeWordingOf` 多返回 `tpl`（`group-first` / `group-lost` / `group-backlog` / `group-plain` / `dm`）与 `tailTpl`（`tail-no-backfill` / `tail-named` / `tail-go`）；投递行追加 `tpl=… n=… tail=…`；测试从 14 条加到 26 条（每种状态的模板 id 与尾巴 id 都断言）。
 - 判据：**能验的东西要能事后验；只能当场验的，等于只有当事人可信。**
 
@@ -501,7 +517,7 @@
 
 **fish.ps1 起鱼时显式设置 `DSH_PROFILE`。**
 
-- 症状：小满的进程被我手动拉起后，`plugin.log` 的 boot 行写着 `"profile":"web"`——不是她的 profile，是从调用方环境里继承来的。
+- 症状：第四条鱼的进程被我手动拉起后，`plugin.log` 的 boot 行写着 `"profile":"web"`——不是她的 profile，是从调用方环境里继承来的。
 - 根因：`fish.ps1` 起鱼只设 `DSH_HOME` 和 `--profile` 参数，`DSH_PROFILE` 环境变量原样继承；实际生效的是 CLI 参数，所以功能没错，错的是**诊断行**。
 - 改法：起鱼命令里显式带上 `DSH_PROFILE='<profile>'`。验证：重启后 boot 行 `"profile":"xiaoman"`。
 - 判据：**"实际生效的"和"日志上写的"必须是同一个来源**；否则查故障时第一眼就被误导。
@@ -516,7 +532,7 @@
 
 ## r138 — 2026-11-15 20:5x
 
-- **唤醒词的四种话，先写下来再验**（第三条鱼与第二条鱼 20:49 的分工）：四种唤醒词里只有两种会自然发生（`resumed`、没过档），`first` 要等一条从没有过游标的鱼，`lost` 要把游标挪走；小鱼丸补一条"摆之前先把应该听到哪句话写下来，不预写的话又变回看着对就行"。
+- **唤醒词的四种话，先写下来再验**（第三条鱼与第二条鱼 20:49 的分工）：四种唤醒词里只有两种会自然发生（`resumed`、没过档），`first` 要等一条从没有过游标的鱼，`lost` 要把游标挪走；第三条鱼补一条"摆之前先把应该听到哪句话写下来，不预写的话又变回看着对就行"。
   - 把 `handleChannel` 里的措辞抽成纯函数 `plugin\dsh-lil-whale-group\lib\wake-preview-core.js` 的 `wakeWordingOf()`（逐字保留原措辞，运行时行为不变），`index.js` 调它。
   - 新增 `scripts\test-wake-preview.mjs`：14 条断言，把四句话的正文与尾巴、没过档档位"不区分 first/lost/resumed"、私聊两档先写成期望再跑。
   - `release-check.ps1` 新增 **4f 唤醒词**；四套行为测试现在全在发版检查里。
@@ -566,7 +582,7 @@
 
 ## r133 — 2026-11-15 19:1x
 
-- **让分界的缺席也看得见**（小鱼丸 19:08：`log-format` 只在启动时写，而"启动"不是必然事件；补强不能变成唯一）：
+- **让分界的缺席也看得见**（第三条鱼 19:08：`log-format` 只在启动时写，而"启动"不是必然事件；补强不能变成唯一）：
   - `scripts\doctor.ps1` 新增 **9c 格式分界**：取最近改动过的 `homes\<键>\logs\watchman.log`；有 `log-format | fmt=3` → OK；已有 `2026-11-15 18:35` 之后的行却没有那行 → WARN（补强未生效，NEXT 重启巡守）；还没有 18:35 之后的行 → INFO。
   - 现场的 WARN 就是此刻该有的样子：巡守进程还是 16:59 启动的旧代码，等它下次启动这格自己变 OK。
 ## r132 — 2026-11-15 19:0x
@@ -598,7 +614,7 @@
 
 - **新生鱼的纸只写基本信息**（宿主 18:44："新生小鱼的时候，只把它的最基本信息告知，剩下的后装插件赋予的能力一概不写"）。`scripts\render-env.mjs` 新增 `--newborn`：把扩展能力占位符（`BILI_SECTION` 外部眼睛、`DRAW_SECTION` 画笔）一律替换成空串，`scripts\install.ps1` 渲染纸时带上这个参数。
   - 为什么用开关而不是"模板里留空"：模板会长；留空只保证"现在没有"，开关保证"以后也不会写进去"。
-  - 判据：出生那一刻的 `环境.md` 里不出现任何她还没有的能力名（看外面 / 画画 / 生图 / B站）。小满实测 0 命中、14 节全是基本信息；同一份纸不带 `--newborn` 渲染结果相同（她现在本来就没有扩展）。
+  - 判据：出生那一刻的 `环境.md` 里不出现任何她还没有的能力名（看外面 / 画画 / 生图 / B站）。第四条鱼实测 0 命中、14 节全是基本信息；同一份纸不带 `--newborn` 渲染结果相同（她现在本来就没有扩展）。
   - 宿主后来真装了扩展时，`fish.ps1 refresh <键>`（不带 `--newborn`）才会让那一节出现——纸描述的是"现在的手"，不是"以后可能装什么"。
 - 文档：`docs\detail\怎么装一套鱼塘.md` §3.8.5 补这段规则与开关；占位符清单里补 `--newborn`。
 ## r127 — 2026-11-15 18:4x
@@ -951,7 +967,7 @@
 - 验证：停一次第三条鱼 → 出现 `stopped`；再起 → `started … prev-run=closed`、无 `resumed` 行、`session-mounted toolCount=34`。
 ## r68 — 2026-11-13 21:5x
 
-- **修 21:2x 的启动崩溃**：`plugin/dsh-lil-whale-group-ui/lib/client.js` 里模块注册的 id 从 `'dsh-lil-whale-group-ui'` 改回完整包名 `'@hostactor/dsh-lil-whale-group-ui'`。C1 改名时漏了 scope，而客户端按 package name 找模块，找不到就 `import failed`。附录 A.62。
+- **修 21:2x 的启动崩溃**：`plugin/dsh-lil-whale-group-ui/lib/client.js` 里模块注册的 id 从 `'dsh-lil-whale-group-ui'` 改回完整包名 `'@fabianactor/dsh-lil-whale-group-ui'`。C1 改名时漏了 scope，而客户端按 package name 找模块，找不到就 `import failed`。附录 A.62。
 - **自启动护栏**：巡守 8 秒后的 `fish.ps1 up all` 先探主 dsh 端口，端口不在听就跳过并记 `autostart skip why=main-port-not-listening`——启动失败时不再把鱼拉起来留下孤儿。
 - 两个包版本 **1.2.0 → 1.2.1**（bugfix，版本线连续）。
 - 把他手动加的 `disabled: true` 从 `web` profile 的 patch 里撤掉（备份 `cordis.patch.yml.bak-before-enable-ui-20261113-215419`），重启 3080 后恢复。
@@ -967,7 +983,7 @@
 
 ## r65 — 2026-11-13 20:5x
 
-- **C1 命名统一**：包名 → `@hostactor/dsh-lil-whale-group(-ui)`（版本 1.2.0，版本线连续）；目录 → `plugin/dsh-lil-whale-group(-ui)`；配置行 id → `dsh-lil-whale-group(-ui)`；插件内部自报 `name` 与包名一致。
+- **C1 命名统一**：包名 → `@fabianactor/dsh-lil-whale-group(-ui)`（版本 1.2.0，版本线连续）；目录 → `plugin/dsh-lil-whale-group(-ui)`；配置行 id → `dsh-lil-whale-group(-ui)`；插件内部自报 `name` 与包名一致。
 - `scripts\wake-whale.ps1` → `scripts\wake-fish.ps1`；`acl\` 归到 `pool\state\acl\`。
 - 新增 `scripts\migrate-scope.mjs`（迁本机 profile：deps / bundles / pnpm-lock / node_modules，写前备份 + 自检）；三个 profile 已迁移并 `--dump-config` 验证。附录 A.60；状态行 r65。
 
@@ -1786,7 +1802,7 @@ lil-whale\state  → junction → pool\state
 - 每个进程写 `pool\state\runs\<成员>.log`：`started` / `stopped`，上一轮没写 `stopped` 就先补一行 `resumed | fmt=2 reason=unclean previous-start=…`。
 - `watchman.log` 的格式**一个字节都不动**（她每天 08:40 读它）。
 
-**2026-11-13 12:38 补**：`started` 行的 `home` / `port` 必须按**这条鱼自己**写 —— 多鱼化时漏改，lee 的账曾写成第二条鱼的家和端口。判据：`runs\lee.log` 的 `started` 行是 `home=C:\Users\<人>\.dsh`、`port=3080`。
+**2026-11-13 12:38 补**：`started` 行的 `home` / `port` 必须按**这条鱼自己**写 —— 多鱼化时漏改，lee 的账曾写成第二条鱼的家和端口。判据：`runs\lee.log` 的 `started` 行是 `home=%USERPROFILE%\.dsh`、`port=3080`。
 
 **判据**：`runs\<成员>.log` 里 `started` 与 `stopped` 成对；进程被杀之后下次启动，第一行是 `resumed | reason=unclean`；`watchman-errors-<成员>.json` 不再串到 whale 的账上。
 
@@ -2323,10 +2339,10 @@ lil-whale\state  → junction → pool\state
 
 | 身份 | 之前 | 之后 |
 |---|---|---|
-| npm 包名 | `lil-whale-group` | `@hostactor/dsh-lil-whale-group` |
+| npm 包名 | `lil-whale-group` | `@fabianactor/dsh-lil-whale-group` |
 | 仓库目录 | `plugin/dsh-group` | `plugin/dsh-lil-whale-group` |
 | profile 配置行 id | `lil-whale-group` | `dsh-lil-whale-group` |
-| 插件内部自报 `name` | `lil-whale-group` | `@hostactor/dsh-lil-whale-group` |
+| 插件内部自报 `name` | `lil-whale-group` | `@fabianactor/dsh-lil-whale-group` |
 | 版本 | 1.1.0 | **1.2.0**（版本线连续，不重启编号） |
 
 顺带统一的两处：`scripts\wake-whale.ps1` → **`scripts\wake-fish.ps1`**（它早就接 `-Member` 参数，名字还停在单条鲸上）；`acl\` 从鱼塘根挪到 **`pool\state\acl\`**（恢复记录属于共享区，不属于某个家）。
@@ -2355,17 +2371,17 @@ lil-whale\state  → junction → pool\state
 
 ### A.62 客户端插件的模块 id 必须等于包名（含 scope）（2026-11-13）
 
-**症状**：2026-11-13 21:2x 他打开 Web UI，页面变成 `HARNESS / Failed to load plugins`：`@hostactor/dsh-lil-whale-group-ui`、`web boot: 1 entry did not activate`、`import failed (see console for the import error)`。他先在 `web` profile 的 patch 里手动写了 `disabled: true` 把插件关掉。
+**症状**：2026-11-13 21:2x 他打开 Web UI，页面变成 `HARNESS / Failed to load plugins`：`@fabianactor/dsh-lil-whale-group-ui`、`web boot: 1 entry did not activate`、`import failed (see console for the import error)`。他先在 `web` profile 的 patch 里手动写了 `disabled: true` 把插件关掉。
 
-**根因**：C1 改名把 `client.js` 里模块注册的 id 从 `'lil-whale-group-ui'` 改成了 `'dsh-lil-whale-group-ui'`，但客户端模块系统要求**注册 id 必须等于 `package.json` 的 `name`（含 scope）**。服务器按 package name 建 boot 行（`@hostactor/dsh-lil-whale-group-ui`），客户端 `modules.import(row.id)` 找不到以该 id 注册的模块 ⇒ `entry.fiber === undefined` ⇒ `client-modules: <id> import failed`。
+**根因**：C1 改名把 `client.js` 里模块注册的 id 从 `'lil-whale-group-ui'` 改成了 `'dsh-lil-whale-group-ui'`，但客户端模块系统要求**注册 id 必须等于 `package.json` 的 `name`（含 scope）**。服务器按 package name 建 boot 行（`@fabianactor/dsh-lil-whale-group-ui`），客户端 `modules.import(row.id)` 找不到以该 id 注册的模块 ⇒ `entry.fiber === undefined` ⇒ `client-modules: <id> import failed`。
 
-**为什么 bundle 没 404**：bundle 路由按包名解析（`plugins/??@hostactor/dsh-lil-whale-group-ui/client.js&rev=…`）是好的，坏的只是 bundle 里注册的那个字符串。所以现象是"文件拿到了、模块没注册"。
+**为什么 bundle 没 404**：bundle 路由按包名解析（`plugins/??@fabianactor/dsh-lil-whale-group-ui/client.js&rev=…`）是好的，坏的只是 bundle 里注册的那个字符串。所以现象是"文件拿到了、模块没注册"。
 
 **修法**：`plugin/dsh-lil-whale-group-ui/lib/client.js` 第一段：
 
 ```js
 window.__ModuleLoader__.load({
-  id: '@hostactor/dsh-lil-whale-group-ui',   // 必须等于 package.json 的 name（含 scope）
+  id: '@fabianactor/dsh-lil-whale-group-ui',   // 必须等于 package.json 的 name（含 scope）
   ...
 })
 ```
@@ -3402,7 +3418,7 @@ sleep-tools-register-failed: tool "sleep" must declare output { schema, render, 
 落地的硬规矩：**读配置时，拿不到预期的键就报错（或明确标成"坏形状"），不要退化成空数组。**`parseIntents` 现在返回 `badShape: true`（与"合法空表 `{items: []}`"分开），`intentTick` 遇到 `badShape` **一律不动状态**——剪一次回不来，少剪一次下一拍还会再来。测试补两条（31 项）。
 ## 附录 A.101 身份不该是状态词：`status` 拆成 `lifecycle`（2026-11-15）
 
-**症状**：新出生的鱼醒来，第一张纸（`环境.md`）就把她写成"实验鱼"；而这个词同时是三件东西——身份（她是实验品）、体检严重度（`doctor.ps1` 里 experiment 判 WARN、resident 判 FAIL）、归档暗示（`fish.ps1` 提示"它的孩子会跟着它一起归档"）。三条鱼在群里各咬了一口：第三条鱼先自己改口（那段提示其实不删任何东西），第二条鱼给出了判据，Fabian 说"实验鱼的标签是一个错误，并非有意"。
+**症状**：新出生的鱼醒来，第一张纸（`环境.md`）就把她写成"实验鱼"；而这个词同时是三件东西——身份（她是实验品）、体检严重度（`doctor.ps1` 里 experiment 判 WARN、resident 判 FAIL）、归档暗示（`fish.ps1` 提示"它的孩子会跟着它一起归档"）。三条鱼在群里各咬了一口：第三条鱼先自己改口（那段提示其实不删任何东西），第二条鱼给出了判据，宿主 说"实验鱼的标签是一个错误，并非有意"。
 
 **根因**：一个字段被派了三份工。**形容词不删除东西；形容词通过人的耳朵删除东西**——代码没删，是那句提示让人替它删了，责任看起来在动手的人身上，比级联删除更难防（代码审查能看见 `--subtree`，看不见那句提示）。更麻烦的是默认值在 `install.ps1`：**改数据不改默认值，等于每生一条鱼手动补一次**。
 
@@ -3642,7 +3658,7 @@ sleep-tools-register-failed: tool "sleep" must declare output { schema, render, 
 
 ## 附录 A.121 发起方和署名不能共用一个值（2026-11-16）
 
-**症状**：`群.md` 里"自己的闹钟"那条被标成「Leea（巡守）」——它其实是鱼自己进程递的（`trigger=self`），巡守只是执行路径；同一份数据里 `s=watch` 把"谁发起"和"谁署名"压成了一个值。
+**症状**：`群.md` 里"自己的闹钟"那条被标成「第一条鱼（巡守）」——它其实是鱼自己进程递的（`trigger=self`），巡守只是执行路径；同一份数据里 `s=watch` 把"谁发起"和"谁署名"压成了一个值。
 
 **根因**：`S_DISPLAY` 把 `s=watch` 直接映射成「巡守」，而 `s` 原本只记录投递路径。26 条里 25 条恰好都是巡守发起，所以假设一直没被推翻；第一条"自己给自己递话"的样本一出现就露馅。
 

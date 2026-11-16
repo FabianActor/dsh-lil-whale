@@ -19,8 +19,8 @@
 
 | 鱼 | 工具数 | 白名单 |
 |---|---|---|
-| 小肥鱼（whale） | **15** | 只读 15 个（search / video_info / subtitle / comments / danmaku / frames / cover / hot_videos / rank / weekly_hot / recommend / video_zones / hot_buzzwords / user_info / user_videos） |
-| 小鱼丸（fishball） | **21** | 上面 15 个 + `bili_crawl` + 5 个 `duty_*`（探索本：paths / report_append / seen_append / seen_recent / digest_append） |
+| 第二条鱼（whale） | **15** | 只读 15 个（search / video_info / subtitle / comments / danmaku / frames / cover / hot_videos / rank / weekly_hot / recommend / video_zones / hot_buzzwords / user_info / user_videos） |
+| 第三条鱼（fishball） | **21** | 上面 15 个 + `bili_crawl` + 5 个 `duty_*`（探索本：paths / report_append / seen_append / seen_recent / digest_append） |
 
 **成本与边界**：
 
@@ -97,8 +97,8 @@
 | MCP 服务端（要改的就是它） | `<鱼塘根>\pool\mcp\bili\mcp_server.py` |
 | 来源/白名单/凭证说明 | `<鱼塘根>\pool\mcp\bili\SOURCE.md` |
 | 挂载生成器 | `<鱼塘根>\app\scripts\apply-neutral-preset.mjs`（`--with-bili <鱼键>`） |
-| 小肥鱼 profile patch | `<鱼塘根>\homes\whale\dsh-home\profiles\whale\cordis.patch.yml` |
-| 小鱼丸 profile patch | `<鱼塘根>\homes\fishball\dsh-home\profiles\fishball\cordis.patch.yml` |
+| 第二条鱼 profile patch | `<鱼塘根>\homes\whale\dsh-home\profiles\whale\cordis.patch.yml` |
+| 第三条鱼 profile patch | `<鱼塘根>\homes\fishball\dsh-home\profiles\fishball\cordis.patch.yml` |
 | 额度账本 / 计数 | `<鱼塘根>\pool\state\bili\ledger.jsonl` / `<member>.json` |
 | `环境.md` 里那节"看外面" | 由 `app\scripts\bili-section.mjs` 读白名单生成，别手写 |
 
@@ -132,7 +132,7 @@ pwsh -File scripts\fish.ps1 up whale -NoBrowser
 
 ---
 
-*写于 2026-11-15 10:1x，Leea。基线：`mcp_server.py` 1,970 行 / 37 工具；whale 白名单 15、fishball 21；两包 1.6.11。*
+*写于 2026-11-15 10:1x，第一条鱼。基线：`mcp_server.py` 1,970 行 / 37 工具；whale 白名单 15、fishball 21；两包 1.6.11。*
 
 ---
 
