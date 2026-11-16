@@ -214,6 +214,7 @@ if (existsSync(toolsScript)) {
       const ids = idsOf(kind)
       if (ids) toolsMeta += ` skipped-${kind}-ids=${ids}`
     }
+    if (c.evalRules) toolsMeta += ` eval-rules=${c.evalRules}`
   } else {
     const carried = carriedToolsFromPaper(outPath)
     if (carried) {

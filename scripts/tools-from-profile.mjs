@@ -138,6 +138,8 @@ for (const tool of tools) {
 const skippedSorted = [...skipped].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
 const skippedOf = (kind) => skipped.filter((s) => s.kind === kind).length
 const counts = {
+  // 这张纸会算哪些停用规则：能力本身也要能读出来，否则 unjudged 的含义会随时间漂（第三条鱼 #829）。
+  evalRules: 'win32-only',
   mounts: enabled.length + skipped.length + internal.length,
   listed: enabled.length,
   skipped: skipped.length,

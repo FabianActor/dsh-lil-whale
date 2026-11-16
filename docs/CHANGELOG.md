@@ -1,12 +1,17 @@
 # 工程变更记录
 
 > 这份文件记录**工程侧**的每一次改动：机制、修账、脚本、文档。它和产品需求是两条线——需求讨论看 [PRD.md](PRD.md)，这里只记"改了什么、为什么"。
-> 编号 `rNN` 是**内部修订号**：改一次 +1，一天可能十几稿；两个 npm 包另有各自的 semver（各自 `package.json`，当前 1.6.47），只在功能变化或发布时动。编号从 r1 起。
-> 条目按时间倒序（新的在上）。A.x 原先住在 PRD 附录里，2026-11-15 搬到这里；历史条目里若还写着「PRD 附录 A.x」，指的就是本文件的 A.x。`A.x` 是"已验证的技术事实与判据"的编号，统一收在文末附录 A（A.1–A.131）。
+> 编号 `rNN` 是**内部修订号**：改一次 +1，一天可能十几稿；两个 npm 包另有各自的 semver（各自 `package.json`，当前 1.6.48），只在功能变化或发布时动。编号从 r1 起。
+> 条目按时间倒序（新的在上）。A.x 原先住在 PRD 附录里，2026-11-15 搬到这里；历史条目里若还写着「PRD 附录 A.x」，指的就是本文件的 A.x。`A.x` 是"已验证的技术事实与判据"的编号，统一收在文末附录 A（A.1–A.132）。
 
 ---
 
 ## 变更条目
+
+## r184 — 2026-11-16 09:3x
+
+- **把"纸会算哪些规则"印进指纹**（第三条鱼 #829、第二条鱼 #830）：r183 之后两条鱼从 `skipped-unjudged=1` 推出"plugin-manager 靠求值失败才在、该改表达式"。我核 loader 后确认上游没错，偏差在纸：纸的生成器只求两条平台规则（`process.platform === 'win32'` / `!==`），别的 `!!js` 表达式一律记 `unjudged`，但纸上没写它"只会算这些"。改 `scripts/tools-from-profile.mjs`：`counts` 加 `evalRules: 'win32-only'`；`scripts/render-env.mjs` 在 `source=dump` 时把 `eval-rules=win32-only` 写进指纹（carried/no-paper 不写，因为没算）。模板与安装文档写明：`unjudged` 的主语是**这张纸**——"纸算不了"，不等于"运行时关着"；"不知道"要说清是谁不知道（纸/运行时/写纸的人，三个主语三种下一步）。
+- 验证：三张纸重生成（09:33），指纹末尾 `… skipped-unjudged-ids=tool-plugin-manager eval-rules=win32-only`；七套测试全过；`release-check` 待跑。
 
 ## r183 — 2026-11-16 09:2x
 
@@ -3692,3 +3697,11 @@ sleep-tools-register-failed: tool "sleep" must declare output { schema, render, 
 - **做法**：`render-env.mjs` 用 `idsOf(kind)` 生成 `skipped-disabled-ids=` / `skipped-unjudged-ids=` / `skipped-nodoc-ids=`（空的不写），删掉合并的 `skipped-ids`；纸面补一句 `unjudged` 只表示"生成器判不了"，不等于运行时用不了。
 - **判据**：①分组计数必须配分组名单，否则读者做不出"是哪几个"，等于没写（第二条鱼原话）；②"判不了"和"被禁用"是两种事实，前者可能此刻正可用，纸不能把不确定翻译成否定；③名单按 id 排序，diff 才有意义。
 - **教训**：**数的粒度变了，名单的粒度也要跟着变。** 只把总数拆开、把明细留在原地，读者会以为两者本来就不是同一件事。
+## 附录 A.132 "判不了"要带主语，还要带"谁能判"（2026-11-16）
+
+- **症状**：r183 的纸上写 `skipped-unjudged=1`（`tool-plugin-manager`），两条鱼据此推"它是靠求值失败才在的，该把停用条件改成能求值的写法"。核 `cordis-plugin-loader/lib/index.js`：`!!js` 节点存成 `{__jsExpr}`，由 `evaluate = new Function("ctx","expr","with (ctx) { return eval(expr) }")` 求值——上游那行是对的，`plugin_manager` 在场是配置结果。
+- **根因**：`unjudged` 这个词没有主语。纸说"判不了"，读者听成"运行时状态未知"；实际是**纸的生成器只求两条平台规则**，别的表达式它不算。同一句"求值不了"在纸和运行时里不是一个意思。
+- **做法**：`tools-from-profile.mjs` 的 `counts` 加 `evalRules: 'win32-only'`；指纹在 `source=dump` 时写 `eval-rules=`；纸面把主语写明，并补"三个主语、三种下一步"（纸不知道 / 运行时不知道 / 写纸的人不知道）。
+- **判据**：①"我不知道"必须带主语，否则读者会替它补一个；②能力本身也要能读出来（`eval-rules`），否则 `unjudged` 的含义会随时间漂（第三条鱼 #829 原话）；③"判不了"不能落在真/假上，而且"判不了"的判据本身也要能被判——谁判不了、凭什么判（第二条鱼补的半句）。
+- **教训**：**同一个词在两个执行环境里，可能不是一个意思。** 写"判不了"之前先问：是谁、在哪一层、算不了什么。
+
