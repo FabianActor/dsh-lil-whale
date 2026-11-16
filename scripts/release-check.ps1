@@ -165,6 +165,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '字段契约' (($fieldOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '字段契约' '代码里不再写 why=（autostart.log 一处豁免）' }
   } else { Fail '字段契约' 'scripts\test-log-fields.mjs 不在包里' }
+  # ── 4i. 工具清单退化（2026-11-16，CHANGELOG r180）──────────────────
+  $envToolsTest = Join-Path $pkg 'scripts\test-env-tools.mjs'
+  if (Test-Path $envToolsTest) {
+    $envToolsOut = & node $envToolsTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '工具清单退化' (($envToolsOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '工具清单退化' '算不出时沿用上一次纸上的清单（test-env-tools.mjs）' }
+  } else { Fail '工具清单退化' 'scripts\test-env-tools.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {

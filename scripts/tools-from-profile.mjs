@@ -91,7 +91,10 @@ for (const line of section) {
   const idMatch = /^\s*- id: ([\w-]+)\s*$/.exec(line)
   if (idMatch) {
     // 默认是"挂着"；只有真的读到 disabled: 才改。没读到不等于停用。
-    current = idMatch[1].startsWith('tool-') ? { id: idMatch[1], disabled: false } : null
+    // 2026-11-16 小满 #774：不是所有"手"的 id 都叫 `tool-*`——DSH 核心挂的 `present`
+    // 就是直接一个 `present`。判据改成"目录里登记过就算手"（目录是这张纸的翻译表，不是白名单的尽头）。
+    const id = idMatch[1]
+    current = id.startsWith('tool-') || catalog[id] ? { id, disabled: false } : null
     if (current) tools.push(current)
     continue
   }

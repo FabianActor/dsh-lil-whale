@@ -150,6 +150,26 @@ const membersTable = [
 ].join('\n')
 
 // ---- 工具清单：必须是真实挂载的，不能手写 ----
+// 2026-11-16 小满 #774：纸上的清单只在宿主跑 refresh 时才算得出来——
+// 鱼在自己家跑 refresh 时写不了 `dsh-home`（沙箱故意不给写），`dsh --dump-config` 会去写
+// `profiles\<键>\cordis.yml`，于是整段退化成"没能算出工具清单"。
+// 判据："鱼自己跑 refresh，纸只会更旧不会更差" ⇒ 算不出来时沿用上一次纸上那份，并写明原因。
+function carriedToolsFromPaper(file) {
+  if (!existsSync(file)) return null
+  try {
+    const text = readFileSync(file, 'utf8')
+    const m = text.match(/## 你能做什么\s*\n([\s\S]*?)\n## /)
+    if (!m) return null
+    const lines = m[1]
+      .split('\n')
+      .map((l) => l.trimEnd())
+      .filter((l) => l.startsWith('- '))
+      .filter((l) => !l.startsWith('- （'))
+    return lines.length ? lines : null
+  } catch {
+    return null
+  }
+}
 let toolsText = '- （工具清单没能自动生成，见下面那行提示）'
 const toolsScript = join(REPO_ROOT, 'scripts', 'tools-from-profile.mjs')
 if (existsSync(toolsScript)) {
@@ -169,7 +189,17 @@ if (existsSync(toolsScript)) {
     lines.push('- 在群里说话（`group_say`）')
     toolsText = lines.join('\n')
   } else {
-    toolsText = `- （没能从 --dump-config 算出工具清单：${parsed?.reason ?? '跑不起来'}）`
+    const carried = carriedToolsFromPaper(outPath)
+    if (carried) {
+      const note =
+        '- （注：这次没能重新算工具清单——这里写不了 `dsh-home`，`--dump-config` 跑不起来。' +
+        '上面这一份是**沿用上一次成功算出的**，不是新算的；要更新请宿主在鱼塘根跑 ' +
+        '`fish.ps1 refresh ' + (args.profile || myKey) + '`。）'
+      toolsText = carried.join('\n') + '\n' + note
+      console.error('render-env: 工具清单没能重算（' + (parsed?.reason ?? '跑不起来').slice(0, 120) + '），沿用上一次纸上的清单')
+    } else {
+      toolsText = `- （没能从 --dump-config 算出工具清单：${parsed?.reason ?? '跑不起来'}；这份纸里也没有旧的清单可沿用）`
+    }
   }
 }
 
@@ -319,4 +349,5 @@ if (args.dryRun) {
 
 writeFileSync(outPath, rendered, 'utf8')
 console.log(`环境.md 已重新生成：${outPath}`)
-console.log(`  名册 ${Object.keys(members).length} 人；工具 ${toolsText.split('\n').length - 1} 条；模板 ${templateSha}；生成于 ${generatedAt}`)
+const toolLines = toolsText.split('\n').filter((l) => l.startsWith('- ') && !l.startsWith('- （')).length
+console.log(`  名册 ${Object.keys(members).length} 人；工具 ${toolLines} 条；模板 ${templateSha}；生成于 ${generatedAt}`)

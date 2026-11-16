@@ -15,6 +15,7 @@
   "tool-subagent-fork": { "line": "派一个继承当前对话的子 agent" },
   "tool-workflow": { "line": "用一段脚本编排很多子 agent 并行做事" },
   "tool-ask-user": { "line": "问人一个问题，等他回答" },
+  "present": { "line": "把做好的文件交给宿主看（交付物：图片、文档等，他那边能直接打开）" },
   "tool-plugin-manager": { "line": "装卸插件（要定了才能用）" },
   "tool-result-pruner": { "kind": "internal" },
   "tool-cordis": { "kind": "internal" }
