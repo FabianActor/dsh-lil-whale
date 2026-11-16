@@ -163,10 +163,13 @@ const AVATAR_TYPES = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp' }
  * @ 面板点不到她**，而且一个错都不报 —— 又是"错的东西长得很安静"。
  * 现在有几个人由数据说了算；读不到文件才退回内置三条。
  */
+// 兜底名册只给"名册文件读不到"时用（最小安装会走到这里）。
+// 名字必须中性：这里曾经写着 大肥鱼/小肥鱼/Fabian，等于把作者家的成员名
+// 漏进别人的安装里（2026-11-16 第三份装机沉淀 P11，r206）。
 const UI_MEMBERS_FALLBACK = {
-  lee: { name: '大肥鱼', kind: 'fish' },
-  whale: { name: '小肥鱼', kind: 'fish' },
-  fabian: { name: 'Fabian', kind: 'human' },
+  lee: { name: '第一条鱼', kind: 'fish' },
+  whale: { name: '第二条鱼', kind: 'fish' },
+  fabian: { name: '宿主', kind: 'human' },
 }
 
 function loadUiMembers() {

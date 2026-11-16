@@ -30,7 +30,8 @@ window.__ModuleLoader__.load({
     const WIDTH_MAX = 92
 
     // 显示名兜底（真正的值在名册里；名字只能由她自己改，A.82）
-    const NAMES = { lee: '大肥鱼', whale: '小肥鱼', fabian: 'Fabian' }
+    // 兜底名必须是中性的：最小安装没有名册，不然会把作者家的名字显示给用户（r206）。
+    const NAMES = { lee: '第一条鱼', whale: '第二条鱼', fabian: '宿主' }
 
     const DEFAULT_CONFIG = {
       panelLabel: '鱼群',
@@ -40,7 +41,7 @@ window.__ModuleLoader__.load({
         whale: { text: '小', tint: '#c2705a' },
         fabian: { text: 'F', tint: '#5c8a6a' },
       },
-      names: { lee: '大肥鱼', whale: '小肥鱼', fabian: 'Fabian' },
+      names: { lee: '第一条鱼', whale: '第二条鱼', fabian: '宿主' },
       /** 座位名：会话 id 前 6 位 → 这段会话在群里显示的名字（同一个人的第二段会话用得上）。 */
       seats: {},
     }
@@ -52,8 +53,8 @@ window.__ModuleLoader__.load({
       placeholder: '在群里说点什么…',
       send: '发送',
       toAll: '所有人',
-      toLee: '大肥鱼',
-      toWhale: '小肥鱼',
+      toLee: '第一条鱼',
+      toWhale: '第二条鱼',
       groupOnly: '在群里说（谁会醒由阀门决定）',
       toOne: (name) => `只有 ${name} 会被叫醒`,
       typing: (names) => `${names} 正在回复…`,
