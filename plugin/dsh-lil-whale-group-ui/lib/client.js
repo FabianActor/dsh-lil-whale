@@ -1011,16 +1011,29 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
     function useFollowTail(scrollRef, deps) {
       const atBottomRef = useRef(true)
       const [atBottom, setAtBottom] = useState(true)
+      // 上一次量到的 scrollTop：用来分辨两件长得一样的事——
+      // "人往下滚到底"（scrollTop 变大）和"内容变短、浏览器把 scrollTop 夹到底"
+      // （scrollTop 变小）。后者 distance 也会变成 0，但人其实没想回底部。
+      const lastTopRef = useRef(0)
       const stickToBottom = useCallback(() => {
         const el = scrollRef.current
-        if (el) el.scrollTop = el.scrollHeight
+        if (el) {
+          el.scrollTop = el.scrollHeight
+          lastTopRef.current = el.scrollTop
+        }
       }, [scrollRef])
       const measureBottom = useCallback(() => {
         const el = scrollRef.current
         if (!el) return
-        const distance = el.scrollHeight - el.scrollTop - el.clientHeight
+        const top = el.scrollTop
+        const distance = el.scrollHeight - top - el.clientHeight
         const next = distance <= 40
-        if (next !== atBottomRef.current) {
+        // 离开底部永远认；回到"底部"只认人往下滚的那一种。
+        // 2026-11-16 报的闪烁：翻历史时来新消息，高度被夹了一下、distance=0，
+        // 于是被当成"到底了"，下一条一来就 stickToBottom 把人弹到底。
+        const movedDown = top >= lastTopRef.current - 1
+        lastTopRef.current = top
+        if (next !== atBottomRef.current && (next === false || movedDown)) {
           atBottomRef.current = next
           setAtBottom(next)
         }
@@ -1038,7 +1051,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
         const timer = setTimeout(stickToBottom, 200)
         return () => { cancelAnimationFrame(raf); clearTimeout(timer) }
       }, deps)
-      return { atBottom, measureBottom, jumpToBottom }
+      return { atBottom, atBottomRef, measureBottom, jumpToBottom }
     }
 
     /**
@@ -1792,6 +1805,10 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       // 消息多时的渲染窗口：只挂最近 N 条，往上翻再点「加载更早」（2026-11-15 他报 500 多条卡顿）。
       // 数据仍然一次拿全（后端不用动）；省的是「600 个气泡 + 每个气泡一次 markdown 解析」。
       const [renderLimit, setRenderLimit] = useState(120)
+      // 翻历史时记住"眼睛在哪"：内容一变（新消息、渲染窗口挪动）就把 scrollTop 放回去。
+      // 2026-11-16 报的闪烁：历史态收到新消息，视觉上先弹到底再弹回来。
+      const historyTopRef = useRef(-1)
+      const messagesLenRef = useRef(0)
       const pendingScrollRef = useRef(null)
       const pendingHistoryRef = useRef(null)
       const messagesSigRef = useRef('')
@@ -1851,6 +1868,11 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
           const sig = `${incoming.length}|${incoming.length ? String(incoming[incoming.length - 1]?.ts ?? '') : ''}`
           if (sig !== messagesSigRef.current) {
             messagesSigRef.current = sig
+            const delta = incoming.length - messagesLenRef.current
+            messagesLenRef.current = incoming.length
+            // 人在翻历史时，新消息不能在下面直接挂上来把渲染窗口挤歪：
+            // 窗口增量和消息放进同一批更新，避免"先少一条、再补回来"的一帧闪光。
+            if (delta > 0 && !atBottomRef.current) setRenderLimit((n) => n + delta)
             setMessages(incoming)
           }
           setTimeout(() => { animateRef.current = true }, 0)
@@ -1924,7 +1946,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       }, [refresh])
 
       // 贴底 / 翻历史 / 回到底部：跟私聊页共用一套（见 useFollowTail）。
-      const { atBottom, measureBottom, jumpToBottom } = useFollowTail(scrollRef, [messages.length, tab, splash])
+      const { atBottom, atBottomRef, measureBottom, jumpToBottom } = useFollowTail(scrollRef, [messages.length, tab, splash])
 
       // 「加载更早」之后保持眼睛原来的位置：上面新增了多少高度，就把滚动条往下推多少。
       useEffect(() => {
@@ -1945,15 +1967,15 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
         }
       }, [renderLimit])
 
-      // 用户翻在上面时来了新消息：把窗口一起往上挪，否则他会看到"消息自己跳了一下"。
-      const prevCountRef = useRef(0)
-      useEffect(() => {
-        const prev = prevCountRef.current
-        prevCountRef.current = messages.length
-        if (prev > 0 && messages.length > prev && !atBottom) {
-          setRenderLimit((n) => n + (messages.length - prev))
-        }
-      }, [messages.length, atBottom])
+      // 内容变化后把眼睛放回去：只在翻历史时动，贴底时不插手。
+      // 用 layout effect：在浏览器绘制之前改 scrollTop，人才看不见那一下。
+      useLayoutEffect(() => {
+        const el = scrollRef.current
+        // 「加载更早」「跳历史线」自带位置补偿，这里让路，免得两头各推一把。
+        if (pendingScrollRef.current || pendingHistoryRef.current) return
+        if (atBottom || !el || historyTopRef.current < 0) return
+        if (Math.abs(el.scrollTop - historyTopRef.current) > 1) el.scrollTop = historyTopRef.current
+      }, [messages.length, renderLimit, atBottom])
 
       // 看过 1.5 秒才算读过：让红点有出现的余地，也不至于一闪就没。
       // 依赖里必须有 atBottom：翻历史回到底部的那一下才是"看见了"；
@@ -2094,7 +2116,9 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       const groupListNode = useMemo(
         () => {
           const nodes = withDivider(visibleMessages, seenGroup, (message, index) => h(Bubble, {
-            key: `${message.ts}-${index}`,
+            // key 用"在整条消息里的绝对位置"：渲染窗口往前挪时，一条消息的 key 不该变。
+            // 以前用窗口内序号，新消息一来 visibleStart 动一下，120 个气泡全重挂一遍。
+            key: `${message.ts}-${visibleStart + index}`,
             config,
             message,
             animate: animateRef.current,
@@ -2217,7 +2241,15 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
         },
         h('div', {
           ref: scrollRef,
-          onScroll: () => { measureBottom(); measureHistory() },
+          onScroll: () => {
+            const el = scrollRef.current
+            if (el) {
+              // 只记"翻历史"时的位置：贴底时位置由贴底逻辑负责。
+              historyTopRef.current = (el.scrollHeight - el.scrollTop - el.clientHeight > 40) ? el.scrollTop : -1
+            }
+            measureBottom()
+            measureHistory()
+          },
           style: { flex: 1, overflowY: 'auto', padding: '8px 0 58px', minHeight: 0, position: 'relative', WebkitMaskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)', maskImage: 'linear-gradient(to bottom, #000 calc(100% - 46px), transparent 100%)' },
         },
           messages.length === 0
@@ -3519,7 +3551,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v49 · ui-typing-uncontrolled:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v50 · history-no-flash:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')
