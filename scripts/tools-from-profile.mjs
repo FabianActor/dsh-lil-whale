@@ -111,11 +111,11 @@ const enabled = []
 const internal = []
 for (const tool of tools) {
   if (tool.disabled === true) {
-    skipped.push({ id: tool.id, why: 'disabled: true' })
+    skipped.push({ id: tool.id, why: 'disabled: true', kind: 'disabled' })
     continue
   }
   if (tool.disabled === null) {
-    skipped.push({ id: tool.id, why: '停用条件是没法安全求值的表达式' })
+    skipped.push({ id: tool.id, why: '停用条件是没法安全求值的表达式', kind: 'unjudged' })
     continue
   }
   const entry = catalog[tool.id]
@@ -126,7 +126,7 @@ for (const tool of tools) {
     continue
   }
   if (!entry || !entry.line) {
-    skipped.push({ id: tool.id, why: '工具目录里没有它（补一行就行）' })
+    skipped.push({ id: tool.id, why: '工具目录里没有它（补一行就行）', kind: 'nodoc' })
     continue
   }
   enabled.push({ id: tool.id, line: entry.line, kind: entry.kind === 'group' ? 'group' : 'tool' })
@@ -136,11 +136,17 @@ for (const tool of tools) {
 // 2026-11-16 三条鱼的结论：dump-config 只报组、不报每组几件，硬折成件只能靠猜，
 // 所以这里只给同单位能算的数；件数由 wake-agent-tools 那本账单独看变化，不参与这条等式。
 const skippedSorted = [...skipped].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+const skippedOf = (kind) => skipped.filter((s) => s.kind === kind).length
 const counts = {
   mounts: enabled.length + skipped.length + internal.length,
   listed: enabled.length,
   skipped: skipped.length,
   internal: internal.length,
+  // 2026-11-16 第二条鱼 #816：skipped 的"方向"要写清——它数的是"挂载项在、但这份纸没写进去"，
+  // 原因是 被停用 / 停用条件判不了 / 目录没登记；反方向（目录有、组合里没有）不在这一行。
+  skippedDisabled: skippedOf('disabled'),
+  skippedUnjudged: skippedOf('unjudged'),
+  skippedNoDoc: skippedOf('nodoc'),
 }
 console.log(
   JSON.stringify(

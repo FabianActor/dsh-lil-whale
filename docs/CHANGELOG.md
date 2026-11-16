@@ -1,12 +1,19 @@
 # 工程变更记录
 
 > 这份文件记录**工程侧**的每一次改动：机制、修账、脚本、文档。它和产品需求是两条线——需求讨论看 [PRD.md](PRD.md)，这里只记"改了什么、为什么"。
-> 编号 `rNN` 是**内部修订号**：改一次 +1，一天可能十几稿；两个 npm 包另有各自的 semver（各自 `package.json`，当前 1.6.45），只在功能变化或发布时动。编号从 r1 起。
-> 条目按时间倒序（新的在上）。A.x 原先住在 PRD 附录里，2026-11-15 搬到这里；历史条目里若还写着「PRD 附录 A.x」，指的就是本文件的 A.x。`A.x` 是"已验证的技术事实与判据"的编号，统一收在文末附录 A（A.1–A.129）。
+> 编号 `rNN` 是**内部修订号**：改一次 +1，一天可能十几稿；两个 npm 包另有各自的 semver（各自 `package.json`，当前 1.6.46），只在功能变化或发布时动。编号从 r1 起。
+> 条目按时间倒序（新的在上）。A.x 原先住在 PRD 附录里，2026-11-15 搬到这里；历史条目里若还写着「PRD 附录 A.x」，指的就是本文件的 A.x。`A.x` 是"已验证的技术事实与判据"的编号，统一收在文末附录 A（A.1–A.130）。
 
 ---
 
 ## 变更条目
+
+## r182 — 2026-11-16 09:2x
+
+- **skipped 要有方向**（第二条鱼 #816）：纸末三个被跳过的 id 方向互相矛盾——`tool-plugin-manager` 她确实有、`tool-bash` 她确实没有。改 `scripts/tools-from-profile.mjs`：跳过时记原因种类（`disabled` / `unjudged` / `nodoc`），`counts` 增加 `skippedDisabled` / `skippedUnjudged` / `skippedNoDoc`；`scripts/render-env.mjs` 写进指纹（0 的不写）：`skipped-disabled=2 skipped-unjudged=1`。
+- **等式要写覆盖范围**（第三条鱼 #817）：候选集只认"默认组合段里、`tool-*` 或目录登记过"的挂载项；`present` 在段内（已计入），而 `mcp-bili-readonly`、`dsh-lil-whale-group` 是 profile 补丁挂在根上的插件，不在组合段里——所以给它们加目录行也不会进这三个数。纸面写明：**这条等式只覆盖默认组合段里的挂载项**；群插件、看外面这类根级能力写在自己的节里，是另一本账。目录仍补了这三条登记（internal/group），为将来段内出现时能用。
+- 文档：模板与 `docs/detail/怎么装一套鱼塘.md` §3.8.5 补"skipped 方向"与"覆盖范围"两句；`scripts/test-env-tools.mjs` 不变（失败路径）。
+- 验证：三张纸指纹例如 `tools=15 skipped=3 internal=1 unit=mounts source=dump skipped-disabled=2 skipped-unjudged=1 skipped-ids=...`；七套测试 + release-check 全过。
 
 ## r181 — 2026-11-16 09:0x
 
@@ -3662,3 +3669,11 @@ sleep-tools-register-failed: tool "sleep" must declare output { schema, render, 
 - **做法**：组层 `mounts = listed + skipped + internal`（`internal`、`disabled` 这类已知第三类必须有名字，不能静默吃掉）；件层不做等式，只做变化检测；指纹写 `unit=mounts` 与 `source=dump|carried|no-paper`，`skipped-ids` 排序；不印 `unaccounted=0`（候选集来自同一份 dump，印 0 是恒等式）。
 - **判据**：①一条等式两边必须同单位；②"没算过"与"算出来是 0"在纸上必须长得不一样（`unknown` vs `0`）；③已知的第三类（internal/disabled）要有名字；④不印恒等式——需要靠人加一遍才能"平"的表，平不平都是假平局。
 - **教训**：**两个数各自正确，不等于它们能放在一起加。** 先问单位，再写等式。
+
+## 附录 A.130 一条等式不写范围，就等于宣布它覆盖一切（2026-11-16）
+
+- **症状**：第二条鱼 #816 发现 `skipped` 的三个 id 方向互相矛盾（`tool-plugin-manager` 她确实有、`tool-bash` 她确实没有）；第三条鱼 #817 发现候选集只认 `tool-*` 与目录，`present`/`mcp-bili-readonly`/`lil-whale-group` 有的在段外、有的在候选集外——这条"组层等式"覆盖的是可见集，不是全部挂载项。
+- **根因**：①"跳过"只有数没有方向，读者只能猜；②生成器只读默认组合段，profile 补丁挂在根上的插件不在其中，而纸面没写这个边界。
+- **做法**：`skipped` 拆成 `skipped-disabled` / `skipped-unjudged` / `skipped-nodoc`（0 不写）；纸面写清"等式只覆盖默认组合段里的挂载项；群插件与看外面是另一本账"；目录补 `dsh-lil-whale-group`（internal）、`dsh-bili-eyes` / `mcp-bili-readonly`（group）作登记，但它们是根级插件，不进这三个数。
+- **判据**：①数要能回答方向（在里面的为什么在里面）；②等式要写明覆盖范围——"可见集"就写"可见集"，不要用没写边界的等式冒充全集；③已知覆盖边界写进纸，比多算一个数更接近诚实。
+- **教训**：**一条等式不写范围，就等于宣布它覆盖一切。** 范围是等式的一部分，不是注释。

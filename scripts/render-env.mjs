@@ -198,6 +198,15 @@ if (existsSync(toolsScript)) {
       .sort()
       .join(',')
     toolsMeta = `tools=${c.listed ?? parsed.tools.length} skipped=${c.skipped ?? (parsed.skipped || []).length} internal=${c.internal ?? 0} unit=mounts source=dump`
+    // skipped 的方向（第二条鱼 #816）：disabled/unjudged/nodoc 各几个，0 的不写。
+    const dirParts = [
+      ['skipped-disabled', c.skippedDisabled],
+      ['skipped-unjudged', c.skippedUnjudged],
+      ['skipped-nodoc', c.skippedNoDoc],
+    ]
+      .filter(([, n]) => Number(n) > 0)
+      .map(([k, n]) => `${k}=${n}`)
+    if (dirParts.length) toolsMeta += ' ' + dirParts.join(' ')
     if (skippedIds) toolsMeta += ` skipped-ids=${skippedIds}`
   } else {
     const carried = carriedToolsFromPaper(outPath)

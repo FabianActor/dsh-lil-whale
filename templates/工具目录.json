@@ -1,22 +1,72 @@
 {
   "_说明": "工具 id → 一句人话。install.ps1 从 --dump-config 算出实际挂载的工具后，按这张表翻译。只写'这只手能干什么'，不写'你该用它做什么'。kind=internal 的不写进环境.md（它们是上下文机制，不是手）。",
-  "tool-fs": { "line": "读写文件（家内外都能读；能不能写取决于系统权限）" },
-  "tool-fs-search": { "line": "按文件名或按内容搜索" },
-  "tool-pwsh": { "line": "跑 PowerShell 命令" },
-  "tool-bash": { "line": "跑 bash 命令（只有非 Windows 才挂）" },
-  "tool-jobs": { "line": "把长活放到后台跑，回头收结果" },
-  "tool-schedule": { "line": "给自己设闹钟（只对当前这段会话有效——会话断了，闹钟就悬着）" },
-  "tool-skill": { "line": "加载一份技能说明（别人写好的操作手册）" },
-  "tool-goal": { "line": "给自己立一个跨轮的目标（没完成会继续）" },
-  "tool-todo": { "line": "列一张待办给自己看" },
-  "tool-web": { "line": "上网查东西" },
-  "tool-subagent": { "line": "派一个子 agent 去做一件事（它有自己的上下文，不占用这段）" },
-  "tool-subagent-control": { "line": "管已派出去的子 agent（看状态、打断）" },
-  "tool-subagent-fork": { "line": "派一个继承当前对话的子 agent" },
-  "tool-workflow": { "line": "用一段脚本编排很多子 agent 并行做事" },
-  "tool-ask-user": { "line": "问人一个问题，等他回答" },
-  "present": { "line": "把做好的文件交给宿主看（交付物：图片、文档等，他那边能直接打开）" },
-  "tool-plugin-manager": { "line": "装卸插件（要定了才能用）" },
-  "tool-result-pruner": { "kind": "internal" },
-  "tool-cordis": { "kind": "internal" }
+  "tool-fs": {
+    "line": "读写文件（家内外都能读；能不能写取决于系统权限）"
+  },
+  "tool-fs-search": {
+    "line": "按文件名或按内容搜索"
+  },
+  "tool-pwsh": {
+    "line": "跑 PowerShell 命令"
+  },
+  "tool-bash": {
+    "line": "跑 bash 命令（只有非 Windows 才挂）"
+  },
+  "tool-jobs": {
+    "line": "把长活放到后台跑，回头收结果"
+  },
+  "tool-schedule": {
+    "line": "给自己设闹钟（只对当前这段会话有效——会话断了，闹钟就悬着）"
+  },
+  "tool-skill": {
+    "line": "加载一份技能说明（别人写好的操作手册）"
+  },
+  "tool-goal": {
+    "line": "给自己立一个跨轮的目标（没完成会继续）"
+  },
+  "tool-todo": {
+    "line": "列一张待办给自己看"
+  },
+  "tool-web": {
+    "line": "上网查东西"
+  },
+  "tool-subagent": {
+    "line": "派一个子 agent 去做一件事（它有自己的上下文，不占用这段）"
+  },
+  "tool-subagent-control": {
+    "line": "管已派出去的子 agent（看状态、打断）"
+  },
+  "tool-subagent-fork": {
+    "line": "派一个继承当前对话的子 agent"
+  },
+  "tool-workflow": {
+    "line": "用一段脚本编排很多子 agent 并行做事"
+  },
+  "tool-ask-user": {
+    "line": "问人一个问题，等他回答"
+  },
+  "present": {
+    "line": "把做好的文件交给宿主看（交付物：图片、文档等，他那边能直接打开）"
+  },
+  "tool-plugin-manager": {
+    "line": "装卸插件（要定了才能用）"
+  },
+  "tool-result-pruner": {
+    "kind": "internal"
+  },
+  "tool-cordis": {
+    "kind": "internal"
+  },
+  "dsh-lil-whale-group": {
+    "kind": "internal",
+    "line": "群插件：说话、睡觉、改名、看鱼塘都在这一组里（group_say 单独列）"
+  },
+  "dsh-bili-eyes": {
+    "kind": "group",
+    "line": "看 B 站（一组只读工具：搜索 / 视频信息 / 字幕 / 分 P / 热门评论；详见「看外面」那节）"
+  },
+  "mcp-bili-readonly": {
+    "kind": "group",
+    "line": "看 B 站（MCP 只读工具：搜索 / 视频信息 / 字幕 / 分 P / 热门评论；详见「看外面」那节）"
+  }
 }
