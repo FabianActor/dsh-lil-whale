@@ -16,6 +16,8 @@
 
 **判据**：①仓库与本地都搜不到这三个文件名（除 CHANGELOG 历史引用）；②README 索引里没有死链；③`release-check` 23 项仍全过。
 
+**顺带**：这次 `git add -A` 把一个 15:59 留下的 `README - 副本.md` 误带进仓库（413 行副本，r200b 已删）。教训：`git add -A` 会把"临时副本"当成文档；以后提交前先 `git status` 看一眼未跟踪文件。
+
 ## r199 — 2026-11-16 15:5x–16:0x
 
 **症状（宿主 15:39 + 16:02 两份装机沉淀）**：①用户默认安装时，agent 不问"鱼塘放哪"，直接装进会话工作区：`<workspace>\whale-src\{dsh-lil-whale-main,homes,pool}`，与我们要求的 `<鱼塘根>\app` 不一致；②npx/pnpm **hoisted** 安装的机器上，插件找不到宿主包 `dsh-tools`/`dsh-llm`（`host-resolve defineTool=object createUserMessage=object`，实际是 `null`），工具以裸对象注册、唤醒消息缺 id。
