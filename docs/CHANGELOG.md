@@ -8,6 +8,14 @@
 
 ## 变更条目
 
+## r200 — 2026-11-16 16:1x
+
+**做了什么（宿主 16:12）**：三份"完成即删"性质的文档已经完成使命，从本地与 GitHub 一起删除：`docs/detail/还没做完的事.md`、`docs/detail/还没做的想法-完成即删.md`、`docs/detail/这一周她过得怎么样-完成即删.md`。
+
+**同步改动**：README 的「文档在哪」去掉三行索引；该节末尾那句"待办只有一页"随之去掉（没有待办页了）。CHANGELOG 里的历史提及保留——记录不改，历史里它们确实存在过；`鱼二代测试记录.md` 里引用过其中一份的判据口径，也照旧保留（那是当时的依据）。
+
+**判据**：①仓库与本地都搜不到这三个文件名（除 CHANGELOG 历史引用）；②README 索引里没有死链；③`release-check` 23 项仍全过。
+
 ## r199 — 2026-11-16 15:5x–16:0x
 
 **症状（宿主 15:39 + 16:02 两份装机沉淀）**：①用户默认安装时，agent 不问"鱼塘放哪"，直接装进会话工作区：`<workspace>\whale-src\{dsh-lil-whale-main,homes,pool}`，与我们要求的 `<鱼塘根>\app` 不一致；②npx/pnpm **hoisted** 安装的机器上，插件找不到宿主包 `dsh-tools`/`dsh-llm`（`host-resolve defineTool=object createUserMessage=object`，实际是 `null`），工具以裸对象注册、唤醒消息缺 id。
