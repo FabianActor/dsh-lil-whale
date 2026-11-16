@@ -64,6 +64,7 @@ import {
 // 宿主包在哪（npx / npm 全局 / launcher 环境变量）：实现放到 host-anchors.js，
 // 那里能单独测；这里只留重试节奏与状态。
 import { hostAnchors, hostExportEntryCandidates } from './host-anchors.js'
+import { registerInstance } from './instance-guard.js'
 const HOST_RETRY_STEPS_MS = [1000, 5000, 30000, 300000]
 let hostAttempt = 0
 let hostNextTryAt = 0
@@ -1792,6 +1793,22 @@ function recordWake(wakes, member) {
 function apply(ctx) {
   ensureDir()
 
+  // 进程内单实例防护（2026-11-16 第五份装机沉淀 P1）：DSH 在同一个进程里卸载/重装插件时，
+  // 旧 fiber 的 dispose 不一定被触发，旧实例会继续跑定时器、按加载时的配置写旧目录，
+  // 甚至把已删除的目录重建出来（实测同进程 3 个实例）。用 %TEMP% 下按 pid 的登记表，
+  // 让旧实例在下一拍自己停表——不依赖 dispose，也不依赖配置路径（旧配置早指向别处了）。
+  const instanceGuard = registerInstance({
+    selfHome: CFG.selfHome,
+    configFile: CFG._path ?? null,
+    profile: process.env.DSH_PROFILE ?? null,
+  })
+  // false = 已被同进程里更新的实例顶替：停掉全部定时器，不再写任何状态。
+  const stillPrimary = () => {
+    if (!instanceGuard.isGhost()) return true
+    instanceGuard.retire()
+    return false
+  }
+
 
   // 一行启动痕迹：确认"这个进程真的加载了我"，出问题时先看它。
   // 这里**不写** defineTool 的状态 —— apply 的时候宿主包还没解析完，写进去永远会是
@@ -2256,6 +2273,7 @@ function apply(ctx) {
 
   // 2. 听：只在新消息到达时唤醒，不做心跳
   const timer = setInterval(() => {
+    if (!stillPrimary()) return
     void tick(ctx).catch((error) => {
       // 她 2026-11-10 数的：那个 readLinesOf 的错抛了 6 小时（≈4300 次），
       // 三个日志里一条都没有 —— "它坏了"和"今天没事"在纸上长得一模一样。
@@ -2266,13 +2284,18 @@ function apply(ctx) {
     })
   }, WAKE.intervalMs)
   timer.unref?.()
+  instanceGuard.addTimer(timer)
 
-  ctx.on('dispose', () => clearInterval(timer))
+  ctx.on('dispose', () => {
+    clearInterval(timer)
+    instanceGuard.unregister()
+  })
 
   // 2.5 自己的闹钟：读自己家的 plan，自己递自己（2026-11-13 review 的建议 B）。
   //     巡守不在也照样响；claim 文件保证和巡守那边不会各递一次。
   if (!isMainProcess()) {
     const selfTimer = setInterval(() => {
+      if (!stillPrimary()) return
       try {
         selfPlanTick(ctx)
       } catch (error) {
@@ -2280,12 +2303,15 @@ function apply(ctx) {
       }
     }, 60_000)
     selfTimer.unref?.()
+    instanceGuard.addTimer(selfTimer)
     const selfBoot = setTimeout(() => {
+      if (!stillPrimary()) return
       try {
         selfPlanTick(ctx)
       } catch {}
     }, 10_000)
     selfBoot.unref?.()
+    instanceGuard.addTimer(selfBoot)
     ctx.on('dispose', () => {
       clearInterval(selfTimer)
       clearTimeout(selfBoot)
@@ -2327,11 +2353,13 @@ function apply(ctx) {
     // 自启动：开关在 pool\state\settings.json，默认关；开着的用户才走这一支。
     scheduleAutoStart(ctx)
     const watchTimer = setInterval(() => {
+      if (!stillPrimary()) return
       void watchmanTick().catch((error) => {
         watchmanLog('note', `note=tick-error detail=${String(error?.message ?? error).replace(/\s+/g, ' ')}`)
       })
     }, WATCH.intervalMs)
     watchTimer.unref?.()
+    instanceGuard.addTimer(watchTimer)
     const startedAt = new Date()
     ctx.on('dispose', () => {
       clearInterval(watchTimer)

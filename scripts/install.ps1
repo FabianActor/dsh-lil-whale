@@ -746,6 +746,13 @@ try {
 if ($null -eq $savedCfgEnv) { Remove-Item Env:LIL_WHALE_CONFIG -ErrorAction SilentlyContinue } else { $env:LIL_WHALE_CONFIG = $savedCfgEnv }
 
 Say ""
+# 第五份装机沉淀 P1：插件的卸载/重装发生在主 dsh 进程里，旧实例不会自己退出（dispose 不触发），
+# 会按加载时的配置继续写旧目录、甚至重建已删除的目录。装完必须重启主 dsh。
+$mainPortNow = if ($cfg.Contains('leePort')) { [int]$cfg['leePort'] } else { 3080 }
+if (Test-Port $mainPortNow) {
+  Warn "主 dsh 正在 127.0.0.1:$mainPortNow 上运行：卸载/重装插件**不会**让旧插件实例退出，它们会继续写旧目录（实测会重建已删除的目录）。装完请重启主 dsh；重启前不要删旧目录。"
+}
+
 Say "  装好了。接下来的四件事脚本替不了：" -ForegroundColor Green
 Say ""
 Say "  1) 重启你的 dsh（装进你 profile 的两个插件要重启才生效）。"

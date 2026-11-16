@@ -204,6 +204,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '写请求守卫' (($guardOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '写请求守卫' '面板写请求要 x-llw-panel 且同源（test-http-guard.mjs）' }
   } else { Fail '写请求守卫' 'scripts\test-http-guard.mjs 不在包里' }
+  # ── 4n. 进程内单实例防护（2026-11-16，CHANGELOG r212）────────────────
+  $guardInstTest = Join-Path $pkg 'scripts\test-instance-guard.mjs'
+  if (Test-Path $guardInstTest) {
+    $guardInstOut = & node $guardInstTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '单实例防护' (($guardInstOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '单实例防护' '同进程旧实例会自己停表（test-instance-guard.mjs）' }
+  } else { Fail '单实例防护' 'scripts\test-instance-guard.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {

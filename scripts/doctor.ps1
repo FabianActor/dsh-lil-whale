@@ -114,7 +114,9 @@ if (Test-Path -LiteralPath $presenceFile) {
     Add-Row '她的心跳' 'FAIL' (("pool\state\presence\{0}.json 读不了：{1}") -f $presenceKey, $_.Exception.Message) 'NEXT: 看 state\presence\ 下的文件是不是坏 JSON'
   }
 } else {
-  Add-Row '她的心跳' 'FAIL' (("pool\state\presence\{0}.json 不存在") -f $presenceKey) 'NEXT: 她的会话从没被打开过——开窗后要在网页里进那段会话'
+  # 2026-11-16 第五份沉淀 P2：刚装完还没开窗时这里必然是"文件不存在"。
+  # 它是首装的正常状态，不该让体检红着一屏——标 INFO 并把"怎么变 OK"写出来。
+  Add-Row '她的心跳' 'INFO' (("pool\state\presence\{0}.json 还不存在——要是刚装完还没开过窗，这属正常（首装 1 FAIL 就是这一格）；开窗并进那段会话后会有心跳" -f $presenceKey)) 'NEXT: 在 GUI 里打开她的页面，进那段会话'
 }
 
 # 3. 工具注册：哑 8 小时那次的判据（有 host-resolve 却没有 group_say-registered）
@@ -268,7 +270,10 @@ if (Test-Path -LiteralPath $pluginLog) {
     $undiciOut = & node $repair --check 2>&1
     $undiciCode = $LASTEXITCODE
     if ($undiciCode -eq 0) {
-      Add-Row 'undici 文件' 'OK' (($undiciOut | Select-Object -Last 1).Trim())
+      # 2026-11-16 第五份沉淀 P3：SKIP 的意思是"没有 undici 可查"，不是"查过且完好"。
+      $undiciLine = ($undiciOut | Select-Object -Last 1).Trim()
+      if ($undiciLine -match '^SKIP') { Add-Row 'undici 文件' 'INFO' $undiciLine }
+      else { Add-Row 'undici 文件' 'OK' $undiciLine }
     } else {
       Add-Row 'undici 文件' 'FAIL' (($undiciOut | Where-Object { $_ -match '^WARN|^FAIL|^  - ' } | Select-Object -First 3) -join ' ') 'NEXT: node scripts/repair-undici.mjs --fix'
     }
@@ -924,7 +929,7 @@ if (Test-Path -LiteralPath $Cfg.MembersFile) {
       if ($m.home) {
         # 他的进程不设 DSH_HOME，启动痕迹写成 "(unset; 默认 <用户目录>\.dsh)" —— 先把真实路径抠出来再比。
         $wantHome = ([string]$m.home).TrimEnd('\')
-        $hit = $bootLines | Where-Object {
+        $hits = @($bootLines | Where-Object {
           # 两个字段都可能写着她/他的家：`home`（进程自己的 DSH_HOME，可能带 "(unset; 默认 …)" 包装）
           # 和 `herHome`（配置里的她的家）。两个都拿来比，谁的路径对上就算谁。
           $candidates = @()
@@ -936,7 +941,13 @@ if (Test-Path -LiteralPath $Cfg.MembersFile) {
           if ($_.herHome) { $candidates += [string]$_.herHome }
           foreach ($c in $candidates) { if (([string]$c).TrimEnd('\') -ieq $wantHome) { return $true } }
           return $false
-        } | Select-Object -Last 1
+        })
+        # 2026-11-16 第五份沉淀 P6：宿主的启动行 selfHome 也等于鱼的家（宿主用鱼的配置跑），
+        # 只按路径取"最后一条"会取到宿主的 pid。鱼自己的行有 profile 字段，优先按它过滤。
+        if ($m.profile) {
+          $hits = @($hits | Where-Object { [string]$_.profile -ieq [string]$m.profile })
+        }
+        $hit = $hits | Select-Object -Last 1
         if ($hit) { $bootText = ('pid={0} pkg={1}' -f $hit.pid, $hit.pkg) }
       }
 
