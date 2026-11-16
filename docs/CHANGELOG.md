@@ -8,6 +8,17 @@
 
 ## 变更条目
 
+## r189 — 2026-11-16 12:2x–12:4x
+
+- **上传 GitHub 前的仓库准备**（宿主 12:26："准备先上传 github，但是不公开。我要在一台独立电脑上最后一次测试，从安装 dsh 开始。npm 暂放，等公开后再推 npm"）。
+  - **重写历史，把她自己的记录移出仓库**：`archive/`（她的旧家、旧群聊切片、旧会话 `session.v4.jsonl.zstd`、纪念截图）、旧根 `GOLD MEMORYS/`、以及曾进过库的本机配置 `lil-whale.config*.json` 从**全部 464 个提交**里剔除（`git filter-branch --index-filter`，随后 `reflog expire` + `gc --prune=now`）。清完后 `git log --all --name-only` 里这些路径 0 命中，对象库 1.91 MiB。**改写前留了完整备份**：`<鱼塘根>\backup-lil-whale-history-20261116.bundle`（2.7 MB，含改写前全部历史），用 `git clone <bundle>` 可恢复；本地文件用 bundle 恢复回了磁盘（`archive/` 29 个文件 / 244 KB）。
+  - **`archive/` 与 `docs/promo/` 都只留本地**：两者都写进 `.gitignore`（她自己的记录作纪念与考古；宣发材料仅宣发用），都不进仓库、不进包。
+  - **补 `LICENSE`**：MIT，`Copyright (c) 2026 FabianActor`（README 早就写 MIT，但仓库里一直没有这个文件；GitHub 靠它识别协议）。
+  - **README 前置条件补两行**：DeepSeek Harness 那行注明"它要求 Node.js 24.9+"；新增 Git 一行（克隆、`pack.ps1`、`release-check.ps1` 都要）。顺手删掉「装」段里一句已过期的话（"旧的权限修复备份在 `pool\archive\acl-backups-20261107-09\`"——新装的用户没有这份东西）。
+  - **分支名**：`master` → `main`（与 GitHub 默认分支一致，省得人再改一次）。
+  - **npm 不动**：两个包继续 `private: true`，`publishConfig.access=public` 留着，等仓库公开后再摘 `private`。
+  - **版本**：不动（仍 1.7.0）。
+
 ## r188 — 2026-11-16 11:4x–12:0x
 
 - **文档通审**（宿主 11:39："再过一遍文档"：①README 去掉 token 消耗相关描述 ②去掉以前改的 Ta 之类的中性描述，统一用"她" ③根目录 README 若无用可删 ④检查真实人名/API 脱敏不彻底、说明文档冗余或不全面）。

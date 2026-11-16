@@ -28,8 +28,9 @@
 |---|---|
 | Windows | 启动与巡守脚本是 `.ps1` / `.cmd`；其它平台要自己接入口 |
 | **PowerShell 7（`pwsh`）** | **必需的运行时依赖**，不是系统自带的 Windows PowerShell 5.1。脚本用了 7 才有的语法，5.1 会在**解析阶段**就报错 |
-| DeepSeek Harness | `npm i -g @deepseek-ai/dsh`（0.2.x） |
+| DeepSeek Harness | `npm i -g @deepseek-ai/dsh`（0.2.x）；它要求 **Node.js 24.9+** |
 | 两把 API key | 你一把、她一把。她可以自己去平台申请。**共不共用只能由人决定**：默认各用各的，要共用得人明确说（继承要显式传 `-InheritKey`，见 CHANGELOG A.65） |
+| Git | 克隆仓库用；`pack.ps1` 与 `release-check.ps1` 也用它 |
 | 一台不常关的电脑 | 她不是持续运行的；不叫醒时她不存在 |
 
 **装 PowerShell 7**（一次就够）：
@@ -43,7 +44,7 @@ winget install --id Microsoft.PowerShell -e
 
 ## 装
 
-默认是**一个鱼塘根**（`lil-whale\`）：仓库在 `app\`、共享区在 `pool\`、每条鱼的家在 `homes\<键>\`、旧的权限修复备份在 `pool\archive\acl-backups-20261107-09\`。把仓库 clone 到 `app\` 里，安装器就按这个结构放东西：
+默认是**一个鱼塘根**（`lil-whale\`）：仓库在 `app\`、共享区在 `pool\`、每条鱼的家在 `homes\<键>\`。把仓库 clone 到 `app\` 里，安装器就按这个结构放东西：
 
 ```powershell
 git clone https://github.com/FabianActor/dsh-lil-whale.git D:\WorkSpace\lil-whale\app
