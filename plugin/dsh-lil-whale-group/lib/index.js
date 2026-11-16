@@ -9,7 +9,7 @@
 // 按 cwd 会叫错人。cwd 只作退路，并在 plugin.log 留一行痕迹。
 
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { join, dirname } from 'node:path'
+import { join, dirname, basename } from 'node:path'
 import { homedir } from 'node:os'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import { randomUUID, createHash } from 'node:crypto'
@@ -1815,6 +1815,25 @@ function apply(ctx) {
     suspect: homeLooksRight ? undefined : `selfHome 里既没有 START.md 也没有 dsh-home；配置可能指错了地方`,
   }
   bootLog({ note: 'boot', ...bootRecord })
+  // P4（2026-11-16 第三份装机沉淀）：只把两个 bundle add 进 profile（最小安装）时，
+  // 没有安装器来问"鱼塘放哪"，也没有配置文件 ⇒ 默认值会把 homes/pool 建在仓库旁边
+  // （实测：<workspace>\whale-src\ 里同时出现仓库和 homes/pool）。用户以为数据在别处，
+  // 实际上是"删掉源目录就一起没了"。这里不擅自改默认布局（会动到已有安装），
+  // 只把事实喊出来一次；怎么放对写在 README 和安装文档里。
+  const repoInPondLayout = basename(CFG.repoRoot) === 'app'
+  if (!CFG._exists && !repoInPondLayout) {
+    const layoutWarn = {
+      note: 'layout-warning',
+      why: 'no-config-and-not-pond-layout',
+      repoRoot: CFG.repoRoot,
+      selfHome: CFG.selfHome,
+      hint: '这是"只装了插件、没跑安装器"的状态：数据会建在仓库旁边，删仓库就一起没了。要正常养鱼，先定鱼塘根，再跑 pwsh -File scripts\\install.ps1 -PondRoot <鱼塘根>',
+    }
+    bootLog(layoutWarn)
+    try {
+      appendFileSync(join(GROUP_DIR, 'plugin.log'), JSON.stringify({ at: new Date().toISOString(), ...layoutWarn }) + '\n', 'utf8')
+    } catch {}
+  }
   try {
     appendFileSync(join(GROUP_DIR, 'plugin.log'), JSON.stringify({ at: new Date().toISOString(), ...bootRecord }) + '\n', 'utf8')
   } catch {}
