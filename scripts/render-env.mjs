@@ -174,10 +174,30 @@ let toolsText = '- （工具清单没能自动生成，见下面那行提示）'
 // 纸末指纹里的计数（2026-11-16 三条鱼）：让"这张纸被人算过"变成能 grep 的数。
 // 单位是"挂载项（组）"，不是"件"——一个插件可能带好几只手，两个数不在一起加。
 // source=dump 是"这次真算了"；source=carried 是"沿用上一次"——数不在＝没算过，不能和 0 混。
-let toolsMeta = 'tools=unknown skipped=unknown internal=unknown unit=mounts source=no-paper'
+// 2026-11-17 第四条鱼 #1012：数不到的 bundle 也要有字段，否则读者会把它读成"没有"。
+// 只列"带手、但不进 dump 默认组合段"的第三方 bundle；核心包与我们自己的两个包不算。
+const CORE_BUNDLES = new Set(['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'])
+const OWN_BUNDLE = /^@fabianactor\/dsh-lil-whale-group(-ui)?$/
+function externalBundlesOf(dshHome, profile) {
+  try {
+    const pkg = JSON.parse(readFileSync(join(dshHome, 'profiles', profile, 'package.json'), 'utf8'))
+    const arr = pkg?.dsh?.profile?.bundles
+    if (!Array.isArray(arr)) return null
+    const ext = arr
+      .filter((b) => typeof b === 'string' && b && !CORE_BUNDLES.has(b) && !OWN_BUNDLE.test(b))
+      .sort()
+    return ext
+  } catch {
+    return null
+  }
+}
+let bundlesField = 'unknown'
+let toolsMeta = `tools=unknown skipped=unknown internal=unknown unit=mounts source=no-paper bundles=${bundlesField}`
 const toolsScript = join(REPO_ROOT, 'scripts', 'tools-from-profile.mjs')
 if (existsSync(toolsScript)) {
   const dshHome = me?.dshHome || join(workspace, 'dsh-home')
+  const extBundles = externalBundlesOf(dshHome, args.profile)
+  bundlesField = extBundles === null ? 'unknown' : extBundles.length ? extBundles.join(',') : 'none'
   const r = spawnSync(process.execPath, [toolsScript, '--profile', args.profile], {
     env: { ...process.env, DSH_HOME: dshHome },
     encoding: 'utf8',
@@ -215,6 +235,7 @@ if (existsSync(toolsScript)) {
       if (ids) toolsMeta += ` skipped-${kind}-ids=${ids}`
     }
     if (c.evalRules) toolsMeta += ` eval-rules=${c.evalRules}`
+    toolsMeta += ` bundles=${bundlesField}`
   } else {
     const carried = carriedToolsFromPaper(outPath)
     if (carried) {
@@ -223,7 +244,7 @@ if (existsSync(toolsScript)) {
         '上面这一份是**沿用上一次成功算出的**，不是新算的；要更新请宿主在鱼塘根跑 ' +
         '`fish.ps1 refresh ' + (args.profile || myKey) + '`。）'
       toolsText = carried.join('\n') + '\n' + note
-      toolsMeta = 'tools=unknown skipped=unknown internal=unknown unit=mounts source=carried'
+      toolsMeta = `tools=unknown skipped=unknown internal=unknown unit=mounts source=carried bundles=${bundlesField}`
       console.error('render-env: 工具清单没能重算（' + (parsed?.reason ?? '跑不起来').slice(0, 120) + '），沿用上一次纸上的清单')
     } else {
       toolsText = `- （没能从 --dump-config 算出工具清单：${parsed?.reason ?? '跑不起来'}；这份纸里也没有旧的清单可沿用）`

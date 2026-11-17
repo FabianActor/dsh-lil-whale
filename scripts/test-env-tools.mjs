@@ -9,7 +9,7 @@
  * 用法：node scripts/test-env-tools.mjs   （exit 0 = PASS）
  */
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -81,6 +81,9 @@ try {
   ok(out.includes('source=carried'), '沿用旧清单时指纹应写 source=carried')
   ok(out.includes('unit=mounts'), '指纹应写明单位 unit=mounts（挂载项，不是件数）')
   ok(out.includes('tools=unknown'), '沿用旧清单时 tools 应写 unknown（数不在＝没算过，不能写 0）')
+  // r235（第四条鱼 #1012）：数不到的 bundle 也要有字段——"数不到"与"没有"是两件事
+  ok(out.includes('bundles='), '指纹里应有 bundles= 字段（数不到的包也要写出来）')
+  ok(readFileSync('templates/环境.md.tpl', 'utf8').includes('bundles='), '模板应解释 bundles= 的含义')
 
   // 负样本：没有旧纸时，应明确说"没有旧的清单可沿用"，而不是假装算出来了
   const home2 = join(root, 'home2')
@@ -105,4 +108,4 @@ if (failures.length) {
   for (const f of failures) console.log(`  - ${f}`)
   process.exit(1)
 }
-console.log('PASS test-env-tools（6 条断言：沿用旧清单 + 指纹计数 + 无旧纸时明说）')
+console.log('PASS test-env-tools（8 条断言：沿用旧清单 + 指纹计数 + bundles 字段 + 无旧纸时明说）')
