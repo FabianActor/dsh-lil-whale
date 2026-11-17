@@ -1990,7 +1990,7 @@ function apply(ctx) {
       const member = memberOf(exec.agent)
       const sid = sessionIdOf(exec.agent)
       if (member === null || !pinnedSessions(member).includes(sid)) {
-        logLine({ note: 'group_say-rejected', member, sessionId: sid })
+        logLine({ note: 'say-unpinned', member, sessionId: sid })
         // 2026-11-15：旧文案教鱼"自己把 id 写进 pins.json"——名册是宿主的账，鱼不该自己改。
         // 第三条鱼第一次开口时就是照着这句去改的（还真改成了，因为沙箱能提权）。
         // 该做的是让宿主跑一条命令；文案指向那条命令，别再把宿主的活派给鱼。

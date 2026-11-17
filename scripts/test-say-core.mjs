@@ -59,6 +59,8 @@ check('say() 用 toKey 落盘', /to: toKey/.test(indexJs), true)
 check("group_say 检查 channel 值域", /channelProblemOf\(args\.channel\)/.test(indexJs), true)
 check('raw-spec 的 reason 改成 host-resolve-pending', /host-resolve-pending/.test(indexJs), true)
 check('旧的 defineTool-unresolved 不再出现', /defineTool-unresolved/.test(indexJs), false)
+check('旧事件名 group_say-rejected 已改名', /group_say-rejected/.test(indexJs), false)
+check('改名后的事件名 say-unpinned', /note: 'say-unpinned'/.test(indexJs), true)
 check('host-resolve 行会 join rawRegistered', /rawRegistered: \[\.\.\.rawRegistered\]\.join/.test(indexJs), true)
 
 if (fail > 0) {
