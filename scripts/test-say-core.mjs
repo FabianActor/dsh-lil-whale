@@ -63,7 +63,49 @@ check('旧事件名 group_say-rejected 已改名', /group_say-rejected/.test(ind
 check('改名后的事件名 say-unpinned', /note: 'say-unpinned'/.test(indexJs), true)
 check('host-resolve 行会 join rawRegistered', /rawRegistered: \[\.\.\.rawRegistered\]\.join/.test(indexJs), true)
 
+// —— 4. 文案快照：拒绝时说的那几句话，是不是还是这几句 ——
+// 期望值是从 say-core.js 一次抄下来的。文案一变，这里就红——这是故意的。
+// 红的时候先分诊（判据 §54）：
+//   CHANGELOG 里有"文案变" ⇒ 这里跟着改，红转绿，不算回归；
+//   没有 ⇒ 先按字段比，别急着改期望值把红抹掉。
+const MEMBER_LIST = KEYS.join(' / ')
+const ALL_LIST = 'all / ' + MEMBER_LIST
+check(
+  '文案快照：channel 类型错',
+  channelProblemOf(7),
+  'channel 要写字符串：group 或 dm（现在是 number）。',
+)
+check(
+  '文案快照：channel 不认识',
+  channelProblemOf('DM'),
+  'channel=DM 不认识：只有 group（在群里说）和 dm（私下说）两个值。',
+)
+check(
+  '文案快照：to 没写',
+  toProblemOf(undefined, KEYS),
+  `to 没写：要给 'all'（群里所有人）或名册里的成员键（现在有：${ALL_LIST}）。`,
+)
+check(
+  '文案快照：to 不在名册',
+  toProblemOf('group', KEYS),
+  [
+    `to=group 不是名册里的键（现在有：${ALL_LIST}）。`,
+    "to 是「说给谁」，不是「在哪间屋」—— 群里说话 to 可以写 'all' 或某个成员键，",
+    '「在群里还是私下」由 channel 决定（channel=group / channel=dm）。',
+  ].join(''),
+)
+check(
+  '文案快照：私聊不能 all',
+  toProblemOf('all', KEYS, 'dm'),
+  `channel=dm 得指名对象：to 不能是 'all'（现在有：${MEMBER_LIST}）。`,
+)
+
 if (fail > 0) {
+  const copyRed = failures.some((item) => item.label.startsWith('文案快照'))
+  if (copyRed) {
+    console.log('文案快照红了：先看 CHANGELOG 里有没有「文案变」那条（判据 §54）。')
+    console.log('  有 ⇒ 更新这里的期望值；没有 ⇒ 先按字段比，再决定是不是真回归。')
+  }
   for (const item of failures) {
     console.log(`xx ${item.label}`)
     console.log(`   期望：${JSON.stringify(item.expected)}`)
