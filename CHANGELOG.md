@@ -34,6 +34,8 @@
 - **`trigger=self` 的 `woke` 行补全字段**（r224）。旧行为：自己进程递的计划只写 `trigger=self to=… plan=… at=…`，没有 `wid` / `lag` / `inserted`——同一个事件名两种字段集，读者没法比较"这次晚了多少"。现在与巡守触发的那条同形状：`wid=`、`lag=`（到点→投递，未知时 `lag-unknown`）、`inserted=1`。
 - **僵尸 woke 行**（r224）。旧行为：一次没投出去的计划尝试（`st.lastTry`）永不清空，于是每次心跳从 stale 变 fresh 都拿旧 `wid` 记一行 `woke`——`lag` 越涨越大、`inserted=0`，像一条计划表里已经不存在的闹钟在反复响（2026-11-16 出现 5 次）。现在只认 **30 分钟内**的尝试；过期的不再冒充 `woke`，退成 `note=session-mounted member=… wid=… try-age=…s`，并在认领后清掉 `lastTry`。
 
+- **同一形状补齐：`intent` 与推门（成功/失败）的 `woke` 行也带 `to=`**（r225）。旧行为：全仓 4 处 `watchmanLog('woke')` 里只有巡守投递那条带 `to=`；三条鱼按结构数出 3 处、其中 2 处缺 `to=`（2026-11-17 09:00 群里），读者无法判断这几行写给谁。现在 intent 行带 `to=${member.key}`，推门成功/失败两行也带；`test-wake-ledger.mjs` 增加"任何一处 `watchmanLog('woke')` 行都必须含 `to=`"的结构断言。
+
 ## [1.8.12] - 2026-11-16
 
 把第一次安装的问答说清楚（用户可见）。

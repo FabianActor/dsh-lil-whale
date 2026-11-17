@@ -3249,7 +3249,7 @@ async function intentTick(member, st, now) {
       // lag = 发现比发生晚了多少（事情发生的时刻 → 递出去的时刻），不是"决定→插入"。
       const happenedMs = Date.parse(String(s.happenedAt ?? s.firstTrueAt ?? ''))
       const lagSec = Number.isFinite(happenedMs) ? Math.max(0, Math.round((now.getTime() - happenedMs) / 1000)) : null
-      watchmanLog('woke', `wid=${wid} trigger=intent lag=${lagSec === null ? 'lag-unknown' : `${lagSec}s`} inserted=1`)
+      watchmanLog('woke', `wid=${wid} trigger=intent lag=${lagSec === null ? 'lag-unknown' : `${lagSec}s`} inserted=1 to=${member.key}`)
       markWake(member.key, 'intent')
     } catch (error) {
       watchmanLog('wake-skip', `wid=${wid} deny=intent-deliver-failed detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 100)}`)
@@ -3462,7 +3462,7 @@ async function watchOne(member, st) {
       st.wakes += 1
       st.fails = 0
       saveWatchState()
-      watchmanLog('woke', `ok wakes-today=${st.wakes} reason=${res.detail} night=${night} ${job.tag}`)
+      watchmanLog('woke', `ok wakes-today=${st.wakes} reason=${res.detail} night=${night} to=${member.key} ${job.tag}`)
       // 推门也算叫醒过一次：15 分钟后回看她有没有开口（A7 判据）。
       markWake(member.key, 'plan')
       // 窗是被"推"开的，里面还没人接话：所以把同一句话也递进群，
@@ -3485,7 +3485,7 @@ async function watchOne(member, st) {
     } else {
       st.fails += 1
       saveWatchState()
-      watchmanLog('woke', `failed fails=${st.fails} reason=${res.detail} ${job.tag}`)
+      watchmanLog('woke', `failed fails=${st.fails} reason=${res.detail} to=${member.key} ${job.tag}`)
     }
   }
 }

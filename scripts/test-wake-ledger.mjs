@@ -18,6 +18,9 @@ const must = [
   ['只认有效期内的尝试', /ageSec <= WAKE_ATTEMPT_TTL_SEC/],
   ['认领过后清掉 lastTry', /st\.lastTry = null/],
   ['过期的尝试退成 note', /note=session-mounted member=\$\{member\.key\} wid=/],
+  ['intent 的 woke 行带 to=', /trigger=intent lag[^\n]*inserted=1 to=\$\{member\.key\}/],
+  ['推门成功的 woke 行带 to=', /night=\$\{night\} to=\$\{member\.key\} \$\{job\.tag\}/],
+  ['推门失败的 woke 行带 to=', /reason=\$\{res\.detail\} to=\$\{member\.key\} \$\{job\.tag\}/],
 ]
 const forbidden = [
   ['旧的 self 行（没有 wid/lag/inserted）', /trigger=self to=\$\{self\}/],
@@ -25,6 +28,13 @@ const forbidden = [
 ]
 
 let bad = 0
+// 结构判据：所有 `watchmanLog('woke'` 行都必须带 `to=`（2026-11-17 第二条鱼按结构数出 3 处、2 处缺）
+for (const [i, line] of src.split('\n').entries()) {
+  if (line.includes("watchmanLog('woke'") && !line.includes('to=')) {
+    console.log('FAIL 第 ' + (i + 1) + ' 行的 woke 行没有 to=')
+    bad++
+  }
+}
 for (const [name, re] of must) if (!re.test(src)) { console.log('FAIL 缺少：' + name); bad++ }
 for (const [name, re] of forbidden) if (re.test(src)) { console.log('FAIL 仍存在：' + name); bad++ }
 if (bad > 0) { console.log('FAIL×' + bad + ' —— 账本形状检查没过'); process.exit(1) }
