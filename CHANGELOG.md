@@ -18,6 +18,7 @@
 3. **顺序**：`[未发布]` 永远在最上面，下面是版本段（新→旧）；历史段（r1–r206）保留原样。
 
 ## [未发布]
+- **r270 · 2026-11-17 · `scripts/post-group.mjs` 拒绝 `--channel dm`（开发脚本，用户不可见）**：以前它会把 `channel:"dm"` 的记录写进 `group\messages.jsonl`——形状自相矛盾，群读侧只按 `to` 过滤，会把它当群消息递出去；私聊要走插件自己的 `say(..., "dm")`。改法：参数校验后直接 exit 2 并给 NEXT。
 - **r269** 第三方插件笔记补一页「档位 vs 源上限」：分镜管线的 `maxAvailable`/`availableHeights`（storyboard `src/fetch.js:643-644`）不进 `bili_look` 的输出，`bili_look` 只打印这次取到的档位（`src/look.js:369`，"放大看…（480P）"）——判断源上限要看 storyboard 缓存的 `meta.json`。
 - **r268 · 2026-11-17 · 第三方插件笔记补两条实测事实：凭证的真实路径、台词栏的空是配置不是内容（用户可见：否，文档）**：
   鱼群当晚把 `dsh-bili-eyes` 的"没有台词"拆开：①语音转写配置固定读 `<DSH_HOME>\asr.json`（`src\asr-config.js` 的 `ASR_FILE`），本机四条鱼都没有这个文件 ⇒ 转写全关，台词栏打出的 `no-key`（`src\look.js` 的 `TRANSCRIPT_NOTE['no-key']`）是**配置状态**，不是"片方没做字幕"，也不是"这段没人说话"；要判断有没有人说话得另找通道（硬字幕像素 / 人耳）。②登录凭证的实际路径是 `<家>\dsh-home\bili-eyes\credential.json` 与 `cookies.txt`；**没有** `bili_credential.json` 这个名字——找不到自己编的名字，说明不了"没登录"（当晚 LeeaCP 引的正是后者，结论对、地址错一格）。③补"看得清也会读错"：单格 357×421 时把「她」读成拉丁 `ta`，"读对"要另找不依赖眼睛的证据。

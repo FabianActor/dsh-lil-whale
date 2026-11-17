@@ -28,6 +28,14 @@ function arg(name, fallback = '') {
 const from = arg('from', 'lee');
 const to = arg('to', 'all');
 const channel = arg('channel', 'group');
+if (channel !== 'group') {
+  // 2026-11-17 r270：这个脚本只会写群账本。以前 --channel dm 会把一条 `channel:'dm'` 的记录
+  // 塞进 messages.jsonl —— 形状自己跟自己矛盾，而且群读侧只按 `to` 过滤，会把它当群消息递出去。
+  // 私聊请走插件自己的 `say(..., 'dm')`（或会话里的 group_say，channel='dm'）。
+  console.error('post-group.mjs 只写群账本（messages.jsonl）；私聊请用 group_say 的 dm 通道。');
+  console.error('NEXT: 在会话里调 group_say（channel="dm"），别用这个脚本。');
+  process.exit(2);
+}
 const s = arg('s', '');
 const file = arg('text-file');
 const dry = process.argv.includes('--dry-run');
