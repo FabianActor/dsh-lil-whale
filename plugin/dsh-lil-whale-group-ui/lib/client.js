@@ -1809,6 +1809,9 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       // 翻历史时记住"眼睛在哪"：内容一变（新消息、渲染窗口挪动）就把 scrollTop 放回去。
       // 2026-11-16 报的闪烁：历史态收到新消息，视觉上先弹到底再弹回来。
       const historyTopRef = useRef(-1)
+      // 平滑滚动的截止时刻：这段时间里浏览器自己在动 scrollTop，
+      // 位置记录与"把眼睛放回去"都该让路，否则两边各推一把，会滚一半停住。
+      const smoothScrollRef = useRef(0)
       const messagesLenRef = useRef(0)
       const pendingScrollRef = useRef(null)
       const pendingHistoryRef = useRef(null)
@@ -1823,6 +1826,17 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       const historyVisitedRef = useRef(false)
       const [historyAbove, setHistoryAbove] = useState(false)
       // 线是不是在视口上方 —— 只回答这一件事，不回答"该不该显示"。
+      const smoothTo = useCallback((el, top) => {
+        const until = Date.now() + 1500
+        smoothScrollRef.current = until
+        el.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
+        // 没有 scrollend 的浏览器（老版本）：到点自己收尾，别让"让路"一直开着。
+        window.setTimeout(() => {
+          if (smoothScrollRef.current !== until) return
+          smoothScrollRef.current = 0
+          historyTopRef.current = (el.scrollHeight - el.scrollTop - el.clientHeight > 40) ? el.scrollTop : -1
+        }, 1600)
+      }, [])
       const measureHistory = useCallback(() => {
         const el = scrollRef.current
         const line = dividerRef.current
@@ -1844,7 +1858,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
         const line = dividerRef.current
         if (line) {
           const top = line.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - 8
-          el.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
+          smoothTo(el, top)
           return
         }
         // 线不在当前窗口里（消息多、只挂了最近 N 条）：先把窗口扩到线那里，渲染完再滚。
@@ -1856,7 +1870,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
           return
         }
         // 没有线（没有新消息）就跳到最早的一条：两种情况下这个按钮都得做事。
-        el.scrollTo({ top: 0, behavior: 'smooth' })
+        smoothTo(el, 0)
       }, [messages])
 
       const refresh = useCallback(async () => {
@@ -1963,7 +1977,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
           const line = dividerRef.current
           if (line && el) {
             const top = line.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - 8
-            el.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
+            smoothTo(el, top)
           }
         }
       }, [renderLimit])
@@ -1974,6 +1988,8 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
         const el = scrollRef.current
         // 「加载更早」「跳历史线」自带位置补偿，这里让路，免得两头各推一把。
         if (pendingScrollRef.current || pendingHistoryRef.current) return
+        // 平滑滚动进行中：scrollTop 由浏览器接管，这里插手就会把它拽回来。
+        if (Date.now() < smoothScrollRef.current) return
         if (atBottom || !el || historyTopRef.current < 0) return
         if (Math.abs(el.scrollTop - historyTopRef.current) > 1) el.scrollTop = historyTopRef.current
       }, [messages.length, renderLimit, atBottom])
@@ -2010,6 +2026,17 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       }, [messages, atBottom, tab])
       useEffect(() => { if (atBottom) setNewBelow(0) }, [atBottom])
       // 线一旦挂上来就要立刻量：只靠 scroll 事件的话，进页面时的第一帧量不到。
+      useEffect(() => {
+        const el = scrollRef.current
+        if (!el) return undefined
+        const done = () => {
+          smoothScrollRef.current = 0
+          historyTopRef.current = (el.scrollHeight - el.scrollTop - el.clientHeight > 40) ? el.scrollTop : -1
+        }
+        el.addEventListener('scrollend', done)
+        return () => el.removeEventListener('scrollend', done)
+      }, [])
+
       useEffect(() => { measureHistory() })
 
       const persistWidth = useCallback(() => {
@@ -2264,8 +2291,10 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
           onScroll: () => {
             const el = scrollRef.current
             if (el) {
-              // 只记"翻历史"时的位置：贴底时位置由贴底逻辑负责。
-              historyTopRef.current = (el.scrollHeight - el.scrollTop - el.clientHeight > 40) ? el.scrollTop : -1
+              // 平滑滚动进行中：这几帧的 scrollTop 是半路值，记下来会把目标位置带偏。
+              if (Date.now() >= smoothScrollRef.current) {
+                historyTopRef.current = (el.scrollHeight - el.scrollTop - el.clientHeight > 40) ? el.scrollTop : -1
+              }
             }
             measureBottom()
             measureHistory()
