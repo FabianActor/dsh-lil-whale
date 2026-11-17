@@ -514,6 +514,31 @@ try {
 } catch {
   Add-Row '名册（全鱼）' 'WARN' ("读不了名册或 pins：{0}" -f $_.Exception.Message) 'NEXT: 看 pool\members.json 与 pool\group\pins.json 是不是合法 JSON'
 }
+# 4c1. 谱系（全鱼）：名册里的每个人都要在 family.json 里有节点（2026-11-17 r240）
+#      单向包含：members ⊆ family；family 里多出来的算历史/归档节点，不算不一致
+#      （反过来"两边必须相等"会把合法历史判成错，然后被人改成好看的样子——小鱼丸）。
+try {
+  $familyFile = Join-Path $Cfg.PoolDir 'family.json'
+  if ($Cfg.MembersFile -and (Test-Path -LiteralPath $Cfg.MembersFile) -and (Test-Path -LiteralPath $familyFile)) {
+    $mjFam = Get-Content -LiteralPath $Cfg.MembersFile -Raw -Encoding utf8 | ConvertFrom-Json
+    $famObj = Get-Content -LiteralPath $familyFile -Raw -Encoding utf8 | ConvertFrom-Json
+    $memberKeys = @($mjFam.members.PSObject.Properties.Name)
+    $familyKeys = @($famObj.nodes.PSObject.Properties.Name)
+    $onlyMember = @($memberKeys | Where-Object { $familyKeys -notcontains $_ })
+    $onlyFamily = @($familyKeys | Where-Object { $memberKeys -notcontains $_ })
+    if ($onlyMember.Count) {
+      Add-Row '谱系（全鱼）' 'WARN' ('名册里有人在谱系里没有节点：' + ($onlyMember -join '、')) 'NEXT: node scripts\gen-family.mjs --seed 重生成；报错就按报错修 pool\family.json'
+    } elseif ($onlyFamily.Count) {
+      Add-Row '谱系（全鱼）' 'OK' ('名册都在谱系里（另有 ' + $onlyFamily.Count + ' 个历史节点：' + ($onlyFamily -join '、') + '）')
+    } else {
+      Add-Row '谱系（全鱼）' 'OK' ('名册与谱系节点一致：' + ($memberKeys -join '、'))
+    }
+  } else {
+    Add-Row '谱系（全鱼）' 'INFO' '还没有名册或还没有 family.json（干净安装后两者都会在）'
+  }
+} catch {
+  Add-Row '谱系（全鱼）' 'WARN' ("读不了名册或谱系：{0}" -f $_.Exception.Message) 'NEXT: 看 pool\members.json 与 pool\family.json 是不是合法 JSON'
+}
 # 4c2. 端口登记：名册里的 port 必须唯一（2026-11-13 他要的）
 try {
   if ($Cfg.MembersFile -and (Test-Path -LiteralPath $Cfg.MembersFile)) {

@@ -40,6 +40,10 @@ const fish = read('scripts/fish.ps1');
 ok('有 sessions 命令（列候选会话）', fish.includes('function Invoke-Sessions') && fish.includes("'sessions'"));
 ok('安装说明：会话由用户决定，脚本不替挑', install.includes('这两段由用户决定，安装脚本不替你挑'));
 ok('安装说明指向 fish.ps1 sessions', install.includes('fish.ps1 sessions $ParentMemberId'));
+// 2026-11-17 r240：lee2（根鱼）那次 gen-family 拒绝写、install 只 Warn 吞了 —— 谱系必须多根 + 写完验节点。
+ok('install 写完谱系会校验新鱼在节点里', install.includes('谱系里没有这条新鱼'));
+ok('gen-family 允许并列多个鱼根', !read('scripts/gen-family.mjs').includes('鱼应该只有一个根'));
+ok('doctor 有谱系（全鱼）一格', doctor.includes("Add-Row '谱系（全鱼）'"));
 
 // 2026-11-16 r201：-SkipParent 的名字与说明不能让人读成"只装鱼、不装宿主"。
 ok('SkipParent 有更明确的名字 SkipParentPlugins', install.includes("Alias('SkipParentPlugins')"));

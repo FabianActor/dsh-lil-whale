@@ -14,6 +14,10 @@
 
 1. **只提 commit、没升版本号**（文档、脚本、账本格式、诊断输出）→ 只写进 `## [未发布]
 
+- **r240 · 2026-11-17 · 谱系允许多个鱼根；install 校验新鱼真的进了谱系**（用户可见：是，根鱼能进谱系了）：
+  旧行为：`gen-family.mjs` 要求"鱼恰好一个根"，`fish.ps1 new -Parent none` 建出来的根鱼会让它校验失败、整份 `family.json` 拒绝写；而 `install.ps1` 只把失败记成 Warn，于是名册里有人、谱系里没有，`鱼塘谱系.md` 也不更新。
+  新行为：谱系允许并列的多个根（照常打印根列表）；`install.ps1` 在 gen-family 失败时 Die，并在写完后核对这条新鱼的键在不在 `family.json` 节点里；`doctor` 新增「谱系（全鱼）」一格（名册 ⊆ 谱系，单向包含，谱系多出来的算历史节点）。
+
 - **r239 · 2026-11-17 · 鱼可以有自己的 XDG 目录**（用户可见：是，数据位置）：
   旧行为：billion-context 这类插件认 XDG，默认写 `%USERPROFILE%\.local\share\billion-context`，鱼和宿主共用一份库，同一段会话被两边写就会互相覆盖。
   新行为：若 `<家>\dsh-home\xdg\{config,data,state,cache}` 存在，`fish.ps1` 起鱼时注入四个 `XDG_*` 环境变量，压缩/缓存/实例登记都落在她家里；目录不存在则不注入，与以前一样。

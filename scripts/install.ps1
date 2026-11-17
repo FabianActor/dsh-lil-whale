@@ -773,8 +773,23 @@ $familyPath = Join-Path $PoolRoot 'family.json'
 # 新鱼就永远进不了谱系（gen-family.mjs 自己会补缺失节点，重跑无害）。
 if (Test-Path -LiteralPath $genFamily) {
   $gfOut = & node $genFamily --seed 2>&1
-  if ($LASTEXITCODE -eq 0) { Ok "family.json 已初始化：$($gfOut | Select-Object -Last 1)" }
-  else { Warn "family.json 没生成：$($gfOut | Select-Object -Last 3)" }
+  if ($LASTEXITCODE -ne 0) {
+    Die "family.json 没生成：$($gfOut | Select-Object -Last 3)" "跑 node scripts\gen-family.mjs --seed 看具体错误；谱系真源是 pool\family.json"
+  }
+  Ok "family.json 已更新：$($gfOut | Select-Object -Last 1)"
+  # 2026-11-17 r240：写没写成功要看节点在不在，不能只看 exit code
+  # （加 lee2 那次 gen-family 因为"鱼只能有一个根"拒绝写，exit 非 0 却被 Warn 吞了）。
+  if ($childMember) {
+    try {
+      $famNow = Get-Content -LiteralPath $familyPath -Raw -Encoding utf8 | ConvertFrom-Json
+      $famKeys = @($famNow.nodes.PSObject.Properties.Name)
+      if ($famKeys -notcontains $childMember) {
+        Die ("谱系里没有这条新鱼（{0}）——装完了，但她不在谱系里" -f $childMember) ("看 node scripts\gen-family.mjs --seed 的报错；真源是 pool\family.json")
+      }
+    } catch {
+      Die ("谱系文件读不了：{0}" -f $_.Exception.Message) "看 pool\family.json 的 JSON 是否合法"
+    }
+  }
 }
 
 $planPath = Join-Path $Workspace 'plan\wake-plan.json'

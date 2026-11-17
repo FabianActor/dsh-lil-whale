@@ -19,6 +19,7 @@ const FAMILIES = [
   { name: '名册与家', static: ['名册与家'], why: '名册 / 家目录 / pins 三个键集合是否对得上' },
   { name: '名册', static: ['名册', '名册（全鱼）', '名册（lee）'], why: 'pins 存在性、每条鱼有没有钉、watcher 不在视野的声明' },
   { name: '名册自检', static: ['名册自检'], why: '巡守的 roster-audit 最近一次结果' },
+  { name: '谱系（全鱼）', static: ['谱系（全鱼）'], why: '名册里的每个人都在 family.json 里有节点（单向包含）' },
   { name: '生命周期字段', static: ['生命周期字段'], why: '旧 status 字段是否还在' },
   { name: '旧段', static: ['旧段'], why: '名册外的会话近两小时是否被写过' },
   { name: '配置', static: ['配置'], why: '配置文件是否可读、键是否齐全' },

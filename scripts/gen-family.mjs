@@ -94,10 +94,13 @@ function walk(key, path) {
   state[key] = 'done'
 }
 for (const key of Object.keys(family.nodes)) walk(key, [])
-// 根：可以不止一个（人类和鱼各是一棵树；鱼必须恰好一个根）
+// 根：可以不止一个。人类和鱼各是一棵树；从别处迁进来的鱼（fish.ps1 new -Parent none）
+// 也可以是另一个根 —— 2026-11-17 r240 起不再要求"鱼必须恰好一个根"，
+// 之前那条规则会把根鱼挡在谱系外，family.json 停在旧日期而没人知道。
 const roots = Object.entries(family.nodes).filter(([, n]) => !n.parent).map(([k]) => k)
 const fishRoots = roots.filter((k) => (members[k] || {}).kind !== 'human')
-if (fishRoots.length !== 1) errors.push(`鱼应该只有一个根，现在是：${fishRoots.join(', ') || '（没有）'}`)
+if (fishRoots.length < 1) errors.push('谱系里一条鱼都没有')
+if (fishRoots.length > 1) console.log(`· 鱼有 ${fishRoots.length} 个根（并列）：${fishRoots.join(', ')}`)
 
 if (errors.length) {
   for (const e of errors) console.error('xx ' + e)
