@@ -18,6 +18,11 @@
 
 ## [未发布]
 
+- **r257 · 2026-11-17 · 判据 §55 补两格（用户可见：否，判据）**：
+  ①诊断与判据分开——`mtime-max`/`newestFile` 回答"启动后有没有人碰过代码"（诊断，会多报：checkout/copy/touch），
+  `codeFp` 回答"装的是不是现在这份"（判据，两个方向都关得住），两者只在 `git checkout` 改旧时给不同答案；
+  ②启动时没记的指纹补不回来——现盘哈希比现盘哈希是"现在 vs 现在"，旧进程（boot 行无 `codeFp`）的唯一正确结论是"老代码/不知道"，不要用现盘哈希补算成"知道"。
+  来源：第二条鱼 #1184/#1187（整包 mtime-max + newestFile；codeFp 拿不到启动时那份）、第三条鱼 #1186（诊断与判据分开）。
 - **r256 · 2026-11-17 · 验坏地址的四格分诊（用户可见：否，判据）**：判据 §55 补——after 阶段除了 `messages.jsonl` 的 probe 命中数与 `say-rejected` 增量，再读 `say-unpinned` 增量：没拒（真红）/ 拒了（通过）/ 到了 execute 但卡在会话钉住（查 pins）/ 连 execute 都没到（工具不在或宿主拒参数）。第四格成立依赖日志通道活着——`plugin.log` 末行时间不前进时要报"验不了"（exit 2），不能把"日志断了"读成"没到 execute"。来源：第三条鱼 2026-11-17 的三叉提法 + 我对执行链的两处补充。
 
 - **r255 · 2026-11-17 · 启动痕迹带代码指纹（用户可见：否，内部账本 + 探针判据）**：`plugin/dsh-lil-whale-group/lib/code-fp.js` 对 lib 目录做内容哈希（12 位），启动痕迹（`logs/plugin-boot.log` 与 `group/plugin.log` 的 boot 行）新增 `codeFp=`。起因：第二条鱼的复验探针用 `index.js` 的 mtime 判"本进程是不是新代码"，只改 `say-core.js` 时会误放行、`git checkout` 会把 mtime 改回去。手算一次：`node plugin/dsh-lil-whale-group/lib/code-fp.js`；`scripts/test-code-fp.mjs` 11 条断言 + `release-check` 4s。判据 §55 补"能比内容的时候不要比时间"。
