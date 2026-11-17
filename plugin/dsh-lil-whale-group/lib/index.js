@@ -10,6 +10,7 @@
 
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { printableText } from './text-clean.js'
+import { sayProblemOf, channelProblemOf } from './say-core.js'
 import { join, dirname, basename } from 'node:path'
 import { homedir } from 'node:os'
 import { pathToFileURL, fileURLToPath } from 'node:url'
@@ -74,6 +75,9 @@ let hostLoggedState = ''
 let hostReady = false
 let defineTool = null
 let createUserMessage = null
+// 2026-11-17 r243：这一轮启动里，哪些工具是以裸对象注册的（apply 时宿主包还没解析到）。
+// resolveHost() 之后写 host-resolve 行时带上它 —— 两行分开的事实要有一行负责 join（第二条鱼）。
+const rawRegistered = new Set()
 
 /** 从 dsh 的安装处找宿主包：`<dsh>/node_modules/@deepseek-ai/<pkg>/lib/index.js` */
 async function loadHostExport(pkg, exportName) {
@@ -117,6 +121,9 @@ async function resolveHost() {
       createUserMessage: typeof createUserMessage,
       attempt: hostAttempt,
       retryMs: hostReady ? 0 : delay,
+      // 只有真的发生过裸注册才写：这次启动里哪些工具注册在解析之前。
+      // 没有它的话，"工具是裸注册的"和"解析没成功"两件事各自在别的行上，要读的人自己 join。
+      ...(rawRegistered.size > 0 ? { rawRegistered: [...rawRegistered].join(',') } : {}),
     })
     if (!hostReady && hostAttempt === 1) {
       // 只写锚点种类，不写用户路径
@@ -1689,6 +1696,17 @@ function sayPrivate(from, to, text, image = null, images = null) {
 }
 
 function say(from, to, text, channel = 'group', s = '', toSeat = '', image = null, images = null) {
+  // 2026-11-17 r243：地址在执行时自己检查。
+  // 起因：裸 spec 路径下 `parameters.enum` 只是文档（宿主只校验 required/type），
+  // 第三条鱼实测 `group_say(to="group")` 成功入账 —— 写进一个没人读的地址，还不报错。
+  // 判据：错的时候要响。值域不对就别写，抛出去让调用方看见。
+  const problem = sayProblemOf({ to, channel }, Object.keys(MEMBERS))
+  if (problem !== null) {
+    logLine({ note: 'say-rejected', from, to, channel, why: problem })
+    throw new Error(problem)
+  }
+  // 归一化：' lee ' 能通过上面的检查，但落盘后没人会拿带空白的键去比 —— 收件人永远不醒。
+  const toKey = typeof to === 'string' ? to.trim() : to
   ensureDir()
   const list = normalizeImageList(image, images)
   // 只追加的文件删不掉一行，所以空正文绝不能落盘。
@@ -1703,9 +1721,9 @@ function say(from, to, text, channel = 'group', s = '', toSeat = '', image = nul
   //   channel = 屋里还有没有别人（group 默认 / dm 只有对象一个人）
   // 所以 `to:"fabian"` + 默认 group = 群里公开对他说；私聊要显式 `channel:"dm"`。
   const isDm = channel === 'dm'
-  if (isDm) return { ...sayPrivate(from, to, body, null, list), channel: 'dm' }
+  if (isDm) return { ...sayPrivate(from, toKey, body, null, list), channel: 'dm' }
   const record = {
-    ts: new Date().toISOString(), from, to, text: body, kind: 'say', channel: 'group',
+    ts: new Date().toISOString(), from, to: toKey, text: body, kind: 'say', channel: 'group',
     ...(s === '' ? {} : { s }),
     // 指名某一座位（同一个人的第二段会话）：只有那一段会被叫醒。
     // 不加这个字段 = 叫"这个人"，谁空谁应（仍然只叫一次）。
@@ -1716,7 +1734,7 @@ function say(from, to, text, channel = 'group', s = '', toSeat = '', image = nul
   appendFileSync(MESSAGES, JSON.stringify(record) + '\n', 'utf8')
   // 投影里带上收信人：指名和公开在纸上必须长得不一样，否则读记录的人学不到"可以指名"。
   // 2026-11-12 19:46 起：`**时间 · 谁 → 收信人**`，只有指名（to 是某个成员）才写箭头。
-  const toLabel = to !== '' && to !== 'all' ? ` → ${labelOf(to)}` : ''
+  const toLabel = toKey !== '' && toKey !== 'all' ? ` → ${labelOf(toKey)}` : ''
   appendFileSync(READABLE, `**${stamp()} · ${labelOf(from)}${provenanceOf(s)}${toLabel}**\n\n${readableBodyOf(body, list)}\n\n`, 'utf8')
   return { ...record, channel: 'group' }
 }
@@ -1883,12 +1901,16 @@ function apply(ctx) {
   // 无人值守挂载改成懒的：见 ensureOwnMounted（第一次要叫醒时再挂）
 
   // 1. 发言：入队即返回，绝不等对方
-  // 先等宿主包解析出来，再用宿主的 defineTool 注册 —— 这样参数/输出 schema 的校验在宿主手里，
-  // 而不是"作者自己看着办"。解析不到才退回裸对象（实测宿主也认），并且必须留痕：
-  // 静默降级的代价是把错误推给别人的存档（今天的旧账）。
+  // 注册必须同步（2026-11-12 的 `unknown tool "group_say"` 事故）：apply 的时候宿主包还没解析到，
+  // 所以成功路径上**总是**用裸对象注册；宿主的 defineTool 是稍后才有的，赶不上这次注册。
+  // 裸对象路径真实存在，所以它得自己承担两件事：
+  //   - 参数检查（say() 里的 to/channel 值域，见 say-core.js）—— schema 的 enum 只是文档，宿主不强制；
+  //   - 留 `*-raw-spec` 痕，reason 写 host-resolve-pending（解析还没开始，不是失败）；
+  //   - resolveHost() 成功后，host-resolve 行带 rawRegistered= 把两行事实 join 起来。
   function registerGroupSay(hostOk) {
     if (!hostOk || defineTool === null) {
-      logLine({ note: 'group_say-raw-spec', reason: 'defineTool-unresolved' })
+      rawRegistered.add('group_say')
+      logLine({ note: 'group_say-raw-spec', reason: 'host-resolve-pending' })
     }
     const buildTool = hostOk && defineTool !== null ? defineTool : (options) => options
     ctx.tools.register(buildTool({
@@ -1978,6 +2000,10 @@ function apply(ctx) {
           '这是名册，只有宿主能写；你不用自己改文件。',
         )
       }
+      // 2026-11-17 r243：channel 只认 group/dm。以前 `args.channel === 'dm' ? 'dm' : 'group'`
+      // 会把 "DM"/"私聊" 这类值悄悄当成 group —— 又是"写错地址不报错"。
+      const channelProblem = channelProblemOf(args.channel)
+      if (channelProblem !== null) throw new Error(channelProblem)
       const channel = args.channel === 'dm' ? 'dm' : 'group'
       if (channel === 'dm' && args.to === 'all') {
         throw new Error('私下说话得指名对象：to 不能是 all。要不就 channel 留空（在群里说）。')
@@ -2016,7 +2042,7 @@ function apply(ctx) {
         sid === null ? '' : sid.replace(/^session-/, '').slice(0, 6), toSeat, image,
       )
       // channel 让发言的人一眼知道这句话去了哪：group = 大家都看得见；dm = 只有对方看得见，且不会叫醒谁。
-      return { ts: record.ts, queued: true, channel: record.channel, to: args.to, image: image === null ? '' : `${image.id}.${image.ext}` }
+      return { ts: record.ts, queued: true, channel: record.channel, to: record.to, image: image === null ? '' : `${image.id}.${image.ext}` }
     },
     presentCall: (args) => ({
       card: 'generic',
@@ -2037,7 +2063,9 @@ function apply(ctx) {
   // 家长要叫醒她走 `fish.ps1 wake <键>`（那才是"上级家长强行停止睡眠"）。
   function registerSleepTools(hostOk) {
     if (!hostOk || defineTool === null) {
-      logLine({ note: 'sleep-tools-raw-spec', reason: 'defineTool-unresolved' })
+      rawRegistered.add('sleep')
+      rawRegistered.add('wake_up')
+      logLine({ note: 'sleep-tools-raw-spec', reason: 'host-resolve-pending' })
     }
     const buildTool = hostOk && defineTool !== null ? defineTool : (options) => options
     const requirePinnedSelf = (exec) => {
@@ -2236,6 +2264,10 @@ function apply(ctx) {
   }
 
   function registerRenameTool(hostOk) {
+    if (!hostOk || defineTool === null) {
+      rawRegistered.add('rename')
+      logLine({ note: 'rename-tool-raw-spec', reason: 'host-resolve-pending' })
+    }
     const buildTool = hostOk && defineTool !== null ? defineTool : (spec) => spec
     ctx.tools.register(buildTool({
       name: 'rename',

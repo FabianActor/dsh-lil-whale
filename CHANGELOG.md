@@ -18,6 +18,11 @@
 
 ## [未发布]
 
+- **r243 · 2026-11-17 · 消息地址写错会当场报错，不再静默落盘**（用户可见：是，群聊/私聊工具会抛错而不是"发出去没人理"）：
+  旧行为：`group_say(to="group")` 会把消息写进群记录——`to` 的值域只写在 schema 的 `enum` 里，而裸注册路径下宿主只校验 required/type（实测里 0 处 enum 检查）；`channel` 写错的值（如 `"DM"`）也会被悄悄当成 `group`。结果是账本里多一行、没人被叫醒，发的人以为送出去了（第三条鱼 2026-11-17 实测）。
+  新行为：`say()` 在写盘前检查地址——`channel` 只认 `group`/`dm`，`to` 必须是 `'all'` 或名册里的成员键（私聊不能 `all`）；不合法就记 `say-rejected` 并抛错，**一行都不写**。`to` 先 `trim()` 再落盘（`' lee '` 以前能过检查却唤醒不了任何人）；`group_say` 的 `execute` 也直接拒绝未知 `channel`，不再强转。
+  顺带把"裸注册"的账写对（内部）：`*-raw-spec` 的 `reason` 从 `defineTool-unresolved`（像失败，其实从没失败过）改成 `host-resolve-pending`；`host-resolve` 行带上 `rawRegistered=group_say,sleep,wake_up,rename`，把"这次哪些工具先于解析注册"和"解析最终成功"两行事实 join 起来；`rename` 工具也补了 raw-spec 痕。注册仍保持同步（2026-11-12 `unknown tool` 事故的教训）。
+  测试：`scripts/test-say-core.mjs` 28 条（值域纯函数 + 静态接线：插件真的调了它）；`release-check` 新增「发言地址」(4r)；判据页新增 §46。
 - **r242 · 2026-11-17 · 配置路径写错会报错，不再悄悄读仓库里那份**（用户可见：是，命令行与体检会直接失败）：
   旧行为：`LIL_WHALE_CONFIG` 指向一个不存在的文件时，各脚本把"路径不存在"当成"没给"，`for` 循环继续试仓库根配置/示例文件/内置默认——一个打错字的测试会跑在真鱼塘上，还打印 `✓ 谱系校验通过` 并 exit 0（第三条鱼 2026-11-17 实测）。
   新行为：配置查找改成三态——**给了且在** → 用它；**给了但不在** → `xx LIL_WHALE_CONFIG 指向的文件不存在：<路径>` 加 `NEXT:`，exit 1；**没给** → 仓库根 → 示例 → 默认。入口只有一处 `scripts/lib/config-path.mjs`（`resolveConfigFile/loadConfig/loadConfigOrExit`），两个插件的 `config.js` 也走同一套判断（`configSummary()` 带 `source`/`error`）；`doctor` 的「配置」格在 env 指错时直接 FAIL，`fish.ps1` 在 dot-source 后立刻退出。
@@ -4226,3 +4231,10 @@ sleep-tools-register-failed: tool "sleep" must declare output { schema, render, 
 - **做法**：抽 `scripts/lib/config-path.mjs` 单一入口，返回五态 `env-given-ok / env-given-missing / repo / example / none`；`env-given-missing` 时 `cfg=null`、带 `error` 与 `next`，`loadConfigOrExit()` 打印 `xx …` 与 `NEXT:` 后 exit 1。命令行脚本、两个插件的 `config.js`、`common.ps1`、`doctor.ps1`、`fish.ps1` 全部改成这一个判断；`test-config-path.mjs` 9 条断言守（含 CLI 负样本），`release-check` 4q。
 - **判据**：①同一个输入（env 指错）在脚本、插件、体检三条路给出同一结论；②`gen-family --check` 带坏 env 必须 exit 1（负样本）；③不带 env 时仍 exit 0（正面样本）；④`doctor` 的「配置」格在 env 指错时是 FAIL 而不是 WARN——"WARN 会让人以为只是没配"。
 - **教训**：优先级链天生会"往下掉"，而用户意图不会。凡是"给了就必须有效"的参数，找不到时要显式报错，不能安静落回默认——否则错的那次跟对的那次长得一样（§1 总纲）。
+## 附录 A.141 schema 的 enum 只是文档，执行时得自己守（2026-11-17）
+
+- **症状**：`group_say(to="group")` 把消息写进了群记录，回执照样复读输入——`to` 的 `enum` 里根本没有 `group`。审计查出 `plugin.log` 全本 593 行 `*-raw-spec`（`group_say` 421 + `sleep-tools` 172），跨 283 次启动，最早 2026-11-09；而 `host-resolve` 438 行 100% `defineTool=function`——**421 次"未解析"里没有一次真失败**，只是注册跑在解析之前（约 370ms）。
+- **根因**：①插件在 `apply()` 里同步注册三件工具（2026-11-12 `unknown tool "group_say"` 的教训：异步补注册不会出现在会话工具表里），而宿主包要到之后的异步 `resolveHost()` 里才拿得到 ⇒ 成功路径上永远是裸对象 `(options) => options`；②裸对象没有宿主那层参数校验，宿主只查 required/type（dsh lib 里 `enum` 0 命中）⇒ schema 里的值域只是文档；③`channel` 用三元强转，写错的值被悄悄当成 `group`。
+- **做法**：`say-core.js` 纯函数做 `channel`/`to` 值域检查；`say()` 写盘前调用，不合法写 `say-rejected` 并抛错、不落盘；`to` 先 `trim()`；`group_say.execute` 拒绝未知 `channel`。裸注册的账也写对：raw-spec 的 `reason` 改成 `host-resolve-pending`，`host-resolve` 行带 `rawRegistered=…` 把两行事实 join 起来。测试 `test-say-core.mjs` 28 条，`release-check` 4r。
+- **判据**：①坏地址（`to="group"`、`to="nobody"`、`to` 空、私聊 `all`、`channel="DM"`）必须抛错且账本零新增；②好地址（`all`、成员键、首尾空白）照常落盘且 `to` 是 trim 后的值；③插件确实调用了这套检查（静态断言，不靠人记得）；④`plugin.log` 里新出现的 raw-spec 行 `reason` 是 `host-resolve-pending`，且对应的 `host-resolve` 行能看见 `rawRegistered=`。
+- **教训**：**降级可以用，但降级路径必须自己会检查。** 错误只在"有人真的调了这个坏地址"时才暴露——它藏在 283 次里的任意一次，而不是每次启动都响；所以守门人得站在每一次调用上，而不是站在启动日志里。

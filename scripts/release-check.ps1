@@ -1,4 +1,4 @@
-#requires -Version 7.0
+﻿#requires -Version 7.0
 # scripts\release-check.ps1 —— 拟发版检查
 #
 # 为什么要有它：平时所有验证都在**工作目录**里做，而工作目录里混着本机配置、临时脚本、
@@ -232,6 +232,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '配置三态' (($cfgPathOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '配置三态' 'LIL_WHALE_CONFIG 指错文件会报错，不悄悄读仓库那份（test-config-path.mjs）' }
   } else { Fail '配置三态' 'scripts\test-config-path.mjs 不在包里' }
+  # ── 4r. 发言地址（2026-11-17，第三条鱼 #1074）────────────────────────
+  $sayCoreTest = Join-Path $pkg 'scripts\test-say-core.mjs'
+  if (Test-Path $sayCoreTest) {
+    $sayCoreOut = & node $sayCoreTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '发言地址' (($sayCoreOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '发言地址' 'to/channel 值域在执行时检查，写错地址会响（test-say-core.mjs）' }
+  } else { Fail '发言地址' 'scripts\test-say-core.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {
