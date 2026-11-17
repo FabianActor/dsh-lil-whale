@@ -12,5 +12,29 @@
     "breaking": "不兼容项；空数组 = 旧数据照旧可读",
     "note": "给人看的补充（为什么、做漏了会怎样）"
   },
-  "entries": []
+  "entries": [
+    {
+      "version": "1.9.0",
+      "at": "2026-11-18",
+      "summary": "鱼塘支持根鱼、每条鱼可有自己的 XDG 数据目录、迁移的会话/附件/工作区能被认出来；消息地址、配置路径、叫醒额度这几处\"错了也不响\"的路径改成当场报错。",
+      "requires": [
+        "package",
+        "restart"
+      ],
+      "restart": [
+        "all"
+      ],
+      "commands": [
+        "pwsh -File app\\scripts\\fish.ps1 upgrade-check",
+        "pwsh -File app\\scripts\\doctor.ps1"
+      ],
+      "verify": [
+        "doctor 全过（新增两格「工作区（鱼）」「会话分身（全鱼）」若提示，按 NEXT 处理）",
+        "logs\\plugin-boot.log 最近一行 pkg 是 @fabianactor/dsh-lil-whale-group@1.9.0",
+        "面板刷新后控制台报 client build v51 · follow-tail-long"
+      ],
+      "breaking": [],
+      "note": "只换代码不会动 pool\\ 与 homes\\ 里的数据。鱼若已经装了自己的 XDG 目录，新版起鱼继续用它；没有的话行为与以前一样。"
+    }
+  ]
 }
