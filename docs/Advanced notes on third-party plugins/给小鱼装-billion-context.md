@@ -12,7 +12,7 @@
 
 ## 1. 全新安装（推荐，四条鱼都是这么装的）
 
-以 `fishball` 为例，`<键>=fishball`，家 `D:\文档\WorkSpace\lil-whale\homes\fishball`。
+以 `fishball` 为例，`<键>=fishball`，家 `<鱼塘根>\homes\fishball`。
 
 **第 1 步：停鱼。**
 
@@ -26,9 +26,9 @@ pwsh -NoProfile -File scripts\fish.ps1 down fishball -Yes
 
 ```powershell
 $key='fishball'
-$home = "D:\文档\WorkSpace\lil-whale\homes\$key"
-foreach ($d in 'config','data','state','cache') { New-Item -ItemType Directory -Force "$home\dsh-home\xdg\$d" | Out-Null }
-$cfgDir = "$home\dsh-home\xdg\config\billion-context"
+$root = '<鱼塘根>'; $fh = "$root\homes\$key"
+foreach ($d in 'config','data','state','cache') { New-Item -ItemType Directory -Force "$fh\dsh-home\xdg\$d" | Out-Null }
+$cfgDir = "$fh\dsh-home\xdg\config\billion-context"
 New-Item -ItemType Directory -Force $cfgDir | Out-Null
 @'
 {"providers":{},"compress":{"preserveRecentMessages":5},"promptCache":{"routing":"enabled"},"rollout":{"features":{"pluginFullResendWatermark":true}}}
@@ -40,12 +40,12 @@ New-Item -ItemType Directory -Force $cfgDir | Out-Null
 **第 3 步：把包装进这条鱼的 profile。**
 
 ```powershell
-$env:DSH_HOME = "$home\dsh-home"
+$env:DSH_HOME = "$fh\dsh-home"
 dsh plugin --profile fishball add billion-context@0.1.216
 ```
 
 - `--profile` 用**鱼键**（不是 `web`）。
-- 装完检查：`$home\dsh-home\profiles\fishball\package.json` 的依赖里要有 `"billion-context": "0.1.216"`。
+- 装完检查：`$fh\dsh-home\profiles\fishball\package.json` 的依赖里要有 `"billion-context": "0.1.216"`。
 - 若 pnpm 报 `minimumReleaseAgeExclude` 提示，可忽略（新发布版本被包管理器按"最小发布年龄"提示）。
 - **坑（PowerShell）**：`$home` 是只读变量，`$home=...` 会被拒绝且脚本继续跑，`DSH_HOME` 变成空串、装进默认 profile。用 `$fh` 之类的名字。
 
@@ -69,11 +69,11 @@ Get-Content app\logs\plugin-boot.log -Tail 5
 # b) 会话挂载后工具数应 +6（compress / decompress / search_context / acp_status / acp_cache / acp_read_original_image）
 Select-String app\logs\plugin-boot.log -Pattern 'session-mounted'
 # c) 她的库文件出现了
-Get-ChildItem "$home\dsh-home\xdg\data\billion-context\sessions"
+Get-ChildItem "$fh\dsh-home\xdg\data\billion-context\sessions"
 # d) 用 CLI 看会话（要带上她的 XDG 环境变量）
-$env:XDG_CONFIG_HOME="$home\dsh-home\xdg\config"; $env:XDG_DATA_HOME="$home\dsh-home\xdg\data"
-$env:XDG_STATE_HOME="$home\dsh-home\xdg\state"; $env:XDG_CACHE_HOME="$home\dsh-home\xdg\cache"
-node "$home\dsh-home\profiles\fishball\node_modules\billion-context\dist\index.js" sessions ls
+$env:XDG_CONFIG_HOME="$fh\dsh-home\xdg\config"; $env:XDG_DATA_HOME="$fh\dsh-home\xdg\data"
+$env:XDG_STATE_HOME="$fh\dsh-home\xdg\state"; $env:XDG_CACHE_HOME="$fh\dsh-home\xdg\cache"
+node "$fh\dsh-home\profiles\fishball\node_modules\billion-context\dist\index.js" sessions ls
 ```
 
 `no sessions found` 不等于坏了——说明她**还没活动**（库刚建、会话还没挂载过）。她下一次说话/被唤醒后再看就会发现 `sessions 1 / blocks N / refs N`。

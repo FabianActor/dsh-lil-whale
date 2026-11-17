@@ -12,7 +12,7 @@
 pwsh -NoProfile -File scripts\fish.ps1 down <键> -Yes
 
 # 2) 装包（--profile 用鱼键）
-$env:DSH_HOME = "D:\文档\WorkSpace\lil-whale\homes\<键>\dsh-home"
+$env:DSH_HOME = "<鱼塘根>\homes\<键>\dsh-home"
 dsh plugin --profile <键> add dsh-bili-eyes@0.8.3
 
 # 3) 起鱼
