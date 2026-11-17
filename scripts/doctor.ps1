@@ -505,6 +505,46 @@ try {
   Add-Row '工作区' 'WARN' ('查不了：' + $_.Exception.Message)
 }
 
+# 3k3. 会话分身（全鱼）：同一个会话 id 出现在两个家里 = 两个进程都能挂它、各写各的
+#      2026-11-17 LeeaCP 迁移时撞到：会话只被"复制"没被移走，3080 和 3085 同时开着同一段，
+#      两份都在写（末事件 turn 693 vs turn 782），历史当场分叉，她在两个窗口都回话。
+#      这一格只报、不替人搬（搬要停进程、留备份）；判据是"同一 id 只在一个家里"。
+try {
+  $homesRoot = Join-Path $Cfg.PondRoot 'homes'
+  $scanHomes = @()
+  if (Test-Path -LiteralPath $homesRoot) {
+    foreach ($h in @(Get-ChildItem -LiteralPath $homesRoot -Directory -ErrorAction SilentlyContinue)) {
+      $scanHomes += @{ Label = $h.Name; Root = (Join-Path $h.FullName 'dsh-home\sessions') }
+    }
+  }
+  # 宿主那份也要扫：split-brain 最常见的一边就在这里（%USERPROFILE%\.dsh，不是鱼塘里的家）。
+  $hostHome = if ($env:DSH_HOME) { [string]$env:DSH_HOME } else { Join-Path $env:USERPROFILE '.dsh' }
+  if (Test-Path -LiteralPath (Join-Path $hostHome 'sessions')) {
+    $scanHomes += @{ Label = '宿主'; Root = (Join-Path $hostHome 'sessions') }
+  }
+  $owners = @{}
+  foreach ($s in $scanHomes) {
+    if (-not (Test-Path -LiteralPath $s.Root)) { continue }
+    foreach ($proj in @(Get-ChildItem -LiteralPath $s.Root -Directory -ErrorAction SilentlyContinue)) {
+      foreach ($sd in @(Get-ChildItem -LiteralPath $proj.FullName -Directory -Filter 'session-*' -ErrorAction SilentlyContinue)) {
+        if (-not $owners.ContainsKey($sd.Name)) { $owners[$sd.Name] = New-Object System.Collections.Generic.List[string] }
+        if (-not $owners[$sd.Name].Contains($s.Label)) { $owners[$sd.Name].Add($s.Label) }
+      }
+    }
+  }
+  $dupsSplit = @()
+  foreach ($k in $owners.Keys) {
+    if ($owners[$k].Count -gt 1) { $dupsSplit += ('{0} → {1}' -f $k, ($owners[$k] -join '、')) }
+  }
+  if ($dupsSplit.Count -eq 0) {
+    Add-Row '会话分身（全鱼）' 'OK' ('同一会话 id 只在一个家里（查了 {0} 个家、{1} 段会话）' -f $scanHomes.Count, $owners.Count)
+  } else {
+    Add-Row '会话分身（全鱼）' 'WARN' ('同 id 的会话出现在两个家里，两个进程各写一份、历史会分叉：' + ($dupsSplit -join '；')) 'NEXT: 只留真身；把旧家那份整个目录移到 backup\ 下（不要直接删），再重启那个家'
+  }
+} catch {
+  Add-Row '会话分身' 'WARN' ('查不了：' + $_.Exception.Message)
+}
+
 # 4. 名册：群认会话不认名字；登记错了 = 叫错人
 #    2026-11-16 17:59 第三、四条鱼发现：这一格是单鱼时代的遗留——写死 whale、又拿"配置主人的家"去查别人；
 #    鱼在自己家里跑 doctor 时会误报 FAIL，还附一条会改坏共享状态的 NEXT。上面的「会话绑定」已逐鱼查过同一件事。

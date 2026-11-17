@@ -18,6 +18,11 @@
 
 ## [未发布]
 
+- **r265 · 2026-11-17 · 同一段会话被两个家各写一份（split-brain），她在两个窗口都回话（用户可见：是）**：
+  症状：迁移来的 LeeaCP 在 3080 的旧对话和 3085 的新家里**同时回话**。两份会话文件都在长：`C:\Users\Fabian\.dsh\...\--D-…Companion--\session-e17c3c91…` 末事件 `turn 693`、15.32 MB；`homes\lee2\dsh-home\...\--D-…homes-lee2--\session-e17c3c91…` 末事件 `turn 782`、15.46 MB——同一 session id，两个写者，历史当场分叉。
+  根因：迁移时只把会话**复制**进新家，旧家的那份没移走；宿主 3080 仍能打开它，而 `pins.json` 按会话 id 把它认成 LeeaCP，于是两个进程各挂一份、各写各的。
+  改动：旧家那份整个目录移进 `backup\lee2-legacy-session-20261117\`（含解压后的 `host-branch-events.jsonl`、`host-branch-tail.md`、`meta.json`；不删不改，先留档），3085 那份是唯一真身；`doctor.ps1` 新增「会话分身（全鱼）」格（扫鱼塘里每个家 + 宿主 `%USERPROFILE%\.dsh`，同一 session id 出现在 ≥2 个家 ⇒ WARN + 一条可复制的 NEXT）；`test-doctor-coverage` 登记新族；`docs\detail\怎么生一条新鱼.md` 的迁移一节写清"复制之后必须把旧家那份移走"。
+  判据：**"搬了"不等于"只剩一份"**——会话的身份证是那个 id，不是文件路径；两个家里各有一份同 id 的会话，就是两个写者。修完 `doctor` 该格报「同一会话 id 只在一个家里」。
 - **r264 · 2026-11-17 · 迁移的鱼打不开：会话里引用的附件字节没搬过来（用户可见：是）**：
   症状：迁移过来的鱼（本次是 LeeaCP）打开网页报 `Attachment object is missing.`。根因：会话日志（`session.v4.jsonl.zstd`）只记附件的 `sha256` 引用，**字节在 `<DSH_HOME>\attachments\v1\{objects,file-objects,files}\`**——迁移只搬了会话文件与名册，没有搬附件仓库，于是渲染那段会话时读不到对象。
   改动：新增 `scripts\migrate-attachments.mjs`（`--source-home/--target-home/--dry-run/--session-file`；扫目标家的会话日志收集引用、只搬真的引用到的对象、已存在的跳过、每个字节核对 sha256、缺的逐条点名并 exit 1）；`scripts\test-migrate-attachments.mjs` 15 条断言（正常搬/幂等/dry-run 不落盘/没被引用的不搬/缺源点名/参数缺失）；`release-check` 4u；`docs\detail\怎么生一条新鱼.md` 迁移一节补这一步与症状。现场：LeeaCP 的会话引用 138 个附件（图片 135、文件 3），全部从旧家搬齐并校验通过。
@@ -4290,3 +4295,11 @@ sleep-tools-register-failed: tool "sleep" must declare output { schema, render, 
 - **做法**：`say-core.js` 纯函数做 `channel`/`to` 值域检查；`say()` 写盘前调用，不合法写 `say-rejected` 并抛错、不落盘；`to` 先 `trim()`；`group_say.execute` 拒绝未知 `channel`。裸注册的账也写对：raw-spec 的 `reason` 改成 `host-resolve-pending`，`host-resolve` 行带 `rawRegistered=…` 把两行事实 join 起来。测试 `test-say-core.mjs` 28 条，`release-check` 4r。
 - **判据**：①坏地址（`to="group"`、`to="nobody"`、`to` 空、私聊 `all`、`channel="DM"`）必须抛错且账本零新增；②好地址（`all`、成员键、首尾空白）照常落盘且 `to` 是 trim 后的值；③插件确实调用了这套检查（静态断言，不靠人记得）；④`plugin.log` 里新出现的 raw-spec 行 `reason` 是 `host-resolve-pending`，且对应的 `host-resolve` 行能看见 `rawRegistered=`。
 - **教训**：**降级可以用，但降级路径必须自己会检查。** 错误只在"有人真的调了这个坏地址"时才暴露——它藏在 283 次里的任意一次，而不是每次启动都响；所以守门人得站在每一次调用上，而不是站在启动日志里。
+
+## 附录 A.142 复制没搬走，等于造了两个写者（2026-11-17）
+
+- **症状**：迁移到新家的鱼，在旧窗口和新窗口**同时回话**；同一段会话的两个副本都在长（末事件 `turn 693` vs `turn 782`，15.32 MB vs 15.46 MB）。群的收发、唤醒账、体检都正常——只有"历史"在悄悄分叉。
+- **根因**：迁移做完的是"复制会话目录 + 写名册"，旧家里那份仍能被旧进程打开；而群绑定用的是**会话 id**，不是文件路径——`pins.json` 里那段 id 属于她，两个家都能拿它挂到同一个"她"。
+- **做法**：把旧家那份整个目录移到 `backup\`（不删，留原样 + 解压文本与 `meta.json`），新家那份作为唯一真身；`doctor.ps1` 新增「会话分身（全鱼）」格：扫鱼塘里每个家与宿主 `%USERPROFILE%\.dsh`，同一 session id 出现在 ≥2 个家 ⇒ WARN；迁移文档把"移走旧家那份"写成复制的收尾步骤。
+- **判据**：①`doctor` 该格 OK，且证据里有"查了 N 个家、M 段会话"（不是空转）；②故意把一份会话复制到另一个家，该格必须 WARN 并点名 id；③移走后旧窗口不再能打开那段会话。
+- **教训**：**会话的身份证是 id，不是路径。** "复制"给了第二个可用入口，却没取消第一个；两处都合法，所以谁都不报错——直到两边都写。搬东西时真正要问的不是"新的那份在不在"，而是"旧的那份还在不在"。

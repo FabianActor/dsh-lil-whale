@@ -17,6 +17,7 @@ const FAMILIES = [
   { name: '睡眠工具', static: ['睡眠工具'], why: 'sleep/wake_up 的注册与形状' },
   { name: '会话绑定', static: ['会话绑定'], dynamicPrefix: ['会话绑定（'], why: '钉的每段会话能否在该鱼自己的 dshHome 里找到；静态兜底名=这一族整体查不了' },
   { name: '工作区（鱼）', static: ['工作区'], dynamicPrefix: ['工作区（'], why: '钉在名册里的会话是否登记进她 storages\\workspace.json（否则界面挂在「未分组」）' },
+  { name: '会话分身', static: ['会话分身（全鱼）', '会话分身'], why: '同一会话 id 是否同时出现在两个家里（split-brain：两个进程各写一份，历史会分叉）' },
   { name: '名册与家', static: ['名册与家'], why: '名册 / 家目录 / pins 三个键集合是否对得上' },
   { name: '名册', static: ['名册', '名册（全鱼）', '名册（lee）'], why: 'pins 存在性、每条鱼有没有钉、watcher 不在视野的声明' },
   { name: '名册自检', static: ['名册自检'], why: '巡守的 roster-audit 最近一次结果' },
