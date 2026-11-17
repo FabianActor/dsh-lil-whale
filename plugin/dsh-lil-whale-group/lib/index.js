@@ -11,6 +11,7 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { printableText } from './text-clean.js'
 import { sayProblemOf, channelProblemOf } from './say-core.js'
+import { codeFingerprint } from './code-fp.js'
 import { join, dirname, basename } from 'node:path'
 import { homedir } from 'node:os'
 import { pathToFileURL, fileURLToPath } from 'node:url'
@@ -163,6 +164,10 @@ const PKG_VERSION = (() => {
     return 'unknown'
   }
 })()
+// 这个进程实际加载的那份 lib 代码的指纹（r255，见 code-fp.js）：
+// 启动时算一次写进启动痕迹，探针拿它和磁盘上现在这份比 —— 比 mtime 诚实。
+const CODE_FP = codeFingerprint()
+
 const inject = ['tools', 'agents']
 
 // 这台机器的假设（她的家在哪、巡守脚本在哪、pwsh 在哪）全从 lil-whale.config.json 读，
@@ -1863,6 +1868,7 @@ function apply(ctx) {
   const homeLooksRight = existsSync(join(CFG.selfHome, 'dsh-home')) || existsSync(join(CFG.selfHome, 'START.md'))
   const bootRecord = {
     pkg: `${name}@${PKG_VERSION}`,
+    codeFp: CODE_FP.fp,
     pid: process.pid,
     // DSH_HOME 没设时 DSH 用的是默认家（~/.dsh）。只写 '(unset)' 会让人以为"没有家"——
     // 从桌面快捷方式启动就是这样（2026-11-12 实测：他自己的 3080 那条痕迹写着 (unset)，害我怀疑了半天）。

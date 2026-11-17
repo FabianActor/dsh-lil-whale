@@ -239,6 +239,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '发言地址' (($sayCoreOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '发言地址' 'to/channel 值域在执行时检查，写错地址会响（test-say-core.mjs）' }
   } else { Fail '发言地址' 'scripts\test-say-core.mjs 不在包里' }
+  # ── 4s. 代码指纹（2026-11-17，第二条鱼的探针反馈）──────────────────────
+  $codeFpTest = Join-Path $pkg 'scripts\test-code-fp.mjs'
+  if (Test-Path $codeFpTest) {
+    $codeFpOut = & node $codeFpTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '代码指纹' (($codeFpOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '代码指纹' '启动痕迹带 codeFp=；比 mtime 诚实，改一个字节就变（test-code-fp.mjs）' }
+  } else { Fail '代码指纹' 'scripts\test-code-fp.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {

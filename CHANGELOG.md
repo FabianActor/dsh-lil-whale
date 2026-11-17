@@ -18,6 +18,8 @@
 
 ## [未发布]
 
+- **r255 · 2026-11-17 · 启动痕迹带代码指纹（用户可见：否，内部账本 + 探针判据）**：`plugin/dsh-lil-whale-group/lib/code-fp.js` 对 lib 目录做内容哈希（12 位），启动痕迹（`logs/plugin-boot.log` 与 `group/plugin.log` 的 boot 行）新增 `codeFp=`。起因：第二条鱼的复验探针用 `index.js` 的 mtime 判"本进程是不是新代码"，只改 `say-core.js` 时会误放行、`git checkout` 会把 mtime 改回去。手算一次：`node plugin/dsh-lil-whale-group/lib/code-fp.js`；`scripts/test-code-fp.mjs` 11 条断言 + `release-check` 4s。判据 §55 补"能比内容的时候不要比时间"。
+
 - **r254 · 2026-11-17 · 探针要先验枪（用户可见：否，判据）**：判据页新增 §55——坏地址复验的探针必须在"本进程装着现在这份代码 / 全局标记已出现 / 对照组命中"三闸全过之后才允许打枪；任一不过要 exit 2（验不了），不能报"通过"也不能报"没通过"。来源：第二条鱼把三段检查写成 `homes\whale\run\probe-bad-to.ps1`（2026-11-17 18:58），并区分 通过/没通过/验不了/用法错 四种退出码。待补：after 阶段同样重验两闸；`ok2=false 且 probeHits=0` 要再分"没打进去"与"打进去没拒"。
 
 - **r253 · 2026-11-17 · 拒绝文案有了快照断言**（用户可见：否，内部测试）：`test-say-core.mjs` 第 4 节把 5 句拒绝文案写成期望值，文案一改测试就红，红时打印分诊提示（§54：先看 CHANGELOG 有没有"文案变"）。这比"用 git diff 判断这次提交该不该改期望值"直接——不需要猜哪些提交是文案变，谁改了文案谁的红（第二条鱼 2026-11-17 提的机器判方向）。
