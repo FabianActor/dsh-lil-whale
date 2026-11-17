@@ -1342,6 +1342,9 @@ function wakesFileOf(member) {
  * 巡守以为她醒着，只递了一句话，没人读。
  */
 const WAKE_STALE_SEC = 90
+// 一次"计划被判定到点"的尝试，最多认领 30 分钟。超过它就不再是"这次叫醒"——
+// 2026-11-17 那条僵尸 woke 行就是因为它被无限期认领（旧 wid 反复出现、lag 越涨越大）。
+const WAKE_ATTEMPT_TTL_SEC = 30 * 60
 
 function presenceAgeOf(member) {
   try {
@@ -2952,6 +2955,16 @@ function deliverToSelf(ctx, self, text) {
   }
 }
 
+// 计划表里的点是"今天的 HH:MM"；算出来比现在晚 12 小时以上，那它其实是昨天的点。
+function planDueMs(at) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(at ?? ''))
+  if (!m) return null
+  const d = new Date()
+  d.setHours(Number(m[1]), Number(m[2]), 0, 0)
+  if (d.getTime() > Date.now() + 12 * 3600_000) d.setDate(d.getDate() - 1)
+  return d.getTime()
+}
+
 function selfPlanTick(ctx) {
   if (isMainProcess()) return
   const self = ownMember()
@@ -2990,7 +3003,16 @@ function selfPlanTick(ctx) {
         say(watcherKey(), self, planDeliveryPublicText(job))
         watchmanLog('deliver', `reason=self-plan-public-fallback to=${self} plan=${item.id}`)
       }
-      watchmanLog('woke', `trigger=self to=${self} plan=${item.id} at=${item.at}`)
+      // 与巡守触发的账同形状（wid / lag / inserted 都要有）：
+      // 2026-11-17 第一条鱼：`trigger=self` 第一次出现时缺这三个字段 = 同一个词、两种账。
+      const selfDueAt = planDueMs(item.at)
+      const selfWid = `wl-${String(item.at ?? '').replace(':', '')}-${item.id}`
+      watchmanLog(
+        'woke',
+        selfDueAt === null
+          ? `wid=${selfWid} trigger=self lag-unknown inserted=1 to=${self} plan=${item.id} at=${item.at}`
+          : `wid=${selfWid} trigger=self lag=${Math.round((Date.now() - selfDueAt) / 1000)}s inserted=1 to=${self} plan=${item.id} at=${item.at}`,
+      )
       markWake(self, 'plan')
     } catch (error) {
       watchmanLog('error', `note=self-plan-deliver-failed to=${self} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)} plan=${item.id}`)
@@ -3263,16 +3285,25 @@ async function watchOne(member, st) {
     if (pending || lastTry) {
       const wid = pending?.wid ?? lastTry?.wid ?? 'none'
       const at = pending?.at ?? lastTry?.at ?? Date.now()
-      watchmanLog(
-        'woke',
-        `wid=${wid} trigger=${pending ? (pending.pushed ? 'push' : 'external') : 'external'} lag=${Math.round((Date.now() - at) / 1000)}s inserted=${pending ? 1 : 0}`,
-      )
+      const ageSec = Math.round((Date.now() - at) / 1000)
+      // 只有"这次推门"留下的尝试才算 woke。lastTry 可能是几小时前一次没投出去的
+      // 计划（2026-11-17 的僵尸 woke 行就是它：旧 wid 不断被认领，lag 越大、inserted 恒 0）。
+      const relevant = Boolean(pending) || (Number.isFinite(ageSec) && ageSec <= WAKE_ATTEMPT_TTL_SEC)
+      if (relevant) {
+        watchmanLog(
+          'woke',
+          `wid=${wid} trigger=${pending ? (pending.pushed ? 'push' : 'external') : 'external'} lag=${ageSec}s inserted=${pending ? 1 : 0}`,
+        )
+      } else {
+        watchmanLog('note', `note=session-mounted member=${member.key} wid=${wid} try-age=${ageSec}s`)
+      }
     } else {
       // 进程刚起时心跳文件还是上一轮留下的（stale），下一轮又新鲜了 ——
       // 那不是"谁叫醒了她"，是"会话自己挂上了"。记 note，不冒充 woke（2026-11-13 他要求的）。
       watchmanLog('note', `note=session-mounted member=${member.key} hb-age=${hbNow}s`)
     }
     delete st.pendingWake
+    st.lastTry = null
     saveWatchState()
   }
   if (st.lastFresh !== freshNow) {
@@ -3325,15 +3356,7 @@ async function watchOne(member, st) {
       // 2026-11-14 小肥鱼：`lag=0s` 是误导——它原来量的是"决定→插入"，不是"到点→投递"。
       // 她提这个字段时没写清是哪一段（自己埋的歧义）。现在 `lag` 一律指"到点→投递"：
       // 到点时刻从 job.at（HH:MM）算回来；算不出来（坏形状）才退回"现在"，并在账上标 `lag-unknown`。
-      const dueAt = (() => {
-        const m = /^(\d{1,2}):(\d{2})$/.exec(String(job.at ?? ''));
-        if (!m) return null;
-        const d = new Date();
-        d.setHours(Number(m[1]), Number(m[2]), 0, 0);
-        // 计划表里的点是"今天的 HH:MM"；如果算出来比现在晚 12 小时以上，那它其实是昨天的点。
-        if (d.getTime() > Date.now() + 12 * 3600_000) d.setDate(d.getDate() - 1);
-        return d.getTime();
-      })();
+      const dueAt = planDueMs(job.at)
       st.lastTry = { wid, at: Date.now() }
       // 同一条 plan 的窗口有两分钟（tick 60s + 窗口 1 分钟），wake-try 每个 wid 只写一次。
       const firstTry = st.triedWid !== wid
