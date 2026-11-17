@@ -253,6 +253,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '工作区登记' (($wsRegOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '工作区登记' '名册钉的会话要登记进 storages\workspace.json，否则界面挂在「未分组」（test-register-workspace.mjs）' }
   } else { Fail '工作区登记' 'scripts\test-register-workspace.mjs 不在包里' }
+  # ── 4u. 附件迁移（2026-11-17，迁移 LeeaCP 打开会话报 Attachment object is missing）──
+  $attTest = Join-Path $pkg 'scripts\test-migrate-attachments.mjs'
+  if (Test-Path $attTest) {
+    $attOut = & node $attTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '附件迁移' (($attOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '附件迁移' '会话里引用的附件字节要一起搬，否则界面打不开（test-migrate-attachments.mjs）' }
+  } else { Fail '附件迁移' 'scripts\test-migrate-attachments.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {
