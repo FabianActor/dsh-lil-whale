@@ -17,10 +17,65 @@ const srcPath = srcArg === -1
   : resolve(process.argv[srcArg + 1] ?? '')
 const src = readFileSync(srcPath, 'utf8')
 
+// 扫之前先剥掉注释（第二条鱼 2026-11-17 09:1x）：
+//   "缺 to= 的调用 + 一句提到 to= 的注释"会让窗口判断假通过——现实里它长成
+//   // TODO: to= 还没补，写这句注释的动机正好和这条检查要抓的东西同一个。
+// 只把"注释的字符"换成空格，换行保留，这样行号还是原来的行号。
+function stripCommentsKeepingLayout(src) {
+  const BT = String.fromCharCode(96)
+  const BS = String.fromCharCode(92)
+  const out = []
+  const ctx = [{ type: 'code', braces: 0, root: true }]
+  const top = () => ctx[ctx.length - 1]
+  let i = 0
+  while (i < src.length) {
+    const c = src[i]
+    const d = src[i + 1]
+    const cur = top()
+    if (cur.type === 'code') {
+      if (c === '/' && d === '/') {
+        while (i < src.length && src[i] !== '\n') { out.push(' '); i++ }
+        continue
+      }
+      if (c === '/' && d === '*') {
+        while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) {
+          out.push(src[i] === '\n' ? '\n' : ' ')
+          i++
+        }
+        if (i < src.length) { out.push(' ', ' '); i += 2 }
+        continue
+      }
+      if (c === "'") { ctx.push({ type: 'str', q: "'" }); out.push(c); i++; continue }
+      if (c === '"') { ctx.push({ type: 'str', q: '"' }); out.push(c); i++; continue }
+      if (c === BT) { ctx.push({ type: 'tmpl' }); out.push(c); i++; continue }
+      if (!cur.root) {
+        if (c === '{') cur.braces++
+        else if (c === '}') {
+          if (cur.braces === 0) { ctx.pop(); out.push(c); i++; continue }
+          cur.braces--
+        }
+      }
+      out.push(c); i++; continue
+    }
+    if (cur.type === 'str') {
+      out.push(c); i++
+      if (c === BS) { if (i < src.length) { out.push(src[i]); i++ } continue }
+      if (c === cur.q) ctx.pop()
+      continue
+    }
+    if (c === BS) { out.push(c); i++; if (i < src.length) { out.push(src[i]); i++ } continue }
+    if (c === BT) { ctx.pop(); out.push(c); i++; continue }
+    if (c === '$' && d === '{') { out.push('$', '{'); i += 2; ctx.push({ type: 'code', braces: 0, root: false }); continue }
+    out.push(c); i++
+  }
+  return out.join('')
+}
+
 // 按「调用」扫：从每个 `watchmanLog(` 起，到下一个 `watchmanLog(` 之前，
 // 这一段里只要出现 `'woke'`，就必须同时出现 `to=`。
 // 不依赖换行，所以跨行写法也在视野里。
-function wokeCallsWithoutTo(text) {
+function wokeCallsWithoutTo(rawText) {
+  const text = stripCommentsKeepingLayout(rawText)
   const marker = 'watchmanLog('
   const hits = []
   let i = -1
@@ -67,6 +122,9 @@ const samples = [
   ['跨行、缺 to=', "watchmanLog(\n  'woke',\n  `wid=x inserted=1`,\n)", 1],
   ['单行、有 to=', "watchmanLog('woke', `wid=x inserted=1 to=whale`)", 0],
   ['跨行、有 to=', "watchmanLog(\n  'woke',\n  `wid=x inserted=1 to=whale`,\n)", 0],
+  ['缺 to=、行尾注释里有 to=', "watchmanLog('woke', `wid=x inserted=1`)   // TODO: to= 还没补\n", 1],
+  ['缺 to=、块注释里有 to=', "watchmanLog(\n  'woke',\n  `wid=x inserted=1`,\n) /* to= 稍后 */\n", 1],
+  ['模板字符串里的 to= 不算（它在日志正文里）', "watchmanLog('woke', `wid=x to=whale`)", 0],
 ]
 for (const [name, sample, want] of samples) {
   const got = wokeCallsWithoutTo(sample).length
