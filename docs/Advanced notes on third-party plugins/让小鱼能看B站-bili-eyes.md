@@ -57,7 +57,7 @@ pwsh -NoProfile -File scripts\fish.ps1 up <键> -NoBrowser
 
 凭证的实际路径是 `<家>\dsh-home\bili-eyes\credential.json` 与 `<家>\dsh-home\bili-eyes\cookies.txt`；**没有** `<家>\dsh-home\bili_credential.json` 这个文件（找不到那个名字，说明不了"没登录"）。2026-11-17 本机：whale / fishball / xiaoman 两个文件都有（登录态）；lee2 两个都没有（纯只读）。
 
-本次安装时，lee2 只复制了配置、**没有**复制凭证 ⇒ 她现在是纯只读（能看、能搜，不能发）。要不要给她登录，由宿主决定。
+2026-11-17 晚，宿主决定给第五条鱼（lee2）一份登录凭证：把 whale 的 `credential.json`（507 B）与 `cookies.txt`（563 B）复制过去，重启后即生效（凭证在启动时读）。她现在与其他三条鱼一样是登录态：1080P、AI 字幕/总结可用；写操作仍默认全关。
 
 ## 4. 验"她真的能看"
 
@@ -84,6 +84,10 @@ Get-Content homes\<键>\dsh-home\bili-eyes\history.jsonl -Tail 3
 - 「这个视频源最高能到多少」→ 看 storyboard 缓存里的 `meta.json`（命中缓存时会连 meta 一起读回 `maxAvailable`/`zoomTarget`）；
 - 别把"我这次读到 480p"当成"这个视频只有 480p"。
 
+**登录前后的实测（lee2，2026-11-17 23:40）**：同一条 `BV1iJW26JEFo`、同一段 `0:17–0:25`、同样 3 格，放大那行从「（480P）」变成「（1080P）」；像素仍是 1010×624——**尺寸被工具输出封顶，标签才是判据**。分镜那条（824×742）没变，说明登录只影响直链取帧，不动分镜管线。
+
+**切换登录状态不需要手动清缓存**：`cacheKey` 把登录状态算进 key 了，登录前后本来就是两个缓存键；"得先清缓存"这条是当时编的，已作废（lee2 验）。
+
 ## 5. 写操作与后台（默认全关）
 
 - 点赞、收藏、评论、私信、关注、发动态：默认关；要在插件设置页按"对谁"（自己人 / 主人评论区里的别人 / 外面的人）一格格开，配额与间隔写在代码里。
@@ -97,7 +101,7 @@ Get-Content homes\<键>\dsh-home\bili-eyes\history.jsonl -Tail 3
 | 第二条鱼（whale） | 0.8.3 | 有 | 有（只读+登录态） | 51（含 14 件 bili） |
 | 第三条鱼（fishball） | 0.8.3 | 有 | 有 | 51 |
 | 第四条鱼（xiaoman） | 0.8.3 | 有 | 有 | 51 |
-| 第五条鱼（lee2/LeeaCP） | 0.8.3 | 有（抄 whale） | **无**（纯只读） | 57（BC 6 + bili 14 + 其它） |
+| 第五条鱼（lee2/LeeaCP） | 0.8.3 | 有（抄 whale） | 有（2026-11-17 晚复制，登录态） | 57（BC 6 + bili 14 + 其它） |
 
 ## 7. 升级与卸载
 
