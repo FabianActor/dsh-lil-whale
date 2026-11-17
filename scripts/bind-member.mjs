@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadConfig } from './lib/config-path.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -14,12 +15,10 @@ function die(msg) {
 }
 
 function readConfig() {
-  const explicit = process.env.LIL_WHALE_CONFIG;
-  const candidates = explicit ? [explicit] : [path.join(ROOT, 'lil-whale.config.json'), path.join(ROOT, 'lil-whale.config.example.json')];
-  for (const p of candidates) {
-    try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { /* 下一个 */ }
-  }
-  return null;
+  // 三态见 lib/config-path.mjs（r242）：env 给的文件不在时报出来，不再当"没有配置"处理。
+  const out = loadConfig({ repoRoot: ROOT });
+  if (out.error) die(out.error);
+  return out.cfg;
 }
 
 function atomicWriteJson(file, value) {

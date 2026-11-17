@@ -16,12 +16,23 @@
 $script:WhaleRoot = Split-Path $PSScriptRoot -Parent
 
 function Get-WhaleConfig {
-  $path = if ($env:LIL_WHALE_CONFIG) { $env:LIL_WHALE_CONFIG } else { Join-Path $script:WhaleRoot 'lil-whale.config.json' }
+  # 三态（r242）：环境变量给了但文件不在，是**配置错误**，不是"没配置"。
+  # 旧写法会安静地落回仓库根那份真配置 —— 临时路径打错一个字母的测试就跑在真鱼塘上，
+  # 还报绿（第三条鱼 2026-11-17 实测）。这里只记下来，由入口脚本/doctor 决定要不要停。
+  $envGiven = [bool]$env:LIL_WHALE_CONFIG
+  $path = if ($envGiven) { $env:LIL_WHALE_CONFIG } else { Join-Path $script:WhaleRoot 'lil-whale.config.json' }
   $raw = $null
+  $configIssue = $null
   if (Test-Path -LiteralPath $path) {
     try { $raw = Get-Content -LiteralPath $path -Raw -Encoding UTF8 | ConvertFrom-Json }
-    catch { Write-Warning "配置读不了（$path）：$($_.Exception.Message)，先按默认布局跑" }
+    catch {
+      $configIssue = "配置读不了（$path）：$($_.Exception.Message)"
+      Write-Warning "$configIssue，先按默认布局跑"
+    }
+  } elseif ($envGiven) {
+    $configIssue = "LIL_WHALE_CONFIG 指向的文件不存在：$path"
   }
+  $configSource = if ($raw) { if ($envGiven) { 'env' } else { 'repo' } } elseif ($envGiven) { 'env-missing' } else { 'default' }
 
   # 默认布局（鱼塘）：<pond>\app 是仓库，鱼在 <pond>\homes\<键>，共享区在 <pond>\pool。
   $defaultHome = Join-Path (Join-Path (Split-Path $script:WhaleRoot -Parent) 'homes') 'fish'
@@ -47,6 +58,8 @@ function Get-WhaleConfig {
   [pscustomobject]@{
     ConfigPath   = $path
     ConfigFound  = [bool]$raw
+    ConfigSource = $configSource
+    ConfigIssue  = $configIssue
     Root         = $script:WhaleRoot
     # 新名字（多鱼）：这个进程服务的那条鱼。
     SelfHome     = $selfHome

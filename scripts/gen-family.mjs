@@ -11,6 +11,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { loadConfigOrExit } from './lib/config-path.mjs'
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const checkOnly = process.argv.includes('--check')
@@ -29,17 +30,9 @@ function die(msg, next) {
   process.exit(1)
 }
 
-function readConfig() {
-  const tries = [process.env.LIL_WHALE_CONFIG, join(REPO, 'lil-whale.config.json'), join(REPO, 'lil-whale.config.example.json')]
-  for (const p of tries) {
-    if (p && existsSync(p)) {
-      try { return JSON.parse(readFileSync(p, 'utf8')) } catch (e) { die(`配置读不了：${p}（${e.message}）`) }
-    }
-  }
-  die('找不到配置', '先跑 install.ps1')
-}
-
-const cfg = readConfig()
+// 配置的三态（给了但不在 / 没给 / 都在）由 lib/config-path.mjs 一个地方判，
+// 这里不再自己写"试下一个"的循环 —— 那会把"打错字"读成"没配置"，然后拿真鱼塘报绿（r242）。
+const cfg = loadConfigOrExit({ repoRoot: REPO })
 const poolDir = cfg.poolDir || join(REPO, '..', 'lil-whale-pool')
 const membersFile = join(poolDir, 'members.json')
 const familyFile = join(poolDir, 'family.json')

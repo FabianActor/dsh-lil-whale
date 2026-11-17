@@ -59,7 +59,10 @@ function Tail-Line([string]$path, [int]$n = 1) {
 }
 
 # 0. 配置：读不到也能按标准布局猜，但那说明"打包出去"这件事没做成
-if ($Cfg.ConfigFound) {
+# r242：环境变量给了但文件不在，是"你给的路径不对"，不是"没配置"——必须报出来。
+if ($Cfg.ConfigIssue) {
+  Add-Row '配置' 'FAIL' $Cfg.ConfigIssue 'NEXT: 检查 LIL_WHALE_CONFIG 的拼写；不想用它就先清掉（$env:LIL_WHALE_CONFIG=$null）—— 脚本不会悄悄改读仓库里的真配置'
+} elseif ($Cfg.ConfigFound) {
   Add-Row '配置' 'OK' $Cfg.ConfigPath
 } else {
   Add-Row '配置' 'WARN' '没读到 lil-whale.config.json，按标准布局猜的' 'NEXT: 检查仓库根目录的 lil-whale.config.json（或用 LIL_WHALE_CONFIG 指到别处）'

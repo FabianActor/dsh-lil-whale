@@ -4,6 +4,7 @@
 // 现在由群插件在进程内调 sessionController.agents.resume(sessionId) 挂载。
 import { readFileSync, writeFileSync, copyFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { loadConfig } from './lib/config-path.mjs'
 
 const args = process.argv.slice(2)
 const opt = (name, fallback = '') => {
@@ -16,13 +17,13 @@ if (!member) {
   process.exit(1)
 }
 
-function readConfig() {
-  for (const p of [process.env.LIL_WHALE_CONFIG, join(process.cwd(), 'lil-whale.config.json')]) {
-    if (p && existsSync(p)) return JSON.parse(readFileSync(p, 'utf8'))
-  }
-  return {}
+// 三态见 lib/config-path.mjs（r242）：env 给的文件不在时退出，不再当"没有配置"处理。
+const cfgOut = loadConfig({ repoRoot: process.cwd(), includeExample: false })
+if (cfgOut.error && cfgOut.source === 'env-given-missing') {
+  console.error(`xx ${cfgOut.error}\n\nNEXT: ${cfgOut.next}`)
+  process.exit(1)
 }
-const cfg = readConfig()
+const cfg = cfgOut.cfg || {}
 const membersFile = cfg.membersFile ?? join(cfg.poolDir ?? join(cfg.herHome ?? '.', '..', 'lil-whale-pool'), 'members.json')
 const members = JSON.parse(readFileSync(membersFile, 'utf8'))
 const m = members.members?.[member] ?? members[member]

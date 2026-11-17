@@ -225,6 +225,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '账本字节' (($textOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '账本字节' '正文写盘前把不可打印字节换成 <0xNN>（test-ledger-text.mjs）' }
   } else { Fail '账本字节' 'scripts\test-ledger-text.mjs 不在包里' }
+  # ── 4q. 配置三态（2026-11-17，第三条鱼 #1074）────────────────────────
+  $cfgPathTest = Join-Path $pkg 'scripts\test-config-path.mjs'
+  if (Test-Path $cfgPathTest) {
+    $cfgPathOut = & node $cfgPathTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '配置三态' (($cfgPathOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '配置三态' 'LIL_WHALE_CONFIG 指错文件会报错，不悄悄读仓库那份（test-config-path.mjs）' }
+  } else { Fail '配置三态' 'scripts\test-config-path.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {

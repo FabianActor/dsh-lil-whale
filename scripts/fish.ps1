@@ -69,6 +69,14 @@ param(
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'common.ps1')
 
+# r242：`LIL_WHALE_CONFIG` 给了但文件不在时不能继续 —— 否则后面每个 $Cfg.* 都是按默认布局猜的，
+# 看着能跑，实际在操作另一套目录（第三条鱼 2026-11-17 实测：测试跑了真鱼塘还报绿）。
+if ($Cfg.ConfigIssue) {
+  Write-Host ("xx " + $Cfg.ConfigIssue) -ForegroundColor Red
+  Write-Host 'NEXT: 检查 LIL_WHALE_CONFIG 的拼写；不想用它就先清掉（$env:LIL_WHALE_CONFIG=$null）' -ForegroundColor Yellow
+  exit 1
+}
+
 # ---------- 起停审计（2026-11-14）----------
 # 每次调用都记一行：谁调的（父进程名 + pid）、带的什么参数。
 # 起因：10:59:41 主 dsh 被强杀、同一秒又被 fish.ps1 起回来，账上查不出是谁下的手。

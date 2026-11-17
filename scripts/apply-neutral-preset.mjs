@@ -16,14 +16,19 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { loadConfig } from './lib/config-path.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
+// 配置三态见 lib/config-path.mjs：`LIL_WHALE_CONFIG` 给了但文件不在时退出（不落回真配置，r242）；
+// 这份脚本在"没有配置"时也能跑（参数齐全就行），所以只拦"你给的路径不在"。
+const cfgOut = loadConfig({ repoRoot });
+if (cfgOut.error && cfgOut.source === 'env-given-missing') {
+  console.error(`xx ${cfgOut.error}\n\nNEXT: ${cfgOut.next}`);
+  process.exit(1);
+}
 function readConfig() {
-  for (const p of [process.env.LIL_WHALE_CONFIG, path.join(repoRoot, 'lil-whale.config.json'), path.join(repoRoot, 'lil-whale.config.example.json')]) {
-    if (p && fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf8'));
-  }
-  return {};
+  return cfgOut.cfg || {};
 }
 
 const argv = process.argv.slice(2);

@@ -15,6 +15,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { loadConfigOrExit } from './lib/config-path.mjs'
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -25,19 +26,9 @@ function die(msg, next) {
   process.exit(1)
 }
 
-function readConfig() {
-  const tries = [process.env.LIL_WHALE_CONFIG, join(REPO, 'lil-whale.config.json'), join(REPO, 'lil-whale.config.example.json')]
-  for (const p of tries) {
-    if (!p) continue
-    if (!existsSync(p)) continue
-    try {
-      return JSON.parse(readFileSync(p, 'utf8'))
-    } catch (e) {
-      die(`配置读不了：${p}（${e.message}）`, '先修好那份 JSON，或删掉它重新生成')
-    }
-  }
-  die('找不到配置（LIL_WHALE_CONFIG / 仓库根 lil-whale.config.json）', '先跑 install.ps1，或把 lil-whale.config.example.json 复制成 lil-whale.config.json')
-}
+// 配置三态由 lib/config-path.mjs 统一判：LIL_WHALE_CONFIG 给了但文件不在时直接退出，
+// 不再"试下一个"落回仓库里的真配置（r242，第三条鱼 2026-11-17 实测）。
+const cfg = loadConfigOrExit({ repoRoot: REPO })
 
 const args = process.argv.slice(2)
 function opt(name) {
@@ -61,7 +52,6 @@ const key = opt('key')
 if (!key) die('缺 --key', '例如：node scripts\\members-add.mjs --key fishball --name 小鱼丸 --parent lee --port 3083 ...')
 if (!/^[a-z][a-z0-9-]{1,23}$/.test(key)) die(`--key 形状不对：${key}`, '只用小写字母、数字、连字符，2–24 个字符')
 
-const cfg = readConfig()
 const membersFile = join(cfg.poolDir || join(REPO, '..', 'lil-whale-pool'), 'members.json')
 if (!existsSync(membersFile)) die(`名册不存在：${membersFile}`, '先跑 node scripts\\migrate-members.mjs 生成它')
 

@@ -18,6 +18,10 @@
 
 ## [未发布]
 
+- **r242 · 2026-11-17 · 配置路径写错会报错，不再悄悄读仓库里那份**（用户可见：是，命令行与体检会直接失败）：
+  旧行为：`LIL_WHALE_CONFIG` 指向一个不存在的文件时，各脚本把"路径不存在"当成"没给"，`for` 循环继续试仓库根配置/示例文件/内置默认——一个打错字的测试会跑在真鱼塘上，还打印 `✓ 谱系校验通过` 并 exit 0（第三条鱼 2026-11-17 实测）。
+  新行为：配置查找改成三态——**给了且在** → 用它；**给了但不在** → `xx LIL_WHALE_CONFIG 指向的文件不存在：<路径>` 加 `NEXT:`，exit 1；**没给** → 仓库根 → 示例 → 默认。入口只有一处 `scripts/lib/config-path.mjs`（`resolveConfigFile/loadConfig/loadConfigOrExit`），两个插件的 `config.js` 也走同一套判断（`configSummary()` 带 `source`/`error`）；`doctor` 的「配置」格在 env 指错时直接 FAIL，`fish.ps1` 在 dot-source 后立刻退出。
+  测试：`scripts/test-config-path.mjs` 9 条（含"gen-family --check 带打错字 env 必须 exit 1"的 CLI 负样本）；`release-check` 新增「配置三态」(4q)。判据页新增 §45。
 - **r241 · 2026-11-17 · 谱系的"根"在诊断行和文档里都说全**（用户可见：诊断输出 + 谱系文档）：
   旧行为：`gen-family.mjs --check` 打 `✓ 谱系校验通过（根：lee，6 个节点）`——只写第一个鱼根，和上一行"鱼有 2 个根（并列）：lee, lee2"对不上，看起来像另有一个"主根"。
   新行为：诊断行与生成结束行都列出全部鱼根（`鱼根：lee、lee2`）；`docs/detail/鱼塘谱系.md` 顶部由生成器写一句"2026-11-17 起允许多个鱼根（并列，不互为依据）"——规则改了、代码注释写了，但读文档的人不会去翻 `.mjs`。
@@ -4214,3 +4218,11 @@ sleep-tools-register-failed: tool "sleep" must declare output { schema, render, 
 **判据**：①新增写路由必须同时加守卫（静态测试点名每个路由）；②拒绝时有一条 `security-reject`，成功请求不产生该行；③文档写明"不防本机进程"，不把边界吹大。
 
 **教训**：**"要登录"是路由的属性，不是端口的属性**。把两组路由挂在同一个监听上，只说明它们共用一个端口，不说明它们共用一个守卫。
+
+## 附录 A.140 路径优先级里，"找不到"和"没给"必须分开（2026-11-17）
+
+- **症状**：`LIL_WHALE_CONFIG=D:\nonexistent\typo\cfg.json node scripts\gen-family.mjs --check` 打印 `✓ 谱系校验通过（鱼根：lee、lee2，6 个节点）`、exit 0。一个明显打错字的测试，跑在真鱼塘上，还报了绿。
+- **根因**：每个脚本各有一份 `readConfig()`，写成"候选列表依次试，找到能读的就用"。它把"这个路径不存在"和"没有人给路径"当成同一件事——于是用户意图（"我就是要用这个文件"）在一次 `continue` 里丢了。
+- **做法**：抽 `scripts/lib/config-path.mjs` 单一入口，返回五态 `env-given-ok / env-given-missing / repo / example / none`；`env-given-missing` 时 `cfg=null`、带 `error` 与 `next`，`loadConfigOrExit()` 打印 `xx …` 与 `NEXT:` 后 exit 1。命令行脚本、两个插件的 `config.js`、`common.ps1`、`doctor.ps1`、`fish.ps1` 全部改成这一个判断；`test-config-path.mjs` 9 条断言守（含 CLI 负样本），`release-check` 4q。
+- **判据**：①同一个输入（env 指错）在脚本、插件、体检三条路给出同一结论；②`gen-family --check` 带坏 env 必须 exit 1（负样本）；③不带 env 时仍 exit 0（正面样本）；④`doctor` 的「配置」格在 env 指错时是 FAIL 而不是 WARN——"WARN 会让人以为只是没配"。
+- **教训**：优先级链天生会"往下掉"，而用户意图不会。凡是"给了就必须有效"的参数，找不到时要显式报错，不能安静落回默认——否则错的那次跟对的那次长得一样（§1 总纲）。

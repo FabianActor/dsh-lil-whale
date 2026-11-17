@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadConfig } from './lib/config-path.mjs';
 
 // 不能用 new URL(...).pathname：仓库路径里有中文（文档），会被百分号编码成 %E6%96%87…，
 // 拼出来的路径不存在 ⇒ 读配置静默失败 ⇒ 报"找不到 groupDir"。这个坑 11-12 在
@@ -13,16 +14,10 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 function readConfig() {
-  const explicit = process.env.LIL_WHALE_CONFIG;
-  const candidates = explicit ? [explicit] : [path.join(ROOT, 'lil-whale.config.json'), path.join(ROOT, 'lil-whale.config.example.json')];
-  for (const p of candidates) {
-    try {
-      return JSON.parse(fs.readFileSync(p, 'utf8'));
-    } catch {
-      /* 下一个 */
-    }
-  }
-  return null;
+  // 三态见 lib/config-path.mjs（r242）：env 给的文件不在时报出来，不再当"没有配置"处理。
+  const out = loadConfig({ repoRoot: ROOT });
+  if (out.error) die(out.error);
+  return out.cfg;
 }
 
 function defaultPinsFile() {

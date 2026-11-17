@@ -59,6 +59,16 @@ export function configPath() {
   return process.env.LIL_WHALE_CONFIG || join(REPO_ROOT, 'lil-whale.config.json')
 }
 
+/**
+ * 配置从哪来。三种状态别混：（r242）
+ *   env / env-missing / repo / default；env-missing 是配置错误，不是"没有配置"。
+ */
+function configSourceOf(path) {
+  const fromEnv = Boolean(process.env.LIL_WHALE_CONFIG)
+  if (fromEnv) return existsSync(path) ? 'env' : 'env-missing'
+  return existsSync(path) ? 'repo' : 'default'
+}
+
 /** 派生字段（只由上面几个推出来，不许单独写死）。 */
 function derive(c) {
   // 先把旧名字抬成新名字（新名字优先）。
@@ -115,12 +125,17 @@ export function config() {
       error = `config 读取失败（${path}）：${e.message}`
     }
   }
-  cached = { ...derive({ ...DEFAULTS, ...raw }), _path: path, _exists: existsSync(path), _error: error }
+  const source = configSourceOf(path)
+  if (source === 'env-missing' && !error) {
+    // 环境变量给了 = "我要用这一份"；文件不在是配置错误，不能安静地用默认值继续跑。
+    error = `LIL_WHALE_CONFIG 指向的文件不存在：${path}`
+  }
+  cached = { ...derive({ ...DEFAULTS, ...raw }), _path: path, _exists: existsSync(path), _error: error, _source: source }
   return cached
 }
 
 /** 给启动痕迹用的短摘要：哪份配置、这条鱼的家在哪儿。 */
 export function configSummary() {
   const c = config()
-  return { path: c._path, exists: c._exists, error: c._error, selfHome: c.selfHome, groupDir: c.groupDir }
+  return { path: c._path, source: c._source, exists: c._exists, error: c._error, selfHome: c.selfHome, groupDir: c.groupDir }
 }

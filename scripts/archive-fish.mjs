@@ -19,23 +19,12 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, cpSync, statSync, r
 import { join, resolve, dirname, basename } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { loadConfigOrExit } from './lib/config-path.mjs'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
-function readConfig() {
-  const candidates = [
-    process.env.LIL_WHALE_CONFIG,
-    join(repoRoot, 'lil-whale.config.json'),
-    join(repoRoot, 'lil-whale.config.example.json'),
-  ].filter((p) => typeof p === 'string' && p !== '')
-  for (const file of candidates) {
-    if (!existsSync(file)) continue
-    try { return JSON.parse(readFileSync(file, 'utf8')) } catch { /* 坏 JSON 换下一个 */ }
-  }
-  return {}
-}
-
-const cfg = readConfig()
+// 配置三态见 lib/config-path.mjs（r242）：env 给了但文件不在时退出，不落回真配置。
+const cfg = loadConfigOrExit({ repoRoot })
 const poolDir = cfg.poolDir || resolve(cfg.herHome ?? '', '..', 'lil-whale-pool')
 const membersFile = cfg.membersFile || join(poolDir, 'members.json')
 const groupDir = cfg.groupDir || join(poolDir, 'group')
