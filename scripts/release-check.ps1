@@ -218,6 +218,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '账本形状' (($wakeLedgerOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '账本形状' 'self 触发的账与他人同形状；过期尝试不冒充 woke（test-wake-ledger.mjs）' }
   } else { Fail '账本形状' 'scripts\test-wake-ledger.mjs 不在包里' }
+  # ── 4p. 账本字节（2026-11-17，第四条鱼 #1014）──────────────────────
+  $textTest = Join-Path $pkg 'scripts\test-ledger-text.mjs'
+  if (Test-Path $textTest) {
+    $textOut = & node $textTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '账本字节' (($textOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '账本字节' '正文写盘前把不可打印字节换成 <0xNN>（test-ledger-text.mjs）' }
+  } else { Fail '账本字节' 'scripts\test-ledger-text.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {

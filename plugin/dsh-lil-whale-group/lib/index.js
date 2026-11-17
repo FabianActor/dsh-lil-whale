@@ -9,6 +9,7 @@
 // 按 cwd 会叫错人。cwd 只作退路，并在 plugin.log 留一行痕迹。
 
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { printableText } from './text-clean.js'
 import { join, dirname, basename } from 'node:path'
 import { homedir } from 'node:os'
 import { pathToFileURL, fileURLToPath } from 'node:url'
@@ -1672,7 +1673,7 @@ function sayPrivate(from, to, text, image = null, images = null) {
   mkdirSync(DM_DIR, { recursive: true })
   const list = normalizeImageList(image, images)
   const record = {
-    ts: new Date().toISOString(), from, to, text, kind: 'dm', channel: 'dm',
+    ts: new Date().toISOString(), from, to, text: printableText(text), kind: 'dm', channel: 'dm',
     ...(list.length === 0 ? {} : (list.length === 1 ? { image: list[0] } : { images: list })),
   }
   appendFileSync(dmFileOf(from, to), JSON.stringify(record) + '\n', 'utf8')
@@ -1693,7 +1694,7 @@ function say(from, to, text, channel = 'group', s = '', toSeat = '', image = nul
   // 只追加的文件删不掉一行，所以空正文绝不能落盘。
   // 现场（2026-11-11 16:23）：一条没有 text 的记录进了 messages.jsonl，
   // 在 群.md 里显示成 undefined —— 一个空对象，读起来却像一句话。
-  const body = typeof text === 'string' ? text.trim() : ''
+  const body = typeof text === 'string' ? printableText(text.trim()) : ''
   // 一条消息至少要有一件东西：一段话或一张图。两个都空，仍然是"空消息"。
   if (body === '' && list.length === 0) throw new Error('群消息不能没有内容（text 和 image 都是空的，拒绝写入）')
   // 2026-11-12 20:20 改：以前 `to === 'fabian'` 也算私聊，于是"在群里对 Fabian 说"这条路不存在了
