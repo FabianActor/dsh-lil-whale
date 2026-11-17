@@ -15,8 +15,11 @@ import { fileURLToPath } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const LIB = join(HERE, '..', 'plugin', 'dsh-lil-whale-group', 'lib')
-const index = readFileSync(join(LIB, 'index.js'), 'utf8')
-const core = readFileSync(join(LIB, 'wake-preview-core.js'), 'utf8')
+// 换行归一：本地工作区是 LF，git archive 打出来的包里可能被 eol 规则转成 CRLF
+// （2026-11-18 首次发版检查踩到：本地 15/15，包里 14/15，差的就是 `'wake-skip',\n` 这种跨行断言）。
+const read = (file) => readFileSync(file, 'utf8').replace(/\r\n/g, '\n')
+const index = read(join(LIB, 'index.js'))
+const core = read(join(LIB, 'wake-preview-core.js'))
 
 let total = 0
 let pass = 0
