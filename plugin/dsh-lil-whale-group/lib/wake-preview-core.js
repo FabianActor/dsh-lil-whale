@@ -54,3 +54,15 @@ export function wakeWordingOf({ kind, who, dmWho = '', count, firstRead, cursorL
   const wtext8 = createHash('sha256').update(where + '\n' + tailHint, 'utf8').digest('hex').slice(0, 8)
   return { where, tailHint, tpl, tailTpl, wtext8 }
 }
+
+/**
+ * 预览被截断时的那句话（纯函数）。
+ *
+ * 2026-11-18，宿主报的第 3 条：私聊触发执行请求时，提示仍然写"全文在群文件里"——
+ * 而那条消息根本不在群里。判据：**提示里的地点，必须是被截掉那段文字真正待在哪儿。**
+ * 所以这里按通道分两种说法；`max` 与调用方一致，测试里写死边界值。
+ */
+export function previewTextOf(text, { channelKind = 'group', max = 120 } = {}) {
+  const where = channelKind === 'dm' ? '私聊文件' : '群文件'
+  return text.length > max ? `${text.slice(0, max)}…（已截断，全文在${where}里）` : text
+}

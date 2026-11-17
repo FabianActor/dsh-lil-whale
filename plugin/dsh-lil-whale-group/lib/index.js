@@ -37,7 +37,7 @@ import {
   windowFor,
   DEFAULT_SLEEP_FROM,
   DEFAULT_SLEEP_TO, normalizeSleepArgs } from './sleep-core.js'
-import { wakeWordingOf } from './wake-preview-core.js'
+import { wakeWordingOf, previewTextOf } from './wake-preview-core.js'
 import { refreshSleepStatus } from './sleep-status.js'
 import { cleanName, nameTaken, historyAfterRename, canRename, renameAnnouncement, NAME_MAX } from './rename-core.js'
 import {
@@ -433,6 +433,29 @@ function noteSleepHold(member, pending, seen, total) {
   if (Date.now() - last < 10 * 60_000) return
   sleepHoldLoggedAt.set(member, Date.now())
   sleepLog('sleep-hold', `member=${member} pending=${pending} cursor=${seen}/${total}（消息在文件里，游标不动）`)
+}
+
+/**
+ * 被额度挡住的消息：**也要留痕**（2026-11-18，宿主报"小满叫不醒"）。
+ *
+ * 那天 23:43 群里有人说话，小满没醒；查下去是小满当天已经被叫醒 200 次，
+ * 撞了 perDay 上限 —— 但旧代码里除 sleep 之外的挡法一声不吭地 return false，
+ * 于是"额度用完"和"消息丢了"在日志里长得一模一样。判据句还是那句：
+ * **一个判据不合格的标志，是它错的时候跟对的时候长得一样。**
+ *
+ * 只记 reason 和游标，不记正文（正文在通道文件里，工程日志不抄内容）。
+ * 10 分钟去重，同一 (成员, 通道, 原因) 不刷屏。
+ */
+const wakeSkipLoggedAt = new Map()
+function noteWakeSkip(member, channelKey, deny, pending, seen, total, human) {
+  const key = `${member}:${channelKey}:${deny}`
+  const last = wakeSkipLoggedAt.get(key) ?? 0
+  if (Date.now() - last < 10 * 60_000) return
+  wakeSkipLoggedAt.set(key, Date.now())
+  watchmanLog(
+    'wake-skip',
+    `to=${member} deny=${deny} channel=${channelKey} pending=${pending} cursor=${seen}/${total} human=${human ? 'yes' : 'no'}（消息在文件里，游标不动）`,
+  )
 }
 
 /** 上一轮是"正常收尾"还是"没写 stopped 就没了"。读尾巴 8KB 找最后一条 started/stopped。 */
@@ -1794,14 +1817,20 @@ function withinQuietHours(now = new Date()) {
 /**
  * 这个成员此刻能不能被叫醒。
  * 返回 null 表示可以，返回字符串表示不行的理由（只用于日志，不告警、不补发）。
+ *
+ * 2026-11-18：加了 bypassRate —— **额度挡的是吵闹，不是人的话**。
+ * 宿主当面/群里说话被 200 次/天的上限挡掉，是"人在叫，系统说今天叫太多了"，
+ * 这不是保护，是把人的话排在了配额后面。睡眠仍然挡（那是她自己的"别叫我"），
+ * 冷却/小时/日上限则对"有真人发来的消息"这一批放行。
  */
-function gate(member, wakes) {
+function gate(member, wakes, bypassRate = false) {
   const state = wakes[member] ?? { lastWakeAt: 0, hourStart: 0, hourCount: 0, dayStart: '', dayCount: 0 }
   const now = Date.now()
 
   // 2026-11-14：全局静默段（00:00–08:00 一刀切）退成"每条鱼自己的默认睡眠窗"。
   // 她能不能被叫醒，现在由她自己家 `plan\sleep.json` 的偏好 + 一次性睡眠 + 家长强制叫醒决定。
   if (isSleeping(member)) return 'sleep'
+  if (bypassRate) return null
   if (now - state.lastWakeAt < WAKE.cooldownSec * 1000) return 'cooldown'
   if (state.hourCount >= WAKE.perHour && now - state.hourStart < 3600_000) return 'hour-cap'
   if (state.dayCount >= WAKE.perDay && state.dayStart === new Date().toDateString()) return 'day-cap'
@@ -2708,11 +2737,16 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
   const waitedEnough = now - pending.get(pendingKey) >= WAKE.maxWaitMs
   if (!quietEnough && !waitedEnough) return false
 
-  const blocked = gate(member, wakes)
+  // 这一批里有没有真人发来的（Fabian）——有就绕过额度闸，只让睡眠挡。
+  const humanIncoming = incoming.some((record) => MEMBERS[record.from]?.kind === 'human')
+  const blocked = gate(member, wakes, humanIncoming)
   if (blocked !== null) {
     // 睡眠挡的是"叫醒"，不是"送达"：消息还在文件里，游标不动，醒了照常读。
     // 留一行痕迹，否则"她睡着没被叫"和"消息丢了"在日志里长得一样。
+    // 2026-11-18：额度挡住也要留痕（宿主报"小满叫不醒"，查下去是日额度 200/200，
+    // 旧代码静默 return —— 日志上"额度用完"和"消息丢了"长得一模一样）。
     if (blocked === 'sleep') noteSleepHold(member, incoming.length, sharedSeen, lines.length)
+    else noteWakeSkip(member, channel.key, blocked, incoming.length, sharedSeen, lines.length, humanIncoming)
     return false // 被闸挡住：不告警、不补发、游标不动
   }
 
@@ -2723,7 +2757,9 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
   const previewOf = (record) => {
     const hasImage = record.image || (Array.isArray(record.images) && record.images.length > 0)
     const body = `${hasImage ? '（图片）' : ''}${record.text}`
-    return body.length > PREVIEW_MAX ? `${body.slice(0, PREVIEW_MAX)}…（已截断，全文在群文件里）` : body
+    // 2026-11-18（宿主第 3 条）：截断提示里的地点要跟消息真正待的地方一致——
+    // 私聊被截断时说"全文在群文件里"，指的是一个不存在的群消息。
+    return previewTextOf(body, { channelKind: channel.kind, max: PREVIEW_MAX })
   }
   // 2026-11-15 08:02：她报"一分钟内两次唤醒、内容一模一样"。核到行号后发现不是重复投递——
   // 第二次唤醒对应的是第 393 行（她 27 秒前已经亲手读过、还回了）。游标记的是"递到哪儿"，
@@ -2787,7 +2823,7 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
   // `id` 是构造出来的 user message id，用来跟会话日志对账（见 wakeDeliverLog 的注释）；
   // `last-line` 是那条消息在通道文件里的绝对行号（1 基），`last-from` 是它谁写的。
   // 有这两个字段，"同一条被递了两次"和"我们自己叫了两次"才分得开 —— 只看时间戳分不开。
-  const deliveryNote = `id=${built.id} member=${member} channel=${channel.key} seat=${seat === '' ? '-' : seat} pending=${incoming.length} last-line=${lastIncomingIndex + 1} last-from=${incoming[incoming.length - 1]?.from ?? '-'} last-ts=${lastTs || 0} cursor=${lines.length} prior-cursor=${sharedSeenStored} cursor-state=${cursorLost ? "lost" : firstRead ? "first" : "resumed"} tpl=${tpl} n=${incoming.length} tail=${tailTpl} wtext8=${wtext8} pkg=${PKG_VERSION}`
+  const deliveryNote = `id=${built.id} member=${member} channel=${channel.key} seat=${seat === '' ? '-' : seat} pending=${incoming.length} last-line=${lastIncomingIndex + 1} last-from=${incoming[incoming.length - 1]?.from ?? '-'} last-ts=${lastTs || 0} cursor=${lines.length} prior-cursor=${sharedSeenStored} cursor-state=${cursorLost ? "lost" : firstRead ? "first" : "resumed"} tpl=${tpl} n=${incoming.length} tail=${tailTpl} wtext8=${wtext8} human=${humanIncoming ? 'yes' : 'no'} pkg=${PKG_VERSION}`
   try {
     agent.followup(built)
   } catch (error) {

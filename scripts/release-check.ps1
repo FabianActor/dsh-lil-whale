@@ -267,6 +267,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '贴底跟随' (($ftOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '贴底跟随' '长消息撑开仍贴底；贴底时不亮「回到历史未读」（test-client-follow-tail.mjs）' }
   } else { Fail '贴底跟随' 'scripts\test-client-follow-tail.mjs 不在包里' }
+  # ── 4w. 叫醒闸与截断提示（2026-11-18，宿主报"小满叫不醒"与私聊截断）──────
+  $wgTest = Join-Path $pkg 'scripts\test-wake-gate.mjs'
+  if (Test-Path $wgTest) {
+    $wgOut = & node $wgTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '叫醒闸' (($wgOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '叫醒闸' '人说话绕额度、睡眠仍挡；挡住留痕；私聊截断指向私聊文件（test-wake-gate.mjs）' }
+  } else { Fail '叫醒闸' 'scripts\test-wake-gate.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {

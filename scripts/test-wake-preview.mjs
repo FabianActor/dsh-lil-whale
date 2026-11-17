@@ -17,7 +17,7 @@
 // 判据：**两个同源的东西对上了，叫一致，不叫验证。**
 
 import { createHash } from 'node:crypto'
-import { wakeWordingOf } from '../plugin/dsh-lil-whale-group/lib/wake-preview-core.js'
+import { wakeWordingOf, previewTextOf } from '../plugin/dsh-lil-whale-group/lib/wake-preview-core.js'
 
 let pass = 0
 let fail = 0
@@ -98,6 +98,19 @@ function eq(name, got, want) {
   eq('私聊没积压的尾巴', r.tailHint, '去看看。')
   eq('私聊没积压的模板 id', r.tpl, 'dm@1')
   eq('私聊没积压的尾巴 id', r.tailTpl, 'tail-go@1')
+}
+
+// ---------- 预览截断提示的地点（2026-11-18，宿主第 3 条） ----------
+// 私聊里被截断时，提示不能再说"全文在群文件里"——那条消息不在群里。
+{
+  const long = '一'.repeat(121)
+  eq('群文件被截断时的地点', previewTextOf(long, { channelKind: 'group', max: 120 }).endsWith('…（已截断，全文在群文件里）'), true)
+  eq('私聊被截断时的地点', previewTextOf(long, { channelKind: 'dm', max: 120 }).endsWith('…（已截断，全文在私聊文件里）'), true)
+  eq('正好 120 字不截断', previewTextOf('一'.repeat(120), { channelKind: 'dm', max: 120 }), '一'.repeat(120))
+  eq('121 字才截断', previewTextOf('一'.repeat(121), { channelKind: 'group', max: 120 }).includes('已截断'), true)
+  eq('截断保留前 120 字原文', previewTextOf('甲乙' + '一'.repeat(119), { channelKind: 'group', max: 120 }).startsWith('甲乙' + '一'.repeat(118)), true)
+  eq('短消息原样返回', previewTextOf('收到。', { channelKind: 'group', max: 120 }), '收到。')
+  eq('默认是群文件（调用方没传通道时）', previewTextOf('一'.repeat(121)).endsWith('全文在群文件里）'), true)
 }
 
 console.log(`test-wake-preview：合计 ${pass + fail}，PASS ${pass}，FAIL ${fail}`)
