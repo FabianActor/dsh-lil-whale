@@ -11,7 +11,7 @@
  *   - `homes=5(dirs:…)` —— `homes\` 下 5 个目录，名字列出来，不用再 `ls`
  *   - `home-check=4(fish;skip=lee:home-outside-pond)` —— 只有 4 条鱼参与「家↔名册」比对，
  *     lee 被跳过，以及为什么
- *   - `pins=5` —— 钉住的成员键数
+ *   - `pins=5(keys:…)` —— 钉住会话的成员**键**（不是鱼数），名字也列出来
  * 旧行（`fmt=1` / `fmt=2`）不改：读的人先看 `fmt` 再决定按哪版读（`docs\detail\日志都记在哪.md`）。
  */
 
@@ -46,7 +46,8 @@ export function rosterAuditCounts({ rosterKeys = [], fishEntries = [], humanKeys
     // 目录名排序，让同一台机器上的两行可以直接比
     homeKeys: [...homeKeys].sort(),
     homeChecked,
-    pinKeys,
+    // pins 数的是「钉住会话的成员键」，不是鱼；名字也列出来，免得哪天多一个人被读成多一条鱼
+    pinKeys: [...pinKeys].sort(),
   }
 }
 
@@ -59,7 +60,7 @@ export function buildRosterAuditLine({ ts, counts, problems = [] }) {
     `members=${counts.fishKeys.length}(fish;keys=${counts.rosterKeys.length};not-fish=${namesOf(counts.humanKeys)})`,
     `homes=${counts.homeKeys.length}(dirs:${namesOf(counts.homeKeys)})`,
     `home-check=${counts.homeChecked.length}(fish;skip=${skip || 'none'})`,
-    `pins=${counts.pinKeys.length}`,
+    `pins=${counts.pinKeys.length}(keys:${namesOf(counts.pinKeys)})`,
   ]
   const kind = problems.length ? 'roster-mismatch' : 'roster-audit'
   const tail = problems.length ? problems.join(' ') : 'ok'

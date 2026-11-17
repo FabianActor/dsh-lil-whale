@@ -48,11 +48,24 @@ ok('干净行以 ok 收尾', line.endsWith(' ok'))
 ok('members 写明是鱼、分母 6 键、人不在数里', line.includes('members=5(fish;keys=6;not-fish=fabian)'))
 ok('homes 写明是目录、名字列出来（排序）', line.includes('homes=5(dirs:fishball,lee,lee2,whale,xiaoman)'))
 ok('home-check 写明只有 4 条鱼、lee 被跳过及原因', line.includes('home-check=4(fish;skip=lee:home-outside-pond)'))
-ok('pins 计数单独一格', line.includes('pins=5'))
+ok('pins 写明数的是键、名字列出来（不是鱼数）', line.includes('pins=5(keys:fishball,lee,lee2,whale,xiaoman)'))
 ok('旧口径字段不再出现（scope= / exclude=）', !line.includes('scope=') && !line.includes('exclude='))
 ok('一行只出现一次 members=', line.split('members=').length === 2)
 ok('home-check 的 4 = members 的 5 − 巡守 1', counts.homeChecked.length === counts.fishKeys.length - 1)
 ok('巡守仍算在 members 里（只是不参与家比对）', counts.fishKeys.includes('lee') && !counts.homeChecked.includes('lee'))
+
+// ---- 人也被钉了会话：pins 会变成 6，但名单里写着是谁，不会被读成多了一条鱼 ----
+const humanPinned = buildRosterAuditLine({
+  ts: '2026-11-18 07:10:00',
+  counts: rosterAuditCounts({
+    rosterKeys: ['a', 'b', 'fabian'],
+    fishEntries: [['a', { kind: 'fish', role: 'member' }], ['b', { kind: 'fish', role: 'member' }]],
+    humanKeys: ['fabian'],
+    homeKeys: ['a', 'b'],
+    pinKeys: ['b', 'a', 'fabian'],
+  }),
+})
+ok('pins 键数独立于鱼数（6 不会被误读成鱼）', humanPinned.includes('pins=3(keys:a,b,fabian)') && humanPinned.includes('members=2(fish'))
 
 // ---- 没有人的名册 ----
 const noHuman = buildRosterAuditLine({

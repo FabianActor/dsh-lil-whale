@@ -19,7 +19,7 @@
 
 ## [未发布]
 
-- **私聊投影的显示名**（r277，用户可见：否，内部脚本 + 投影文件）。`scripts\post-dm.mjs` 取名字时读了名册的 `label` 字段，而名册里存的是 `name`（插件 `buildMembers()` 会把它映成 `label`）⇒ 它写的 `私聊-lee__lee2.md` 抬头是 `lee / lee2`，读端按显示名重建时对不上。改成同一口径 `name || label || key`；现有投影已按新格式重写（`rebuild-group-md.mjs --migrate`，旧文件备份在 `backup\dm-projections-20261118\`）。这一处是读端（重建对照）抓到的，不是自己发现。- **巡守自检行写清每个数的口径**（r276，用户可见：否，日志）。旧行 `members=5 homes=5 pins=5 scope=fish exclude=fabian(human),lee(home-outside-pond)` 里，`members=5` 到底含不含被 `exclude` 点名的 lee，这一行没说清——读的人（小肥鱼）拿名册自己算了一遍才定。`fmt=3` 起每个计数自带分母、排除项贴到它真正影响的那一格：`members=5(fish;keys=6;not-fish=fabian)`、`homes=5(dirs:…)`、`home-check=4(fish;skip=lee:home-outside-pond)`、`pins=5`。判据：「一行里放两个字段，就要写清它们的关系」。旧 `fmt=2` 行不改，读的人先看 `fmt`。
+- **`pins=` 也带上口径**（r278，用户可见：否，日志）。`fmt=3` 第一版里四个数有三个带分母，只剩 `pins=5` 是裸的——而它恰恰最容易被误读：pins 数的是「钉住会话的成员键」，不是鱼数；哪天 fabian 或 lee 的会话也被钉住，`pins` 会变成 6，读的人却仍以为在数鱼。改成 `pins=5(keys:fishball,lee,lee2,whale,xiaoman)`，与 `homes=(dirs:…)` 同一个形状（名字列出、排序）。判据（小肥鱼 2026-11-18 07:1x）：「显然」的那一格最容易漏说明——写的人觉得它不用解释，读的人恰恰没有那个前提。- **私聊投影的显示名**（r277，用户可见：否，内部脚本 + 投影文件）。`scripts\post-dm.mjs` 取名字时读了名册的 `label` 字段，而名册里存的是 `name`（插件 `buildMembers()` 会把它映成 `label`）⇒ 它写的 `私聊-lee__lee2.md` 抬头是 `lee / lee2`，读端按显示名重建时对不上。改成同一口径 `name || label || key`；现有投影已按新格式重写（`rebuild-group-md.mjs --migrate`，旧文件备份在 `backup\dm-projections-20261118\`）。这一处是读端（重建对照）抓到的，不是自己发现。- **巡守自检行写清每个数的口径**（r276，用户可见：否，日志）。旧行 `members=5 homes=5 pins=5 scope=fish exclude=fabian(human),lee(home-outside-pond)` 里，`members=5` 到底含不含被 `exclude` 点名的 lee，这一行没说清——读的人（小肥鱼）拿名册自己算了一遍才定。`fmt=3` 起每个计数自带分母、排除项贴到它真正影响的那一格：`members=5(fish;keys=6;not-fish=fabian)`、`homes=5(dirs:…)`、`home-check=4(fish;skip=lee:home-outside-pond)`、`pins=5`。判据：「一行里放两个字段，就要写清它们的关系」。旧 `fmt=2` 行不改，读的人先看 `fmt`。
 
 ## [1.9.0] - 2026-11-18
 
