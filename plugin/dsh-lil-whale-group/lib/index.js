@@ -3292,7 +3292,7 @@ async function watchOne(member, st) {
       if (relevant) {
         watchmanLog(
           'woke',
-          `wid=${wid} trigger=${pending ? (pending.pushed ? 'push' : 'external') : 'external'} lag=${ageSec}s inserted=${pending ? 1 : 0}`,
+          `wid=${wid} trigger=${pending ? (pending.pushed ? 'push' : 'external') : 'external'} lag=${ageSec}s inserted=${pending ? 1 : 0} to=${member.key}`,
         )
       } else {
         watchmanLog('note', `note=session-mounted member=${member.key} wid=${wid} try-age=${ageSec}s`)
@@ -3389,8 +3389,8 @@ async function watchOne(member, st) {
           watchmanLog(
             'woke',
             dueAt === null
-              ? `wid=${wid} trigger=plan lag-unknown inserted=1`
-              : `wid=${wid} trigger=plan lag=${Math.round((Date.now() - dueAt) / 1000)}s inserted=1`,
+              ? `wid=${wid} trigger=plan lag-unknown inserted=1 to=${member.key}`
+              : `wid=${wid} trigger=plan lag=${Math.round((Date.now() - dueAt) / 1000)}s inserted=1 to=${member.key}`,
           )
           markWake(member.key, 'plan')
         } catch (error) {

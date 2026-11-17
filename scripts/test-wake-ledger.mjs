@@ -1,8 +1,11 @@
 #!/usr/bin/env node
-// 账本形状检查（2026-11-17，第一条鱼 #911 指出两处，第三条鱼 r225 后追问"断言配负样本了吗"）：
+// 账本形状检查（2026-11-17）：
 //  ① trigger=self 的 woke 行要和其它触发同形状（wid / lag / inserted 都有）；
 //  ② 一次没投出去的计划尝试不能无限期冒充 woke（僵尸 wid、lag 越涨越大、inserted 恒 0）；
-//  ③ 任何一处 `watchmanLog('woke'` 行都必须带 to=（r225；结构断言自身也在这里做负样本自检）。
+//  ③ 任何一处 `woke` 写点都必须带 to=（r227 起改成按「调用」扫，不再按行扫）。
+//
+// 按行扫的教训（三条鱼 2026-11-17 09:0x 一起指出）：`watchmanLog(` 与 `'woke'`
+// 跨行写时，逐行检查一条也看不见；错误跨行，检查器就得跨行。
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join, resolve } from 'node:path'
@@ -14,20 +17,31 @@ const srcPath = srcArg === -1
   : resolve(process.argv[srcArg + 1] ?? '')
 const src = readFileSync(srcPath, 'utf8')
 
-// 结构性判据：逐行找 `watchmanLog('woke'` 且不带 `to=` 的行。
-// 注：多行写法（`watchmanLog(` 与 `'woke'` 不在同一行）由下面的 must 断言单独盯。
-function wokeLinesWithoutTo(text) {
+// 按「调用」扫：从每个 `watchmanLog(` 起，到下一个 `watchmanLog(` 之前，
+// 这一段里只要出现 `'woke'`，就必须同时出现 `to=`。
+// 不依赖换行，所以跨行写法也在视野里。
+function wokeCallsWithoutTo(text) {
+  const marker = 'watchmanLog('
   const hits = []
-  for (const [i, line] of text.split('\n').entries()) {
-    if (line.includes("watchmanLog('woke'") && !line.includes('to=')) hits.push(i + 1)
+  let i = -1
+  while ((i = text.indexOf(marker, i + 1)) !== -1) {
+    const rest = text.slice(i)
+    const nextCall = rest.indexOf(marker, marker.length)
+    const call = nextCall === -1 ? rest : rest.slice(0, nextCall)
+    if (!call.includes("'woke'")) continue
+    if (!call.includes('to=')) hits.push(i)
   }
   return hits
 }
+
+const lineOf = (text, idx) => text.slice(0, idx).split('\n').length
 
 const must = [
   ['self 的 woke 行带 lag', /trigger=self lag/],
   ['self 的 woke 行带 inserted=1', /trigger=self lag[^\n]*inserted=1/],
   ['self 的 woke 行带 to= 与 plan=', /inserted=1 to=\$\{self\} plan=\$\{item\.id\}/],
+  ['回放/外部 wake 的 woke 行带 to=', /inserted=\$\{pending \? 1 : 0\} to=\$\{member\.key\}/],
+  ['计划投递的 woke 行带 to=', /trigger=plan lag[^\n]*inserted=1 to=\$\{member\.key\}/],
   ['计划时刻统一用 planDueMs()', /function planDueMs\(at\) \{/],
   ['一次尝试有有效期常量', /const WAKE_ATTEMPT_TTL_SEC = 30 \* 60/],
   ['只认有效期内的尝试', /ageSec <= WAKE_ATTEMPT_TTL_SEC/],
@@ -44,20 +58,26 @@ const forbidden = [
 
 let bad = 0
 
-// 断言自身的负样本：先证明"抓到坏样本"和"放行好样本"这两件事都成立，
-// 否则检查器只是在打印一句漂亮的 OK。
-const selftestBad = "watchmanLog('woke', `wid=x trigger=self lag=0s inserted=1`)"
-const selftestGood = "watchmanLog('woke', `wid=x trigger=self lag=0s inserted=1 to=whale`)"
-if (wokeLinesWithoutTo(selftestBad).length !== 1) { console.log('FAIL 断言自身失效：坏样本没被抓到'); bad++ }
-if (wokeLinesWithoutTo(selftestGood).length !== 0) { console.log('FAIL 断言自身失效：好样本被误报'); bad++ }
+// 断言自检：负样本要配"最难看见的那一类"（第三条鱼语）——
+// 单行能抓到不算本事，跨行也抓到才算；顺便确认好样本不被误报。
+const samples = [
+  ['单行、缺 to=', "watchmanLog('woke', `wid=x inserted=1`)", 1],
+  ['跨行、缺 to=', "watchmanLog(\n  'woke',\n  `wid=x inserted=1`,\n)", 1],
+  ['单行、有 to=', "watchmanLog('woke', `wid=x inserted=1 to=whale`)", 0],
+  ['跨行、有 to=', "watchmanLog(\n  'woke',\n  `wid=x inserted=1 to=whale`,\n)", 0],
+]
+for (const [name, sample, want] of samples) {
+  const got = wokeCallsWithoutTo(sample).length
+  if (got !== want) { console.log('FAIL 自检：' + name + ' 期望 ' + want + ' 处，得到 ' + got); bad++ }
+}
 
-// 真实代码的结构判据
-for (const line of wokeLinesWithoutTo(src)) {
-  console.log('FAIL 第 ' + line + ' 行的 woke 行没有 to=')
+// 真实代码：每个 woke 写点都得带 to=
+for (const idx of wokeCallsWithoutTo(src)) {
+  console.log('FAIL 第 ' + lineOf(src, idx) + ' 行的 woke 调用没有 to=')
   bad++
 }
 
 for (const [name, re] of must) if (!re.test(src)) { console.log('FAIL 缺少：' + name); bad++ }
 for (const [name, re] of forbidden) if (re.test(src)) { console.log('FAIL 仍存在：' + name); bad++ }
 if (bad > 0) { console.log('FAIL×' + bad + ' —— 账本形状检查没过'); process.exit(1) }
-console.log('OK —— self 触发的账与他人触发同形状；过期的尝试不再冒充 woke；结构断言自检通过')
+console.log('OK —— 所有 woke 写点都带 to=（单行与跨行都扫）；过期的尝试不再冒充 woke；断言自检通过（含跨行负样本）')
