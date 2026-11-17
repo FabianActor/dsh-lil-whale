@@ -501,7 +501,14 @@ function Start-Fish($member) {
       $cfgPath = if ([System.IO.Path]::IsPathRooted($member.ConfigFile)) { $member.ConfigFile } else { Join-Path (Split-Path $PSScriptRoot -Parent) $member.ConfigFile }
       $cfgLine = "`$env:LIL_WHALE_CONFIG='$cfgPath'; "
     }
-    "${cfgLine}`$env:DSH_HOME='$($member.DshHome)'; `$env:DSH_PROFILE='$($member.Profile)'; dsh --profile $($member.Profile) --port $fishPort --no-open"
+    # 2026-11-17 r239：这条鱼若自带隔离目录（<家>\dsh-home\xdg），把 bili/压缩状态关在她自己家里。
+    $xdgLine = ''
+    $xdgRoot = Join-Path $member.DshHome 'xdg'
+    if (Test-Path -LiteralPath $xdgRoot) {
+      $xdgLine = "`$env:XDG_CONFIG_HOME='$(Join-Path $xdgRoot 'config')'; `$env:XDG_DATA_HOME='$(Join-Path $xdgRoot 'data')'; `$env:XDG_STATE_HOME='$(Join-Path $xdgRoot 'state')'; `$env:XDG_CACHE_HOME='$(Join-Path $xdgRoot 'cache')'; "
+      Write-Host ("{0}：bili/压缩状态用她自己的目录（{1}）" -f $member.Label, $xdgRoot)
+    }
+    "${cfgLine}${xdgLine}`$env:DSH_HOME='$($member.DshHome)'; `$env:DSH_PROFILE='$($member.Profile)'; dsh --profile $($member.Profile) --port $fishPort --no-open"
   }
   if ($openWindow -and $Console) {
     Start-Visible -Command $command -WorkingDirectory $cwd -OutLog $out
