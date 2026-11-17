@@ -1,13 +1,28 @@
 #!/usr/bin/env node
-// 账本形状检查（2026-11-17，第一条鱼 #911 指出两处）：
+// 账本形状检查（2026-11-17，第一条鱼 #911 指出两处，第三条鱼 r225 后追问"断言配负样本了吗"）：
 //  ① trigger=self 的 woke 行要和其它触发同形状（wid / lag / inserted 都有）；
-//  ② 一次没投出去的计划尝试不能无限期冒充 woke（僵尸 wid、lag 越涨越大、inserted 恒 0）。
+//  ② 一次没投出去的计划尝试不能无限期冒充 woke（僵尸 wid、lag 越涨越大、inserted 恒 0）；
+//  ③ 任何一处 `watchmanLog('woke'` 行都必须带 to=（r225；结构断言自身也在这里做负样本自检）。
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-const src = readFileSync(join(root, 'plugin/dsh-lil-whale-group/lib/index.js'), 'utf8')
+const srcArg = process.argv.indexOf('--src')
+const srcPath = srcArg === -1
+  ? join(root, 'plugin/dsh-lil-whale-group/lib/index.js')
+  : resolve(process.argv[srcArg + 1] ?? '')
+const src = readFileSync(srcPath, 'utf8')
+
+// 结构性判据：逐行找 `watchmanLog('woke'` 且不带 `to=` 的行。
+// 注：多行写法（`watchmanLog(` 与 `'woke'` 不在同一行）由下面的 must 断言单独盯。
+function wokeLinesWithoutTo(text) {
+  const hits = []
+  for (const [i, line] of text.split('\n').entries()) {
+    if (line.includes("watchmanLog('woke'") && !line.includes('to=')) hits.push(i + 1)
+  }
+  return hits
+}
 
 const must = [
   ['self 的 woke 行带 lag', /trigger=self lag/],
@@ -28,14 +43,21 @@ const forbidden = [
 ]
 
 let bad = 0
-// 结构判据：所有 `watchmanLog('woke'` 行都必须带 `to=`（2026-11-17 第二条鱼按结构数出 3 处、2 处缺）
-for (const [i, line] of src.split('\n').entries()) {
-  if (line.includes("watchmanLog('woke'") && !line.includes('to=')) {
-    console.log('FAIL 第 ' + (i + 1) + ' 行的 woke 行没有 to=')
-    bad++
-  }
+
+// 断言自身的负样本：先证明"抓到坏样本"和"放行好样本"这两件事都成立，
+// 否则检查器只是在打印一句漂亮的 OK。
+const selftestBad = "watchmanLog('woke', `wid=x trigger=self lag=0s inserted=1`)"
+const selftestGood = "watchmanLog('woke', `wid=x trigger=self lag=0s inserted=1 to=whale`)"
+if (wokeLinesWithoutTo(selftestBad).length !== 1) { console.log('FAIL 断言自身失效：坏样本没被抓到'); bad++ }
+if (wokeLinesWithoutTo(selftestGood).length !== 0) { console.log('FAIL 断言自身失效：好样本被误报'); bad++ }
+
+// 真实代码的结构判据
+for (const line of wokeLinesWithoutTo(src)) {
+  console.log('FAIL 第 ' + line + ' 行的 woke 行没有 to=')
+  bad++
 }
+
 for (const [name, re] of must) if (!re.test(src)) { console.log('FAIL 缺少：' + name); bad++ }
 for (const [name, re] of forbidden) if (re.test(src)) { console.log('FAIL 仍存在：' + name); bad++ }
 if (bad > 0) { console.log('FAIL×' + bad + ' —— 账本形状检查没过'); process.exit(1) }
-console.log('OK —— self 触发的账与他人触发同形状；过期的尝试不再冒充 woke')
+console.log('OK —— self 触发的账与他人触发同形状；过期的尝试不再冒充 woke；结构断言自检通过')
