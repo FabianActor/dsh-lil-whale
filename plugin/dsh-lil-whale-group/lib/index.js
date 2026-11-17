@@ -3283,19 +3283,21 @@ async function watchOne(member, st) {
     const pending = st.pendingWake
     const lastTry = st.lastTry
     if (pending || lastTry) {
-      const wid = pending?.wid ?? lastTry?.wid ?? 'none'
+      const wid = pending?.wid ?? lastTry?.wid
       const at = pending?.at ?? lastTry?.at ?? Date.now()
       const ageSec = Math.round((Date.now() - at) / 1000)
       // 只有"这次推门"留下的尝试才算 woke。lastTry 可能是几小时前一次没投出去的
       // 计划（2026-11-17 的僵尸 woke 行就是它：旧 wid 不断被认领，lag 越大、inserted 恒 0）。
-      const relevant = Boolean(pending) || (Number.isFinite(ageSec) && ageSec <= WAKE_ATTEMPT_TTL_SEC)
+      // 2026-11-17 第三条鱼：缺席不要给它一个合法替身——没有 wid 就写 missing=wid，
+      // 不要写 wid=none（语法上像真 id，语义上是"没有"）。
+      const relevant = Boolean(wid) && (Boolean(pending) || (Number.isFinite(ageSec) && ageSec <= WAKE_ATTEMPT_TTL_SEC))
       if (relevant) {
         watchmanLog(
           'woke',
           `wid=${wid} trigger=${pending ? (pending.pushed ? 'push' : 'external') : 'external'} lag=${ageSec}s inserted=${pending ? 1 : 0} to=${member.key}`,
         )
       } else {
-        watchmanLog('note', `note=session-mounted member=${member.key} wid=${wid} try-age=${ageSec}s`)
+        watchmanLog('note', `note=session-mounted member=${member.key}${wid ? ` wid=${wid}` : ' missing=wid'} try-age=${ageSec}s`)
       }
     } else {
       // 进程刚起时心跳文件还是上一轮留下的（stale），下一轮又新鲜了 ——

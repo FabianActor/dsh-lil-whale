@@ -39,14 +39,15 @@ const lineOf = (text, idx) => text.slice(0, idx).split('\n').length
 const must = [
   ['self 的 woke 行带 lag', /trigger=self lag/],
   ['self 的 woke 行带 inserted=1', /trigger=self lag[^\n]*inserted=1/],
-  ['self 的 woke 行带 to= 与 plan=', /inserted=1 to=\$\{self\} plan=\$\{item\.id\}/],
+  ['self 的 woke 行带 to= 与 plan=', /inserted=1 to=\$\{[^}]+\} plan=/],
+  ['缺席的 wid 不写替身（missing=wid）', /missing=wid/],
   ['回放/外部 wake 的 woke 行带 to=', /inserted=\$\{pending \? 1 : 0\} to=\$\{member\.key\}/],
   ['计划投递的 woke 行带 to=', /trigger=plan lag[^\n]*inserted=1 to=\$\{member\.key\}/],
   ['计划时刻统一用 planDueMs()', /function planDueMs\(at\) \{/],
   ['一次尝试有有效期常量', /const WAKE_ATTEMPT_TTL_SEC = 30 \* 60/],
   ['只认有效期内的尝试', /ageSec <= WAKE_ATTEMPT_TTL_SEC/],
   ['认领过后清掉 lastTry', /st\.lastTry = null/],
-  ['过期的尝试退成 note', /note=session-mounted member=\$\{member\.key\} wid=/],
+  ['过期的尝试退成 note', /note=session-mounted member=\$\{member\.key\}[^\n]*try-age=\$\{ageSec\}s/],
   ['intent 的 woke 行带 to=', /trigger=intent lag[^\n]*inserted=1 to=\$\{member\.key\}/],
   ['推门成功的 woke 行带 to=', /night=\$\{night\} to=\$\{member\.key\} \$\{job\.tag\}/],
   ['推门失败的 woke 行带 to=', /reason=\$\{res\.detail\} to=\$\{member\.key\} \$\{job\.tag\}/],
@@ -54,6 +55,7 @@ const must = [
 const forbidden = [
   ['旧的 self 行（没有 wid/lag/inserted）', /trigger=self to=\$\{self\}/],
   ['旧的 dueAt 内联 IIFE', /const dueAt = \(\(\) => \{/],
+  ['wid 用 none 当缺席替身', /\?\? 'none'/],
 ]
 
 let bad = 0
