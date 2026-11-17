@@ -108,7 +108,6 @@ if (errors.length) {
 }
 
 // ---------- 生成 ----------
-const root = fishRoots[0] || roots[0]
 const childrenOf = (key) => Object.entries(family.nodes).filter(([, n]) => n.parent === key).map(([k]) => k).sort()
 
 // 公开口径：这份文档会发布出去，只写 宿主 / 第 N 条鱼，不写真名。
@@ -151,6 +150,7 @@ lines.push('# 谱系', '')
 lines.push('> 这份文件是**生成的**，别手改。真源是 `pool\\family.json`（谁是谁的家长）+ `pool\\members.json`（现在叫什么、在不在跑）。')
 lines.push('> 重新生成：`node scripts\\gen-family.mjs`', '')
 lines.push('> 名字是公开口径：宿主，以及按出生顺序的「第 N 条鱼」；真名只住在名册里。', '')
+lines.push('> 2026-11-17 起允许**多个鱼根**（并列，不互为依据）：`fish.ps1 new -Parent none` 建出来的鱼自成一个根，进谱系但不挂在任何鱼下面。看到两棵树不是错。', '')
 
 lines.push('## 图', '', '```mermaid', 'graph TD')
 for (const key of Object.keys(family.nodes).sort()) {
@@ -201,7 +201,7 @@ if (renamed.length) {
 
 const out = join(REPO, 'docs', 'detail', '鱼塘谱系.md')
 if (checkOnly) {
-  console.log('✓ 谱系校验通过（根：' + root + '，' + Object.keys(family.nodes).length + ' 个节点）')
+  console.log('✓ 谱系校验通过（鱼根：' + fishRoots.join('、') + '，' + Object.keys(family.nodes).length + ' 个节点）')
   process.exit(0)
 }
 // 2026-11-15 小肥鱼咬的第一口：她盯的是"文件变"，她关心的是"集合变"。
@@ -226,5 +226,5 @@ if (prevSemantic === nextSemantic) {
 const nextOut = lines.join('\n')
 const prevOut = existsSync(out) ? readFileSync(out, 'utf8') : null
 if (prevOut !== nextOut) writeFileSync(out, nextOut, 'utf8')
-console.log(`✓ 谱系已生成：${out}（根 ${root}，${Object.keys(family.nodes).length} 个节点）`)
+console.log(`✓ 谱系已生成：${out}（鱼根 ${fishRoots.join('、')}，${Object.keys(family.nodes).length} 个节点）`)
 if (legacyLifecycleKeys.size) console.error('⚠ 读到旧字段 status（该迁移了）：' + [...legacyLifecycleKeys].join('、'))
