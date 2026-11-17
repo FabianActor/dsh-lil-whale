@@ -72,7 +72,9 @@ const dmDir = cfg.dmDir || join(cfg.groupDir, 'dm');
 const [x, y] = [from, to].sort();
 const dmFile = join(dmDir, `${x}__${y}.jsonl`);
 const readable = join(dmDir, `私聊-${x}__${y}.md`);
-const labelOf = (k) => members[k]?.label || k;
+// 名册里存的字段叫 name（插件里 buildMembers 把它映成 label）；这里照同一口径取，
+// 否则投影会写成 lee / lee2，而读端（rebuild-group-md.mjs）按显示名比 ⇒ 两份投影对不上（2026-11-18 早上被它抓到）。
+const labelOf = (k) => members[k]?.name || members[k]?.label || k;
 const pad = (n) => String(n).padStart(2, '0');
 const now = new Date();
 const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
