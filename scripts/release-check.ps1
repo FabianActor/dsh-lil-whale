@@ -260,6 +260,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '附件迁移' (($attOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '附件迁移' '会话里引用的附件字节要一起搬，否则界面打不开（test-migrate-attachments.mjs）' }
   } else { Fail '附件迁移' 'scripts\test-migrate-attachments.mjs 不在包里' }
+  # ── 4v. 贴底跟随与历史提示（2026-11-17，宿主报两个 UI bug）──────────────
+  $ftTest = Join-Path $pkg 'scripts\test-client-follow-tail.mjs'
+  if (Test-Path $ftTest) {
+    $ftOut = & node $ftTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '贴底跟随' (($ftOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '贴底跟随' '长消息撑开仍贴底；贴底时不亮「回到历史未读」（test-client-follow-tail.mjs）' }
+  } else { Fail '贴底跟随' 'scripts\test-client-follow-tail.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {

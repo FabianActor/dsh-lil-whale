@@ -1016,41 +1016,77 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       // "人往下滚到底"（scrollTop 变大）和"内容变短、浏览器把 scrollTop 夹到底"
       // （scrollTop 变小）。后者 distance 也会变成 0，但人其实没想回底部。
       const lastTopRef = useRef(0)
+      // 上一次量到的内容高度：scrollTop 没动、高度变高，说明"人没走、是被顶下去的"。
+      // 2026-11-17 报的第 1 条：贴底时来一条比视口还高的消息，撑开发生在
+      // 跟到底的那几个补丁之后，于是停在半路。这件事靠多设几个 setTimeout 修不好，得看高度。
+      const lastHeightRef = useRef(0)
       const stickToBottom = useCallback(() => {
         const el = scrollRef.current
         if (el) {
           el.scrollTop = el.scrollHeight
           lastTopRef.current = el.scrollTop
+          lastHeightRef.current = el.scrollHeight
         }
       }, [scrollRef])
       const measureBottom = useCallback(() => {
         const el = scrollRef.current
         if (!el) return
         const top = el.scrollTop
-        const distance = el.scrollHeight - top - el.clientHeight
+        const height = el.scrollHeight
+        // 人没动、内容变高：这是"贴着底被顶下去"，不是"人离开了底"。
+        // 直接补到底，并且仍然算贴底——否则长消息一来就永远停在半路。
+        const grew = height > lastHeightRef.current
+        const movedDown = top >= lastTopRef.current - 1
+        if (atBottomRef.current && grew && movedDown) {
+          lastHeightRef.current = height
+          stickToBottom()
+          return
+        }
+        lastHeightRef.current = height
+        const distance = height - top - el.clientHeight
         const next = distance <= 40
         // 离开底部永远认；回到"底部"只认人往下滚的那一种。
         // 2026-11-16 报的闪烁：翻历史时来新消息，高度被夹了一下、distance=0，
         // 于是被当成"到底了"，下一条一来就 stickToBottom 把人弹到底。
-        const movedDown = top >= lastTopRef.current - 1
         lastTopRef.current = top
         if (next !== atBottomRef.current && (next === false || movedDown)) {
           atBottomRef.current = next
           setAtBottom(next)
         }
-      }, [scrollRef])
+      }, [scrollRef, stickToBottom])
       const jumpToBottom = useCallback(() => {
         atBottomRef.current = true
         setAtBottom(true)
         stickToBottom()
         requestAnimationFrame(stickToBottom)
       }, [stickToBottom])
+      // 贴底时盯着内容高度：Markdown 排版、图片加载、代码块换行都在首帧之后还会长高。
+      // 只认"贴底"这一个前提；人一翻历史就不管——不能把正在看三天前的人拽回今天。
+      useEffect(() => {
+        const el = scrollRef.current
+        if (!el) return undefined
+        let observer = null
+        try {
+          if (typeof ResizeObserver === 'undefined') return undefined
+          observer = new ResizeObserver(() => {
+            if (!atBottomRef.current) return
+            stickToBottom()
+          })
+          // 内容列是滚动容器的第一个子元素；容器自己也要看（窗口高度变化）。
+          observer.observe(el.firstElementChild || el)
+          observer.observe(el)
+        } catch {
+          return undefined
+        }
+        return () => observer.disconnect()
+      }, [scrollRef, stickToBottom, ...deps])
       useEffect(() => {
         if (!atBottomRef.current) return undefined
         stickToBottom()
         const raf = requestAnimationFrame(stickToBottom)
         const timer = setTimeout(stickToBottom, 200)
-        return () => { cancelAnimationFrame(raf); clearTimeout(timer) }
+        const late = setTimeout(stickToBottom, 800)
+        return () => { cancelAnimationFrame(raf); clearTimeout(timer); clearTimeout(late) }
       }, deps)
       return { atBottom, atBottomRef, measureBottom, jumpToBottom }
     }
@@ -1843,7 +1879,9 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
         // 线在视口上方 = 上面还有没看过的。
         const lineAbove = Boolean(el && line && line.getBoundingClientRect().top < el.getBoundingClientRect().top + 4)
         // 点过一次就不再催：往下读时线会滑出视口上沿，以前会反复把提示亮出来（第 4 条）。
-        const next = lineAbove && !historyVisitedRef.current
+        // 贴底时也不催：人已经看见最新的了；2026-11-17 第 2 条就是新消息比视口高、
+        // 分割线被顶出上沿，于是"回到历史未读"又亮起来。
+        const next = lineAbove && !historyVisitedRef.current && !atBottomRef.current
         if (next !== historyAboveRef.current) {
           historyAboveRef.current = next
           setHistoryAbove(next)
@@ -1963,6 +2001,13 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       // 贴底 / 翻历史 / 回到底部：跟私聊页共用一套（见 useFollowTail）。
       const { atBottom, atBottomRef, measureBottom, jumpToBottom } = useFollowTail(scrollRef, [messages.length, tab, splash])
 
+      // 贴底了就把"回到历史未读"收掉：人已经看见最新的了，留着只剩误导。
+      // 2026-11-17 第 2 条：清完红点后来新消息，长消息把分割线顶出视口上沿，提示又亮。
+      useEffect(() => {
+        if (!atBottom) return
+        if (historyAboveRef.current) { historyAboveRef.current = false; setHistoryAbove(false) }
+      }, [atBottom])
+
       // 「加载更早」之后保持眼睛原来的位置：上面新增了多少高度，就把滚动条往下推多少。
       useEffect(() => {
         const anchor = pendingScrollRef.current
@@ -2003,6 +2048,8 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
         const timer = setTimeout(() => {
           void markRead('group').then(() => {
             historyVisitedRef.current = false
+            // 读完一批后分割线会挪到新位置：立刻重量，别等下一次滚动。
+            measureHistory()
             refresh()
             // 面板读完一批，喊一声；侧边栏红点不用等下一轮轮询。
             window.dispatchEvent(new Event('dsh-group-read'))
@@ -3603,7 +3650,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v50 · history-no-flash:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v51 · follow-tail-long:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')
