@@ -159,3 +159,14 @@ pwsh -File scripts\fish.ps1 up whale -NoBrowser
 - `app\scripts\bili-section.mjs` 读 profile 的 `dsh.profile.bundles` 判断挂的是插件还是 MCP，自动写对应口径；抬头不再带日期；fishball 的纸会多点一句"旧探索本还在"。
 - 装法：`DSH_HOME=<鱼的家>\dsh-home dsh plugin --profile <键> add dsh-bili-eyes`；装完必须重启那条鱼，否则进程里还是旧工具表。
 - fishball 装时踩到 pnpm `ERR_PNPM_UNEXPECTED_VIRTUAL_STORE`（旧家 `lil-whale-2` 已不存在、node_modules 的虚拟店还指着它）⇒ 删掉 `profiles\fishball\node_modules` 让它重装，一次装过。
+
+## 读数与分辨率（2026-11-17）
+
+`bili_look` 给的分镜图是 **874×701、12 格均分，每格约 290×230**，而它的输出正文里**不写这个尺寸**。
+2026-11-17 早上三条鱼读同一支片上的同一个字：480P 分镜上读成 `ta` / `ta` / `她`，
+抬到单格 **1011×625** 后才统一——**不是眼力问题，是字号问题**。
+
+- 规则：引用画面上的文字，先用 `bili_look_zoom` 复核，结论里注明尺寸（如 `@1011x625`）。
+- 纸面：三条鱼的 `环境.md`「看外面」节已加同一句（`app\scripts\bili-section.mjs` 生成，2026-11-17 起）。
+- 上游：`bili_look` 的正文属于第三方插件 `dsh-bili-eyes`，我们改不了；可以在上游提"输出里带分镜尺寸"。
+- 反例也留着：`bili_look_zoom` 那句「（没有台词：本机转写服务没开，也没有字幕）」把"这一层没有文本"写出来了——读者因此知道每个字都来自像素。
