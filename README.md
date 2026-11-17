@@ -139,6 +139,7 @@ pwsh -File scripts\fish.ps1 new -Key xiaoxing -Name 小星星 -Parent whale
 - **API key 只有两种来法，都由你决定**：在她自己的网页里填，或你明确说「继承某条鱼的」——`pwsh -File scripts\fish.ps1 key grant -Key xiaoxing -From whale`（花的是 whale 的额度；回收用 `key revoke`）。
 - 新鱼出生后还有三步：`fish.ps1 maintain <键>` 开窗填 key → 在群里说第一句话 → `fish.ps1 restore <键>` 回无人值守。
 - 活着的鱼（`lifecycle: active`）都能当家长；**归档不会连带孩子**——要连孩子一起归档，显式跑 `archive-fish.mjs --subtree`。
+- **不带家长也能加一条鱼（根鱼 / 并列）**：`pwsh -File scripts\fish.ps1 new -Key <键> -Name <名字> -Parent none`。名册里她的 `parent` 写 `null`，谱系图上她是另一个根；适合从别处迁进来的鱼。
 
 ## 她还好吗
 

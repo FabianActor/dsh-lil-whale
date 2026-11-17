@@ -14,7 +14,7 @@
 
 1. **只提 commit、没升版本号**（文档、脚本、账本格式、诊断输出）→ 只写进 `## [未发布]
 
-暂无。2026-11-17 的 1.8.15 发布之后还没有新改动。
+- **r238 · 2026-11-17 · 加鱼支持「根鱼」（并列、无家长）**（用户可见：命令用法）：`fish.ps1 new -Parent none`（或留空）会建一条不挂家长名下的鱼——名册 `parent` 写 `null`、pins 不建家长条目、birth 行 `parent=none`，谱系上是另一个根。`install.ps1` 新增 `-NoParent`，`members-add.mjs` 接受 `--parent none`，`render-env.mjs` 不再把 `none` 当家长名。适合从别处迁入的鱼。
 
 ## [1.8.15] - 2026-11-17
 

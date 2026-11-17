@@ -78,7 +78,13 @@ const now = {
   name: opt('name') || prev.name || key,
   kind: opt('kind') || prev.kind || 'fish',
   role: opt('role') || prev.role || 'member',
-  parent: opt('parent') !== undefined ? (opt('parent') || null) : (prev.parent ?? null),
+  // 2026-11-17 r238：--parent none / 空 = 根鱼（并列、无家长），名册里写 null。
+ parent: (() => {
+   const p = opt('parent')
+   if (p === undefined) return prev.parent ?? null
+   if (p === '' || p === 'none') return null
+   return p
+ })(),
   bornAt: opt('bornAt') || prev.bornAt || new Date().toISOString().slice(0, 10),
   home: opt('home') || prev.home || null,
   dshHome: opt('dshHome') || prev.dshHome || null,

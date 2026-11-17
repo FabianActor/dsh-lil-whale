@@ -23,6 +23,7 @@ param(
   [string]$ParentMemberId = 'host', # 家长/巡守的成员键（递归装第二代时改它）
   [string]$HumanMemberId = 'human', # 人类的成员键
   [string]$ParentProfile = 'web',
+  [switch]$NoParent,             # 根鱼（并列、无家长）：名册里 parent 写 null、pins 不建家长条目（2026-11-17 r238）
   [int]$ChildPort = 0,                 # 0 = 从 3082 起找第一个空口
   [string]$ParentSessionId = '',
   [string]$ChildSessionId = '',
@@ -37,6 +38,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $RepoRoot = Split-Path $PSScriptRoot -Parent
+# 根鱼的 parent 是 null；其余沿用 -ParentMemberId（2026-11-17 r238）。
+$childParentId = if ($NoParent) { $null } else { $ParentMemberId }
 $TemplateRoot = Join-Path $RepoRoot 'templates'
 
 function Say([string]$text) { Write-Host $text }
@@ -557,7 +560,7 @@ $values = @{
   TOKEN_PER_TURN = '180-200'
   CHILD_NAME = $ChildName
   DEPLOY_DATE = $deployDate
-  PARENT_ID = $ParentMemberId
+  PARENT_ID = if ($NoParent) { 'none' } else { $ParentMemberId }
   CHILD_ID = $(if ($ChildMemberId) { $ChildMemberId } else { $ChildProfile })
   HUMAN_ID = $HumanMemberId
   TOOLS = '- （工具清单没能自动生成，见下面那行提示）'
@@ -612,7 +615,7 @@ if (-not (Test-Path $envPath) -or $Force) {
   # （2026-11-12 20:10 Fabian 提："有些描述放在小鱼的目录内"）。
   $envScript = Join-Path $RepoRoot 'scripts\render-env.mjs'
   if (Test-Path $envScript) {
-    & node $envScript --workspace $Workspace --profile $ChildProfile --pool-dir $PoolRoot --her-port $port --deploy-date $deployDate --child-name $ChildName --child-id $ChildMemberId --parent-id $ParentMemberId --newborn 2>&1 | ForEach-Object { Write-Host ('    ' + $_) }
+    & node $envScript --workspace $Workspace --profile $ChildProfile --pool-dir $PoolRoot --her-port $port --deploy-date $deployDate --child-name $ChildName --child-id $ChildMemberId --parent-id $(if ($NoParent) { [string]'none' } else { [string]$ParentMemberId }) --newborn 2>&1 | ForEach-Object { Write-Host ('    ' + $_) }
     if ($LASTEXITCODE -ne 0) {
       Warn 'render-env.mjs 失败，环境.md 没写。装完手动跑一次：node scripts\render-env.mjs --workspace <家> --profile <profile>'
     } else {
@@ -681,7 +684,7 @@ if ($sharedGroup) {
     if ($ParentSessionId) { $parentIds += $ParentSessionId }
     if ($ChildSessionId) { $childIds += $ChildSessionId }
     $pins = [ordered]@{}
-    $pins[$ParentMemberId] = $parentIds
+    if (-not $NoParent) { $pins[$ParentMemberId] = $parentIds }
     $pins[$childMember] = $childIds
     Write-Utf8NoBom $poolPins (($pins | ConvertTo-Json -Depth 5) + "`n")
     Ok 'group\pins.json（共享区，新建；只有父辈和你两条）'
@@ -698,7 +701,7 @@ if ($sharedGroup) {
     if ($ParentSessionId) { $parentIds += $ParentSessionId }
     if ($ChildSessionId) { $childIds += $ChildSessionId }
     $pins = [ordered]@{}
-    $pins[$ParentMemberId] = $parentIds
+    if (-not $NoParent) { $pins[$ParentMemberId] = $parentIds }
     $pins[$childMember] = $childIds
     Write-Utf8NoBom $pinsPath (($pins | ConvertTo-Json -Depth 5) + "`n")
     if ($ChildSessionId -or $ParentSessionId) { Ok 'group\pins.json（已带会话 id）' }
@@ -724,7 +727,7 @@ if (-not (Test-Path $membersPath)) {
   }
   $members[$HumanMemberId] = [ordered]@{ name = $HumanName; kind = 'human'; role = 'human'; parent = $null }
   $members[$childMember] = [ordered]@{
-    name = $ChildName; kind = 'fish'; role = 'member'; parent = $ParentMemberId
+    name = $ChildName; kind = 'fish'; role = 'member'; parent = $childParentId
     port = $port; home = $Workspace; dshHome = $DshHome
     profile = $ChildProfile; lifecycle = 'active'; bornAt = $nowIso
   }
@@ -741,7 +744,7 @@ if (-not (Test-Path $membersPath)) {
       $fmtLine = '{0} | log-format | fmt=1 since={1} note=install.ps1 写的第一行（首鱼出生账）' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $sinceIso
       Write-Utf8NoBom $installBirthLog ($fmtLine + [Environment]::NewLine)
     }
-    $installBirthLine = '{0} | birth | fmt=3 key={1} name={2} parent={3} by=install.ps1 parentLifecycle=active requestedBy=' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $childMember, $ChildName, $ParentMemberId
+    $installBirthLine = '{0} | birth | fmt=3 key={1} name={2} parent={3} by=install.ps1 parentLifecycle=active requestedBy=' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $childMember, $ChildName, $(if ($NoParent) { [string]'none' } else { [string]$ParentMemberId })
     Add-Content -LiteralPath $installBirthLog -Value $installBirthLine -Encoding utf8
     Ok 'births.log（首鱼出生账）'
   } catch { Warn ("首鱼出生账没记上：{0}" -f $_.Exception.Message) }
@@ -751,7 +754,7 @@ if (-not (Test-Path $membersPath)) {
   # fish.ps1 认不出它、面板里也看不见（CHANGELOG A.32 同族）。
   $membersAdd = Join-Path $RepoRoot 'scripts\members-add.mjs'
   if (Test-Path $membersAdd) {
-    $addArgs = @($membersAdd, '--key', $childMember, '--name', $ChildName, '--parent', $ParentMemberId,
+    $addArgs = @($membersAdd, '--key', $childMember, '--name', $ChildName, '--parent', $(if ($NoParent) { [string]'none' } else { [string]$ParentMemberId }),
       '--port', [string]$port, '--home', $Workspace, '--dshHome', $DshHome,
       '--profile', $ChildProfile, '--configFile', $cfgName)
     $addOut = & node @addArgs 2>&1
@@ -822,8 +825,12 @@ Say "  4) 添加工作区 $Workspace ，在里面新建一段对话，然后由�
 Say ""
 Say "  出生之后，还要两段会话 id 群才认人。**这两段由用户决定，安装脚本不替你挑**——"
 Say "  尤其不要拿'这次安装开的那段会话'当父辈：它是临时的，不该代表用户。"
-Say "     pwsh -File scripts\fish.ps1 sessions $ParentMemberId     # 列候选：id / 最后写时间 / 所在工作区"
-Say "     pwsh -File scripts\fish.ps1 bind $ParentMemberId -Session <选中的 id>"
+if (-not $NoParent) {
+  Say "     pwsh -File scripts\fish.ps1 sessions $ParentMemberId     # 列候选：id / 最后写时间 / 所在工作区"
+  Say "     pwsh -File scripts\fish.ps1 bind $ParentMemberId -Session <选中的 id>"
+} else {
+  Say "     她是根鱼（没有家长）：只需要她那一段 —— sessions $childMember / bind $childMember -Session <id>"
+}
 Say "     她那一段同理：先在网页里说第一句话，再 sessions $childMember / bind $childMember -Session <id>"
 Say "  （装的时候也可以显式传 -ParentSessionId / -ChildSessionId——只在你已经知道是哪段时传。）"
 Say ""

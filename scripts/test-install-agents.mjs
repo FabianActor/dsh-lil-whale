@@ -67,6 +67,20 @@ ok('提问列表里不再询问小鱼键', !install.includes("Var = 'ChildMember
 ok('README 写清小鱼键固定 fish', readme.includes('小鱼的成员键固定为'));
 ok('README 写清 bind 对宿主也适用', readme.includes('宿主与她的都一样'));
 
+// 2026-11-17 r238：根鱼（并列、无家长）—— -Parent none 要有完整链路。
+ok('fish.ps1 支持根鱼（-Parent 空/none）', fish.includes("$isRoot = ($parentKey -eq '' -or $parentKey -ceq 'none')"));
+ok('根鱼调用 install 时传 -NoParent', fish.includes("$installArgs += '-NoParent'"));
+ok('根鱼展示为「无（独立迁入）」', fish.includes('无（独立迁入，不挂在谁下面）'));
+ok('install.ps1 有 -NoParent 开关', /\[switch\]\$NoParent/.test(install));
+ok('根鱼名册 parent 为 null', install.includes('parent = $childParentId'));
+ok('根鱼不建家长 pin 条目', install.includes('if (-not $NoParent) { $pins[$ParentMemberId] = $parentIds }'));
+ok('根鱼 birth 行能写 parent=none', install.includes("if ($NoParent) { [string]'none' }"));
+const membersAdd = read('scripts/members-add.mjs');
+ok('members-add 接受 --parent none', membersAdd.includes("p === 'none'"));
+const renderEnv = read('scripts/render-env.mjs');
+ok('render-env 不把 none 当家长', renderEnv.includes("args.parentId !== 'none'"));
+ok('render-env 根鱼 PARENT_ID 兜底 none', renderEnv.includes("me?.parent ?? 'none'"));
+
 const fail = checks.filter((c) => !c.pass);
 for (const c of checks) console.log(`${c.pass ? 'PASS' : 'FAIL'}  ${c.name}${c.detail ? ' — ' + c.detail : ''}`);
 if (fail.length) {

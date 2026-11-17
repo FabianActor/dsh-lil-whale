@@ -90,15 +90,15 @@ if (existsSync(membersFile)) {
   // 为什么允许这样：环境.md 是装完就该有的东西；不能因为"共享区还没建名册"就让她的家里缺一页。
   const childId = args.childId || args.profile
   const childName = args.childName || childId
-  const parentId = args.parentId || 'host'
+  const parentId = args.parentId && args.parentId !== 'none' ? args.parentId : null
+  const rosterMembers = {}
+  if (parentId) rosterMembers[parentId] = { name: '宿主', kind: 'fish', role: 'watcher', parent: null, profile: 'web' }
+  rosterMembers[childId] = { name: childName, kind: 'fish', role: 'member', parent: parentId, profile: args.profile, home: workspace, dshHome: join(workspace, 'dsh-home') }
+  rosterMembers.human = { name: '人类', kind: 'human', role: 'human', parent: null }
   roster = {
     version: 1,
     updatedAt: new Date().toISOString(),
-    members: {
-      [parentId]: { name: '宿主', kind: 'fish', role: 'watcher', parent: null, profile: 'web' },
-      [childId]: { name: childName, kind: 'fish', role: 'member', parent: parentId, profile: args.profile, home: workspace, dshHome: join(workspace, 'dsh-home') },
-      human: { name: '人类', kind: 'human', role: 'human', parent: null },
-    },
+    members: rosterMembers,
   }
   console.error(`render-env: 还没有 ${membersFile}，按安装参数拼了一份临时名册（${Object.keys(roster.members).join(' / ')}）`)
 }
@@ -113,7 +113,7 @@ if (
 ) {
   const childId = args.childId || args.profile
   const childName = args.childName || childId
-  const parentId = args.parentId || 'host'
+  const parentId = args.parentId && args.parentId !== 'none' ? args.parentId : null
   members[childId] = {
     name: childName, kind: 'fish', role: 'member', parent: parentId,
     profile: args.profile, home: workspace, dshHome: join(workspace, 'dsh-home'),
@@ -134,10 +134,11 @@ const me = members[myKey]
 function relationOf(key, m) {
   if (key === myKey) return '你'
   if (m?.kind === 'human') return '人（不跑轮，只读消息）'
+  if (m?.role === 'watcher') return '宿主（巡守）'
   if (m?.parent === myKey) return '你的下一代'
   if (myKey && me?.parent && m?.parent === me.parent) return '同辈（同一个家长）'
   if (key === me?.parent) return '你的家长'
-  if (m?.parent === me?.parent && m?.parent === null) return '另一个上一代'
+  if (m?.parent === me?.parent && m?.parent === null) return '另一个根（并列，没有家长）'
   return m?.kind === 'fish' ? '另一条鱼' : '成员'
 }
 const memberRows = Object.keys(members)
@@ -373,7 +374,7 @@ const values = {
   TOKEN_PER_TURN: '180-200',
   CHILD_NAME: me?.name ?? myKey,
   CHILD_ID: myKey,
-  PARENT_ID: me?.parent ?? 'host',
+  PARENT_ID: me?.parent ?? 'none',
   HUMAN_ID: Object.keys(members).find((k) => members[k]?.kind === 'human') ?? 'human',
   TOOLS: toolsText,
   TOOLS_META: toolsMeta,

@@ -16,7 +16,7 @@
 #   pwsh -File fish.ps1 up-main            启动主 dsh（快捷方式用；已在跑就直接开浏览器）
 #   pwsh -File fish.ps1 down-main          停整个鱼塘（鱼活不过主进程；先鱼后主，账本写 stopped）
 #   pwsh -File fish.ps1 doctor             体检（现在只对配置里那条鱼）
-#   pwsh -File fish.ps1 new -Key <键> -Name <名字> -Parent whale   养一条新鱼（查重 → 建家 → 进名册 → 记 birth）
+#   pwsh -File fish.ps1 new -Key <键> -Name <名字> -Parent whale   养一条新鱼（查重 → 建家 → 进名册 → 记 birth；-Parent none = 并列的根鱼）
 #   pwsh -File fish.ps1 acl-check [whale|all]   查沙箱通行证（文件工具能写、pwsh 不能写 = 缺它）
 #   pwsh -File fish.ps1 acl-repair [whale|all]  补沙箱通行证（补完记 pool\state\acl.log）
 #   pwsh -File fish.ps1 wake <名字|all> [-By 谁] [-Why 为什么]  家长强行叫醒（睡眠窗里也叫得醒；记 sleep.log）
@@ -667,7 +667,7 @@ fish.ps1 -- 鱼群唯一的入口
   pwsh -File fish.ps1 up-main          只起主 dsh（鱼由它 8 秒后自己带起来；勾选关掉＝空鱼塘，调试用）
   pwsh -File fish.ps1 down-main        停整个鱼塘（鱼活不过主进程；先鱼后主，账本写 stopped）
   pwsh -File fish.ps1 doctor           体检
-  pwsh -File fish.ps1 new -Key <键> -Name <名字> -Parent whale   养一条新鱼（查重 → 建家 → 进名册 → 记 birth）
+  pwsh -File fish.ps1 new -Key <键> -Name <名字> -Parent whale   养一条新鱼（查重 → 建家 → 进名册 → 记 birth；-Parent none = 并列的根鱼）
   pwsh -File fish.ps1 refresh whale    重新生成环境.md（模板/名册/工具变了以后）
   pwsh -File fish.ps1 maintain whale   检修：先停，再开窗（看完关窗 → restore）
   pwsh -File fish.ps1 restore whale    回无人值守（无窗起，会话由 host 自己挂上）
@@ -778,6 +778,7 @@ function Invoke-Restore([string]$name) {
 
 # ---------- 养一条新鱼（D4-2：让一条鱼自己当家长） ----------
 # 用法：pwsh -File scripts\fish.ps1 new -Key <成员键> -Name <名字> -Parent <父辈键> [-Port 0] [-DryRun]
+#       -Parent 留空 / none = 根鱼（并列、无家长）：名册 parent 写 null，谱系上是另一个根（2026-11-17 r238）
 # 它做什么：查重（键 / 名字 / 端口 / 鱼数上限）→ 调 install.ps1（-SkipParent，不碰父辈的 profile）→ 记 births.log → 打印还缺什么。
 # 它不做什么：不填 API key、不替你开窗、不写第一句话 —— 这三件必须由人或孩子自己完成。
 # ---------- 钥匙：人给、人收（死命令，见 CHANGELOG A.65） ----------
@@ -872,20 +873,22 @@ function Invoke-NewFish {
     Write-Host 'NEXT: 名字在群里认人，重名会叫错人。'
     return $false
   }
-  if ($parentKey -eq '') {
-    Write-Host 'xx 得说清是谁在养：-Parent <父辈成员键>。'
-    return $false
-  }
-  $parent = Get-Fish $parentKey
-  if (-not $parent) {
-    Write-Host ("xx 名册里没有「{0}」这条鱼。" -f $parentKey)
-    return $false
-  }
-  if ($parent.Lifecycle -eq 'archived') {
-    # 2026-11-15：status 不再表示身份；"归档连带"只由 archive-fish --subtree 决定，
-    # 所以这里不是提醒，而是一条拦截：归档的鱼不能再当家长。
-    Write-Host ("  xx 家长「{0}」已经归档了 —— 归档的鱼不能再养新的。" -f $parent.Label)
-    return $false
+  # 2026-11-17 r238：根鱼（并列、无家长）。-Parent 留空 / none 都表示"独立迁入"，
+  # 她不挂在任何鱼下面：名册里 parent 写 null，谱系图里是另一个根。
+  $isRoot = ($parentKey -eq '' -or $parentKey -ceq 'none')
+  $parent = $null
+  if (-not $isRoot) {
+    $parent = Get-Fish $parentKey
+    if (-not $parent) {
+      Write-Host ("xx 名册里没有「{0}」这条鱼。" -f $parentKey)
+      return $false
+    }
+    if ($parent.Lifecycle -eq 'archived') {
+      # 2026-11-15：status 不再表示身份；"归档连带"只由 archive-fish --subtree 决定，
+      # 所以这里不是提醒，而是一条拦截：归档的鱼不能再当家长。
+      Write-Host ("  xx 家长「{0}」已经归档了 —— 归档的鱼不能再养新的。" -f $parent.Label)
+      return $false
+    }
   }
   $fishCount = @($MEMBERS.Values | Where-Object { $_.Kind -eq 'fish' }).Count
   $maxFish = 5
@@ -927,7 +930,11 @@ function Invoke-NewFish {
   $portText = if ($Port -gt 0) { [string]$Port } else { '自动挑一个空口' }
   Write-Host ''
   Write-Host ('  养一条新鱼：{0}（{1}）' -f $childName, $key)
-  Write-Host ('  家长        {0}（{1}）' -f $parent.Label, $parent.Key)
+  if ($isRoot) {
+    Write-Host '  家长        无（独立迁入，不挂在谁下面）'
+  } else {
+    Write-Host ('  家长        ' + $parent.Label + '（' + $parent.Key + '）')
+  }
   Write-Host ('  她的家      {0}' -f $childHome)
   Write-Host ('  端口        {0}' -f $portText)
   Write-Host ('  现在鱼数    {0} / {1}' -f $fishCount, $maxFish)
@@ -944,10 +951,12 @@ function Invoke-NewFish {
     Write-Host 'xx 找不到 install.ps1（new 只是它的套壳）。'
     return $false
   }
-  & pwsh -NoProfile -File $install -ChildName $childName -ChildMemberId $key -ParentMemberId $parent.Key -ChildProfile $key -SkipParent -ChildPort $Port
+  $installArgs = @('-NoProfile', '-File', $install, '-ChildName', $childName, '-ChildMemberId', $key, '-ChildProfile', $key, '-SkipParent', '-ChildPort', $Port)
+  if ($isRoot) { $installArgs += '-NoParent' } else { $installArgs += @('-ParentMemberId', $parent.Key) }
+  & pwsh @installArgs
   if ($LASTEXITCODE -ne 0) {
     Write-Host 'xx 安装没成（原因在上面）。什么都没记账。'
-    Write-Host ('NEXT: 修掉上面那条，再跑 pwsh -File scripts\fish.ps1 new -Key {0} -Name {1} -Parent {2}' -f $key, $childName, $parent.Key)
+    Write-Host ('NEXT: 修掉上面那条，再跑 pwsh -File scripts\fish.ps1 new -Key {0} -Name {1} -Parent {2}' -f $key, $childName, $(if ($isRoot) { [string]'none' } else { $parent.Key }))
     return $false
   }
   $realPort = $Port
@@ -986,12 +995,17 @@ function Invoke-NewFish {
     }
   }
   $birthLog = Join-Path $Cfg.PoolState 'births.log'
-  $parentLifecycle = if ($parent.Lifecycle) { $parent.Lifecycle } else { 'active' }
+  $parentLifecycle = if ($isRoot) { 'none' } elseif ($parent.Lifecycle) { $parent.Lifecycle } else { 'active' }
+  $parentForBirth = if ($isRoot) { 'none' } else { $parent.Key }
   $keyPart = if ($keyInherited) { ' keyInherited=' + $keyInherited } else { '' }
-  $line = '{0} | birth | fmt=2 key={1} name={2} parent={3} by={4} port={5} parentLifecycle={6} requestedBy={7}{8}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $key, $childName, $parent.Key, $By, $realPort, $parentLifecycle, $RequestedBy, $keyPart
+  $line = '{0} | birth | fmt=2 key={1} name={2} parent={3} by={4} port={5} parentLifecycle={6} requestedBy={7}{8}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $key, $childName, $parentForBirth, $By, $realPort, $parentLifecycle, $RequestedBy, $keyPart
   try { Add-Content -LiteralPath $birthLog -Value $line -Encoding utf8 } catch { Write-Host ('!! birth 没记上：{0}' -f $_.Exception.Message) }
   Write-Host ''
-  Write-Host ('{0} 出生了：{1}（{2}），端口 {3}。' -f $parent.Label, $childName, $key, $realPort)
+  if ($isRoot) {
+    Write-Host ('独立迁入：' + $childName + '（' + $key + '），端口 ' + $realPort + '。')
+  } else {
+    Write-Host ('{0} 出生了：{1}（{2}），端口 {3}。' -f $parent.Label, $childName, $key, $realPort)
+  }
   Write-Host ''
   if ($keyInherited) {
     Write-Host '还缺两步（钥匙已经继承了；最后一步是给它第一句话）：'
