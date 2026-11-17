@@ -460,6 +460,51 @@ try {
   Add-Row '会话绑定' 'WARN' ('查不了：' + $_.Exception.Message)
 }
 
+# 3k2. 工作区（鱼）：钉在名册里的会话要登记进她 <dshHome>\storages\workspace.json
+#      网页左侧的「工作区 / 未分组」读这张登记表，不是 sessions 目录：会话文件搬进来、
+#      pins 也钉了，登记表里没有它，界面就把它挂在「未分组」下（2026-11-17 LeeaCP 迁移时撞到）。
+#      这一格只报"钉了但没登记"，不替人改（那张表归她的界面，写它要停进程）。
+try {
+  if ($Cfg.MembersFile -and (Test-Path -LiteralPath $Cfg.MembersFile)) {
+    $rosterWs = (Get-Content -LiteralPath $Cfg.MembersFile -Raw -Encoding utf8 | ConvertFrom-Json).members
+    $pinsFileWs = Join-Path $Cfg.GroupDir 'pins.json'
+    $pinsWs = $null
+    if (Test-Path -LiteralPath $pinsFileWs) {
+      try { $pinsWs = Get-Content -LiteralPath $pinsFileWs -Raw -Encoding utf8 | ConvertFrom-Json } catch { $pinsWs = $null }
+    }
+    foreach ($prop in $rosterWs.PSObject.Properties) {
+      $m = $prop.Value
+      if ($m.kind -ne 'fish' -or $m.role -eq 'watcher' -or -not $m.dshHome) { continue }
+      $bound = @()
+      if ($pinsWs -and ($pinsWs.PSObject.Properties.Name -contains $prop.Name)) { $bound = @($pinsWs.($prop.Name)) }
+      if ($bound.Count -eq 0) { continue }
+      $fishName = if ($m.name) { [string]$m.name } else { $prop.Name }
+      $wsPath = Join-Path ([string]$m.dshHome) 'storages\workspace.json'
+      if (-not (Test-Path -LiteralPath $wsPath)) {
+        Add-Row ('工作区（' + $fishName + '）') 'WARN' ('钉了 {0} 段会话，但没有界面登记文件（网页里列不出来）' -f $bound.Count) ('NEXT: 先在网页里打开她一次，建出 storages\workspace.json，再跑 node scripts\register-workspace-session.mjs --member ' + $prop.Name + ' --session <会话id>')
+        continue
+      }
+      try {
+        $wsData = Get-Content -LiteralPath $wsPath -Raw -Encoding utf8 | ConvertFrom-Json
+        $registered = @()
+        foreach ($w in $wsData.tables.workspaces.PSObject.Properties) {
+          if ($w.Value.sessionIds) { $registered += @($w.Value.sessionIds) }
+        }
+        $missing = @($bound | Where-Object { $registered -notcontains $_ })
+        if ($missing.Count -eq 0) {
+          Add-Row ('工作区（' + $fishName + '）') 'OK' ('钉了 {0} 段，界面登记里都有' -f $bound.Count)
+        } else {
+          Add-Row ('工作区（' + $fishName + '）') 'WARN' ('钉了 {0} 段，{1} 段没登记进工作区（界面会挂在「未分组」）' -f $bound.Count, $missing.Count) ('NEXT: node scripts\register-workspace-session.mjs --member ' + $prop.Name + ' --session ' + $missing[0])
+        }
+      } catch {
+        Add-Row ('工作区（' + $fishName + '）') 'WARN' ('查不了：' + $_.Exception.Message) 'NEXT: 看 ' + $wsPath
+      }
+    }
+  }
+} catch {
+  Add-Row '工作区' 'WARN' ('查不了：' + $_.Exception.Message)
+}
+
 # 4. 名册：群认会话不认名字；登记错了 = 叫错人
 #    2026-11-16 17:59 第三、四条鱼发现：这一格是单鱼时代的遗留——写死 whale、又拿"配置主人的家"去查别人；
 #    鱼在自己家里跑 doctor 时会误报 FAIL，还附一条会改坏共享状态的 NEXT。上面的「会话绑定」已逐鱼查过同一件事。

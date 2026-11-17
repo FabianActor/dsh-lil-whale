@@ -246,6 +246,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '代码指纹' (($codeFpOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '代码指纹' '启动痕迹带 codeFp=；比 mtime 诚实，改一个字节就变（test-code-fp.mjs）' }
   } else { Fail '代码指纹' 'scripts\test-code-fp.mjs 不在包里' }
+  # ── 4t. 工作区登记（2026-11-17，迁移 LeeaCP 时撞到）────────────────────
+  $wsRegTest = Join-Path $pkg 'scripts\test-register-workspace.mjs'
+  if (Test-Path $wsRegTest) {
+    $wsRegOut = & node $wsRegTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '工作区登记' (($wsRegOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '工作区登记' '名册钉的会话要登记进 storages\workspace.json，否则界面挂在「未分组」（test-register-workspace.mjs）' }
+  } else { Fail '工作区登记' 'scripts\test-register-workspace.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {
