@@ -142,20 +142,20 @@ pwsh -File scripts\fish.ps1 up whale -NoBrowser
 同样是"看一条视频"，插件给的是 **1 张分镜图 + 视频 AI 总结 + 分段 + 热评 + 弹幕热词 + 每格台词**，
 我们给的是 6 张大图、约 9k token、没有任何文字。宿主拍板：**不重复造轮子，换成现成插件**。
 
-装了什么（只动了 whale）：
+装了什么（2026-11-17 起三条鱼都有）：
 
 | 项 | 值 |
 |---|---|
 | 插件 | `dsh-bili-eyes@0.8.3`（npm，MIT，github.com/QiuYeDx/dsh-bili-eyes） |
 | 工具 | `bili_look` / `bili_look_zoom` / `bili_find` / `bili_feed` / `bili_comments` / `bili_surf` / `bili_inbox`（写操作存在但权限默认 `off`） |
-| 配置 | `homes\whale\dsh-home\bili-eyes.json`（额度收到 `maxPerHour:12` / `maxFindPerHour:30`） |
+| 配置 | 每条鱼自己的 `homes\<键>\dsh-home\bili-eyes.json`（`maxPerHour:12` / `maxFindPerHour:30` / `mediaMaxMb:2048`） |
 | ffmpeg | 共享静态版 `pool\tools\ffmpeg\bin\{ffmpeg,ffprobe}.exe`（插件自带下载器拉的，不走系统 PATH） |
-| 登录 | `homes\whale\dsh-home\bili-eyes\credential.json`（宿主的号，`cookies.txt` 一起生成） |
-| 数据 | `pool\cache\bili-eyes\media\`（下载的视频）、`$DSH_HOME\bili-eyes\`（缓存/台词/history） |
+| 登录 | 每条鱼自己的 `…\dsh-home\bili-eyes\credential.json` + `cookies.txt`（宿主的号） |
+| 数据 | `pool\cache\bili-eyes\media\`（下载的视频，三条鱼共用）、`<dsh-home>\bili-eyes\`（缓存/台词/history，各自一份） |
 
-**whale 的 `mcp-bili-readonly` 已整块退役**（原因：插件也有 `bili_comments`，两套同名工具会撞；两套并存模型也会挑错）。
-`pool\mcp\bili\mcp_server.py` 原样留着，给鱼丸和刷视频脚本用；`bili_grab` 也留在里面，没删。
-
-- `app\scripts\bili-section.mjs` 现在会读 profile 的 `dsh.profile.bundles` 判断挂的是插件还是 MCP，自动写对应口径；`环境.md` 已用 `fish.ps1 refresh whale` 重生成。
-- 备份：`cordis.patch.yml.bak-bili-eyes-20261115`、`node_modules\.modules.yaml.bak-20261115`（旧家目录搬家后 pnpm virtualStoreDir 指错，装插件前修过）。
-- **待办**：宿主手动重启 whale 后才生效；重启后让 whale 自己 `bili_look` 一条验证图片能进模型；fishball 暂不动，等 whale 验证完再决定接不接。
+- **whale**：`mcp-bili-readonly` 2026-11-15 整块退役（插件也有 `bili_comments`，两套同名工具会撞）。
+- **fishball**：2026-11-17 换插件；`mcp-bili-readonly` 只留探索本五个 `duty_*`（写在她自己的 `bili-duty` 下），`bili_*` 从白名单删掉。
+- **xiaoman**：2026-11-17 新装（她此前没有眼睛）。
+- `app\scripts\bili-section.mjs` 读 profile 的 `dsh.profile.bundles` 判断挂的是插件还是 MCP，自动写对应口径；抬头不再带日期；fishball 的纸会多点一句"旧探索本还在"。
+- 装法：`DSH_HOME=<鱼的家>\dsh-home dsh plugin --profile <键> add dsh-bili-eyes`；装完必须重启那条鱼，否则进程里还是旧工具表。
+- fishball 装时踩到 pnpm `ERR_PNPM_UNEXPECTED_VIRTUAL_STORE`（旧家 `lil-whale-2` 已不存在、node_modules 的虚拟店还指着它）⇒ 删掉 `profiles\fishball\node_modules` 让它重装，一次装过。

@@ -32,7 +32,7 @@ function eyesSection(dshHome, profile) {
   }
 
   const lines = [];
-  lines.push('## 看外面（B站；2026-11-15 起换成 dsh-bili-eyes）');
+  lines.push('## 看外面（B站，用 dsh-bili-eyes）');
   lines.push('');
   lines.push('看视频用的是插件 `dsh-bili-eyes`。它给的是一套名字不带前缀的工具：');
   lines.push('');
@@ -84,6 +84,19 @@ function eyesSection(dshHome, profile) {
       '**还没登录**：B站 AI 字幕/总结和高清直链都要登录才给。看视频之前先跟 Fabian 说一声，让他在设置页里扫码（或跑 `dsh-bili-eyes login`）。',
     );
   }
+  // 2026-11-17：bili_* 换成插件，fishball 的旧探索本（duty_*）还留在自研 MCP 里。
+  try {
+    const patchText = readFileSync(join(home, 'profiles', profile, 'cordis.patch.yml'), 'utf8');
+    if (/id:\s*mcp-bili-readonly/.test(patchText) && /duty_paths/.test(patchText)) {
+      lines.push('');
+      lines.push(
+        '**旧探索本还在**：' + BT + 'duty_paths' + BT + ' / ' + BT + 'duty_report_append' + BT + ' / ' + BT + 'duty_seen_append' + BT +
+          ' / ' + BT + 'duty_seen_recent' + BT + ' / ' + BT + 'duty_digest_append' + BT +
+          ' 五个工具仍留在旧的自研 MCP 里，写在你自己的 ' + BT + 'bili-duty' + BT + ' 下；看视频/搜/逛用上面这些新工具。',
+      );
+    }
+  } catch {}
+
   lines.push('');
   lines.push(
     '**别人家不能盯**：另一条鱼的家默认不许监听。想知道她那边的事，合法办法是让她发消息告诉你——她的产出、她的发现，都算她的话。',
