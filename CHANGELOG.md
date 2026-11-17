@@ -1,6 +1,6 @@
 # 更新日志
 
-**当前版本：1.8.14** ｜ **最后更新：2026-11-17 11:45***（每次升版本号时更新这一行）
+**当前版本：1.8.14** ｜ **最后更新：2026-11-17 11:45**（每次升版本号时更新这一行）
 
 这里记录 **小小肥鱼（lil-whale）** 两个 npm 包的变更：`@fabianactor/dsh-lil-whale-group`（宿主插件）与 `@fabianactor/dsh-lil-whale-group-ui`（面板）。产品设计看 [docs/PRD.md](docs/PRD.md)。
 
