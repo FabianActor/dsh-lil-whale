@@ -78,6 +78,12 @@ Get-Content homes\<键>\dsh-home\bili-eyes\history.jsonl -Tail 3
 
 **台词栏为什么是空的**：本机四条鱼都没有 `<家>\dsh-home\asr.json`（bili-eyes 的语音转写配置，按插件的约定放在 DSH_HOME 根），所以台词栏会打 `没有台词：本机转写服务没开，也没有字幕`——这是**配置状态**，不是内容判断：它不代表片方没做字幕，也不代表这段没人说话（代码里 `TRANSCRIPT_NOTE['no-key']` 与 `none` 是两种来源）。判断"这段有没有人说话"不要用台词栏，要另找通道（画面上的硬字幕、或宿主的人耳）。
 
+**"这次读到的档位" ≠ "视频源的上限"**：分镜管线是 `dsh-video-storyboard`（bili-eyes 的依赖，0.4.4）。它的取帧结果里有 `maxAvailable`（源最高档）和 `availableHeights`（可用的档位列表，`src/fetch.js:643-644`），storyboard 自己的输出会写成 `source max <N>p` 和降级原因（`src/pipeline.js:1262-1267`）；但 `bili_look` 不用那几行——它自己拼文本，只在「放大看…（<N>P）」里写出**这次取到的档位**（`src/look.js:369`；没登录时直链上限 480）。所以：
+
+- 「这次读的是哪档」→ 看 `bili_look` 输出里「放大看」那行；
+- 「这个视频源最高能到多少」→ 看 storyboard 缓存里的 `meta.json`（命中缓存时会连 meta 一起读回 `maxAvailable`/`zoomTarget`）；
+- 别把"我这次读到 480p"当成"这个视频只有 480p"。
+
 ## 5. 写操作与后台（默认全关）
 
 - 点赞、收藏、评论、私信、关注、发动态：默认关；要在插件设置页按"对谁"（自己人 / 主人评论区里的别人 / 外面的人）一格格开，配额与间隔写在代码里。
