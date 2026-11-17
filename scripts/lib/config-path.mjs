@@ -98,3 +98,16 @@ export const CONFIG_SOURCE_LABEL = {
   example: '示例文件',
   none: '没有配置',
 }
+
+// CLI：`node scripts/lib/config-path.mjs`
+// 只回答"该读哪份"，不碰鱼塘数据 —— 所以它能进发布包的干净环境里验三态
+// （`test-config-path.mjs` 用它跑正/负样本；gen-family 那种要读名册的脚本在空包里跑不了）。
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const out = loadConfig({})
+  if (out.error) {
+    console.error('xx ' + out.error)
+    if (out.next) console.error('\nNEXT: ' + out.next)
+    process.exit(1)
+  }
+  console.log(`source=${out.source} path=${out.path}`)
+}

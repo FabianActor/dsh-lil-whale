@@ -126,9 +126,11 @@ check('哪里都没有配置时给出 next', () => {
   })
 })
 
-// ⑧ CLI 集成：gen-family --check 在环境变量打错字时必须 exit 1（真鱼塘不许报绿）
-check('gen-family --check 在 LIL_WHALE_CONFIG 打错字时退出 1', () => {
-  const r = spawnSync(process.execPath, [join(REPO, 'scripts', 'gen-family.mjs'), '--check'], {
+// ⑧ CLI 集成：配置入口在环境变量打错字时必须 exit 1
+//   用 config-path.mjs 自己的 CLI 而不是 gen-family：发布包解压出来的干净环境里没有名册，
+//   gen-family 会因为"读不到鱼塘"而失败 —— 那会把这个测试变成"在别处也红"的假样本。
+check('配置入口 CLI 在 LIL_WHALE_CONFIG 打错字时退出 1', () => {
+  const r = spawnSync(process.execPath, [join(REPO, 'scripts', 'lib', 'config-path.mjs')], {
     cwd: REPO,
     env: { ...process.env, LIL_WHALE_CONFIG: join(tmp, 'never-there.json') },
     encoding: 'utf8',
@@ -138,12 +140,33 @@ check('gen-family --check 在 LIL_WHALE_CONFIG 打错字时退出 1', () => {
 })
 
 // ⑨ CLI 集成：不带环境变量时仍能正常跑（别把正常路径改坏）
-check('gen-family --check 不带环境变量时仍能跑', () => {
+check('配置入口 CLI 不带环境变量时仍能跑', () => {
   const env = { ...process.env }
   delete env.LIL_WHALE_CONFIG
-  const r = spawnSync(process.execPath, [join(REPO, 'scripts', 'gen-family.mjs'), '--check'], { cwd: REPO, env, encoding: 'utf8' })
+  const r = spawnSync(process.execPath, [join(REPO, 'scripts', 'lib', 'config-path.mjs')], { cwd: REPO, env, encoding: 'utf8' })
   eq(r.status, 0, 'exit code；stdout：' + (r.stdout || '').slice(0, 200) + ' stderr：' + (r.stderr || '').slice(0, 200))
+  ok((r.stdout || '').includes('source='), 'stdout 应该写出 source=')
+  ok(!(r.stdout || '').includes('env-given-missing'), '没有 env 时不该被当成 env-given-missing')
 })
+
+// ⑩ 真消费者（可选）：本机有鱼塘数据时，gen-family --check 也必须遵守同一判断。
+//    鱼塘根有两种位置：仓库就是鱼塘（app/ 旁边就是 pool/），或仓库在 <根>\app 里（pool/ 在上一级）。
+//    发布包的干净环境里没有名册，这一条跳过 —— 跳过要打印出来，不许安静地"也算过"。
+const pondCandidates = [join(REPO, 'pool', 'members.json'), join(dirname(REPO), 'pool', 'members.json')]
+const pondMembers = pondCandidates.find((p) => existsSync(p))
+if (pondMembers) {
+  check('gen-family --check 在 LIL_WHALE_CONFIG 打错字时退出 1（真消费者）', () => {
+    const r = spawnSync(process.execPath, [join(REPO, 'scripts', 'gen-family.mjs'), '--check'], {
+      cwd: REPO,
+      env: { ...process.env, LIL_WHALE_CONFIG: join(tmp, 'never-there-2.json') },
+      encoding: 'utf8',
+    })
+    eq(r.status, 1, 'exit code')
+    ok((r.stderr || '').includes('指向的文件不存在'), 'stderr 应该说明文件不存在；实际：' + (r.stderr || '').slice(0, 200))
+  })
+} else {
+  console.log('SKIP gen-family --check 真消费者（这个环境没有 pool\\members.json，比如发布包解压出来的干净目录）')
+}
 
 rmSync(tmp, { recursive: true, force: true })
 console.log(`\ntest-config-path：合计 ${pass + fail}，PASS ${pass}，FAIL ${fail}`)
