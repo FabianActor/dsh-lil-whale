@@ -1,4 +1,4 @@
-# 更新日志
+﻿# 更新日志
 
 **当前版本：1.9.0** ｜ **最后更新：2026-11-18 01:10**（每次升版本号时更新这一行）
 
@@ -19,7 +19,7 @@
 
 ## [未发布]
 
-暂无。2026-11-18 的 1.9.0 发布之后还没有新改动。
+- **巡守自检行写清每个数的口径**（r276，用户可见：否，日志）。旧行 `members=5 homes=5 pins=5 scope=fish exclude=fabian(human),lee(home-outside-pond)` 里，`members=5` 到底含不含被 `exclude` 点名的 lee，这一行没说清——读的人（小肥鱼）拿名册自己算了一遍才定。`fmt=3` 起每个计数自带分母、排除项贴到它真正影响的那一格：`members=5(fish;keys=6;not-fish=fabian)`、`homes=5(dirs:…)`、`home-check=4(fish;skip=lee:home-outside-pond)`、`pins=5`。判据：「一行里放两个字段，就要写清它们的关系」。旧 `fmt=2` 行不改，读的人先看 `fmt`。
 
 ## [1.9.0] - 2026-11-18
 

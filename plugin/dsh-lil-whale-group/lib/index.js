@@ -38,6 +38,7 @@ import {
   DEFAULT_SLEEP_FROM,
   DEFAULT_SLEEP_TO, normalizeSleepArgs } from './sleep-core.js'
 import { wakeWordingOf, previewTextOf } from './wake-preview-core.js'
+import { rosterAuditCounts, buildRosterAuditLine } from './roster-audit-core.js'
 import { refreshSleepStatus } from './sleep-status.js'
 import { cleanName, nameTaken, historyAfterRename, canRename, renameAnnouncement, NAME_MAX } from './rename-core.js'
 import {
@@ -3622,9 +3623,21 @@ function rosterNonFishKeys() {
   }
 }
 
+/** 名册里的全部键（含人）——只为了把那行的分母写清楚，不参与差集。 */
+function rosterAllKeys() {
+  try {
+    const roster = JSON.parse(readFileSync(CFG.membersFile, 'utf8'))
+    return Object.keys(roster?.members ?? {})
+  } catch {
+    return []
+  }
+}
+
 // 账本格式：fmt=1（2026-11-14 18:15 之前）的时间戳是 UTC，只有计数；
-// fmt=2 起时间戳改本地（和 watchman/fish/sleep 同钟），并带 scope=fish / exclude= 两个口径字段。
-// 两版会长期并存：读账的人先看 fmt 再决定怎么读时间（docs\日志都记在哪.md）。
+// fmt=2 起时间戳改本地（和 watchman/fish/sleep 同钟），并带 scope=fish / exclude= 两个口径字段；
+// fmt=3 起每个计数自带口径、排除项贴在它真正影响的那一格上（小肥鱼 2026-11-18 07:0x 读账的发现：
+// 「members=5」到底含不含 exclude 里的 lee，那一行没说清，她得拿名册自己算一遍）。
+// 三版会长期并存：读账的人先看 fmt 再决定怎么读（docs\detail\日志都记在哪.md）。
 function auditRoster(now = new Date()) {
   if (Date.now() - lastRosterAuditAt < ROSTER_AUDIT_EVERY_MS) return
   lastRosterAuditAt = Date.now()
@@ -3653,20 +3666,22 @@ function auditRoster(now = new Date()) {
   if (rosterWithoutHome.length) problems.push(`only-in-members=${rosterWithoutHome.join(',')}`)
   if (pinWithoutRoster.length) problems.push(`only-in-pins=${pinWithoutRoster.join(',')}`)
   // 口径写在同一行（她 2026-11-14 18:08 咬的那一口：3/2/3 三个数看着不相等，结论却是 ok，
-  // 读的人只能信 ok 或者以为漏了）。scope=fish：members 只数鱼；exclude 点名被排除的两种：
-  // 人（不在 homes、也不该在）、巡守（是鱼，但家不在 homes\\ 下）。
+  // 读的人只能信 ok 或者以为漏了）。fmt=3 起把每个数的分母和排除项都写出来：
+  // 人（不在 homes、也不该在）只影响 members 的口径；巡守（是鱼，但家不在 homes\ 下）只影响家比对。
   const humanKeys = rosterNonFishKeys()
-  const outsidePondHomed = entries.filter(([, m]) => m.role === 'watcher').map(([key]) => key)
-  const exclude = [...humanKeys.map((k) => `${k}(human)`), ...outsidePondHomed.map((k) => `${k}(home-outside-pond)`)]
-  const counts = `members=${rosterAll.size} homes=${homes.size} pins=${pinKeys.length} scope=fish${exclude.length ? ' exclude=' + exclude.join(',') : ''}`
+  const counts = rosterAuditCounts({
+    rosterKeys: rosterAllKeys(),
+    fishEntries: entries,
+    humanKeys,
+    homeKeys,
+    pinKeys,
+  })
   // 时间用本地时间、和 watchman.log 同一个钟（她 2026-11-14 18:08：同一台机器上不该有两种钟）。
   const pad = (n) => String(n).padStart(2, '0')
   const ts = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
   // 每次跑都写一行（2026-11-14 小肥鱼：文件不存在只说明"还没跑过"，不说明"跑了没问题"——
   // 要让"没跑"和"跑了没问题"在纸上长得不一样）。
-  const line = problems.length
-    ? `${ts} | roster-mismatch | fmt=2 ${counts} ${problems.join(' ')}`
-    : `${ts} | roster-audit | fmt=2 ${counts} ok`
+  const line = buildRosterAuditLine({ ts, counts, problems })
   try {
     appendFileSync(ROSTER_AUDIT_LOG, `${line}\n`)
   } catch { /* 日志写不了不该炸巡守 */ }
