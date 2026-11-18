@@ -121,6 +121,41 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * 版本：读两个包当前版本；「检查更新」才去问 npm。
+     * 两个包必须一起用，所以两条一起显示、一起说"有没有新的"。
+     */
+    async function loadVersions() {
+      const response = await fetch('/group/api/version', { headers: { accept: 'application/json' } })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      return await response.json()
+    }
+
+    async function checkUpdates() {
+      const response = await fetch('/group/api/check-update', {
+        method: 'POST',
+        headers: { 'x-llw-panel': '1' },
+      })
+      const data = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(data?.error ?? `HTTP ${response.status}`)
+      return data
+    }
+
+    /** 版本状态 → 一句人话。检查失败要说出原因，不能显示成"已是最新"。 */
+    function versionLineOf(state) {
+      if (!state) return '还没读到版本'
+      if (state.error) return `检查失败：${state.error}`
+      const part = (label, side) => {
+        if (!side) return `${label} 未知`
+        if (side.error) return `${label} ${side.current ?? '未知'}（检查失败：${side.error}）`
+        if (side.latest == null) return `${label} ${side.current ?? '未知'}`
+        if (side.updateAvailable === true) return `${label} ${side.current} → 最新 ${side.latest}`
+        if (side.updateAvailable === false) return `${label} ${side.current}（已是最新）`
+        return `${label} ${side.current}（最新 ${side.latest}，无法比较）`
+      }
+      return `${part('宿主', state.host)}；${part('面板', state.ui)}`
+    }
+
+    /**
      * 名字：默认按成员 id 取。
      * 但同一个人的多段会话会共用一个 id（`lee`），所以如果能拿到这条消息的 `s`，
      * 就先在 `seats` 里找座位名 —— 群里因此能分出「大肥鱼·工」和「大肥鱼·家」。
@@ -2762,6 +2797,23 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       const fileInputs = useRef({})
       const [avatarBusy, setAvatarBusy] = useState('')
 
+      // 版本：进设置页先读当前版本；「检查更新」是显式动作（要联网，不自动跑）。
+      const [versions, setVersions] = useState(null)
+      const [updateState, setUpdateState] = useState(null)
+      const [updateBusy, setUpdateBusy] = useState(false)
+      useEffect(() => {
+        void loadVersions()
+          .then((data) => setVersions(data))
+          .catch(() => setVersions({ error: '连不上宿主，读不到版本' }))
+      }, [])
+      const runCheckUpdate = () => {
+        setUpdateBusy(true)
+        void checkUpdates()
+          .then((data) => setUpdateState(data))
+          .catch((error) => setUpdateState({ error: String(error?.message ?? error) }))
+          .finally(() => setUpdateBusy(false))
+      }
+
       const uploadAvatar = (member, file) => {
         if (!file) return
         if (!/^image\/(png|jpeg|webp)$/.test(file.type)) {
@@ -2929,6 +2981,22 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
             (config.notifyScope ?? 'all') === 'mentions'
               ? '群里只有 @ 所有人 或 直接给你的话才算未读；大肥鱼跟小肥鱼之间的对话不打扰你。'
               : '群里任何人说的话都算未读（除了你自己发的）。'),
+        ),
+
+        h(SettingsSection, { title: '版本', hint: '两个包必须一起装：宿主 + 面板。版本也一起看。' },
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, flexWrap: 'wrap' } },
+            h('div', { style: { flex: 1, minWidth: 220, fontSize: 13, lineHeight: '20px', color: 'var(--dsw-alias-label-primary)' } },
+              versionLineOf(updateState ?? versions)),
+            h('button', {
+              onClick: runCheckUpdate,
+              disabled: updateBusy,
+              style: { ...smallBtnStyle, opacity: updateBusy ? 0.6 : 1 },
+            }, updateBusy ? '检查中…' : '检查更新'),
+          ),
+          updateState?.checkedAt
+            ? h('div', { style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)', marginTop: 6 } },
+                `检查时间：${String(updateState.checkedAt).replace('T', ' ').slice(0, 19)}`)
+            : null,
         ),
 
         h('div', {

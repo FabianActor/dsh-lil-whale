@@ -10,6 +10,8 @@ import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { spawn } from 'node:child_process'
 import { Socket } from 'node:net'
+import { fileURLToPath } from 'node:url'
+import { createRequire } from 'node:module'
 import { config } from './config.js'
 
 export const name = '@fabianactor/dsh-lil-whale-group-ui'
@@ -55,6 +57,61 @@ const IMAGE_EXT = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp', gif
 // 没有 fmt 字段的图片指针按 fmt=1 读；fmt=2 起有 path / algo。
 const IMAGE_FMT = 2
 const IMAGE_ALGO = 'sha256'
+
+// 版本：设置页要显示「当前版本」并检查 npm 上的最新版。
+// 当前版本从两个包自己的 package.json 读（ui 就是自己；host 走模块解析，
+// 解析不到再按同 scope 的兄弟目录找）——不写死数字，免得代码和 package.json 各说各话。
+const UI_PACKAGE = JSON.parse(readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'))
+const HOST_PACKAGE_NAME = '@fabianactor/dsh-lil-whale-group'
+
+function hostPackageVersion() {
+  try {
+    const req = createRequire(import.meta.url)
+    const file = req.resolve(HOST_PACKAGE_NAME + '/package.json')
+    return JSON.parse(readFileSync(file, 'utf8')).version ?? null
+  } catch {
+    try {
+      return JSON.parse(readFileSync(fileURLToPath(new URL('../../dsh-lil-whale-group/package.json', import.meta.url)), 'utf8')).version ?? null
+    } catch {
+      return null
+    }
+  }
+}
+
+function versionState() {
+  return {
+    host: { name: HOST_PACKAGE_NAME, current: hostPackageVersion() },
+    ui: { name: UI_PACKAGE.name, current: UI_PACKAGE.version ?? null },
+  }
+}
+
+/** 只比 x.y.z 的数字段；预发布标签（-rc.1）忽略——给人看的是版本，不是 semver 全集。 */
+function newerThan(latest, current) {
+  if (!latest || !current) return null
+  const a = String(latest).split('-')[0].split('.').map((n) => Number(n) || 0)
+  const b = String(current).split('-')[0].split('.').map((n) => Number(n) || 0)
+  for (let i = 0; i < 3; i += 1) {
+    if ((a[i] ?? 0) > (b[i] ?? 0)) return true
+    if ((a[i] ?? 0) < (b[i] ?? 0)) return false
+  }
+  return false
+}
+
+async function latestOnNpm(packageName) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 8000)
+  try {
+    const response = await fetch(`https://registry.npmjs.org/${packageName.replace('/', '%2F')}/latest`, {
+      signal: controller.signal,
+      headers: { accept: 'application/json' },
+    })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const data = await response.json()
+    return typeof data?.version === 'string' ? data.version : null
+  } finally {
+    clearTimeout(timer)
+  }
+}
 
 /**
  * 读不到的图片必须留痕，否则"没有图"和"图丢了"看起来一样（小肥鱼的原话：
@@ -874,6 +931,44 @@ export function apply(ctx) {
         return
       }
       sendJson(res, 200, next)
+    },
+  }))
+
+  // 版本：当前版本随时能看；「检查更新」才去问 npm。
+  // 网络不通要说清楚，不能装成"已是最新"——那和真的检查过长得一样（§60）。
+  disposers.push(ctx.webServer.register({
+    kind: 'exact',
+    path: '/group/api/version',
+    handler(req, res) {
+      if (req.method !== 'GET') {
+        sendJson(res, 405, { error: 'method-not-allowed' })
+        return
+      }
+      sendJson(res, 200, versionState())
+    },
+  }))
+
+  disposers.push(ctx.webServer.register({
+    kind: 'exact',
+    path: '/group/api/check-update',
+    async handler(req, res) {
+      if (!guardWrite(req, res, '/group/api/check-update')) return
+      if (req.method !== 'POST') {
+        sendJson(res, 405, { error: 'method-not-allowed' })
+        return
+      }
+      const base = versionState()
+      const result = { checkedAt: new Date().toISOString(), host: { ...base.host }, ui: { ...base.ui } }
+      for (const side of ['host', 'ui']) {
+        try {
+          const latest = await latestOnNpm(result[side].name)
+          result[side].latest = latest
+          result[side].updateAvailable = newerThan(latest, result[side].current)
+        } catch (error) {
+          result[side].error = String(error?.message ?? error)
+        }
+      }
+      sendJson(res, 200, result)
     },
   }))
 
