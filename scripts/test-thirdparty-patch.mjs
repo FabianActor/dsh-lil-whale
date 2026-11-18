@@ -164,6 +164,9 @@ console.log('第三方补丁：行为测试');
   ok('明说"没有 orig 可对"', r.out.includes('没有 orig 可对'));
   ok('不再让人去 diff 一个不存在的文件', !r.out.includes('对一下；若上游已自行修复'));
   ok('给出替代下一步（手工补 / 从同版本另一台拿）', r.out.includes('从同版本另一台'));
+  // 2026-11-18 小满：别让读者自己去列目录；也给出"三句都在就是上游改措辞"的读法
+  ok('把同目录真实文件名列出来', r.out.includes('目录里实际有：') && r.out.includes('look.js'));
+  ok('给出可执行的判断（三句都在 = 上游改过措辞）', r.out.includes('上游改过措辞') && r.out.includes('asr-failed'));
   rmSync(root, { recursive: true, force: true });
 }
 

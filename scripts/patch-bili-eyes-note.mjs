@@ -246,8 +246,22 @@ for (const t of targets) {
         console.log(`  下一步：先看 diff——把 ${path.basename(t.file)} 与 ${path.basename(orig)} 对一下；若上游已自行修复，不要回滚。`);
         console.log(`  真要回滚：先把当前文件另存为 ${path.basename(t.file)}.bak-<时间>（别让「下一步」不可逆），再把 orig 复制回去、重跑本脚本。`);
       } else {
+        // 2026-11-18 小满：先问"下一步要动的东西在不在"；不在就别指路。
+        // 并且别让读者自己去列目录——把同目录的文件名列出来。
+        const dir = path.dirname(t.file);
+        let listing = '（目录读不了）';
+        try {
+          const names = fs.readdirSync(dir).filter((n) => n.startsWith(path.basename(t.file)));
+          listing = names.length
+            ? names.map((n) => `${n} ${fs.statSync(path.join(dir, n)).size} B`).join(' · ')
+            : '（是个空目录）';
+        } catch {
+          listing = '（目录读不了）';
+        }
+        console.log(`  目录里实际有：${listing}`);
         console.log('  这台没有 orig 可对：它从没成功打过补丁，所以没留下原样副本（不是放错了位置，是根本没生成过）。');
-        console.log('  下一步：先看 diff / changelog 确认上游是不是自己修了这句；要补就手工补那半，或从同版本另一台拷一份 look.js.orig-* 过来。');
+        console.log('  先看当前文件里有没有我们那三句（`asr-failed` / `file-failed` / `no-audio`）：都在、只有推送那句不像 ⇒ 上游改过措辞，别回滚。');
+        console.log('  要补就手工补那半，或从同版本另一台拷一份 look.js.orig-* 过来，再重跑本脚本。');
       }
       if (!ver) console.log('  （orig 名字里的 unknown 不是版本号：那是「版本没读到」，不是插件版本叫 unknown。）');
       continue;
