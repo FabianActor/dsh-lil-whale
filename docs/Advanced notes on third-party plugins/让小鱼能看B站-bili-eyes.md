@@ -1,4 +1,4 @@
-# 让小鱼能看 B 站（dsh-bili-eyes 装进鱼的家）
+﻿# 让小鱼能看 B 站（dsh-bili-eyes 装进鱼的家）
 
 > 第三方插件心得，不是基座的一部分。记录时间：2026-11-17，验证版本 `dsh-bili-eyes@0.8.3`。
 > 官方文档在包内 `README.md` 与 `docs/guide/`（安装、配置项、工具、写操作与权限、后台功能），这篇只写"装进鱼塘"时和直装宿主的区别。
@@ -108,3 +108,20 @@ Get-Content homes\<键>\dsh-home\bili-eyes\history.jsonl -Tail 3
 - 升级：停鱼 → `DSH_HOME=… dsh plugin --profile <键> add dsh-bili-eyes@<版本>` → 起鱼；配置字段向后兼容以包内 `docs/guide/配置项.md` 为准。
 - 卸载：停鱼 → `dsh plugin --profile <键> remove dsh-bili-eyes` → 起鱼；`bili-eyes\` 下的凭证与缓存可留可删（凭证删了就要重新登录）。
 - 故障排查先看包内 `docs/guide/安装与上手.md` 的"连不上 B站"与"使用条件"。
+
+## 7. 已知问题：转写失败会被写成「没人说话」（2026-11-18 已本地补）
+
+- **现象**：`dsh-bili-eyes@0.8.3` 的 `src/look.js` 里 `TRANSCRIPT_NOTE` 表只登记了 `no-key` / `none` 两句；而 `dsh-video-storyboard` 实际会产出 `asr-failed`（转写报错）、`file-failed`（台词文件读不了）、`no-audio`（没有音轨）这些状态。表里没有 → 代码掉进下一个分支（`plan.inputs.speechRate === 0`），屏幕上写「（这段基本没人说话：音乐或环境声）」。**转写挂了，纸上却写着没人说话**——真实原因其实在 `result.transcript.error` 里，旧代码只读了 `.source`。
+- **判定**：这属于「说反」，比「没数」更贵：它会用一句自信的假话代替「没听成」。
+- **本地补丁**（幂等脚本，可检查）：
+
+  ```
+  node app\scripts\patch-bili-eyes-note.mjs            # 打补丁
+  node app\scripts\patch-bili-eyes-note.mjs --dry-run   # 只看看
+  node app\scripts\patch-bili-eyes-note.mjs --check     # 有没打全；没打全 exit 1
+  ```
+
+  补三句（`asr-failed` / `file-failed` / `no-audio`），并在失败时把原因附上（`；原因：<error 前 160 字>`）。
+- **注意**：pnpm 用硬链接，四个 profile 里的 `look.js` 与 `.pnpm-store` 里的同一份是**同一个 inode**——改一处，四个安装一起变；本次备份在 `homes\fishball\...\dsh-bili-eyes\src\look.js.bak-20261118`。**重装或升级插件会覆盖补丁**，升级后重跑脚本。
+- **生效**：要重启对应鱼的进程才会加载新代码。
+- **上游**：https://github.com/QiuYeDx/dsh-bili-eyes （要不要报 issue 由宿主定）。
