@@ -307,7 +307,7 @@ if ($root) {
   if (Test-Path $psTest) {
     $psOut = & node $psTest 2>&1
     if ($LASTEXITCODE -ne 0) { Fail '保留名赋值' (($psOut | Select-Object -Last 3) -join ' / ') }
-    else { Ok '保留名赋值' '不向 $HOME/$Host/$PID 等 21 个只读自动变量赋值（test-ps-reserved-names.mjs）' }
+    else { Ok '保留名赋值' '不向 $HOME/$Host/$PID 等 20 个只读自动变量赋值（test-ps-reserved-names.mjs）' }
   } else { Fail '保留名赋值' 'scripts\test-ps-reserved-names.mjs 不在包里' }
 # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'

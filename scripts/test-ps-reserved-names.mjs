@@ -38,7 +38,8 @@ export function reservedHits(text) {
 let pass = 0
 let fail = 0
 const ok = (cond, label, detail = '') => {
-  if (cond) { pass += 1; console.log(`ok   ${label}`) } else { fail += 1; console.log(`FAIL ${label}${detail ? ' — ' + detail : ''}`) }
+  // 分母不能只在红的时候出现：绿的时候读的人更要知道"它到底扫了几个文件"（小鱼丸私信 #15）
+  if (cond) { pass += 1; console.log(`ok   ${label}${detail ? '（' + detail + '）' : ''}`) } else { fail += 1; console.log(`FAIL ${label}${detail ? ' — ' + detail : ''}`) }
 }
 
 const files = [...scriptsOf(path.join(ROOT, 'scripts')), ...scriptsOf(path.join(ROOT, 'templates'))]
