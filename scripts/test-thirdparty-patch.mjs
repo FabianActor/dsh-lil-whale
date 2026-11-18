@@ -190,6 +190,29 @@ console.log('第三方补丁：行为测试');
   const r = run(['--check', '--pond', root]);
   ok('版本读不到时仍能指出目录里真实那份 orig', r.out.includes(renamed), r.out.trim().split('\n').slice(-4).join(' / '));
   ok('并说明 unknown 是"版本没读到"', r.out.includes('版本没读到'));
+  // 2026-11-18 小鱼丸/小满：名字里没有 unknown 时，不能解释一个不在本行里的词
+  ok('名字里没有 unknown 就不解释 unknown', !r.out.includes('unknown 是「版本没读到」') && !r.out.includes('unknown 不是版本号'));
+  ok('但仍要说清"插件版本没读到"', r.out.includes('插件版本没读到'));
+  rmSync(root, { recursive: true, force: true });
+}
+
+// 3c5. 没有 orig、版本也读不到：不要冒出一句解释 unknown 的话（此路径根本没生成过 orig）
+{
+  const { root, file, pkg } = makePond();
+  run(['--pond', root]);
+  const patched = readFileSync(file, 'utf8');
+  const stuck = patched.replace(
+    /if \(src && TRANSCRIPT_NOTE\[src\]\) \{[\s\S]*?\n  \}/,
+    'lines.push(TRANSCRIPT_NOTE[src] || "");',
+  );
+  writeFileSync(file, stuck, 'utf8');
+  const dir = path.dirname(file);
+  for (const name of readdirSync(dir)) {
+    if (name.startsWith('look.js.orig-')) rmSync(path.join(dir, name));
+  }
+  writeFileSync(path.join(pkg, 'package.json'), JSON.stringify({ name: 'dsh-bili-eyes' }), 'utf8');
+  const r = run(['--check', '--pond', root]);
+  ok('没有 orig 且版本读不到时，不解释未出现的词', !r.out.includes('orig 名字里的 unknown'), r.out.trim().slice(-200));
   rmSync(root, { recursive: true, force: true });
 }
 

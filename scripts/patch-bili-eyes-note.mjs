@@ -263,7 +263,15 @@ for (const t of targets) {
         console.log('  先看当前文件里有没有我们那三句（`asr-failed` / `file-failed` / `no-audio`）：都在、只有推送那句不像 ⇒ 上游改过措辞，别回滚。');
         console.log('  要补就手工补那半，或从同版本另一台拷一份 look.js.orig-* 过来，再重跑本脚本。');
       }
-      if (!ver) console.log('  （orig 名字里的 unknown 不是版本号：那是「版本没读到」，不是插件版本叫 unknown。）');
+      // 2026-11-18 第二条鱼/第四条鱼：这句解释里的词必须真的出现在这一行里。
+      // 版本读不到但 orig 名字里没有 unknown（如 orig-1.6.33）时，不解释 unknown，只把"版本没读到"说清。
+      if (hasOrig && !ver) {
+        if (path.basename(orig).includes('unknown')) {
+          console.log('  （orig 名字里的 unknown 是「版本没读到」，不是版本号叫 unknown。）');
+        } else {
+          console.log('  （插件版本没读到；不影响你把上面两份文件对一下 diff。）');
+        }
+      }
       continue;
     }
     if (readOnly) {
