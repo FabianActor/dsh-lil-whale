@@ -6,7 +6,7 @@
 //
 // 用法：node scripts/test-thirdparty-patch.mjs（PASS/FAIL 计数器在最后）
 
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, linkSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -137,6 +137,86 @@ console.log('第三方补丁：行为测试');
   ok('无法自动补时 --check exit 1', r.code === 1, `实际 ${r.code}`);
   ok('明说"无法自动补"', r.out.includes('无法自动补'));
   ok('给出下一步：拿 orig 复制回去', r.out.includes('.orig-'));
+  rmSync(root, { recursive: true, force: true });
+}
+
+// 3d. 与 pnpm store 共享 inode（硬链接）：打补丁要断开链接，且 store 那份恢复成上游原样
+//     2026-11-18 LeeaCP：原地写会把 store 也改掉；store 按内容 hash 命名，名字与内容对不上时
+//     pnpm install/verify 可能重新解包，补丁就没了。
+{
+  const root = mkdtempSync(path.join(tmpdir(), 'llw-tpp-link-'));
+  const mkLook = (member) => {
+    const pkg = path.join(root, 'homes', member, 'dsh-home', 'profiles', member, 'node_modules', 'dsh-bili-eyes');
+    mkdirSync(path.join(pkg, 'src'), { recursive: true });
+    writeFileSync(path.join(pkg, 'package.json'), JSON.stringify({ name: 'dsh-bili-eyes', version: '0.8.3' }), 'utf8');
+    return path.join(pkg, 'src', 'look.js');
+  };
+  const aFile = mkLook('a');
+  const bFile = mkLook('b');
+  writeFileSync(aFile, ORIGINAL, 'utf8');
+  linkSync(aFile, bFile); // 两份 node_modules 共享一个 inode
+  const storeFile = path.join(root, 'store', 'look.js');
+  mkdirSync(path.dirname(storeFile), { recursive: true });
+  linkSync(aFile, storeFile); // store 那份也挂同一个 inode
+  const r = run(['--pond', root]);
+  const aText = readFileSync(aFile, 'utf8');
+  const bText = readFileSync(bFile, 'utf8');
+  ok('共享 inode 的两个安装都打上了', aText.includes('2026-11-18 本地补丁') && bText.includes('2026-11-18 本地补丁'));
+  ok('打完不再是同一个 inode（各鱼一份，nlink=1）', statSync(aFile).nlink === 1 && statSync(bFile).nlink === 1);
+  ok('store 那份恢复成上游原样', readFileSync(storeFile, 'utf8') === ORIGINAL);
+  ok('store 的链接计数回到 1', statSync(storeFile).nlink === 1);
+  rmSync(root, { recursive: true, force: true });
+}
+
+// 3e. 已经原地打过（store 被污染）的旧状态：--detach 断开链接并恢复 store
+{
+  const root = mkdtempSync(path.join(tmpdir(), 'llw-tpp-link-old-'));
+  const mkLook = (member) => {
+    const pkg = path.join(root, 'homes', member, 'dsh-home', 'profiles', member, 'node_modules', 'dsh-bili-eyes');
+    mkdirSync(path.join(pkg, 'src'), { recursive: true });
+    writeFileSync(path.join(pkg, 'package.json'), JSON.stringify({ name: 'dsh-bili-eyes', version: '0.8.3' }), 'utf8');
+    return path.join(pkg, 'src', 'look.js');
+  };
+  const aFile = mkLook('a');
+  const bFile = mkLook('b');
+  writeFileSync(aFile, ORIGINAL, 'utf8');
+  linkSync(aFile, bFile);
+  const storeFile = path.join(root, 'store', 'look.js');
+  mkdirSync(path.dirname(storeFile), { recursive: true });
+  linkSync(aFile, storeFile);
+  // 真实情况里装过补丁的鱼都留了 .orig-* 备份；detach 靠它把 store 恢复成原样
+  writeFileSync(`${aFile}.orig-0.8.3`, ORIGINAL, 'utf8');
+  writeFileSync(`${bFile}.orig-0.8.3`, ORIGINAL, 'utf8');
+  // 造"旧脚本原地写"的结果：补丁内容写穿硬链接，a/b/store 全变成补丁版
+  const patched = ORIGINAL.replace(
+    /const TRANSCRIPT_NOTE = \{[\s\S]*?\n\};/,
+    [
+      'const TRANSCRIPT_NOTE = {',
+      "  'no-key': '没有台词：本机转写服务没开，也没有字幕',",
+      "  none: '没有台词',",
+      '  // 2026-11-18 本地补丁：转写/台词文件失败时，不能掉进「没人说话」那句',
+      "  'asr-failed': '台词没转成：转写服务报错了（不是没人说话）',",
+      "  'file-failed': '台词文件读不了（不是没人说话）',",
+      "  'no-audio': '这段没有音轨（不是没人说话）',",
+      '};',
+    ].join('\n'),
+  ).replace(
+    'if (src && TRANSCRIPT_NOTE[src]) lines.push(`（${TRANSCRIPT_NOTE[src]}）`);',
+    [
+      'if (src && TRANSCRIPT_NOTE[src]) {',
+      "    const why = String(result.transcript?.error ?? '').trim().replace(/\\s+/g, ' ');",
+      "    lines.push(`（${TRANSCRIPT_NOTE[src]}${why ? `；原因：${why.slice(0, 160)}` : ''}）`);",
+      '  }',
+    ].join('\n'),
+  );
+  writeFileSync(aFile, patched, 'utf8'); // 写穿链接：store 也是补丁内容
+  ok('造出的坏状态：store 里也是补丁内容', readFileSync(storeFile, 'utf8') === patched);
+  const r = run(['--detach', '--pond', root]);
+  ok('--detach exit 0', r.code === 0, `实际 ${r.code}`);
+  ok('--detach 后 store 恢复原样', readFileSync(storeFile, 'utf8') === ORIGINAL);
+  ok('--detach 后各鱼仍是补丁版', readFileSync(aFile, 'utf8') === patched && readFileSync(bFile, 'utf8') === patched);
+  ok('--detach 后各自独立（nlink=1）', statSync(aFile).nlink === 1 && statSync(bFile).nlink === 1);
+  ok('--detach 后 --check 仍绿', run(['--check', '--pond', root]).code === 0);
   rmSync(root, { recursive: true, force: true });
 }
 
