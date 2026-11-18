@@ -63,9 +63,13 @@ try {
   ok(stats.existed === true, 'stats：目录存在')
   ok(stats.files === 1 && stats.bytes === 50, `stats：只剩 1 个文件 50 B（实际 ${stats.files} 个 ${stats.bytes} B）`)
   ok(stats.oldestMs !== null && Math.abs(stats.oldestMs - now) < 5000, 'stats：最老一份就是刚留下的那个（mtime 对得上）')
-  ok(mediaCacheStats({ dir: join(root, 'no-such-dir') }).existed === false, 'stats：缺目录 existed=false')
+  const parentThere = mediaCacheStats({ dir: join(root, 'no-such-dir') })
+  ok(parentThere.existed === false && parentThere.error === null, 'stats：父目录在、缓存目录没建 ⇒ existed=false 且 error=null（还没下过，不是失败）')
+  const parentGone = mediaCacheStats({ dir: join(root, 'no-such-parent', 'media') })
+  ok(parentGone.existed === false && parentGone.error === 'ENOENT', `stats：父目录也不在 ⇒ error=ENOENT（路径算错，实际 ${parentGone.error}）`)
+  const noArgStats = mediaCacheStats({})
+  ok(noArgStats.existed === false && noArgStats.error === 'NO-ARG', 'stats：没给 dir 时 error=NO-ARG（没算，不是没东西）')
   ok(mediaCacheStats({ dir: join(root, 'nested') }).files === 1, 'stats：子目录里的文件不算进这一层（只数本层普通文件）')
-  ok(mediaCacheStats({}).existed === false && mediaCacheStats({}).files === 0, 'stats：没给 dir 时空表')
 } finally {
   rmSync(root, { recursive: true, force: true })
 }

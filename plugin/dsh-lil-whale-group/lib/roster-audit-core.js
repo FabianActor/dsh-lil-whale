@@ -77,8 +77,11 @@ export function rosterAuditCounts({ rosterKeys = [], fishEntries = [], humanKeys
 /**
  * 拼一行。`problems` 非空时事件名是 `roster-mismatch`，否则 `roster-audit` 并以 `ok` 收尾。
  *
- * `media`（可选）：`mediaCacheStats()` 的结果。给了就写 `media=files:… bytes:… oldest:…`；
- * 没给写 `media=unknown`，目录不存在写 `media=no-dir`——三种状态三句话，不共用缺省。
+ * `media`（可选）：`mediaCacheStats()` 的结果。三种状态三句话，不共用缺省：
+ *   - 给了且读到了 ⇒ `media=files:… bytes:… oldest:…`；
+ *   - 父目录在、缓存目录还没建 ⇒ `media=no-dir`（正常：还没下过）；
+ *   - 试过、失败了 ⇒ `media=unknown:<原因>`（`EACCES`=读不到、`ENOENT`=父目录也不在、别的写码）。
+ * "`unknown` 不带原因"等于把"没记"和"试过、失败了"混成一句（第三条鱼 2026-11-18 私信）。
  */
 export function buildRosterAuditLine({ ts, counts, problems = [], media = null }) {
   // 巡守的家不写进这一列：路径里带 `:` 和 `\\`，套在括号里会让"按 ( 切"的读者
@@ -90,10 +93,12 @@ export function buildRosterAuditLine({ ts, counts, problems = [], media = null }
     : 'none'
   const mediaPart =
     media === null
-      ? 'media=unknown'
-      : media.existed
-        ? `media=files:${media.files} bytes:${media.bytes} oldest:${media.oldestMs === null ? 'none' : dateOf(media.oldestMs)}`
-        : 'media=no-dir'
+      ? 'media=unknown:not-collected'
+      : media.error
+        ? `media=unknown:${media.error}`
+        : media.existed
+          ? `media=files:${media.files} bytes:${media.bytes} oldest:${media.oldestMs === null ? 'none' : dateOf(media.oldestMs)}`
+          : 'media=no-dir'
   const parts = [
     `members=${counts.fishKeys.length}(fish;keys=${counts.rosterKeys.length};not-fish=${namesOf(counts.humanKeys)})`,
     `homes=${counts.homeKeys.length}(fish-home:${namesOf(counts.homeKeys)};other:${other})`,

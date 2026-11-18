@@ -3723,8 +3723,14 @@ function auditRoster(now = new Date()) {
   // 要让"没跑"和"跑了没问题"在纸上长得不一样）。
   // 缓存现状挂在周期行上（第三条鱼 2026-11-18 私信）：prune 行"没东西可删就不写"，
   // 于是"机制没跑（配置错/进程没起）"和"跑了但目录本来就空"在账上同形；这一格让"它看过目录"有凭据。
+  // 看失败时也带上原因（同一位当天补的）：`unknown:EACCES` 是"试过、读不到"，
+  // `unknown:not-collected` 是"没算"——两者修法相反，不能共用一个 `unknown`。
   let media = null
-  try { media = mediaCacheStats({ dir: MEDIA_CACHE_DIR }) } catch { media = null }
+  try {
+    media = mediaCacheStats({ dir: MEDIA_CACHE_DIR })
+  } catch (error) {
+    media = { existed: false, error: error?.code ?? 'error', files: 0, bytes: 0, oldestMs: null }
+  }
   const line = buildRosterAuditLine({ ts, counts, problems, media })
   try {
     appendFileSync(ROSTER_AUDIT_LOG, `${line}\n`)

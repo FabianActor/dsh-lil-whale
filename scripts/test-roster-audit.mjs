@@ -111,10 +111,16 @@ const noWatcher = buildRosterAuditLine({
 })
 ok('没巡守时 skip=none', noWatcher.includes('home-check=2(fish;skip=none)'))
 
-// ---- 媒体缓存三态：unknown（没给）/ no-dir（没下过）/ 空目录（oldest:none），不共用缺省 ----
-ok('没给 media 时写 media=unknown', noHuman.includes('media=unknown'))
-const noDir = buildRosterAuditLine({ ts: '2026-11-18 07:10:00', counts, media: { existed: false } })
+// ---- 媒体缓存三态：unknown（没算/失败）/ no-dir（没下过）/ 空目录（oldest:none），不共用缺省 ----
+// "unknown 不带原因"等于把"没记"与"试过、失败了"混成一句（第三条鱼 2026-11-18 私信）。
+ok('没给 media 时写 media=unknown:not-collected', noHuman.includes('media=unknown:not-collected'))
+const noDir = buildRosterAuditLine({ ts: '2026-11-18 07:10:00', counts, media: { existed: false, error: null } })
 ok('目录不存在写 media=no-dir（不是 files:0）', noDir.includes('media=no-dir') && !noDir.includes('media=files:0'))
+const eacces = buildRosterAuditLine({ ts: '2026-11-18 07:10:00', counts, media: { existed: false, error: 'EACCES' } })
+ok('读不到写 media=unknown:EACCES（权限，试过了）', eacces.includes('media=unknown:EACCES'))
+const enoent = buildRosterAuditLine({ ts: '2026-11-18 07:10:00', counts, media: { existed: false, error: 'ENOENT' } })
+ok('父目录不在写 media=unknown:ENOENT（路径算错）', enoent.includes('media=unknown:ENOENT'))
+ok('失败原因优先于 existed（有 error 就不写 files:0）', !enoent.includes('media=files:0'))
 const emptyDir = buildRosterAuditLine({
   ts: '2026-11-18 07:10:00',
   counts,

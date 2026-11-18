@@ -13,7 +13,7 @@
 //  3. "没东西可删"不写事件行，但现状要挂在周期行上（mediaCacheStats）：否则
 //     "机制没跑（配置错/进程没起）"和"跑了但目录本来就空"在账上同形。
 import { readdirSync, statSync, unlinkSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
 // 默认 7 天：比插件的 cacheHours=24 宽得多，因为它们量的不是一件事（见上）。
 export const MEDIA_CACHE_MAX_AGE_DAYS = 7
@@ -51,15 +51,35 @@ export function pruneMediaCache({ dir, maxAgeDays = MEDIA_CACHE_MAX_AGE_DAYS, no
 /**
  * 看一眼目录现状，不删东西。给周期行（roster-audit 的 `media=`）提供对照：
  * 有这一格，"没删"与"没清过"才分得开。
- * 返回 { existed, files, bytes, oldestMs }；oldestMs 为 null 表示目录里没有文件。
+ *
+ * 返回 { existed, error, files, bytes, oldestMs }：
+ *   - `existed: true`：读到了，files/bytes/oldestMs 有效（oldestMs=null 表示空目录）；
+ *   - `existed: false, error: null`：目录还没建（父目录在，正常：还没下过视频）；
+ *   - `existed: false, error: '<CODE>'`：试过、失败了，码留在 error 里（`unknown` 必须带原因——
+ *     第三条鱼 2026-11-18 私信：`hash=unreadable:EBUSY` 说的是"试过、失败了"，空 hash 说的是"没记"，
+ *     而"权限"与"路径算错"的修法完全相反）。
  */
 export function mediaCacheStats({ dir } = {}) {
-  const out = { existed: false, files: 0, bytes: 0, oldestMs: null }
-  if (!dir) return out
+  const out = { existed: false, error: null, files: 0, bytes: 0, oldestMs: null }
+  if (!dir) {
+    out.error = 'NO-ARG'
+    return out
+  }
   let names
   try {
     names = readdirSync(dir)
-  } catch {
+  } catch (error) {
+    const code = error?.code ?? 'error'
+    if (code === 'ENOENT') {
+      // 父目录还在 ⇒ 只是缓存目录还没建（没下过）；父目录也不在 ⇒ 多半路径算错，要能分开
+      try {
+        statSync(dirname(dir))
+      } catch {
+        out.error = 'ENOENT'
+      }
+      return out
+    }
+    out.error = code
     return out
   }
   out.existed = true
