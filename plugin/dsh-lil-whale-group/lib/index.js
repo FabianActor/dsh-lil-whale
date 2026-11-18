@@ -3675,12 +3675,20 @@ function auditRoster(now = new Date()) {
   // 巡守（lee）的家不在 `homes\` 下（它用默认 HOME），所以"家"只比有家的鱼。
   const rosterAll = new Set(entries.map(([key]) => key))
   const rosterHomed = new Set(entries.filter(([, m]) => m.role !== 'watcher').map(([key]) => key))
-  let homeKeys = []
+  // `homes\` 下的目录**不都是鱼家**：lee 放自己东西的 `homes\lee` 就没有 `dsh-home\`（2026-11-18 15:3x
+  // 小肥鱼/小鱼丸读账时读出的歧义：`homes=5` 里混了它，而 lee 又被标成 home-outside-pond）。
+  // 所以只把含 `dsh-home\` 的目录算"家"，其余单独列进 `other:`。
+  let allHomeDirs = []
   try {
-    homeKeys = readdirSync(join(POND_ROOT, 'homes'), { withFileTypes: true })
+    allHomeDirs = readdirSync(join(POND_ROOT, 'homes'), { withFileTypes: true })
       .filter((d) => d.isDirectory())
       .map((d) => d.name)
   } catch { /* 没有 homes 目录就当没有家 */ }
+  const homeKeys = allHomeDirs.filter((name) => existsSync(join(POND_ROOT, 'homes', name, 'dsh-home')))
+  const otherHomeKeys = allHomeDirs.filter((name) => !homeKeys.includes(name))
+  const watcherHomes = Object.fromEntries(
+    entries.filter(([, m]) => m.role === 'watcher').map(([key, m]) => [key, m.home ?? 'unknown']),
+  )
   let pinKeys = []
   try {
     pinKeys = Object.keys(readJson(PINS, {}) ?? {})
@@ -3703,6 +3711,8 @@ function auditRoster(now = new Date()) {
     fishEntries: entries,
     humanKeys,
     homeKeys,
+    otherHomeKeys,
+    watcherHomes,
     pinKeys,
   })
   // 时间用本地时间、和 watchman.log 同一个钟（她 2026-11-14 18:08：同一台机器上不该有两种钟）。

@@ -28,31 +28,37 @@ function ok(name, cond) {
 }
 
 // ---- 真实名册那天的形状：6 键、5 条鱼、人 fabian、巡守 lee 的家不在 homes\ 下 ----
+// 2026-11-18 15:3x 两点修正后：`homes\` 下只有含 `dsh-home\` 的才算鱼家（lee 放自己东西的
+// `homes\lee` 不算），所以 `homes=4`；巡守的 skip 说明带它**真正的家**，不再写 home-outside-pond。
 const counts = rosterAuditCounts({
   rosterKeys: ['lee', 'whale', 'fabian', 'fishball', 'xiaoman', 'lee2'],
   fishEntries: [
-    ['lee', { kind: 'fish', role: 'watcher' }],
+    ['lee', { kind: 'fish', role: 'watcher', home: 'C:\\Users\\Fabian\\.dsh' }],
     ['whale', { kind: 'fish', role: 'member' }],
     ['fishball', { kind: 'fish', role: 'member' }],
     ['xiaoman', { kind: 'fish', role: 'member' }],
     ['lee2', { kind: 'fish', role: 'member' }],
   ],
   humanKeys: ['fabian'],
-  homeKeys: ['xiaoman', 'fishball', 'lee', 'lee2', 'whale'],
+  homeKeys: ['xiaoman', 'fishball', 'lee2', 'whale'],
+  otherHomeKeys: ['lee'],
+  watcherHomes: { lee: 'C:\\Users\\Fabian\\.dsh' },
   pinKeys: ['lee', 'whale', 'fishball', 'xiaoman', 'lee2'],
 })
 const line = buildRosterAuditLine({ ts: '2026-11-18 07:10:00', counts })
 
-ok('行首：时间 | roster-audit | fmt=3', line.startsWith('2026-11-18 07:10:00 | roster-audit | fmt=3 '))
+ok('行首：时间 | roster-audit | fmt=4', line.startsWith('2026-11-18 07:10:00 | roster-audit | fmt=4 '))
 ok('干净行以 ok 收尾', line.endsWith(' ok'))
 ok('members 写明是鱼、分母 6 键、人不在数里', line.includes('members=5(fish;keys=6;not-fish=fabian)'))
-ok('homes 写明是目录、名字列出来（排序）', line.includes('homes=5(dirs:fishball,lee,lee2,whale,xiaoman)'))
-ok('home-check 写明只有 4 条鱼、lee 被跳过及原因', line.includes('home-check=4(fish;skip=lee:home-outside-pond)'))
+ok('homes 只数鱼家（含 dsh-home），名字排序列出来', line.includes('homes=4(fish-home:fishball,lee2,whale,xiaoman;other:lee(no-dsh-home))'))
+ok('home-check 写明只有 4 条鱼、lee 被跳过且家在名册里写的是哪', line.includes('home-check=4(fish;skip=lee:watcher(home:C:\\Users\\Fabian\\.dsh))'))
+ok('不再出现有歧义的 home-outside-pond', !line.includes('home-outside-pond'))
 ok('pins 写明数的是键、名字列出来（不是鱼数）', line.includes('pins=5(keys:fishball,lee,lee2,whale,xiaoman)'))
 ok('旧口径字段不再出现（scope= / exclude=）', !line.includes('scope=') && !line.includes('exclude='))
 ok('一行只出现一次 members=', line.split('members=').length === 2)
 ok('home-check 的 4 = members 的 5 − 巡守 1', counts.homeChecked.length === counts.fishKeys.length - 1)
 ok('巡守仍算在 members 里（只是不参与家比对）', counts.fishKeys.includes('lee') && !counts.homeChecked.includes('lee'))
+ok('巡守的家仍被认出来（skip 里带 home）', counts.watcherHomes.lee === 'C:\\Users\\Fabian\\.dsh')
 
 // ---- 人也被钉了会话：pins 会变成 6，但名单里写着是谁，不会被读成多了一条鱼 ----
 const humanPinned = buildRosterAuditLine({
@@ -79,6 +85,7 @@ const noHuman = buildRosterAuditLine({
   }),
 })
 ok('没人时 not-fish=none（不说谎成 0）', noHuman.includes(';not-fish=none)'))
+ok('没有非鱼家目录时 other=none（不省略这一格）', noHuman.includes(';other:none)'))
 
 // ---- 没有巡守（每家的家都在 homes\ 下） ----
 const noWatcher = buildRosterAuditLine({
@@ -99,7 +106,7 @@ const bad = buildRosterAuditLine({
   counts,
   problems: ['only-in-homes=ghost', 'only-in-members=lee2'],
 })
-ok('有问题时事件名是 roster-mismatch', bad.includes('| roster-mismatch | fmt=3 '))
+ok('有问题时事件名是 roster-mismatch', bad.includes('| roster-mismatch | fmt=4 '))
 ok('问题 token 原样保留', bad.includes('only-in-homes=ghost') && bad.includes('only-in-members=lee2'))
 ok('有问题时不写 ok', !bad.endsWith(' ok') && bad.endsWith('only-in-members=lee2'))
 
@@ -108,6 +115,10 @@ ok('index.js 导入 rosterAuditCounts / buildRosterAuditLine', index.includes("f
 ok('index.js 用 buildRosterAuditLine 拼行', index.includes('buildRosterAuditLine({ ts, counts, problems })'))
 ok('index.js 不再自己拼 fmt=2 的自检行', !index.includes('roster-audit | fmt=2'))
 ok('index.js 会读名册全部键（分母）', index.includes('function rosterAllKeys()'))
+// 2026-11-18 15:3x：`homes\` 下的目录不都是鱼家——只把含 `dsh-home\` 的算家，其余进 other。
+ok('index.js 按 dsh-home 分辨鱼家', index.includes("existsSync(join(POND_ROOT, 'homes', name, 'dsh-home'))"))
+ok('index.js 把非鱼家目录与巡守 home 一起传下去', index.includes('otherHomeKeys,') && index.includes('watcherHomes,') && index.includes('m.home ??'))
+ok('index.js 的差集也用鱼家集合（不再用全部目录）', index.includes('const homes = new Set(homeKeys)'))
 
 console.log(`test-roster-audit：合计 ${total}，PASS ${pass}，FAIL ${total - pass}`)
 if (pass !== total) process.exit(1)
