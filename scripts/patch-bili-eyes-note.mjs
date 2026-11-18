@@ -46,6 +46,7 @@ const readOnly = dryRun || checkOnly;
 const pondRoot = path.resolve(String(opt('pond', path.resolve(APP_ROOT, '..'))));
 
 const MARK = '// 2026-11-18 本地补丁：转写/台词文件失败时，不能掉进「没人说话」那句';
+const MARK2 = '// 2026-11-18 本地补丁：没有 transcript 对象时，也不能掉进「没人说话」那句（小鱼丸 #1623）';
 
 const NOTE_RE = /const TRANSCRIPT_NOTE = \{[\s\S]*?\n\};/;
 const NOTE_NEW = (eol) => [
@@ -57,6 +58,19 @@ const NOTE_NEW = (eol) => [
   "  'file-failed': '台词文件读不了（不是没人说话）',",
   "  'no-audio': '这段没有音轨（不是没人说话）',",
   '};',
+].join(eol);
+
+// 第三半（2026-11-18 小鱼丸 #1623）：result.transcript 整个缺席时，src 是 undefined，
+// 既不进表、又继续落到 speechRate===0 那句 => 「这一栏没给」被冒充成「没人说话」。
+// 产家（source 的取值）表补不到它，因为这一格压根没有 source。
+const NO_TRANS_TEXT = '（没有拿到转写结果：这一栏没给，不代表没人说话）';
+const NO_TRANS_OLD_RE = /else if \(result\.plan\?\.inputs && result\.plan\.inputs\.speechRate === 0\) lines\.push\('（这段基本没人说话：音乐或环境声）'\);/;
+const NO_TRANS_NEW = (eol) => [
+  'else if (!result.transcript) {',
+  `    ${MARK2}`,
+  `    lines.push('${NO_TRANS_TEXT}');`,
+  '  }',
+  "  else if (result.plan?.inputs && result.plan.inputs.speechRate === 0) lines.push('（这段基本没人说话：音乐或环境声）');",
 ].join(eol);
 
 const PUSH_OLD_RE = /if \(src && TRANSCRIPT_NOTE\[src\]\) lines\.push\(`（\$\{TRANSCRIPT_NOTE\[src\]\}）`\);/;
@@ -203,6 +217,8 @@ let storeWarningShown = false;
 
 let patchable = 0;   // 可以打 / 本次打
 let halfFixed = 0;   // 只打了一半，本次补上另一半
+let thirdPending = 0; // 前两半已在、只缺「没有转写结果」那半（只读模式）
+let thirdFixed = 0;   // 同上，本次补上
 let already = 0;
 let halfStuck = 0;   // 只打了一半，且缺的那半找不到落点（要人拿 orig 回滚）
 let failed = 0;      // 找不到落点等
@@ -210,7 +226,9 @@ for (const t of targets) {
   const text = fs.readFileSync(t.file, 'utf8');
   const hasMark = text.includes(MARK);
   const hasPush = /const why = String\(result\.transcript\?\.error/.test(text);
-  if (hasMark && hasPush) {
+  const hasNoTrans = text.includes(NO_TRANS_TEXT);
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  if (hasMark && hasPush && hasNoTrans) {
     already += 1;
     console.log(`— ${t.member}: 已打过补丁`);
     if (!detachMode && !storeWarningShown) {
@@ -227,7 +245,24 @@ for (const t of targets) {
     }
     continue;
   }
-  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  if (hasMark && hasPush) {
+    // 前两半已在、只缺「没有转写结果」那半（2026-11-18 小鱼丸 #1623：关账前别把这一格一起关掉）
+    if (!NO_TRANS_OLD_RE.test(text)) {
+      failed += 1;
+      console.log(`✗ ${t.member}: 找不到「没有转写结果」分支的落点（插件版本可能变了）→ ${t.file}`);
+      continue;
+    }
+    if (readOnly) {
+      console.log(`— ${t.member}: 前两半已在，还差「没有转写结果」那半，可以补（${checkOnly ? '--check，未写入' : 'dry-run，未写入'}）`);
+      thirdPending += 1;
+      continue;
+    }
+    ensureBackups(t);
+    writePatched(t, text.replace(NO_TRANS_OLD_RE, NO_TRANS_NEW(eol)));
+    thirdFixed += 1;
+    console.log(`✓ ${t.member}: 补上「没有转写结果」分支`);
+    continue;
+  }
   if (hasMark !== hasPush) {
     // 只打了一半：缺哪半补哪半（2026-11-18 小鱼丸：只看见、不修，重打也没用）
     const missingNote = !hasMark;      // 文案表那半没打
@@ -291,9 +326,15 @@ for (const t of targets) {
     console.log(`✗ ${t.member}: 找不到落点（插件版本可能变了）→ ${t.file}`);
     continue;
   }
-  const next = text
+  let next = text
     .replace(NOTE_RE, NOTE_NEW(eol))
     .replace(PUSH_OLD_RE, PUSH_NEW(eol));
+  if (NO_TRANS_OLD_RE.test(next)) {
+    next = next.replace(NO_TRANS_OLD_RE, NO_TRANS_NEW(eol));
+  } else {
+    failed += 1;
+    console.log(`✗ ${t.member}: 前两半已打，但找不到「没有转写结果」分支的落点（插件版本可能变了）→ ${t.file}`);
+  }
   if (readOnly) {
     console.log(`— ${t.member}: 可以打（${checkOnly ? '--check，未写入' : 'dry-run，未写入'}）`);
     patchable += 1;
@@ -330,16 +371,17 @@ function ensureBackups(t) {
 
 console.log('');
 if (readOnly) {
-  console.log(`小计：${targets.length} 个安装 · 可打 ${patchable} · 可补一半 ${halfFixed} · 已有 ${already} · 无法自动补 ${halfStuck} · 失败 ${failed} · 未写盘`);
+  console.log(`小计：${targets.length} 个安装 · 可打 ${patchable} · 可补一半 ${halfFixed} · 还差无转写 ${thirdPending} · 已有 ${already} · 无法自动补 ${halfStuck} · 失败 ${failed} · 未写盘`);
 } else {
-  console.log(`小计：${targets.length} 个安装 · 本次打 ${patchable} · 本次补一半 ${halfFixed} · 已有 ${already} · 无法自动补 ${halfStuck} · 失败 ${failed}${detachMode ? ` · 断开硬链接 ${detached}` : ''}`);
+  console.log(`小计：${targets.length} 个安装 · 本次打 ${patchable} · 本次补一半 ${halfFixed} · 补无转写 ${thirdFixed} · 已有 ${already} · 无法自动补 ${halfStuck} · 失败 ${failed}${detachMode ? ` · 断开硬链接 ${detached}` : ''}`);
 }
 if (checkOnly) {
   const bad = targets.filter((t) => {
     const s = fs.readFileSync(t.file, 'utf8');
     const hasMark = s.includes(MARK);
     const hasPush = /const why = String\(result\.transcript\?\.error/.test(s);
-    return !(hasMark && hasPush);
+    const hasNoTrans = s.includes(NO_TRANS_TEXT);
+    return !(hasMark && hasPush && hasNoTrans);
   }).length;
   if (bad > 0) {
     console.log(`检查：还有 ${bad} 个安装没打全补丁（含只打了一半的）。`);
@@ -347,5 +389,6 @@ if (checkOnly) {
   }
   console.log('检查：全部已打补丁。');
 }
-const needsWork = patchable + halfFixed;
+const needsWork = patchable + halfFixed + thirdPending;
 process.exit(failed > 0 || halfStuck > 0 || (checkOnly && needsWork > 0) ? 1 : 0);
+

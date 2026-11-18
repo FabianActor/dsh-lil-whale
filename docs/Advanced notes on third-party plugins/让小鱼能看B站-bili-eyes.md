@@ -134,3 +134,4 @@ Get-Content homes\<键>\dsh-home\bili-eyes\history.jsonl -Tail 3
 - **不用记得去查**：`fish.ps1 up`（每次起鱼）和 `fish.ps1 upgrade-check`（每次读升级单）都会自动跑一次 `--check`；全打或没人装时静默，真丢了才黄字 + `NEXT`。这是 LeeaCP 追出来的那一层——"检测存在 ≠ 检测会被跑到"。
 - **生效**：要重启对应鱼的进程才会加载新代码。
 - **上游**：https://github.com/QiuYeDx/dsh-bili-eyes （要不要报 issue 由宿主定）。
+- **「没有 transcript 对象」也要有自己的一句**（2026-11-18 小鱼丸 #1623，关账前提醒别把这一格一起关掉）：`result.transcript` 整个缺席时，`src` 是 `undefined`——既不进表，又继续落到 `speechRate === 0` 那句，「这一栏没给」被冒充成「没人说话」。补丁的第三半在 `else if (speechRate…)` 前插一句 `else if (!result.transcript) lines.push('（没有拿到转写结果：这一栏没给，不代表没人说话）')`；`--check` 现在三半都看（`--detach` 顺带补齐缺的半）。判据（小鱼丸）：**「没给」和「给了但空了」是两件事**——见判据页 §61。

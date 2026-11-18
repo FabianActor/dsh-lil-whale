@@ -44,6 +44,7 @@ const ORIGINAL = [
   '  const lines = [];',
   '  const src = result.transcript?.source;',
   '  if (src && TRANSCRIPT_NOTE[src]) lines.push(`（${TRANSCRIPT_NOTE[src]}）`);',
+  "  else if (result.plan?.inputs && result.plan.inputs.speechRate === 0) lines.push('（这段基本没人说话：音乐或环境声）');",
   '  return lines;',
   '}',
   '',
@@ -290,7 +291,12 @@ console.log('第三方补丁：行为测试');
   const r = run(['--detach', '--pond', root]);
   ok('--detach exit 0', r.code === 0, `实际 ${r.code}`);
   ok('--detach 后 store 恢复原样', readFileSync(storeFile, 'utf8') === ORIGINAL);
-  ok('--detach 后各鱼仍是补丁版', readFileSync(aFile, 'utf8') === patched && readFileSync(bFile, 'utf8') === patched);
+  // 2026-11-18 小鱼丸 #1623 之后，--detach 跑完还会把缺的第三半补上（补丁内容只增不减）
+  const stillPatched = [aFile, bFile].every((f) => {
+    const s = readFileSync(f, 'utf8');
+    return s.includes('asr-failed') && s.includes('没有拿到转写结果');
+  });
+  ok('--detach 后各鱼仍是补丁版（第三半也补上）', stillPatched);
   ok('--detach 后各自独立（nlink=1）', statSync(aFile).nlink === 1 && statSync(bFile).nlink === 1);
   ok('--detach 后 --check 仍绿', run(['--check', '--pond', root]).code === 0);
   rmSync(root, { recursive: true, force: true });
