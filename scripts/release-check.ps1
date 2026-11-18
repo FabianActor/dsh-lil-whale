@@ -324,6 +324,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '媒体缓存清理' (($mcOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '媒体缓存清理' '过期媒体文件被删、不递归、缺目录不算错、删不掉会红（test-media-prune.mjs）' }
   } else { Fail '媒体缓存清理' 'scripts\test-media-prune.mjs 不在包里' }
+  # ── 4ad. 人工操作落账（2026-11-18，小鱼丸私聊 #33：群消息会滚走，换个人来问未必翻得到）──────
+  $moTest = Join-Path $pkg 'scripts\test-manual-op.mjs'
+  if (Test-Path $moTest) {
+    $moOut = & node $moTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '人工操作账' (($moOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '人工操作账' '行形固定、空 note/by 拒绝、note 不许多行或多竖线（test-manual-op.mjs）' }
+  } else { Fail '人工操作账' 'scripts\test-manual-op.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {
