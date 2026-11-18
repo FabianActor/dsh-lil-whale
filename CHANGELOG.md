@@ -20,6 +20,12 @@
 
 ## [未发布]
 
+- **第三方补丁脚本：按三条鱼的实际验收改三个地方**（r283，用户可见：否，开发脚本与文档）。
+  1. **汇报用的数跟模式走**（小满）：`--check`/`--dry-run` 一个字节都不写，小计却印"本次打 1"——现在只读模式印「可打 N · 已有 N · 只打一半 N · 失败 N · 未写盘」，真打才印"本次打 N"。
+  2. **"打了一半"单独说**（小鱼丸）：`NOTE_RE` 命中、`PUSH_OLD_RE` 不命中（或反过来）以前被归成"找不到落点（插件版本可能变了）"——两种原因现在分开点名。
+  3. **能重打也要能回退**（小满）：真打时先留 `look.js.orig-<版本>`（已有不覆盖），回滚就是复制回去；mtime 回答不了"补丁在不在"（同一份内容被重写过），判据用 `--check` + 内容 sha256。今天先给四个安装补齐了 `orig-0.8.3`（源自 fishball 那份上游原版备份）。
+  `scripts\test-thirdparty-patch.mjs` 20→27 条（新增只读计数、半打状态、原样副本三组断言），`release-check` 4y 跟着跑。上游 issue 草稿按 LeeaCP 的复核补齐：fixture 必须给 `plan.inputs.speechRate = 0`（否则输出空串、误判"没复现"）、`pipeline.js:392` 的 `transcriptChars / winDur` 与线上现象的连线、`source` 取值列表按行号列全（不写"10 种"让人去数）、`import { compactCells } from 'dsh-bili-eyes/look'` 的入口说明。
+
 - **补丁检查改成「没有前提的一层」**（r282，用户可见：否，体检 + 启动输出 + 升级输出）。r281 的三层里两层靠「有人想起来」（跑脚本、读文档），LeeaCP 指出：检测存在 ≠ 检测会被跑到。现在 `fish.ps1 up` 与 `fish.ps1 upgrade-check` 各自动跑一次 `patch-bili-eyes-note.mjs --check`（全打或没人装时静默；真丢了才黄字 + NEXT），`doctor` 那格保留。同时修掉 `--check` 的一个真 bug：它以前会顺手把补丁打上，于是「检查的那一刻它自己把洞补了」，永远 exit 0——检查器不能在检查时改变被检查的东西。现在 `--check` 只读并 exit 1；新增 `scripts\test-thirdparty-patch.mjs` 20 条（含负样本：检查后文件必须一个字节不变），release-check 加 4y。判据（LeeaCP）：「能做到、有检测、且检测会在你忘的时候自己跑，才叫维护得起。」
 
 - **第三方补丁要能活过更新**（r281，用户可见：否，体检 + 文档）。bili-eyes 的本地补丁打在 `node_modules` 里，升级或重装插件会把它冲掉；只留一个脚本不够，还得有人定期问它一句。`doctor.ps1` 新增「第三方补丁（bili-eyes）」一格：跑 `patch-bili-eyes-note.mjs --check`，0=全打、2=没人装、其余=WARN 并给出重打命令；测试覆盖登记新族；`怎么升级.md` §0/§2 补「第三方补丁」这一类与漏打症状；bili-eyes 笔记 §7→§8 并补「忘了重打怎么办」。判据（LeeaCP 2026-11-18）：「能做、有检测、能重打，才叫维护得起」。

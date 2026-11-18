@@ -51,11 +51,13 @@ const ORIGINAL = [
 
 function makePond() {
   const root = mkdtempSync(path.join(tmpdir(), 'llw-tpp-'));
-  const dir = path.join(root, 'homes', 'a', 'dsh-home', 'profiles', 'a', 'node_modules', 'dsh-bili-eyes', 'src');
+  const pkg = path.join(root, 'homes', 'a', 'dsh-home', 'profiles', 'a', 'node_modules', 'dsh-bili-eyes');
+  const dir = path.join(pkg, 'src');
   mkdirSync(dir, { recursive: true });
+  writeFileSync(path.join(pkg, 'package.json'), JSON.stringify({ name: 'dsh-bili-eyes', version: '0.8.3' }), 'utf8');
   const file = path.join(dir, 'look.js');
   writeFileSync(file, ORIGINAL, 'utf8');
-  return { root, file };
+  return { root, file, pkg };
 }
 
 console.log('第三方补丁：行为测试');
@@ -67,6 +69,9 @@ console.log('第三方补丁：行为测试');
   ok('--check 空安装时 exit 1', r.code === 1, `实际 ${r.code}`);
   ok('--check 说"未写入"', r.out.includes('--check，未写入'), r.out.trim().split('\n').pop());
   ok('--check 不改文件（检查器不能在检查时改被检查的东西）', readFileSync(file, 'utf8') === ORIGINAL);
+  // 2026-11-18 小满：一个字节都没写，"本次打 1"却印出来了——汇报用的数要跟模式一致
+  ok('--check 的小计不说"本次打"', !/本次打 \d/.test(r.out), r.out.trim().split('\n').find((l) => l.includes('小计')) || '');
+  ok('--check 的小计写"可打"', /可打 1/.test(r.out));
   rmSync(root, { recursive: true, force: true });
 }
 
@@ -79,7 +84,7 @@ console.log('第三方补丁：行为测试');
   rmSync(root, { recursive: true, force: true });
 }
 
-// 3. 真打：补三句 + 带 error
+// 3. 真打：补三句 + 带 error + 原始副本和备份
 {
   const { root, file } = makePond();
   const r = run(['--pond', root]);
@@ -90,7 +95,27 @@ console.log('第三方补丁：行为测试');
   ok('补了 file-failed', text.includes("'file-failed'"));
   ok('补了 no-audio', text.includes("'no-audio'"));
   ok('带上了 transcript.error', text.includes('const why = String(result.transcript?.error'));
-  ok('写了备份文件', run(['--check', '--pond', root]).code === 0);
+  ok('留了原始副本 look.js.orig-0.8.3（能重打也要能回退）', readFileSync(`${file}.orig-0.8.3`, 'utf8') === ORIGINAL);
+  ok('留了当日备份 look.js.bak-20261118', readFileSync(`${file}.bak-20261118`, 'utf8') === ORIGINAL);
+  ok('打完再 --check 应 exit 0', run(['--check', '--pond', root]).code === 0);
+  rmSync(root, { recursive: true, force: true });
+}
+
+// 3b. 打了一半（标记在、推送句没补）要被单独点名，不能归成"版本可能变了"
+{
+  const { root, file } = makePond();
+  run(['--pond', root]);
+  const patched = readFileSync(file, 'utf8');
+  // 把推送分支还原成上游单行版：只剩"标记在、推送句没补"
+  const halfText = patched.replace(
+    /if \(src && TRANSCRIPT_NOTE\[src\]\) \{[\s\S]*?\n  \}/,
+    'if (src && TRANSCRIPT_NOTE[src]) lines.push(`（${TRANSCRIPT_NOTE[src]}）`);',
+  );
+  writeFileSync(file, halfText, 'utf8');
+  const r = run(['--check', '--pond', root]);
+  ok('半打状态 exit 1', r.code === 1, `实际 ${r.code}`);
+  ok('点名"只打了一半"', r.out.includes('只打了一半'));
+  ok('不再说成"找不到落点（插件版本可能变了）"', !r.out.includes('找不到落点'));
   rmSync(root, { recursive: true, force: true });
 }
 
