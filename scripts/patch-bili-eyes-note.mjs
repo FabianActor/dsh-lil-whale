@@ -8,9 +8,11 @@
 //   真实原因就在 result.transcript.error 里，原代码只读了 .source。
 //
 // 用法：
-//   node app\scripts\patch-bili-eyes-note.mjs [--pond <鱼塘根>] [--dry-run] [--check] [--detach]
+//   node app\scripts\patch-bili-eyes-note.mjs [--pond <鱼塘根>] [--dry-run] [--check] [--detach] [--also-root <DSH_HOME>]
 //   --check   只检查是否已打补丁；有未打的 exit 1（给体检/发版检查用）
 //   --detach  给已经打过的安装断开与 pnpm store 的硬链接，并把 store 那份恢复成原样
+//   --also-root  额外扫一份 `<DSH_HOME>\profiles\*\node_modules\dsh-bili-eyes`（2026-11-19：宿主
+//                自己的 web profile 也装了这只眼睛，它不在 homes\ 下面，默认扫不到）
 //
 // 注意：打的是 node_modules 里的第三方插件代码，**重装或升级插件会覆盖**；升级后重跑本脚本。
 // 上游仓库：https://github.com/QiuYeDx/dsh-bili-eyes
@@ -50,6 +52,20 @@ const checkOnly = argv.includes('--check');
 const detachMode = argv.includes('--detach');
 const readOnly = dryRun || checkOnly;
 const pondRoot = path.resolve(String(opt('pond', path.resolve(APP_ROOT, '..'))));
+
+// 2026-11-19：宿主自己的 web profile 也装了 dsh-bili-eyes（它不在 homes\ 下面），
+// 默认扫不到；用 --also-root <DSH_HOME> 显式加一个 `<DSH_HOME>\profiles\*` 根。
+// 默认不扫，是为了让"扫到几份"这个数在任何机器上都只由鱼塘内容决定。
+const alsoRoots = [];
+for (let i = 0; i < argv.length; i += 1) {
+  if (argv[i] !== '--also-root') continue;
+  const v = argv[i + 1];
+  if (!v || v.startsWith('--')) {
+    console.error('--also-root 需要一个目录参数（例：--also-root C:\\Users\\Fabian\\.dsh）');
+    process.exit(2);
+  }
+  alsoRoots.push(path.resolve(v));
+}
 
 const MARK = '// 2026-11-18 本地补丁：转写/台词文件失败时，不能掉进「没人说话」那句';
 const MARK2 = '// 2026-11-18 本地补丁：没有 transcript 对象时，也不能掉进「没人说话」那句（小鱼丸 #1623）';
@@ -126,14 +142,25 @@ function applyGen2(text, eol) {
 function candidates() {
   const out = [];
   const homes = path.join(pondRoot, 'homes');
-  if (!fs.existsSync(homes)) return out;
-  for (const home of fs.readdirSync(homes)) {
-    const profiles = path.join(homes, home, 'dsh-home', 'profiles');
+  if (fs.existsSync(homes)) {
+    for (const home of fs.readdirSync(homes)) {
+      const profiles = path.join(homes, home, 'dsh-home', 'profiles');
+      if (!fs.existsSync(profiles)) continue;
+      for (const profile of fs.readdirSync(profiles)) {
+        const pkgDir = path.join(profiles, profile, 'node_modules', 'dsh-bili-eyes');
+        const file = path.join(pkgDir, 'src', 'look.js');
+        if (fs.existsSync(file)) out.push({ member: home, file, pkgDir });
+      }
+    }
+  }
+  // 宿主的 profile：member 写成「宿主/<profile>」，一眼看得出它不在鱼塘里。
+  for (const root of alsoRoots) {
+    const profiles = path.join(root, 'profiles');
     if (!fs.existsSync(profiles)) continue;
     for (const profile of fs.readdirSync(profiles)) {
       const pkgDir = path.join(profiles, profile, 'node_modules', 'dsh-bili-eyes');
       const file = path.join(pkgDir, 'src', 'look.js');
-      if (fs.existsSync(file)) out.push({ member: home, file, pkgDir });
+      if (fs.existsSync(file)) out.push({ member: `宿主/${profile}`, file, pkgDir });
     }
   }
   return out;

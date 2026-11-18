@@ -21,7 +21,17 @@ pwsh -NoProfile -File scripts\fish.ps1 up <键> -NoBrowser
 
 判据：启动后会话挂载的 `toolCount` 会多出 **14 件** `bili_*` 工具（例：lee2 从 43 → 57；whale 从 37 → 51）。`dsh plugin` 报"已在依赖里"就跳过。
 
-注意：宿主自己的 web profile 不需要装它——"眼睛"是给鱼看的；宿主想看视频直接用浏览器。
+注意（2026-11-19 更新）：宿主本人不需要它——宿主想看视频直接用浏览器。但宿主侧的那个 agent（Leea）如果也要自己看，可以给它装一只只读的：装法与鱼相同，只是 profile 换成宿主自己的 `web`。
+
+```powershell
+$env:DSH_HOME = "$env:USERPROFILE\.dsh"   # 换成你自己的 DSH_HOME
+dsh plugin --profile web add dsh-bili-eyes@0.8.3    # 会自动写进 profile package.json 的 dsh.profile.bundles
+# 配置：<DSH_HOME>\bili-eyes.json     凭证：<DSH_HOME>\bili-eyes\{credential.json,cookies.txt}
+# 改完 profile 要重启才生效（这条链不触发热重载，但工具表是启动时挂的）
+node app\scripts\patch-bili-eyes-note.mjs --also-root "<DSH_HOME>"   # 补丁脚本默认只扫 homes\，宿主这份要显式加根
+```
+
+判据：重启后宿主的会话工具表多出 **14 件** `bili_*`（2026-11-19 本机装前 70 件）。只读边界与鱼相同：看视频/搜/看评论弹幕默认开，点赞/评论/私信/关注/发动态默认全关。
 
 ## 2. 配置：一条鱼一份 JSON
 
@@ -94,7 +104,7 @@ Get-Content homes\<键>\dsh-home\bili-eyes\history.jsonl -Tail 3
 - 自己逛（按时段自动刷）与收件箱：默认关。
 - 给鱼的边界建议：**只开只读**（看视频、搜、看评论），写操作要开就只对她自己人；这些是她的账号行为，不是基座的账本。
 
-## 6. 本机现状（2026-11-17）
+## 6. 本机现状（2026-11-19 更新）
 
 | 鱼 | 版本 | 配置 | 凭证 | 工具数 |
 | --- | --- | --- | --- | --- |
@@ -102,6 +112,7 @@ Get-Content homes\<键>\dsh-home\bili-eyes\history.jsonl -Tail 3
 | 第三条鱼（fishball） | 0.8.3 | 有 | 有 | 51 |
 | 第四条鱼（xiaoman） | 0.8.3 | 有 | 有 | 51 |
 | 第五条鱼（lee2/LeeaCP） | 0.8.3 | 有（抄 whale） | 有（2026-11-17 晚复制，登录态） | 57（BC 6 + bili 14 + 其它） |
+| 宿主进程里的 agent（Leea，2026-11-19 装） | 0.8.3 | 有（抄 whale，放在 `<DSH_HOME>\bili-eyes.json`） | 有（抄 whale，登录态） | 装前 70，重启后待验（预期 +14） |
 
 ## 7. 升级与卸载
 

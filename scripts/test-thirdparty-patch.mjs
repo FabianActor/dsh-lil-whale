@@ -463,5 +463,28 @@ console.log('第三方补丁：行为测试');
   rmSync(d.root, { recursive: true, force: true });
 }
 
+// 9. 2026-11-19 Leea（宿主自己也要一只眼睛）：--also-root 能扫到宿主的 profile，
+//    但默认不扫——"扫到几份"这个数只由鱼塘内容决定，不由这台机器碰巧装了什么决定。
+{
+  const src = readFileSync(SCRIPT, 'utf8');
+  ok('also-root：脚本支持 --also-root', src.includes("'--also-root'"));
+  ok('also-root：默认不扫（alsoRoots 初始为空数组）', /const alsoRoots = \[\];/.test(src));
+  ok('also-root：宿主的安装标成「宿主/<profile>」', src.includes("`宿主/${profile}`"));
+  ok('also-root：缺参数时 exit 2 并说清要什么', src.includes('--also-root 需要一个目录参数'));
+  ok('also-root：用法注释里写了它', /--also-root <DSH_HOME>/.test(src));
+
+  // 行为：临时 DSH_HOME 造一份宿主安装，只加 --also-root 时小计里要出现「宿主/web」。
+  const fake = mkdtempSync(path.join(tmpdir(), 'llw-tpp-host-'));
+  const pkgDir = path.join(fake, 'profiles', 'web', 'node_modules', 'dsh-bili-eyes');
+  mkdirSync(path.join(pkgDir, 'src'), { recursive: true });
+  writeFileSync(path.join(pkgDir, 'package.json'), JSON.stringify({ name: 'dsh-bili-eyes', version: '0.8.3' }), 'utf8');
+  writeFileSync(path.join(pkgDir, 'src', 'look.js'), ORIGINAL, 'utf8');
+  const emptyPond = mkdtempSync(path.join(tmpdir(), 'llw-tpp-nohomes-'));
+  const dry = run(['--dry-run', '--pond', emptyPond, '--also-root', fake]);
+  ok('also-root：不扫时鱼塘里没有东西，扫了之后能看见宿主/web', /宿主\/web.*可以打/.test(dry.out), dry.out.slice(-400));
+  rmSync(fake, { recursive: true, force: true });
+  rmSync(emptyPond, { recursive: true, force: true });
+}
+
 console.log(`test-thirdparty-patch：合计 ${pass + fail}，PASS ${pass}，FAIL ${fail}`);
 process.exit(fail > 0 ? 1 : 0);
