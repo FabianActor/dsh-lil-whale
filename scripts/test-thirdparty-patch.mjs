@@ -101,7 +101,7 @@ console.log('第三方补丁：行为测试');
   rmSync(root, { recursive: true, force: true });
 }
 
-// 3b. 打了一半（标记在、推送句没补）要被单独点名，不能归成"版本可能变了"
+// 3b. 打了一半（标记在、推送句没补）：只读时能看见"可以补"，真打要补上另一半
 {
   const { root, file } = makePond();
   run(['--pond', root]);
@@ -112,10 +112,31 @@ console.log('第三方补丁：行为测试');
     'if (src && TRANSCRIPT_NOTE[src]) lines.push(`（${TRANSCRIPT_NOTE[src]}）`);',
   );
   writeFileSync(file, halfText, 'utf8');
+  const check = run(['--check', '--pond', root]);
+  ok('半打状态 --check exit 1', check.code === 1, `实际 ${check.code}`);
+  ok('说"可以补"', check.out.includes('可以补'));
+  ok('不再说成"找不到落点（插件版本可能变了）"', !check.out.includes('找不到落点'));
+  const fix = run(['--pond', root]);
+  ok('半打状态重跑能补上（不再空转）', fix.code === 0 && fix.out.includes('补上了另一半'), fix.out.trim().split('\n').slice(-2).join(' / '));
+  ok('补完后 --check 真绿', run(['--check', '--pond', root]).code === 0);
+  rmSync(root, { recursive: true, force: true });
+}
+
+// 3c. 只打了一半、缺的那半也找不到落点：要给出明确下一步（拿 orig 回滚），不能红着不动
+{
+  const { root, file } = makePond();
+  run(['--pond', root]);
+  const patched = readFileSync(file, 'utf8');
+  // 标记在，但把推送分支整段换成一句认不出来的话
+  const stuck = patched.replace(
+    /if \(src && TRANSCRIPT_NOTE\[src\]\) \{[\s\S]*?\n  \}/,
+    'lines.push(TRANSCRIPT_NOTE[src] || "");',
+  );
+  writeFileSync(file, stuck, 'utf8');
   const r = run(['--check', '--pond', root]);
-  ok('半打状态 exit 1', r.code === 1, `实际 ${r.code}`);
-  ok('点名"只打了一半"', r.out.includes('只打了一半'));
-  ok('不再说成"找不到落点（插件版本可能变了）"', !r.out.includes('找不到落点'));
+  ok('无法自动补时 --check exit 1', r.code === 1, `实际 ${r.code}`);
+  ok('明说"无法自动补"', r.out.includes('无法自动补'));
+  ok('给出下一步：拿 orig 复制回去', r.out.includes('.orig-'));
   rmSync(root, { recursive: true, force: true });
 }
 

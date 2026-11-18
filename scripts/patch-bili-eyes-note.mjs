@@ -91,8 +91,9 @@ if (targets.length === 0) {
 }
 
 let patchable = 0;   // 可以打 / 本次打
+let halfFixed = 0;   // 只打了一半，本次补上另一半
 let already = 0;
-let half = 0;        // 只打了一半（标记在、推送句没补，或反过来）
+let halfStuck = 0;   // 只打了一半，且缺的那半找不到落点（要人拿 orig 回滚）
 let failed = 0;      // 找不到落点等
 for (const t of targets) {
   const text = fs.readFileSync(t.file, 'utf8');
@@ -103,9 +104,28 @@ for (const t of targets) {
     console.log(`— ${t.member}: 已打过补丁`);
     continue;
   }
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
   if (hasMark !== hasPush) {
-    half += 1;
-    console.log(`✗ ${t.member}: 只打了一半（${hasMark ? '标记在、推送句没补' : '推送句在、标记没补'}）→ ${t.file}`);
+    // 只打了一半：缺哪半补哪半（2026-11-18 小鱼丸：只看见、不修，重打也没用）
+    const missingNote = !hasMark;      // 文案表那半没打
+    const canFixMissing = missingNote ? NOTE_RE.test(text) : PUSH_OLD_RE.test(text);
+    const which = missingNote ? '标记/文案表' : '推送句';
+    if (!canFixMissing) {
+      halfStuck += 1;
+      console.log(`✗ ${t.member}: 只打了一半（缺${which}），而且缺的那半也找不到落点 → ${t.file}`);
+      console.log(`  下一步：把 ${path.basename(t.file)}.orig-* 复制回 ${path.basename(t.file)}，再重跑本脚本。`);
+      continue;
+    }
+    if (readOnly) {
+      console.log(`— ${t.member}: 只打了一半（缺${which}），可以补（${checkOnly ? '--check，未写入' : 'dry-run，未写入'}）`);
+      halfFixed += 1;
+      continue;
+    }
+    const next = missingNote ? text.replace(NOTE_RE, NOTE_NEW(eol)) : text.replace(PUSH_OLD_RE, PUSH_NEW(eol));
+    ensureBackups(t);
+    fs.writeFileSync(t.file, next, 'utf8');
+    halfFixed += 1;
+    console.log(`✓ ${t.member}: 补上了另一半（${which}）`);
     continue;
   }
   if (!NOTE_RE.test(text) || !PUSH_OLD_RE.test(text)) {
@@ -113,7 +133,6 @@ for (const t of targets) {
     console.log(`✗ ${t.member}: 找不到落点（插件版本可能变了）→ ${t.file}`);
     continue;
   }
-  const eol = text.includes('\r\n') ? '\r\n' : '\n';
   const next = text
     .replace(NOTE_RE, NOTE_NEW(eol))
     .replace(PUSH_OLD_RE, PUSH_NEW(eol));
@@ -122,28 +141,40 @@ for (const t of targets) {
     patchable += 1;
     continue;
   }
-  const version = versionOf(t.pkgDir);
-  const orig = `${t.file}.orig-${version || 'unknown'}`;
+  ensureBackups(t);
+  fs.writeFileSync(t.file, next, 'utf8');
+  patchable += 1;
+  console.log(`✓ ${t.member}: 已打补丁（原始副本 ${path.basename(origPath(t))}）`);
+}
+
+function origPath(t) {
+  return `${t.file}.orig-${versionOf(t.pkgDir) || 'unknown'}`;
+}
+function ensureBackups(t) {
+  const orig = origPath(t);
   if (!fs.existsSync(orig)) fs.copyFileSync(t.file, orig);
   const bak = `${t.file}.bak-20261118`;
   if (!fs.existsSync(bak)) fs.copyFileSync(t.file, bak);
-  fs.writeFileSync(t.file, next, 'utf8');
-  patchable += 1;
-  console.log(`✓ ${t.member}: 已打补丁（原始副本 ${path.basename(orig)}）`);
 }
 
 console.log('');
 if (readOnly) {
-  console.log(`小计：${targets.length} 个安装 · 可打 ${patchable} · 已有 ${already} · 只打一半 ${half} · 失败 ${failed} · 未写盘`);
+  console.log(`小计：${targets.length} 个安装 · 可打 ${patchable} · 可补一半 ${halfFixed} · 已有 ${already} · 无法自动补 ${halfStuck} · 失败 ${failed} · 未写盘`);
 } else {
-  console.log(`小计：${targets.length} 个安装 · 本次打 ${patchable} · 已有 ${already} · 只打一半 ${half} · 失败 ${failed}`);
+  console.log(`小计：${targets.length} 个安装 · 本次打 ${patchable} · 本次补一半 ${halfFixed} · 已有 ${already} · 无法自动补 ${halfStuck} · 失败 ${failed}`);
 }
 if (checkOnly) {
-  const bad = targets.filter((t) => !fs.readFileSync(t.file, 'utf8').includes(MARK)).length;
+  const bad = targets.filter((t) => {
+    const s = fs.readFileSync(t.file, 'utf8');
+    const hasMark = s.includes(MARK);
+    const hasPush = /const why = String\(result\.transcript\?\.error/.test(s);
+    return !(hasMark && hasPush);
+  }).length;
   if (bad > 0) {
-    console.log(`检查：还有 ${bad} 个安装没打补丁。`);
+    console.log(`检查：还有 ${bad} 个安装没打全补丁（含只打了一半的）。`);
     process.exit(1);
   }
   console.log('检查：全部已打补丁。');
 }
-process.exit(failed > 0 || half > 0 ? 1 : 0);
+const needsWork = patchable + halfFixed;
+process.exit(failed > 0 || halfStuck > 0 || (checkOnly && needsWork > 0) ? 1 : 0);
