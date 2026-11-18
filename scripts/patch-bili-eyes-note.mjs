@@ -95,8 +95,8 @@ for (const t of targets) {
   const next = text
     .replace(NOTE_RE, NOTE_NEW(eol))
     .replace(PUSH_OLD_RE, PUSH_NEW(eol));
-  if (dryRun) {
-    console.log(`— ${t.member}: 可以打（dry-run，未写入）`);
+  if (dryRun || checkOnly) {
+    console.log(`— ${t.member}: 可以打（${checkOnly ? '--check，未写入' : 'dry-run，未写入'}）`);
     patched += 1;
     continue;
   }

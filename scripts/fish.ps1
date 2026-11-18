@@ -667,6 +667,20 @@ function Invoke-Doctor {
   return ($LASTEXITCODE -eq 0)
 }
 
+# ---------- 第三方补丁（bili-eyes）----------
+# LeeaCP 2026-11-18 08:27：三层里两层靠"有人想起来跑"。补丁活在 node_modules 里，
+# 升级/重装就会丢；把检查挂到"你本来就会跑的两个时刻"（起鱼、读升级单），
+# 这样它不靠记性。全打或没人装时静默，只在真丢时嚷一句。
+function Show-BiliEyesPatchStatus {
+  $patchScript = Join-Path $PSScriptRoot 'patch-bili-eyes-note.mjs'
+  if (-not (Test-Path -LiteralPath $patchScript)) { return }
+  $out = @(& node $patchScript --check 2>&1)
+  $code = $LASTEXITCODE
+  if ($code -eq 0 -or $code -eq 2) { return }
+  Write-Host '第三方补丁：有安装没打——「转写失败」会被写成「没人说话」' -ForegroundColor Yellow
+  $out | Where-Object { $_ -match '✗|小计：|检查：' } | ForEach-Object { Write-Host ('  ' + $_) -ForegroundColor Yellow }
+  Write-Host '  NEXT: node app\scripts\patch-bili-eyes-note.mjs（先 --dry-run；重装或升级 dsh-bili-eyes 后要重打）' -ForegroundColor Yellow
+}
 function Show-Help {
   @'
 fish.ps1 -- 鱼群唯一的入口
@@ -718,6 +732,7 @@ function Invoke-Up([string]$name) {
       $NoBrowser = $saved
     }
   }
+  Show-BiliEyesPatchStatus
   return $okAll
 }
 
@@ -1241,6 +1256,7 @@ function Invoke-Wake([string]$name, [string]$by = 'fish.ps1', [string]$why = '')
 # 这个命令把"要不要做、做什么、做完看什么"打成清单，交给宿主（或宿主的代理）执行。
 # 不自动重启、不自动改用户的机器：重启归宿主，改权限要人点头。
 function Invoke-UpgradeCheck([string]$MarkVersion) {
+  Show-BiliEyesPatchStatus
   $specFile = Join-Path $Cfg.Root 'upgrade.json'
   $stateFile = Join-Path $Cfg.PoolState 'upgrade-applied.json'
   $pkgFile = Join-Path $Cfg.Root 'plugin\dsh-lil-whale-group\package.json'

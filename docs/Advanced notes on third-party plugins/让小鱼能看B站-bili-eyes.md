@@ -124,5 +124,6 @@ Get-Content homes\<键>\dsh-home\bili-eyes\history.jsonl -Tail 3
   补三句（`asr-failed` / `file-failed` / `no-audio`），并在失败时把原因附上（`；原因：<error 前 160 字>`）。
 - **注意**：pnpm 用硬链接，四个 profile 里的 `look.js` 与 `.pnpm-store` 里的同一份是**同一个 inode**——改一处，四个安装一起变；本次备份在 `homes\fishball\...\dsh-bili-eyes\src\look.js.bak-20261118`。**重装或升级插件会覆盖补丁**，升级后重跑脚本。
 - **忘了重打怎么办**：`doctor` 里有「第三方补丁（bili-eyes）」一格（跑 `--check`：0=全打、2=没人装、其余=WARN 并直接给出重打命令）；`docs/detail/怎么升级.md` §0 的「四类不会自己变」表里也加了"第三方补丁"这一行，§2 的"做漏了会怎样"有对应症状。
+- **不用记得去查**：`fish.ps1 up`（每次起鱼）和 `fish.ps1 upgrade-check`（每次读升级单）都会自动跑一次 `--check`；全打或没人装时静默，真丢了才黄字 + `NEXT`。这是 LeeaCP 追出来的那一层——"检测存在 ≠ 检测会被跑到"。
 - **生效**：要重启对应鱼的进程才会加载新代码。
 - **上游**：https://github.com/QiuYeDx/dsh-bili-eyes （要不要报 issue 由宿主定）。

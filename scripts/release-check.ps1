@@ -281,7 +281,14 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '自检行口径' (($raOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '自检行口径' '每个计数自带分母与排除项（test-roster-audit.mjs）' }
   } else { Fail '自检行口径' 'scripts\test-roster-audit.mjs 不在包里' }
-  # ── 5. 模板残留 ─────────────────────────────────────────────────────
+    # ── 4y. 第三方补丁（2026-11-18，LeeaCP 问"补丁怎么活过更新"）──────────
+  $tpTest = Join-Path $pkg 'scripts\test-thirdparty-patch.mjs'
+  if (Test-Path $tpTest) {
+    $tpOut = & node $tpTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '第三方补丁' (($tpOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '第三方补丁' '检查器只读、补丁可重打、起鱼与读升级单时自动跑（test-thirdparty-patch.mjs）' }
+  } else { Fail '第三方补丁' 'scripts\test-thirdparty-patch.mjs 不在包里' }
+# ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {
     if (Select-String -Path $tpl -Pattern '\{\{[A-Z_]+\}\}' -Quiet) { Ok '模板占位符' '模板里是占位符（正常），装的时候会填' }
