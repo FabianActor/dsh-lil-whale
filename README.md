@@ -404,6 +404,8 @@ pwsh -File scripts\fish.ps1 upgrade-check -Mark 1.7.2   # 做完以后记账
 2. **或直接开 PR**：修好了就带上复现步骤一起提，issue 可以省。
 3. **或在 QQ 群说一声**：群号 `xxx`（占位，发布时替换）。
 
+另外：如果你**成功给小鱼装过第三方插件**（或踩通了别人没写过的坑），也欢迎开 issue 分享——这类经验比 bug 报告更稀缺，我们会整理进 [`docs/Advanced notes on third-party plugins/`](./docs/Advanced%20notes%20on%20third-party%20plugins/README.md)。
+
 报的时候带这四样，能省几轮来回：
 
 - 版本号：`plugin/dsh-lil-whale-group/package.json`（以及 `-ui` 包的）里的 `version`；

@@ -5,6 +5,8 @@
 > 以下插件都不是基座的一部分：装不装都能跑；基座的安装、升级、体检文档不依赖它们。
 > 这里的本机补丁、配置与用法**不写入基座 CHANGELOG**——基座 CHANGELOG 只记基座自己的改动（r323 起）；第三方插件的沉淀留在这一册。
 
+如果你**成功给小鱼装过这里的插件**（或别的第三方插件、踩通了没写过的坑），欢迎[开 issue](https://github.com/FabianActor/dsh-lil-whale/issues)分享——这类经验比 bug 报告更稀缺，我们会把它整理进这一册。
+
 ## 目录
 
 - [给小鱼装 billion-context](给小鱼装-billion-context.md) —— 两个情形：全新装（XDG 是开关、回填会让时间塌成批次时刻、怎么用她自己的原话验收）／把用过 billion-context 的老会话迁成一条鱼（会话 + 附件 + 压缩库 + 工作区登记 + 旧家收尾，含 `restore` 只 UPDATE 的坑）。
