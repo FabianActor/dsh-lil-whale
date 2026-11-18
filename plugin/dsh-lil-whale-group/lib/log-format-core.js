@@ -10,31 +10,58 @@
 //
 // 判据（小满）：「一个字段名承诺的是『某个区间』，写法却每行都重置它，那么读它的人
 // 得到的是『最后一次重置的时刻』」。
+//
+// 2026-11-18 r296，两条补丁（第二条鱼 #1746、第四条鱼 #1745）：
+//   1. 指纹改成"按 key 解析后比"，不再在整条 detail 上做字符串搜索——
+//      否则任何值里出现字面量 `fields=` / `fmt=` 都会把指纹切错。
+//   2. key 的顺序不再是签名的一部分：比较的是"每个 key 的值"，不是拼好的字符串。
+//      （小鱼丸："签名的相等是按字符串比的，顺序不同就算变了"——重排常量会让每次启动多一行。）
 
 export const LOG_FORMAT_SIG = 'fmt=3 changed=skip,wake-skip,deliver fields=deny,note,reason field-since=codeFp:r255,member:r292,note:r293'
 
 const MARK = ' | log-format | '
-const KEYS = ['fmt=', 'changed=', 'fields=', 'field-since=']
+// 参与指纹的 key（顺序固定输出，但比较时按 key 取值——顺序不进指纹）。
+const KEYS = ['fmt', 'changed', 'fields', 'field-since']
+export const LOG_FORMAT_KEYS = KEYS
 
-// 从一整行日志里取出"格式指纹"（不含 since / pid / to 这些每次都可能不同的部分）。
-// 不是 log-format 行返回 ''。
-function signatureOf(line) {
+// 从 detail 里按 ` (^|空格)key=值` 取每个 key 的值。
+// 值里夹着别的 key 的字面量不会影响：这里只认"空白之后"的 key。
+function parseDetail(detail) {
+  const map = {}
+  const re = /(?:^|\s)(fmt|changed|fields|field-since)=(\S*)/g
+  let m = re.exec(detail)
+  while (m) {
+    map[m[1]] = m[2]
+    m = re.exec(detail)
+  }
+  return map
+}
+
+// 稳定指纹：只含"格式"那几项，按 key 取值拼成 JSON（顺序与写法无关）。
+function canonicalOf(map) {
+  const out = {}
+  for (const key of KEYS) out[key] = map[key] ?? null
+  return JSON.stringify(out)
+}
+
+function detailOf(line) {
   const text = String(line || '')
   const at = text.indexOf(MARK)
   if (at < 0) return ''
-  const detail = text.slice(at + MARK.length)
-  const parts = KEYS.map((key) => {
-    const pos = detail.indexOf(key)
-    if (pos < 0) return ''
-    const rest = detail.slice(pos + key.length)
-    const m = rest.match(/^[^\s]*/)
-    return key + (m ? m[0] : '')
-  })
-  return parts.filter(Boolean).join(' ')
+  return text.slice(at + MARK.length)
 }
 
+// 从一整行日志里取出"格式指纹"（不含 since / pid / to 这些每次都可能不同的部分）。
+// 不是 log-format 行返回 ''。
 export function signatureOfLine(line) {
-  return signatureOf(line)
+  const detail = detailOf(line)
+  if (!detail) return ''
+  return canonicalOf(parseDetail(detail))
+}
+
+// 签名常量的规范化形式（与 signatureOfLine 的返回可直接比较）。
+export function signatureOfConstant(signature = LOG_FORMAT_SIG) {
+  return canonicalOf(parseDetail(String(signature || '')))
 }
 
 // 最后一行 log-format（找不到返回 ''）。旧行可能中间夹着别的日志，所以从尾往前找。
@@ -47,12 +74,12 @@ export function findLastLogFormatLine(lines) {
 }
 
 // 该不该写一行新的表头。
-// lines：这本日志现有的行（顺序与文件一致）；signature：本次打算写的格式指纹。
+// lines：这本日志现有的行（顺序与文件一致）；signature：本次打算写的格式签名。
 export function shouldWriteLogFormat({ lines, signature = LOG_FORMAT_SIG } = {}) {
   const prev = findLastLogFormatLine(lines)
   if (!prev) return { write: true, reason: '还没有表头' }
-  const prevSig = signatureOf(prev)
-  if (prevSig !== signature) return { write: true, reason: '格式变了' }
+  const prevSig = signatureOfLine(prev)
+  if (prevSig !== signatureOfConstant(signature)) return { write: true, reason: '格式变了' }
   return { write: false, reason: '同一格式已在纸上' }
 }
 

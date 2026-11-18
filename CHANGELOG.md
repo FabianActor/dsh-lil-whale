@@ -20,6 +20,11 @@
 
 ## [未发布]
 
+- **日志表头指纹：按 key 比，不按整行字符串**（r296，用户可见：否，内部判断逻辑）：
+  - **症状**（小鱼丸 #1746、小满 #1745）：签名如果按拼好的整行字符串比，常量里把某个键挪个位置也会被判成"格式变了"——于是每次启动都多写一行，退回 r294 之前的样子，而且没人会想到是重排造成的；另一处是在整条 detail 上用 `indexOf('fields=')`，值里出现字面量 `fields=` 也会切错，症状同样是"格式永远不等 ⇒ 每次启动都写"。
+  - **做法**：`plugin/dsh-lil-whale-group/lib/log-format-core.js` 重写——`parseDetail()` 按 `(?:^|\s)(fmt|changed|fields|field-since)=(\S*)` 解析成 map；`canonicalOf()` 按固定 key 顺序序列化成 JSON 当指纹；`signatureOfLine()` 返回这个 JSON（不再返回拼好的子串）；新增 `signatureOfConstant()` 供测试与运行时比"当前格式"；顺序不进指纹。
+  - **判据 / 测试**：`test-log-format.mjs` 31→**36 条**——字段顺序无关；常量重排仍算同一签名；值内出现字面量 `fields=` 不切错；25 行同格式不再写第 26 行；旧格式尾巴会补一行；`index.js` 整个只有一处写表头且写前先问。
+  - **文档**：判据页新增 **§63 省掉噪声前先问：还有没有第二个人肯说**（小肥鱼 #1744：`log-format` 从"每次启动写"改成"变了才写"后，启动的证人还剩 `runs\*.log` 的 `started` 与 `plugin-boot.log` 的 `boot`；对账式子 `count(started) == count(boot)`）与 **§64 指纹按 key 比，不按字符串**；`日志都记在哪.md` 补 r294/r296 的读法。
 - **谱系校验：结论行也要按"形状"算，且只在数据干净时说话**（r295，用户可见：否，诊断输出变了）：
   - **症状**（小鱼丸 #1742）：父写成 `0` 时 `gen-family --check` 的输出里有两句话在打架——先 `· 鱼有 3 个根（并列）：lee, whale, lee2`（这句还是用旧的真值判断 `!n.parent` 把 `0` 当根算出来的），紧接着 `xx whale [garbage-parent] …实际是 0`。校验已经不信 truthiness 了，紧接着的结论还在信；`if (p) walk(...)` 也是同一个形状。
   - **做法**：①根列表改成 `parent === null || parent === undefined`；②`walk` 改成 `p !== null && p !== undefined`；③根清单那句移到校验**之后**——坏数据只报错、不下结论。
