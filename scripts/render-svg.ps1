@@ -105,7 +105,7 @@ try {
 
   $fileUrl = 'file:///' + ($htmlPath -replace '\\', '/')
   $profileDir = Join-Path $tmp 'profile'
-  $args = @(
+  $chromeArgs = @(
     '--headless=new', '--disable-gpu', '--hide-scrollbars',
     '--no-first-run', '--no-default-browser-check',
     '--disable-extensions', '--disable-background-networking',
@@ -114,7 +114,7 @@ try {
     "--screenshot=$outPath",
     $fileUrl
   )
-  & $edge @args 2>&1 | Out-Null
+  & $edge @chromeArgs 2>&1 | Out-Null
 
   if (-not (Test-Path -LiteralPath $outPath)) { Fail "浏览器没写出 PNG：$outPath" }
   $info = Get-Item -LiteralPath $outPath

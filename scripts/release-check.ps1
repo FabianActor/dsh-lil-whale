@@ -302,6 +302,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '日志表头' (($lfOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '日志表头' '格式没变不重复写 since；变了才写一次（test-log-format.mjs）' }
   } else { Fail '日志表头' 'scripts\test-log-format.mjs 不在包里' }
+  # ── 4aa. PowerShell 保留名（2026-11-18，小鱼丸私信 #13：$host 赋值失败但脚本照跑）──────
+  $psTest = Join-Path $pkg 'scripts\test-ps-reserved-names.mjs'
+  if (Test-Path $psTest) {
+    $psOut = & node $psTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '保留名赋值' (($psOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '保留名赋值' '不向 $HOME/$Host/$PID 等 21 个只读自动变量赋值（test-ps-reserved-names.mjs）' }
+  } else { Fail '保留名赋值' 'scripts\test-ps-reserved-names.mjs 不在包里' }
 # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {
