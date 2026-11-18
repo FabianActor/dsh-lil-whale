@@ -137,6 +137,10 @@ console.log('第三方补丁：行为测试');
   ok('无法自动补时 --check exit 1', r.code === 1, `实际 ${r.code}`);
   ok('明说"无法自动补"', r.out.includes('无法自动补'));
   ok('给出下一步：拿 orig 复制回去', r.out.includes('.orig-'));
+  // 2026-11-18 小满：判不了 ≠ 你该动手；回滚是最重的动作，得先让人看 diff 再自己决定
+  ok('先分清"判不了"（可能是上游自己修了）', r.out.includes('上游自己修了这句'));
+  ok('回滚前要求先备份当前文件', r.out.includes('另存为') && r.out.includes('.bak-'));
+  ok('提示不要直接回滚（先看 diff）', r.out.includes('先看 diff'));
   rmSync(root, { recursive: true, force: true });
 }
 

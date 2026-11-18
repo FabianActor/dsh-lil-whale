@@ -235,8 +235,10 @@ for (const t of targets) {
     const which = missingNote ? '标记/文案表' : '推送句';
     if (!canFixMissing) {
       halfStuck += 1;
-      console.log(`✗ ${t.member}: 只打了一半（缺${which}），而且缺的那半也找不到落点 → ${t.file}`);
-      console.log(`  下一步：把 ${path.basename(t.file)}.orig-* 复制回 ${path.basename(t.file)}，再重跑本脚本。`);
+      console.log(`✗ ${t.member}: 标记在、${which}没找到落点 → ${t.file}`);
+      console.log('  判不了：可能是「只打了一半」，也可能是上游自己修了这句——我们的检查用的是自己写下的措辞，不是语义。');
+      console.log(`  下一步：先看 diff——把 ${path.basename(t.file)} 与 ${path.basename(origPath(t))} 对一下；若上游已自行修复，不要回滚。`);
+      console.log(`  真要回滚：先把当前文件另存为 ${path.basename(t.file)}.bak-<时间>（别让「下一步」不可逆），再把 orig 复制回去、重跑本脚本。`);
       continue;
     }
     if (readOnly) {
