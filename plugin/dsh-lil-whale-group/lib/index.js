@@ -38,7 +38,7 @@ import {
   DEFAULT_SLEEP_FROM,
   DEFAULT_SLEEP_TO, normalizeSleepArgs } from './sleep-core.js'
 import { wakeWordingOf, previewTextOf } from './wake-preview-core.js'
-import { pruneMediaCache, MEDIA_CACHE_MAX_AGE_DAYS } from './media-cache-core.js'
+import { pruneMediaCache, mediaCacheStats, MEDIA_CACHE_MAX_AGE_DAYS } from './media-cache-core.js'
 import { rosterAuditCounts, buildRosterAuditLine } from './roster-audit-core.js'
 import { shouldWriteLogFormat, buildLogFormatDetail } from './log-format-core.js'
 import { refreshSleepStatus } from './sleep-status.js'
@@ -3721,7 +3721,11 @@ function auditRoster(now = new Date()) {
   const ts = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
   // 每次跑都写一行（2026-11-14 小肥鱼：文件不存在只说明"还没跑过"，不说明"跑了没问题"——
   // 要让"没跑"和"跑了没问题"在纸上长得不一样）。
-  const line = buildRosterAuditLine({ ts, counts, problems })
+  // 缓存现状挂在周期行上（第三条鱼 2026-11-18 私信）：prune 行"没东西可删就不写"，
+  // 于是"机制没跑（配置错/进程没起）"和"跑了但目录本来就空"在账上同形；这一格让"它看过目录"有凭据。
+  let media = null
+  try { media = mediaCacheStats({ dir: MEDIA_CACHE_DIR }) } catch { media = null }
+  const line = buildRosterAuditLine({ ts, counts, problems, media })
   try {
     appendFileSync(ROSTER_AUDIT_LOG, `${line}\n`)
   } catch { /* 日志写不了不该炸巡守 */ }

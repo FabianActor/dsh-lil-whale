@@ -20,12 +20,24 @@
  * 两件事都对——`homes\lee` 是 lee 放自己文件的目录，不是**鱼家**（没有 `dsh-home\`）；
  * 飞行成员 lee 在名册里的 home 不在 `homes\` 下（它是宿主自己的 `~\.dsh`）。所以 `homes` 改成只数鱼家、
  * `other` 列出非鱼家目录，`skip` 的说明也改成"角色 + 真正的家"。
+ *
+ * `fmt=5`（2026-11-18 19:5x，第三条鱼私信）：末尾加一格 `media=`，把共享视频缓存的现状挂在这条
+ * 周期行上——`media=files:3 bytes:18117679 oldest:11-15`（没有目录 `media=no-dir`，空目录
+ * `oldest:none`）。原因是 prune 事件行"没东西可删就不写"，于是"机制没跑"和"跑了但没东西"同形；
+ * 这一格让"它看过目录"有凭据，而不必每小时写一条事件。
  */
 
-const FMT = 4
+const FMT = 5
 
 function namesOf(list) {
   return list && list.length ? list.join(',') : 'none'
+}
+
+// 只写月-日：缓存最老也就 7 天，跨年那一行自己看得出年份。
+function dateOf(ms) {
+  const d = new Date(ms)
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
 /**
@@ -64,8 +76,11 @@ export function rosterAuditCounts({ rosterKeys = [], fishEntries = [], humanKeys
 
 /**
  * 拼一行。`problems` 非空时事件名是 `roster-mismatch`，否则 `roster-audit` 并以 `ok` 收尾。
+ *
+ * `media`（可选）：`mediaCacheStats()` 的结果。给了就写 `media=files:… bytes:… oldest:…`；
+ * 没给写 `media=unknown`，目录不存在写 `media=no-dir`——三种状态三句话，不共用缺省。
  */
-export function buildRosterAuditLine({ ts, counts, problems = [] }) {
+export function buildRosterAuditLine({ ts, counts, problems = [], media = null }) {
   // 巡守的家不写进这一列：路径里带 `:` 和 `\\`，套在括号里会让"按 ( 切"的读者
   // 静默丢掉整截家信息（小鱼丸 2026-11-18 #20 用三种朴素切法验出来的）。
   // 写成"从名册读"反而无歧义：身份（watcher）在这里，位置在 members.json 里。
@@ -73,11 +88,18 @@ export function buildRosterAuditLine({ ts, counts, problems = [] }) {
   const other = counts.otherHomeKeys?.length
     ? counts.otherHomeKeys.map((key) => `${key}(no-dsh-home)`).join(',')
     : 'none'
+  const mediaPart =
+    media === null
+      ? 'media=unknown'
+      : media.existed
+        ? `media=files:${media.files} bytes:${media.bytes} oldest:${media.oldestMs === null ? 'none' : dateOf(media.oldestMs)}`
+        : 'media=no-dir'
   const parts = [
     `members=${counts.fishKeys.length}(fish;keys=${counts.rosterKeys.length};not-fish=${namesOf(counts.humanKeys)})`,
     `homes=${counts.homeKeys.length}(fish-home:${namesOf(counts.homeKeys)};other:${other})`,
     `home-check=${counts.homeChecked.length}(fish;skip=${skip || 'none'}${skip ? ';watcher-home-from=members' : ''})`,
     `pins=${counts.pinKeys.length}(keys:${namesOf(counts.pinKeys)})`,
+    mediaPart,
   ]
   const kind = problems.length ? 'roster-mismatch' : 'roster-audit'
   const tail = problems.length ? problems.join(' ') : 'ok'

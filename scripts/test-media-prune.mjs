@@ -4,7 +4,7 @@
 import { mkdtempSync, mkdirSync, writeFileSync, utimesSync, existsSync, rmSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { pruneMediaCache, MEDIA_CACHE_MAX_AGE_DAYS } from '../plugin/dsh-lil-whale-group/lib/media-cache-core.js'
+import { pruneMediaCache, mediaCacheStats, MEDIA_CACHE_MAX_AGE_DAYS } from '../plugin/dsh-lil-whale-group/lib/media-cache-core.js'
 
 let total = 0
 let pass = 0
@@ -57,6 +57,15 @@ try {
   const noArg = pruneMediaCache({})
   ok(noArg.existed === false, '没给 dir 时当作不存在')
   ok(MEDIA_CACHE_MAX_AGE_DAYS === 7, '默认保留 7 天')
+
+  // ---- 现状快照：不删东西，只数；给周期行提供"有没有东西"的对照 ----
+  const stats = mediaCacheStats({ dir: root })
+  ok(stats.existed === true, 'stats：目录存在')
+  ok(stats.files === 1 && stats.bytes === 50, `stats：只剩 1 个文件 50 B（实际 ${stats.files} 个 ${stats.bytes} B）`)
+  ok(stats.oldestMs !== null && Math.abs(stats.oldestMs - now) < 5000, 'stats：最老一份就是刚留下的那个（mtime 对得上）')
+  ok(mediaCacheStats({ dir: join(root, 'no-such-dir') }).existed === false, 'stats：缺目录 existed=false')
+  ok(mediaCacheStats({ dir: join(root, 'nested') }).files === 1, 'stats：子目录里的文件不算进这一层（只数本层普通文件）')
+  ok(mediaCacheStats({}).existed === false && mediaCacheStats({}).files === 0, 'stats：没给 dir 时空表')
 } finally {
   rmSync(root, { recursive: true, force: true })
 }
