@@ -26,6 +26,16 @@ catch (e) { console.log(`FAIL test-upgrade-json：包 package.json 读不了（$
 const ALLOWED = new Set(['package', 'restart', 'refresh-env', 'acl-repair', 'seed-profile', 'custom']);
 const SEMVER = /^\d+\.\d+\.\d+$/;
 const vnum = (v) => v.split('.').map((n) => Number(n));
+// 版本比较必须按数字逐段比：1.10.0 比 1.9.0 新，拼成字符串比会得到相反的答案（r326）。
+const cmpVer = (a, b) => {
+  for (let i = 0; i < 3; i += 1) {
+    const x = a[i] ?? 0; const y = b[i] ?? 0;
+    if (x !== y) return x - y;
+  }
+  return 0;
+};
+need(cmpVer(vnum('1.10.0'), vnum('1.9.0')) > 0, '版本比较自检失败：1.10.0 应比 1.9.0 新');
+need(cmpVer(vnum('1.9.0'), vnum('1.10.0')) < 0, '版本比较自检失败：1.9.0 应比 1.10.0 旧');
 
 need(spec._schema === 1, '缺少 "_schema": 1');
 need(Array.isArray(spec.entries), '缺少 entries 数组');
@@ -51,10 +61,8 @@ if (Array.isArray(spec.entries)) {
     if (isStr(entry.version)) {
       need(!seen.has(entry.version), `${at}.version 重复：${entry.version}`);
       seen.add(entry.version);
-      if (prev) need(vnum(entry.version).join() < vnum(prev.version).join(), `${at} 没按版本倒序（${prev.version} 之后是 ${entry.version}）`);
-      const d = vnum(entry.version); const p = vnum(pkg.version ?? '0.0.0');
-      const less = d[0] < p[0] || (d[0] === p[0] && (d[1] < p[1] || (d[1] === p[1] && d[2] <= p[2])));
-      need(less, `${at}.version ${entry.version} 比包版本 ${pkg.version} 还新——升级单不能预告未来`);
+      if (prev) need(cmpVer(vnum(entry.version), vnum(prev.version)) < 0, `${at} 没按版本倒序（${prev.version} 之后是 ${entry.version}）`);
+      need(cmpVer(vnum(entry.version), vnum(pkg.version ?? '0.0.0')) <= 0, `${at}.version ${entry.version} 比包版本 ${pkg.version} 还新——升级单不能预告未来`);
       prev = entry;
     }
   });

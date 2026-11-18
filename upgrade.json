@@ -14,6 +14,31 @@
   },
   "entries": [
     {
+      "version": "1.10.0",
+      "at": "2026-11-18",
+      "summary": "dsh 插件页显示图标与中英文名；鱼群设置页显示当前版本并能检查 npm 更新；日志表头改为\"格式变了才写一次\"，巡守自检行的每个计数自带口径。",
+      "requires": [
+        "package",
+        "restart"
+      ],
+      "restart": [
+        "all"
+      ],
+      "commands": [
+        "pwsh -File app\\scripts\\fish.ps1 upgrade-check",
+        "pwsh -File app\\scripts\\doctor.ps1"
+      ],
+      "verify": [
+        "dsh 插件页里两个包显示图标与中英文名（重启 web 进程后；只刷新页面可能看不到图标）",
+        "鱼群设置页「版本」显示 1.10.0；点「检查更新」显示\"已是最新\"；网络失败会显示失败原因（不会显示成已是最新）",
+        "logs\\plugin-boot.log 最近一行 pkg 是 @fabianactor/dsh-lil-whale-group@1.10.0",
+        "重启后各鱼 watchman.log 只在格式变化时补一行 log-format（同一格式不再每启动一行）",
+        "doctor 全过"
+      ],
+      "breaking": [],
+      "note": "只换代码，不动 pool\\ 与 homes\\ 里的数据。两个包要一起升级（图标与 locale 在两个包里）；只装一个也能跑，但插件页只显示装了的那一个的图标。"
+    },
+    {
       "version": "1.9.0",
       "at": "2026-11-18",
       "summary": "鱼塘支持根鱼、每条鱼可有自己的 XDG 数据目录、迁移的会话/附件/工作区能被认出来；消息地址、配置路径、叫醒额度这几处\"错了也不响\"的路径改成当场报错。",
