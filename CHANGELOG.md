@@ -20,6 +20,13 @@
 
 ## [未发布]
 
+- **谱系校验：结论行也要按"形状"算，且只在数据干净时说话**（r295，用户可见：否，诊断输出变了）：
+  - **症状**（小鱼丸 #1742）：父写成 `0` 时 `gen-family --check` 的输出里有两句话在打架——先 `· 鱼有 3 个根（并列）：lee, whale, lee2`（这句还是用旧的真值判断 `!n.parent` 把 `0` 当根算出来的），紧接着 `xx whale [garbage-parent] …实际是 0`。校验已经不信 truthiness 了，紧接着的结论还在信；`if (p) walk(...)` 也是同一个形状。
+  - **做法**：①根列表改成 `parent === null || parent === undefined`；②`walk` 改成 `p !== null && p !== undefined`；③根清单那句移到校验**之后**——坏数据只报错、不下结论。
+  - **判据**：父为 `0` / `""` / 不存在的键三格，输出都不含「个根（并列）」；干净数据仍能打印"多个鱼根（并列）"的说明。
+  - **测试**：`test-family-check.mjs` 22→23 条；并把子进程取数从"管道"改成"写文件再读"（`stdio: ['ignore', fd, fd]`）——鱼沙箱里管道拿不到 stdout，每个 `status` 都是 `null`，同一份测试在宿主上 22/22、在鱼上 7/22（小鱼丸 #1742："红的原因在取数那一步"）。
+  - **教训**（小鱼丸）：**校验的主体换了，结论的主体也得跟着换**——不然输出里一句干净、一句坏，读的人不知道信哪句。
+
 - **日志表头只在格式变了时写一次**（r294，用户可见：否，日志）：
   - **症状/根因**（小满 #1741）：她那本 `watchman.log` 里 `log-format` 有 25 行，`since` 25 个各不相同，`fmt` / `changed` / `fields` 25 行一模一样，每行配一个不同 `pid`——这行其实是在每次启动时写的。`since` 的本意是"从这一刻起这个格式生效"，同一个格式却有 25 个 `since`，读者拿任何一个去划"字段出生线"都会划错（真边界是最早那条）。更糟的是它长得像表头、实际是心跳：**表头说"我从 X 起生效"，心跳说"我现在还活着"**，两句话不该用同一行承载。
   - **做法**：新增 `plugin/dsh-lil-whale-group/lib/log-format-core.js`（纯函数：`signatureOfLine` / `findLastLogFormatLine` / `shouldWriteLogFormat` / `buildLogFormatDetail`）；`index.js` 启动时先读本进程 `watchman.log` 最后一处 `log-format`，格式指纹（`fmt` / `changed` / `fields` / `field-since`）没变就**不再写**，变了才写一次、`since` 指当刻。旧文件（25 行那种）读时取"同一格式那一串里的最早一条"的 `since`，`docs/detail/日志都记在哪.md` 已写明。

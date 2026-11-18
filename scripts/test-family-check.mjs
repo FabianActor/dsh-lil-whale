@@ -9,7 +9,7 @@
 // 全部用临时目录 + LIL_WHALE_CONFIG 指过去，不碰真鱼塘、不写任何真文件。
 
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, openSync, closeSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -69,12 +69,26 @@ function makeCase(name, familyParent, opts = {}) {
   return { dir, cfgFile: join(dir, 'config.json'), membersFile: join(dir, 'pool', 'members.json') }
 }
 
+// 子进程的输出写到文件、再读回来——不走管道。
+// 2026-11-18 小鱼丸 #1742：鱼沙箱里 spawnSync 的管道拿不到 stdout，`status` 全是 null，
+// 同一份测试宿主上 22/22、鱼上 7/22——红的原因在取数那一步，那就别走那一步。
+let runSeq = 0
 function run(cwd, args, cfgFile, extraEnv = {}) {
   const env = { ...process.env, ...extraEnv }
   if (cfgFile) env.LIL_WHALE_CONFIG = cfgFile
   else delete env.LIL_WHALE_CONFIG
-  const r = spawnSync(process.execPath, args, { cwd, env, encoding: 'utf8' })
-  return { code: r.status, out: (r.stdout || '') + (r.stderr || '') }
+  const logFile = join(tmpdir(), `llw-tfc-${process.pid}-${++runSeq}.log`)
+  const fd = openSync(logFile, 'w')
+  let status = null
+  try {
+    const r = spawnSync(process.execPath, args, { cwd, env, stdio: ['ignore', fd, fd] })
+    status = r.status
+  } finally {
+    closeSync(fd)
+  }
+  const out = readFileSync(logFile, 'utf8')
+  rmSync(logFile, { force: true })
+  return { code: status, out }
 }
 
 // 1) 干净数据：exit 0
@@ -92,6 +106,8 @@ function run(cwd, args, cfgFile, extraEnv = {}) {
   ok('gen-family：parent=0 exit 1', r.code === 1, `exit=${r.code}`)
   ok('gen-family：parent=0 带 [garbage-parent] 锚', /\[garbage-parent\]/.test(r.out), r.out.slice(0, 240))
   ok('gen-family：parent=0 原样印出坏值', /实际是 0/.test(r.out), r.out.slice(0, 240))
+  // 小鱼丸 #1742：坏数据下不能先打一句· 鱼有 3 个根（并列）、再打 xx [garbage-parent]——两句话描述同一份数据。
+  ok('gen-family：坏父时不打印根清单（两个结论不打架）', !/个根（并列）/.test(r.out), r.out.slice(0, 240))
 }
 
 // 3) parent = ''（空串）：不是"没有父"，也要 exit 1

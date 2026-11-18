@@ -99,22 +99,27 @@ function walk(key, path) {
   if (state[key] === 'walking') { errors.push('谱系里有一个环：' + [...path, key].join(' -> ')); return }
   state[key] = 'walking'
   const p = family.nodes[key]?.parent
-  if (p) walk(p, [...path, key])
+  // 2026-11-18 r295（小鱼丸 #1742）：坏父也会被 walk 一趟，用 null/undefined 判断，不让 0 和空串从 truthiness 底下漏过去。
+  if (p !== null && p !== undefined) walk(p, [...path, key])
   state[key] = 'done'
 }
 for (const key of Object.keys(family.nodes)) walk(key, [])
 // 根：可以不止一个。人类和鱼各是一棵树；从别处迁进来的鱼（fish.ps1 new -Parent none）
 // 也可以是另一个根 —— 2026-11-17 r240 起不再要求"鱼必须恰好一个根"，
 // 之前那条规则会把根鱼挡在谱系外，family.json 停在旧日期而没人知道。
-const roots = Object.entries(family.nodes).filter(([, n]) => !n.parent).map(([k]) => k)
+// 2026-11-18 r295（小鱼丸 #1742）：根按形状算——0 和空串不是根，是坏值；
+const roots = Object.entries(family.nodes)
+  .filter(([, n]) => n.parent === null || n.parent === undefined)
+  .map(([k]) => k)
 const fishRoots = roots.filter((k) => (members[k] || {}).kind !== 'human')
 if (fishRoots.length < 1) errors.push('谱系里一条鱼都没有')
-if (fishRoots.length > 1) console.log(`· 鱼有 ${fishRoots.length} 个根（并列）：${fishRoots.join(', ')}`)
 
 if (errors.length) {
   for (const e of errors) console.error('xx ' + e)
   die('谱系数据有问题，没有生成图', '修 pool\\family.json（它是谱系真源），再跑一次')
 }
+// 结论行放在校验之后：坏数据下不再打印根清单（小鱼丸 #1742 的"两个结论打架"）。
+if (fishRoots.length > 1) console.log(`· 鱼有 ${fishRoots.length} 个根（并列）：${fishRoots.join(', ')}`)
 
 // ---------- 生成 ----------
 const childrenOf = (key) => Object.entries(family.nodes).filter(([, n]) => n.parent === key).map(([k]) => k).sort()
