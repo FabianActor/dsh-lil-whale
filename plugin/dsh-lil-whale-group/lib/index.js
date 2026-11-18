@@ -1896,6 +1896,10 @@ function apply(ctx) {
   // 2026-11-12 教训：配置被污染成临时目录时，①整个消失、连"我没加载"都看不出来；
   // 所以"这个进程加载了什么"这件事必须记在配置改不到的地方，并把可疑的配置值一起写下来。
   const homeLooksRight = existsSync(join(CFG.selfHome, 'dsh-home')) || existsSync(join(CFG.selfHome, 'START.md'))
+  // 小鱼丸 #1626（2026-11-18）：boot 行里没有"我是谁"，鱼只能靠 home/selfHome 猜自己那条。
+  // 只写能证明的那种（按 DSH_HOME 与名册 dshHome 对上）；认不出就写 (unresolved)——
+  // 推断出来的身份不能写成事实（同 `own-member-guess` 那次的教训）。
+  const bootMember = selfMemberKeyRaw()
   const bootRecord = {
     pkg: `${name}@${PKG_VERSION}`,
     codeFp: CODE_FP.fp,
@@ -1907,6 +1911,9 @@ function apply(ctx) {
     selfHome: CFG.selfHome,
     selfPort: CFG.selfPort,
     profile: process.env.DSH_PROFILE ?? '(unset)',
+    // 小鱼丸 #1626（2026-11-18）：boot 行里没有"我是谁"，鱼只能靠 home/selfHome 猜自己那条。
+    // 加上 member=（名册键），一行就能认领；认不出来时为 '(unresolved)'，不写成某个默认成员。
+    member: bootMember ?? '(unresolved)',
     suspect: homeLooksRight ? undefined : `selfHome 里既没有 START.md 也没有 dsh-home；配置可能指错了地方`,
   }
   bootLog({ note: 'boot', ...bootRecord })
@@ -2833,6 +2840,10 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
     return false
   }
   wakeDeliverLog('delivered', deliveryNote)
+  // 小肥鱼 #1627（2026-11-18）：通道交付也是一次"被叫醒"，但过去的 `woke` 行只记推门那几类，
+  // 于是"最频繁的群交付"在 watchman.log 里一次都看不见。不改旧行的意思，只把这一类也记进来：
+  // trigger=channel。此前的行没有它，只代表当时不记，不代表当时没有通道唤醒（append-only，补不回去）。
+  watchmanLog('woke', `trigger=channel to=${member} channel=${channel.key} pending=${incoming.length} last-line=${lastIncomingIndex + 1} human=${humanIncoming ? 'yes' : 'no'}`)
   markWakeMarker(member, channel.kind)
   markWake(member, channel.kind)
 

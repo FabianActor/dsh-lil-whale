@@ -320,7 +320,45 @@ console.log('第三方补丁：行为测试');
   rmSync(root, { recursive: true, force: true });
 }
 
-// 4. 幂等：第二次打 0 个
+// 3g. 第四/五半（2026-11-18 小满 #1625）：表外名字与"空台词"不能落进"没人说话"
+//     裁决：`file-empty` / `asr-empty` 不合并进"没人说话"——"我什么都没拿到"不是对内容的断言。
+{
+  const { root, file } = makePond();
+  run(['--pond', root]);
+  const text = readFileSync(file, 'utf8');
+  ok('第四半：file-empty 有自己的话', text.includes("'file-empty'"));
+  ok('第四半：asr-empty 有自己的话', text.includes("'asr-empty'"));
+  ok('第四半：空台词说的是"台词是空的"', text.includes('台词是空的'));
+  ok('第五半：表外名字有分支', /else if \(src && !\['file', 'subtitle', 'asr'\]\.includes\(src\)\)/.test(text));
+  ok('第五半：提示里带出 src 本身', text.includes('台词状态没识别'));
+  ok('第五半：说明这不是内容判断', text.includes('这是插件里的名字，不是内容判断'));
+  ok('第四/五半与"没人说话"那句顺序正确（表外分支在 speechRate 之前）', text.indexOf('台词状态没识别') < text.indexOf('speechRate === 0'), '');
+  ok('再 --check 仍绿', run(['--check', '--pond', root]).code === 0);
+  rmSync(root, { recursive: true, force: true });
+}
+
+// 3h. 只缺第四/五半（三半已是旧版）：--check 要点名、重跑要能补上（不能让"已打过补丁"的安装停在旧版）
+{
+  const { root, file } = makePond();
+  run(['--pond', root]);
+  const full = readFileSync(file, 'utf8');
+  // 退化成"三半版"：去掉空台词两条与表外名字那段
+  const threeHalves = full
+    .replace(/  'file-empty':[^\n]*\n/, '')
+    .replace(/  'asr-empty':[^\n]*\n/, '')
+    .replace(/  else if \(src && !\['file', 'subtitle', 'asr'\]\.includes\(src\)\) \{\n[\s\S]*?\n  \}\n/, '');
+  writeFileSync(file, threeHalves, 'utf8');
+  const c = run(['--check', '--pond', root]);
+  ok('只缺第四/五半时 --check exit 1', c.code === 1, `实际 ${c.code}`);
+  ok('并点名"空台词 / 表外名字"', c.out.includes('空台词') && c.out.includes('表外名字'), c.out.trim().split('\n').find((l) => l.includes('还差')) || '');
+  const f = run(['--pond', root]);
+  const after = readFileSync(file, 'utf8');
+  ok('重跑能补上第四/五半', f.code === 0 && after.includes("'file-empty'") && after.includes('台词状态没识别'));
+  ok('补完 --check 绿', run(['--check', '--pond', root]).code === 0);
+  rmSync(root, { recursive: true, force: true });
+}
+
+
 {
   const { root } = makePond();
   run(['--pond', root]);
@@ -349,6 +387,15 @@ console.log('第三方补丁：行为测试');
   ok('读升级单时自动跑（Invoke-UpgradeCheck 里调用）', /function Invoke-UpgradeCheck[\s\S]*?Show-BiliEyesPatchStatus/.test(fish));
 }
 
-console.log('');
+// 7. 2026-11-18 小鱼丸 #1626 / 小肥鱼 #1627：账本里"我是谁"和"通道交付算不算一次叫醒"
+{
+  const lib = readFileSync(path.join(HERE, '..', 'plugin', 'dsh-lil-whale-group', 'lib', 'index.js'), 'utf8');
+  ok('boot 行带 member=（名册键）', /member:\s*bootMember \?\? '\(unresolved\)'/.test(lib));
+  ok('boot 的 member 只写能证明的（selfMemberKeyRaw）', lib.includes('const bootMember = selfMemberKeyRaw()'));
+  ok('通道交付也记一行 woke（trigger=channel）', lib.includes('trigger=channel'));
+  ok('通道交付的 woke 行带 to=/channel=/pending=', /trigger=channel to=\$\{member\} channel=\$\{channel\.key\} pending=/.test(lib));
+}
+
+
 console.log(`test-thirdparty-patch：合计 ${pass + fail}，PASS ${pass}，FAIL ${fail}`);
 process.exit(fail > 0 ? 1 : 0);
