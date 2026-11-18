@@ -30,7 +30,16 @@ try {
   # 排除清单靠"从 ls-files 里挑"而不是 pathspec magic：
   # git archive 不支持 `:(exclude)`（实测 fatal: pathspec magic not supported），
   # 而它会照样把 archive\ 打进去、还返回 0 —— 一个静默的错误包。
-  $files = @(git -c core.quotepath=false ls-files | Where-Object { $_ -notlike 'archive/*' })
+  # 插件目录里的 screenshots\ 与 screenshots.json 是给 awesome 市场详情页的素材
+  # （读 raw.githubusercontent 的 HEAD），不随发行包分发：发行包里没有它们，
+  # 装包也不会多出 1.5 MB 的图片。
+  $files = @(git -c core.quotepath=false ls-files |
+    Where-Object {
+      $_ -notlike 'archive/*' -and
+      $_ -notlike 'docs/image/screenshots/*' -and
+      $_ -notlike 'plugin/*/screenshots/*' -and
+      $_ -notmatch '^plugin/[^/]+/screenshots\.json$'
+    })
   if ($files.Count -eq 0) { throw 'ls-files 一个文件都没列出来，不对' }
 
   # --prefix：解压出来是一个 lil-whale\ 目录，而不是一堆文件撒在面前。
@@ -41,7 +50,7 @@ try {
   $count = $files.Count
   Write-Host ("打包完成：{0}" -f $zip)
   Write-Host ("  文件 {0} 个，{1:N1} KB" -f $count, ($size / 1KB))
-  Write-Host ("  不含：archive\（她的旧家记录 + 旧脚本存档）、本机配置、tmp\、logs\、node_modules\")
+  Write-Host ("  不含：archive\（她的旧家记录 + 旧脚本存档）、plugin\*\screenshots\（市场详情页素材）、本机配置、tmp\、logs\、node_modules\")
 
   if ($Npm) {
     foreach ($pkg in @('plugin\dsh-lil-whale-group', 'plugin\dsh-lil-whale-group-ui')) {

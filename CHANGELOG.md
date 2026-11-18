@@ -20,6 +20,8 @@
 
 ## [未发布]
 
+- **插件截图与市场声明**（r330，用户可见：否，仓库素材）：两个包目录各加 `screenshots/`（群聊、私聊、鱼塘、设置页四张）与 `screenshots.json`——这是 awesome 插件市场的约定（放在 `package.json` 旁边、1–8 张相对路径、不许 `..` 爬出插件目录）。`scripts/check-awesome-screenshots.mjs` 校验声明形状与图片存在；发行包与 npm 包里都不含这些图（`files` 白名单 + `pack.ps1` 排除）。
+
 - **r329**（无行为变化，测试跟上）：`test-client-follow-tail` 的构建标记期望从 `client build v51 · follow-tail-long` 改成 `v52 · line-cite`——r328 换的是标记字符串，不是行为。
 
 - **群聊与私聊的气泡能直接引用**（r328，用户可见：是，群面板）：气泡头上的时间后面多一个 `#行号`，点一下复制引用（`群 #1763` / `私聊 <a>__<b> #3`）。行号是消息文件的物理行号（空行/坏行也占号），文件只追加，引用不会失效。宿主读消息时一并带上行号；投影抽到 `lib/messages-core.js` 并补了 28 条测试。
