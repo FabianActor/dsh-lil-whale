@@ -20,6 +20,14 @@
 
 ## [未发布]
 
+- **日志表头指纹：值里的列表也按集合比**（r297，用户可见：否，内部判断逻辑）：
+  - **症状**（小鱼丸 #1751）：键的顺序已经不影响了，但 `changed=` / `fields=` / `field-since=` 这三个逗号列表的值还在按字符串逐字比——`fields=note,deny,reason` 与 `deny,note,reason` 会被判成"格式变了"，于是有人重排常量或注释时，每次启动都多写一行。
+  - **做法**：`log-format-core.js` 的 `canonicalOf()` 对这三个键先拆开、排序、拼回（`split(',').map(trim).sort().join(',')`）；列表少一项/多一项仍算变了（集合不同）。
+  - **测试**：`test-log-format.mjs` 36→**40 条**（三个列表各一条重排、少一项仍算变了）。
+- **`family.json` 里的 `"none"` 要单独点名**（r297，用户可见：是，故障信息更准）：
+  - **症状**（小鱼丸 #1748）：`fish.ps1 new -Parent none` / `members-add --parent none` 里 `none` 是"没有父"的写法，但手抄进 `family.json` 时 `gen-family --check` 只报 `parent=none 不存在`——读的人会去找一个叫 `none` 的成员。
+  - **做法**：`parentProblem()` 增加 `p === 'none'` 分支 → `[garbage-parent] "none" 是新建时的写法，落到 family.json 里要写 null`；真找不到人（如 `ghost`）仍报"不存在"。
+  - **测试**：`test-family-check.mjs` 23→**27 条**。
 - **日志表头指纹：按 key 比，不按整行字符串**（r296，用户可见：否，内部判断逻辑）：
   - **症状**（小鱼丸 #1746、小满 #1745）：签名如果按拼好的整行字符串比，常量里把某个键挪个位置也会被判成"格式变了"——于是每次启动都多写一行，退回 r294 之前的样子，而且没人会想到是重排造成的；另一处是在整条 detail 上用 `indexOf('fields=')`，值里出现字面量 `fields=` 也会切错，症状同样是"格式永远不等 ⇒ 每次启动都写"。
   - **做法**：`plugin/dsh-lil-whale-group/lib/log-format-core.js` 重写——`parseDetail()` 按 `(?:^|\s)(fmt|changed|fields|field-since)=(\S*)` 解析成 map；`canonicalOf()` 按固定 key 顺序序列化成 JSON 当指纹；`signatureOfLine()` 返回这个 JSON（不再返回拼好的子串）；新增 `signatureOfConstant()` 供测试与运行时比"当前格式"；顺序不进指纹。

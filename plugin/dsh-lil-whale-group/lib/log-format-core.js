@@ -38,9 +38,21 @@ function parseDetail(detail) {
 }
 
 // 稳定指纹：只含"格式"那几项，按 key 取值拼成 JSON（顺序与写法无关）。
+//
+// 2026-11-18 r297，第三条补丁（第二条鱼 #1751）：键的顺序已经不影响了，但值里的
+// **逗号列表**（`changed=` / `fields=` / `field-since=`）还在按字符串逐字比——
+// 把 `fields=note,deny,reason` 重排成 `deny,note,reason` 会被判成"格式变了"。
+// 列表内部的顺序对读者没有意义（它们都是集合），所以比较前先拆开、排序、拼回。
+function listCanonical(value) {
+  if (typeof value !== 'string' || !value.includes(',')) return value
+  return value.split(',').map((part) => part.trim()).filter(Boolean).sort().join(',')
+}
+
+const LIST_KEYS = new Set(['changed', 'fields', 'field-since'])
+
 function canonicalOf(map) {
   const out = {}
-  for (const key of KEYS) out[key] = map[key] ?? null
+  for (const key of KEYS) out[key] = LIST_KEYS.has(key) ? listCanonical(map[key] ?? null) : (map[key] ?? null)
   return JSON.stringify(out)
 }
 

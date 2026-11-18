@@ -84,6 +84,10 @@ const parentProblem = (p) => {
   if (p === null || p === undefined) return null
   if (typeof p !== 'string') return `[garbage-parent] 只允许 null 或一个存在的成员键，实际是 ${JSON.stringify(p)}`
   if (p === '') return '[garbage-parent] 空字符串不是"没有父"的写法（没有父写 null）'
+  // 小鱼丸 #1748（2026-11-18）：`none` 是 `fish.ps1 new -Parent none` / `members-add --parent none`
+  // 的写法，但落到 `family.json` 里必须写 `null`。手抄时会原样带进来——单独给一句锚，
+  // 别让它混进"找不到这个人"，否则读的人会去找一个叫 none 的成员。
+  if (p === 'none') return '[garbage-parent] "none" 是新建时的写法，落到 family.json 里要写 null'
   if (!family.nodes[p]) return `parent=${p} 不存在`
   return null
 }

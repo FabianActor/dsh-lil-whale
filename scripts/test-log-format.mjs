@@ -54,6 +54,10 @@ ok('常量重排后仍算同一签名（顺序不进指纹）', (() => {
   return signatureOfConstant(reordered) === SIG
 })())
 ok('值里出现字面量 fields= 不会把指纹切错', signatureOfLine(line(`${OLD_SIG} since=x pid=1 to=note=fmt=3,fields=evil`)) === signatureOfConstant(OLD_SIG))
+ok('值里的逗号列表重排也算同一签名（fields，r297）', signatureOfConstant(LOG_FORMAT_SIG.replace('fields=deny,note,reason', 'fields=note,deny,reason')) === SIG)
+ok('值里的逗号列表重排也算同一签名（changed，r297）', signatureOfConstant(LOG_FORMAT_SIG.replace('changed=skip,wake-skip,deliver', 'changed=deliver,skip,wake-skip')) === SIG)
+ok('值里的逗号列表重排也算同一签名（field-since，r297）', signatureOfConstant(LOG_FORMAT_SIG.replace('field-since=codeFp:r255,member:r292,note:r293', 'field-since=note:r293,codeFp:r255,member:r292')) === SIG)
+ok('值里的列表少一项仍算变了', signatureOfConstant(LOG_FORMAT_SIG.replace('fields=deny,note,reason', 'fields=deny,note')) !== SIG)
 ok('两个不同格式的指纹不同', signatureOfConstant('fmt=4 changed=a fields=b field-since=c') !== signatureOfConstant('fmt=3 changed=a fields=b field-since=c'))
 ok('签名指纹不含 since/pid/to', signatureOfLine(newLine(0)) === signatureOfLine(newLine(1)))
 

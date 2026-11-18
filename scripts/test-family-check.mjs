@@ -126,6 +126,18 @@ function run(cwd, args, cfgFile, extraEnv = {}) {
   ok('gen-family：父不存在指出 ghost', /parent=ghost 不存在/.test(r.out), r.out.slice(0, 240))
 }
 
+// 4b) parent = 'none'（字符串）：`fish.ps1 new -Parent none` / `members-add --parent none` 的写法，
+// 但落到 family.json 里要写 null。手抄进来时要给 [garbage-parent] 锚，不能混成"找不到叫 none 的人"。
+// 小鱼丸 #1748（2026-11-18）。
+{
+  const c = makeCase('none-str', 'none')
+  const r = run(REPO, [GEN, '--check'], c.cfgFile)
+  ok('gen-family：parent="none" exit 1', r.code === 1, `exit=${r.code}`)
+  ok('gen-family：parent="none" 带 [garbage-parent] 锚', /\[garbage-parent\]/.test(r.out), r.out.slice(0, 240))
+  ok('gen-family：parent="none" 说清要写 null', /要写 null/.test(r.out), r.out.slice(0, 240))
+  ok('gen-family：parent="none" 不混成"不存在"', !/parent=none 不存在/.test(r.out), r.out.slice(0, 240))
+}
+
 // 5) 未知参数：exit 2（与 r242 的配置三态同口径——2 是"我读不了/用法错"，不是"数据坏"）
 {
   const c = makeCase('unknown-arg', 'lee')
