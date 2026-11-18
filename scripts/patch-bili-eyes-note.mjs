@@ -170,12 +170,34 @@ function consistencyOf(targets) {
     const groups = new Map();
     for (const t of list) {
       const h = normalizedHash(t.file);
-      if (!groups.has(h)) groups.set(h, []);
-      groups.get(h).push(t);
+      if (!groups.has(h)) groups.set(h, { hash: h, targets: [], newestAt: 0 });
+      const g = groups.get(h);
+      g.targets.push(t);
+      try {
+        const ms = fs.statSync(t.file).mtimeMs;
+        if (ms > g.newestAt) g.newestAt = ms;
+      } catch {
+        /* 读不到时间就不写，后面按 0 处理 */
+      }
     }
-    if (groups.size > 1) problems.push({ version, groups: [...groups.values()] });
+    if (groups.size > 1) {
+      // 2026-11-18 LeeaCP（r299）：只说"内容不同"之后，人还得自己去找是哪一份。
+      // 这里把每组、每份的路径与 mtime 都摆出来，并点名"最早修改"的那一组——
+      // 它通常就是没跟上的那份；这是线索，不是结论。
+      const arr = [...groups.values()].sort((x, y) => y.newestAt - x.newestAt);
+      const earliest = arr.reduce((acc, g) => (!acc || g.newestAt < acc.newestAt ? g : acc), null);
+      problems.push({ version, groups: arr, earliest });
+    }
   }
   return { byVersion, problems };
+}
+
+// 本地时间；读不到就写"时间读不到"（别印 1970）。
+function fmtMs(ms) {
+  if (!ms) return '(时间读不到)';
+  const d = new Date(ms);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
 // ---- 硬链接（pnpm store）处理 ----
@@ -509,8 +531,24 @@ if (checkOnly) {
   if (problems.length > 0) {
     console.log('检查：补丁版本不齐——同版本的多份安装内容不同。');
     for (const p of problems) {
-      const groups = p.groups.map((g) => `${g.map((t) => t.member).join('、')}（${g.length} 份）`).join(' ／ ');
-      console.log(`  ✗ 插件 ${p.version}：${groups}`);
+      console.log(`  ✗ 插件 ${p.version}：`);
+      p.groups.forEach((g, i) => {
+        const names = g.targets.map((t) => t.member).join('、');
+        console.log(`     组 ${i + 1}（${g.targets.length} 份 · 最近修改 ${fmtMs(g.newestAt)}）：${names}`);
+        for (const t of g.targets) {
+          let ms = 0;
+          try {
+            ms = fs.statSync(t.file).mtimeMs;
+          } catch {
+            ms = 0;
+          }
+          console.log(`       - ${t.member}: ${t.file}（${fmtMs(ms)}）`);
+        }
+      });
+      if (p.earliest) {
+        const names = p.earliest.targets.map((t) => t.member).join('、');
+        console.log(`  最早修改的是 ${names}（${fmtMs(p.earliest.newestAt)}）——要找差的，先看这一组。`);
+      }
     }
     console.log('  NEXT: 逐份跑 --dry-run 看差在哪，再重跑补丁；差异大的一份先与同版本另一台对 diff。');
     process.exit(1);

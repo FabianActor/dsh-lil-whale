@@ -432,6 +432,10 @@ console.log('第三方补丁：行为测试');
   ok('多安装：点名"补丁版本不齐"', /补丁版本不齐/.test(drift.out), drift.out.slice(-300));
   ok('多安装：两份成员都点到（a、b）', /a/.test(drift.out) && /b/.test(drift.out), drift.out.slice(-300));
   ok('多安装：给出下一步（逐份 --dry-run）', /逐份跑 --dry-run/.test(drift.out), drift.out.slice(-300));
+  // 2026-11-18 LeeaCP（r299）：报"不齐"之后还要说清哪一份旧——路径 + mtime，
+  // 否则人还得自己到四台里去找。这里点名"最早修改"的那一组（线索，不是结论）。
+  ok('多安装：每组列出路径与 mtime', /look\.js（\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}）/.test(drift.out), drift.out.slice(-600));
+  ok('多安装：点名哪一组最早修改（名字 + 时间）', /最早修改的是 a（\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}）/.test(drift.out), drift.out.slice(-600));
   rmSync(a.root, { recursive: true, force: true });
 
   // 不同版本各自打好：不比内容，但要说清"版本不同"
