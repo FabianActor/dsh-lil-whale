@@ -11,13 +11,15 @@
  *   node scripts/manual-op.mjs --by lee --removed 3 --bytes 18117679 --note "清过期视频缓存（宿主让转告小肥鱼）"
  *   node scripts/manual-op.mjs --by lee --at "2026-11-18 19:29:50" --removed 3 --bytes 18117679 --note "补记当时那笔"
  *   [--kind manual-rm|manual-other] [--file <日志路径>] [--dry-run]
+ *   node scripts/manual-op.mjs --fix-eof [--file <日志路径>]   # 上一行没换行结尾时只补一个换行
  *
- * 2026-11-18 r342。
+ * 2026-11-18 r342；r347 按小鱼丸私聊补两处：NEXT 要按错误类型说人话、
+ * 追加前先看末字节（否则两条记录会粘成一行，行数不变量看不出问题）。
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { formatManualOp, parseAt, tsLocal } from './lib/manual-op-core.mjs';
+import { endOfFileProblem, formatManualOp, parseAt, tsLocal } from './lib/manual-op-core.mjs';
 import { loadConfigOrExit } from './lib/config-path.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -35,8 +37,31 @@ const bytes = arg('bytes', '0');
 const note = arg('note');
 const atText = arg('at');
 const dry = process.argv.includes('--dry-run');
+const fixEof = process.argv.includes('--fix-eof');
 const stateDir = cfg.poolStateDir || join(cfg.poolDir, 'state');
 const file = arg('file') || join(stateDir, 'manual-ops.log');
+
+// --fix-eof（r347）：账本末行没有换行结尾时，只补一个换行；不改已有任何字节。
+// 单独一个动作，是因为"补换行"本身就是一次手改账本，得有人按一次键。
+if (fixEof) {
+  if (!existsSync(file)) {
+    console.log(`no-file ${file}（不用补）`);
+    process.exit(0);
+  }
+  const raw = readFileSync(file);
+  const problem = endOfFileProblem(raw);
+  if (!problem) {
+    console.log(`ok ${file} 末字节已经是换行，不用补`);
+    process.exit(0);
+  }
+  if (dry) {
+    console.log(JSON.stringify({ ok: true, dryRun: true, fixEof: true, file, bytes: problem.bytes }, null, 2));
+    process.exit(0);
+  }
+  appendFileSync(file, '\n', 'utf8');
+  console.log(`fixed ${file} 补了一个换行（${statSync(file).size - problem.bytes} 字节），原有内容未改`);
+  process.exit(0);
+}
 
 if (!by || !note) {
   console.error('缺少 --by / --note（一行账至少要知道是谁、做了什么）');
@@ -59,12 +84,29 @@ try {
   line = formatManualOp({ ts: tsLocal(when), kind, by, removed, bytes, note });
 } catch (e) {
   console.error(e.message);
-  console.error('NEXT: 补全 --by/--note，或把 by/note 里的换行或竖线去掉');
+  // NEXT 按错误类型分开说（r347，小鱼丸 2026-11-18 私聊）：
+  // 字符集被拒的时候，让人去"去掉换行"是把他引到一个不存在的问题上。
+  const next = {
+    missing: '补全 --by / --note：一行账至少要有"谁"和"做了什么"。',
+    charset: '--by 改成 1–32 位 ASCII：字母、数字、下划线、点或连字符（中文、空格、换行都不行）。',
+    field: '把字段里的换行和竖线去掉：换行会造出第二行，竖线会造出第二个字段。',
+    kind: '--kind 只用 manual-rm 或 manual-other。',
+  }[e.hint] || '照上面那行改，改完重跑。';
+  console.error(`NEXT: ${next}`);
+  process.exit(2);
+}
+
+// 追加前先看末字节（r347）：上一行没换行结尾时直接 append，两条记录会粘成一行；
+// 行数只 +1，后面的不变量也抓不到。检查必须在写之前，代价是一次 read。
+const eof = existsSync(file) ? endOfFileProblem(readFileSync(file)) : null;
+if (eof) {
+  console.error(`xx 账本末行没有换行结尾（${eof.bytes} 字节，尾部是「${eof.tail}」）；现在追加会把两条记录粘成一行。`);
+  console.error(`NEXT: 先补一个换行：node scripts/manual-op.mjs --fix-eof --file "${file}"，然后重跑这次记账。`);
   process.exit(2);
 }
 
 if (dry) {
-  console.log(JSON.stringify({ ok: true, dryRun: true, file, line }, null, 2));
+  console.log(JSON.stringify({ ok: true, dryRun: true, file, eof: 'ok', line }, null, 2));
   process.exit(0);
 }
 

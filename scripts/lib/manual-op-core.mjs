@@ -40,22 +40,58 @@ function countArg(value, name) {
   return n;
 }
 
+/**
+ * 抛错时带上"这类错该怎么改"（r347，小鱼丸 2026-11-18 私聊）。
+ *
+ * 为什么不用一句通用 NEXT：字符集被拒时，通用 NEXT 会让人去找一个根本
+ * 不存在的换行——提示指错了地方，比没有提示更浪费时间。hint 是给 CLI
+ * 选 NEXT 用的，不是给人看的；message 自己必须能读。
+ *
+ * hint 取值：missing / charset / field / kind。
+ */
+function reject(message, hint) {
+  const e = new Error(message);
+  e.hint = hint;
+  return e;
+}
+
 /** 纯格式化 + 校验；不合法就抛错（宁可写不进去，也不要写一行看不懂的账）。 */
 export function formatManualOp({ ts, kind = 'manual-rm', by, removed = 0, bytes = 0, note } = {}) {
   const byText = String(by ?? '').trim();
   const noteText = String(note ?? '').trim();
-  if (byText === '') throw new Error('缺少 by（谁做的）');
-  if (noteText === '') throw new Error('缺少 note（做了什么、为什么）——空着不如不写');
-  if (!MANUAL_KINDS.includes(kind)) throw new Error(`kind 只认 ${MANUAL_KINDS.join(' / ')}：${kind}`);
+  if (byText === '') throw reject('缺少 by（谁做的）', 'missing');
+  if (noteText === '') throw reject('缺少 note（做了什么、为什么）——空着不如不写', 'missing');
+  if (!MANUAL_KINDS.includes(kind)) throw reject(`kind 只认 ${MANUAL_KINDS.join(' / ')}：${kind}`, 'kind');
   // by 也是行内字段：换行能造出第二行，竖线能造出第二个 by（小鱼丸 2026-11-18 20:2x 实测两枪都进了账）。
-  if (/[\r\n|]/.test(byText)) throw new Error('by 里不要换行或竖线（它是一行账里的字段值）');
-  if (!/^[A-Za-z0-9_.-]{1,32}$/.test(byText)) throw new Error(`by 只许字母/数字/下划线/点/连字符，1–32 位：${byText}`);
-  if (/[\r\n]/.test(noteText)) throw new Error('note 里不要换行（一行一个动作）');
-  if (noteText.includes('|')) throw new Error('note 里不要竖线（竖线是字段分隔符）');
-  if (!ts || String(ts).trim() === '') throw new Error('缺少 ts');
+  if (/[\r\n|]/.test(byText)) throw reject('by 里不要换行或竖线（它是一行账里的字段值）', 'field');
+  if (!/^[A-Za-z0-9_.-]{1,32}$/.test(byText)) {
+    throw reject(`by 只许字母/数字/下划线/点/连字符，1–32 位（中文、空格、换行都不行）：${byText}`, 'charset');
+  }
+  if (/[\r\n]/.test(noteText)) throw reject('note 里不要换行（一行一个动作）', 'field');
+  if (noteText.includes('|')) throw reject('note 里不要竖线（竖线是字段分隔符）', 'field');
+  if (!ts || String(ts).trim() === '') throw reject('缺少 ts', 'missing');
   const line = `${String(ts).trim()} | ${kind} | fmt=${MANUAL_FMT} by=${byText} removed=${countArg(removed, 'removed')} bytes=${countArg(bytes, 'bytes')} note=${noteText}`;
   // 最后一道：这一行必须正好是"两段竖线分隔、没有换行"——拼出来的东西再自己验一次。
-  if (/\r|\n/.test(line)) throw new Error('格式化结果是多行：有一个字段没洗干净');
-  if ((line.match(/\|/g) || []).length !== 2) throw new Error(`格式化结果竖线数不对（期望 2，实际 ${(line.match(/\|/g) || []).length}）：${line}`);
+  if (/\r|\n/.test(line)) throw reject('格式化结果是多行：有一个字段没洗干净', 'field');
+  const bars = (line.match(/\|/g) || []).length;
+  if (bars !== 2) throw reject(`格式化结果竖线数不对（期望 2，实际 ${bars}）：${line}`, 'field');
   return line;
 }
+
+/**
+ * 末字节检查（r347）：追加账本前先确认"最后一行已经结束"。
+ *
+ * 为什么必须先查：追加式账本不能回滚。上一行没有换行结尾时直接 append，
+ * 两条记录会粘成一行（写前 88 字节、写后 168 字节、行数只 +1 ⇒ 行数不变量
+ * 也看不出问题），事后再修只能靠人。检查放在 append 之前，代价是一次 read。
+ *
+ * 不替人补换行：补一个 '\n' 不改已有内容，但它仍是"手改账本"这个动作，
+ * 得由一个明确的命令去做（--fix-eof），而不是悄悄发生在记账路径里。
+ */
+export function endOfFileProblem(raw) {
+  const buf = Buffer.isBuffer(raw) ? raw : Buffer.from(String(raw ?? ''), 'utf8');
+  if (buf.length === 0) return null;
+  if (buf[buf.length - 1] === 0x0a) return null;
+  return { bytes: buf.length, tail: buf.subarray(Math.max(0, buf.length - 24)).toString('utf8') };
+}
+
