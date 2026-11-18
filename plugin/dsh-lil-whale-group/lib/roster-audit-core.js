@@ -18,7 +18,7 @@
  * 2026-11-18 15:3x 小肥鱼与小鱼丸读账时又发现一处：旧写法把 `homes\lee` 数进 `homes=5`
  * 又把 lee 标成 `home-outside-pond`，读的人会以为"它在 homes\ 底下却又在家外"。
  * 两件事都对——`homes\lee` 是 lee 放自己文件的目录，不是**鱼家**（没有 `dsh-home\`）；
- * 飞行成员 lee 在名册里的 home 是 `C:\Users\Fabian\.dsh`。所以 `homes` 改成只数鱼家、
+ * 飞行成员 lee 在名册里的 home 不在 `homes\` 下（它是宿主自己的 `~\.dsh`）。所以 `homes` 改成只数鱼家、
  * `other` 列出非鱼家目录，`skip` 的说明也改成"角色 + 真正的家"。
  */
 
