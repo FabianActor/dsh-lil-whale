@@ -338,6 +338,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '起停账判据' (($rsOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '起停账判据' '新行写 reason=no-stop-record、旧名仍认、巡守支复用块 3 的 previousRun（test-run-state.mjs）' }
   } else { Fail '起停账判据' 'scripts\test-run-state.mjs 不在包里' }
+  # ── 4af. 巡守账位置（2026-11-19 r352：整池一本 pool\state\watchman.log，旧路径只在迁移里）──
+  $wlTest = Join-Path $pkg 'scripts\test-watchman-ledger.mjs'
+  if (Test-Path $wlTest) {
+    $wlOut = & node $wlTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '巡守账位置' (($wlOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '巡守账位置' '写点只在 pool\state\watchman.log、旧路径只出现在迁移与 home-moved 行里（test-watchman-ledger.mjs）' }
+  } else { Fail '巡守账位置' 'scripts\test-watchman-ledger.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {

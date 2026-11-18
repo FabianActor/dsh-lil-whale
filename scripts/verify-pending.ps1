@@ -50,7 +50,7 @@ foreach ($k in $fish) {
 Add-Row 'runs 账按鱼写' $(if ($runsOk) { 'PASS' } else { 'FAIL' }) ($runsDetail -join '；')
 
 # 2) 自执行闹钟（B）：watchman.log 里 trigger=self 的行
-$wm = Join-Path $Cfg.HerHome 'logs\watchman.log'
+$wm = Join-Path $Cfg.PoolState 'watchman.log'
 $selfRows = @()
 if (Test-Path -LiteralPath $wm) { $selfRows = @(Get-Content -LiteralPath $wm -Encoding utf8 -Tail 400 | Where-Object { $_ -match 'trigger=self' }) }
 Add-Row '自己的闹钟（B）' 'INFO' $(if ($selfRows.Count -gt 0) { "最近 400 行里有 $($selfRows.Count) 条 trigger=self：$($selfRows[-1])" } else { '还没有 trigger=self（下次闹钟到点前属正常）' })

@@ -212,7 +212,47 @@ const WATCH = {
 }
 const SELF_HOME = CFG.selfHome
 const SCHEDULE_FILE = join(SELF_HOME, 'dsh-home', 'storages', 'schedule.json')
-const WATCHMAN_LOG = join(SELF_HOME, 'logs', 'watchman.log')
+
+// 巡守账（2026-11-19 r352）：从第一条鱼的家搬到鱼塘。
+//
+// 为什么搬：这本账记的是"巡守替整池做了哪些事"（推门、递话、轮转、prune、体检），
+// 不是任何一条鱼的家务。它原先住在 selfHome 指向的那条鱼家里（当前配置是 whale 的家），
+// 直接后果是：①她家的日志目录里有一本 0.3 MB 的账只有 239/344 行是她的；
+// ②算法默认"谁写谁删"，而这条鱼的沙箱写不进 pool\，可她读得到这本账，
+// 于是一次"搬家"要先解释清楚"借住"这件事。
+// 账属于鱼塘，住在 pool\state\ 下；鱼塘是共享区，谁读它都不需要先知道谁借住在谁家。
+const WATCHMAN_LOG = join(POOL_STATE, 'watchman.log')
+const LEGACY_WATCHMAN_LOG = join(SELF_HOME, 'logs', 'watchman.log')
+
+/**
+ * 把旧位置那本账搬到新位置（只搬主文件一次；旧路径的轮转文件不动，历史留在原处）。
+ *
+ * 搬完在场账首补一行 `home-moved from=… to=… at=…`：
+ * 让"改过路径"和"账断在某天"分得开——读的人看到断口，先查记录，不用猜。
+ * 两边都在（理论上不该有）时不合并：合并会造出一个解释不了的顺序；
+ * 旧文件改名留档，新位置记一行 `home-moved-conflict`，把"谁没搬"点出来。
+ */
+function migrateWatchmanLog() {
+  if (LEGACY_WATCHMAN_LOG === WATCHMAN_LOG) return
+  try {
+    if (!existsSync(LEGACY_WATCHMAN_LOG)) return
+    mkdirSync(dirname(WATCHMAN_LOG), { recursive: true })
+    const d = new Date()
+    const pad = (n) => String(n).padStart(2, '0')
+    const at = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+    if (!existsSync(WATCHMAN_LOG)) {
+      renameSync(LEGACY_WATCHMAN_LOG, WATCHMAN_LOG)
+      appendFileSync(WATCHMAN_LOG, `${at} | note | home-moved from=${LEGACY_WATCHMAN_LOG} to=${WATCHMAN_LOG} at=${at}\n`, 'utf8')
+      return
+    }
+    const keep = join(dirname(LEGACY_WATCHMAN_LOG), `watchman.legacy-${pad(d.getFullYear())}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.log`)
+    renameSync(LEGACY_WATCHMAN_LOG, keep)
+    appendFileSync(WATCHMAN_LOG, `${at} | note | home-moved-conflict from=${LEGACY_WATCHMAN_LOG} kept=${keep} at=${at}\n`, 'utf8')
+  } catch {
+    // 搬不动也不能让插件起不来：新位置写不进去这件事由 doctor（日志目录那一格）报
+  }
+}
+migrateWatchmanLog()
 
 // 每个进程自己的起停账（2026-11-12 19:25 加的）。
 //
@@ -221,7 +261,8 @@ const WATCHMAN_LOG = join(SELF_HOME, 'logs', 'watchman.log')
 // 而 `close.log` 只有 `fish.ps1 down` 才写，直接关窗/杀进程不留痕。
 // 现在每个进程都往 `pool\state\runs\<成员>.log` 记 started/stopped，
 // 下次启动时若上一轮没写 stopped，就补一行 resumed（reason=no-stop-record；旧行写的是 unclean）。
-// 巡守那条鱼照旧写 `watchman.log`（她的 morning-read 每天读它，格式不动）。
+// 巡守账 2026-11-19 起住在 `pool\state\watchman.log`（整池共享，见上面 WATCHMAN_LOG 的注释）；
+// 旧位置 `homes\<她>\logs\watchman.log` 只作为迁移来源保留常量，之后不再写。
 const RUNS_DIR = join(POOL_STATE, 'runs')
 
 function runLogFileOf(member) {

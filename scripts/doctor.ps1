@@ -290,16 +290,11 @@ if (Test-Path -LiteralPath $pluginLog) {
   #   日志里没有 wake-caps 行 → 版本还没到，等重启；
   #   日志里有那行、文件却不在 → 写失败（权限/路径/盘），要查。
   $capsLogSeen = $false
-  $homesRoot = Join-Path $Cfg.PondRoot 'homes'
-  if (Test-Path -LiteralPath $homesRoot) {
-    foreach ($h in @(Get-ChildItem -LiteralPath $homesRoot -Directory -ErrorAction SilentlyContinue)) {
-      $lg = Join-Path $h.FullName 'logs\watchman.log'
-      if ((Test-Path -LiteralPath $lg) -and (Select-String -LiteralPath $lg -Pattern 'wake-caps \| fmt=1' -Quiet -ErrorAction SilentlyContinue)) { $capsLogSeen = $true; break }
-    }
-  }
+  $capsLog = Join-Path $Cfg.PoolState 'watchman.log'
+  if ((Test-Path -LiteralPath $capsLog) -and (Select-String -LiteralPath $capsLog -Pattern 'wake-caps \| fmt=1' -Quiet -ErrorAction SilentlyContinue)) { $capsLogSeen = $true }
   if (-not (Test-Path -LiteralPath $capsFile)) {
     if ($capsLogSeen) {
-      Add-Row '生效值' 'FAIL' 'watchman.log 里有 wake-caps 行，但 wake-caps.json 不在：写失败（权限/路径/盘）' 'NEXT: 看巡守日志里 wake-caps-write-failed 的 detail'
+      Add-Row '生效值' 'FAIL' 'watchman.log 里有 wake-caps 行，但 wake-caps.json 不在：写失败（权限/路径/盘）' 'NEXT: 看 pool\state\watchman.log 里 wake-caps-write-failed 的 detail'
     } else {
       Add-Row '生效值' 'WARN' '日志里还没有 wake-caps 行：版本还没到（等主 dsh 重启到带这段代码的版本）' 'NEXT: 重启主 dsh（3080）后看 pool\state\wake-caps.json'
     }
@@ -322,7 +317,7 @@ if (Test-Path -LiteralPath $pluginLog) {
       } elseif ($ageMin -lt 0) {
         Add-Row '生效值' 'FAIL' 'wake-caps.json 里没有可读的 at' 'NEXT: 看 pool\state\wake-caps.json 的内容'
       } elseif ($ageMin -gt 5) {
-        Add-Row '生效值' 'FAIL' "巡守 $ageMin 分钟没更新生效值（进程可能死了/卡住）：$capText" 'NEXT: 看 homes\<鱼>\logs\watchman.log 末尾有没有 wake-caps 行'
+        Add-Row '生效值' 'FAIL' "巡守 $ageMin 分钟没更新生效值（进程可能死了/卡住）：$capText" 'NEXT: 看 pool\state\watchman.log 末尾有没有 wake-caps 行'
       } else {
         $capPid = $caps.pid
     $capLoaded = ''
@@ -1234,82 +1229,40 @@ try {
 
 # 9c. 格式分界（巡守账本）：分界行只在启动时写，而"启动"不是必然事件。
 #     小鱼丸 2026-11-15 19:08：别让补强变成唯一 —— 但不能让它的缺席也看不见。
-#     2026-11-16 02:0x：按"一家一本"逐鱼检查；日志轮转会改名当前文件，新文件开头没有分界行是轮转的正常样子，
+#     2026-11-19 r352：账本搬到 pool\state\watchman.log（整池一本，不再按鱼分家）。
+#     轮转会把当前文件改名：新文件开头没有分界行是轮转的正常样子，
 #     只要最近轮转的那份里有分界行就算同一格式延续（否则每次轮转都会误报一次 WARN）。
 try {
   $boundary = '2026-11-15 18:35'
-  $members9c = @()
-  if ($Cfg.MembersFile -and (Test-Path -LiteralPath $Cfg.MembersFile)) {
-    $members9c = @((Get-Content -LiteralPath $Cfg.MembersFile -Raw -Encoding utf8 | ConvertFrom-Json).members.PSObject.Properties |
-      Where-Object { $_.Value.kind -eq 'fish' -and $_.Value.home })
-  }
-  foreach ($prop9c in $members9c) {
-    $m = $prop9c.Value
-    $wmPath = Join-Path ([string]$m.home) 'logs\watchman.log'
-    if (-not (Test-Path -LiteralPath $wmPath)) { continue }
-    $tail = @(Get-Content -LiteralPath $wmPath -Encoding utf8 -Tail 3000)
-    $hasFmt3 = @($tail | Where-Object { $_ -match '\| log-format \| fmt=3' }).Count -gt 0
-    $label = '{0}（{1}）' -f $m.name, $prop9c.Name
-    if ($hasFmt3) {
-      Add-Row '格式分界' 'OK' ($label + '：有 log-format 分界行')
-      continue
-    }
-    $lateAny = @($tail | Where-Object { $_ -match '^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})' -and [string]$matches[1] -gt $boundary }).Count -gt 0
-    if (-not $lateAny) {
-      Add-Row '格式分界' 'INFO' ($label + '：还没有 18:35 之后的行，分界未到')
-      continue
-    }
-    $logsDir = Join-Path ([string]$m.home) 'logs'
-    $rotatedWithFmt = $false
-    try {
-      $rotated = @(Get-ChildItem -LiteralPath $logsDir -Filter 'watchman.*.log' -File -ErrorAction SilentlyContinue |
-        Sort-Object LastWriteTime -Descending | Select-Object -First 3)
-      foreach ($r in $rotated) {
-        $rTail = @(Get-Content -LiteralPath $r.FullName -Encoding utf8 -Tail 400)
-        if (@($rTail | Where-Object { $_ -match '\| log-format \| fmt=3' }).Count -gt 0) { $rotatedWithFmt = $true; break }
-      }
-    } catch { }
-    # 2026-11-16 02:19（第四条鱼 #724 收回 + 判据更正）：不拿"启动版本 vs 磁盘版本"当"写者在不在"——
-    # 磁盘版本会因为跟分界无关的改动上涨（改一句文案也算），版本不同只在"一次改动恰好重合"时等于"写者不在"。
-    # 改成绑"写者引入的那一刻"：LOG_FORMAT_SINCE；并把版本写成有名字的常量（数字不会说话，注解会）。
-    $logFormatSince = '1.6.39'   # 自这一版起：每个进程在 apply() 开头各写自己那份 log-format（此前只有巡守写，且只写它注视的那一家）
-    function Test-VerAtLeast([string]$ver, [string]$atLeast) {
-      try {
-        $v = [version]($ver -replace '[+-].*$', '')
-        $a = [version]($atLeast -replace '[+-].*$', '')
-        return ($v -ge $a)
-      } catch { return $null }
-    }
-    $bootVer9c = $null
-    $bootSeen9c = $false
-    try {
-      $bootPath9c = Join-Path $Cfg.Root 'logs\plugin-boot.log'
-      if (Test-Path -LiteralPath $bootPath9c) {
-        $myHome9c = [string]$m.dshHome
-        foreach ($ln9c in @(Get-Content -LiteralPath $bootPath9c -Encoding utf8)) {
-          try {
-            $o9c = $ln9c | ConvertFrom-Json
-            if (-not $o9c.pkg) { continue }
-            if ($myHome9c -and $o9c.home -and (([string]$o9c.home).TrimEnd('\') -ieq $myHome9c.TrimEnd('\'))) {
-              $bootVer9c = [string]$o9c.pkg -replace '^.*@', ''
-              $bootSeen9c = $true
-            }
-          } catch { }
-        }
-      }
-    } catch { }
-    if ($rotatedWithFmt) {
-      Add-Row '格式分界' 'OK' ($label + '：分界行在被轮转的旧文件里（轮转后新文件不重复写）')
-    } elseif (-not $bootSeen9c) {
-      Add-Row '格式分界' 'INFO' ($label + '：本文件还没有分界行，这一家也还没有启动痕迹（第三种状态）——等它先启动一次')
-    } elseif (-not $bootVer9c) {
-      Add-Row '格式分界' 'INFO' ($label + '：本文件还没有分界行——启动版本读不到，判不了"还没到"还是"丢了"（不猜）')
-    } elseif ($null -eq (Test-VerAtLeast $bootVer9c $logFormatSince)) {
-      Add-Row '格式分界' 'INFO' ($label + '：本文件还没有分界行——启动版本 ' + $bootVer9c + ' 解析不了，判不了')
-    } elseif (-not (Test-VerAtLeast $bootVer9c $logFormatSince)) {
-      Add-Row '格式分界' 'INFO' ($label + '：本文件还没有分界行——进程还是旧代码（启动 ' + $bootVer9c + '，' + $logFormatSince + ' 起才每个进程各写自己那份），属"还没到"，重启后自愈')
+  $wmPath9c = Join-Path $Cfg.PoolState 'watchman.log'
+  $label9c = 'pool\state\watchman.log'
+  if (-not (Test-Path -LiteralPath $wmPath9c)) {
+    Add-Row '格式分界' 'INFO' ($label9c + '：还没有这本账（巡守还没启动过，或刚换位置要等一次启动）')
+  } else {
+    $tail9c = @(Get-Content -LiteralPath $wmPath9c -Encoding utf8 -Tail 3000)
+    $hasFmt9c = @($tail9c | Where-Object { $_ -match '\| log-format \| fmt=3' }).Count -gt 0
+    if ($hasFmt9c) {
+      Add-Row '格式分界' 'OK' ($label9c + '：有 log-format 分界行')
     } else {
-      Add-Row '格式分界' 'WARN' ($label + '：进程已经是带分界的代码（启动 ' + $bootVer9c + ' ≥ ' + $logFormatSince + '）却没有 log-format 行——这不像"还没到"，像真丢了') 'NEXT: 重启这一条鱼（fish.ps1 down <键> -Yes; fish.ps1 up <键> -NoBrowser）'
+      $late9c = @($tail9c | Where-Object { $_ -match '^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})' -and [string]$matches[1] -gt $boundary }).Count -gt 0
+      $rotatedWithFmt9c = $false
+      if ($late9c) {
+        try {
+          $rot9c = @(Get-ChildItem -LiteralPath (Split-Path -Parent $wmPath9c) -Filter 'watchman.*.log' -File -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 3)
+          foreach ($r9c in $rot9c) {
+            $rTail9c = @(Get-Content -LiteralPath $r9c.FullName -Encoding utf8 -Tail 400)
+            if (@($rTail9c | Where-Object { $_ -match '\| log-format \| fmt=3' }).Count -gt 0) { $rotatedWithFmt9c = $true; break }
+          }
+        } catch { }
+      }
+      if (-not $late9c) {
+        Add-Row '格式分界' 'INFO' ($label9c + '：还没有 18:35 之后的行，分界未到')
+      } elseif ($rotatedWithFmt9c) {
+        Add-Row '格式分界' 'OK' ($label9c + '：分界行在被轮转的旧文件里（轮转后新文件不重复写）')
+      } else {
+        Add-Row '格式分界' 'WARN' ($label9c + '：已有 18:35 之后的行、却没有 log-format 分界——像"丢了"，不是"还没到"') 'NEXT: 重启主 dsh（3080）；重启后看新账首行附近有没有 log-format fmt=3'
+      }
     }
   }
 } catch { Add-Row '格式分界' 'WARN' ('核不了：{0}' -f $_.Exception.Message) }

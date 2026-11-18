@@ -19,6 +19,7 @@
 3. **顺序**：`[未发布]` 永远在最上面，下面是版本段（新→旧）；历史段（r1–r206）保留原样。
 
 ## [未发布]
+- r352 · 2026-11-19 · 巡守账搬出鱼的家、改成整池一本：`pool\state\watchman.log`。旧行为：`WATCHMAN_LOG = <写者进程的 selfHome>\logs\watchman.log`，宿主与各鱼按各自配置各写各的，同一件事散在几家，读的人得先问“这是谁的进程”；新行为：所有进程写同一本，靠行里的 `pid=` / `to=` 分辨写者与收件人。插件在加载时做一次迁移：旧文件在、新文件不在 ⇒ `rename` 过去并在账首补一行 `home-moved from=… to=… at=…`；两边都在 ⇒ 旧文件改名 `watchman.legacy-<时间戳>.log` 留档并写 `home-moved-conflict`（不删任何人的账）。`doctor` 9c 与 `verify-pending.ps1` 改读新位置，轮转目标本来就有 `pool\state`；旧路径的轮转文件留在原处、只读历史（内部，日志）
 
 - r351 · 2026-11-19 · 转写补丁脚本支持 `--also-root <DSH_HOME>`：宿主自己的 profile 也可能装 `dsh-bili-eyes`（它不在 `homes\` 下面，默认扫描看不见）；带这个参数时把 `<DSH_HOME>\profiles\<p>\node_modules\dsh-bili-eyes` 也算进去，member 标成 `宿主/<p>`。默认不扫——"扫到几处安装"这个数只由鱼塘内容决定，不由这台机器碰巧还装了什么决定；缺参数 exit 2。`--check` 仍只读（内部，脚本）
 
