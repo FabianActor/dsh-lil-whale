@@ -235,10 +235,21 @@ for (const t of targets) {
     const which = missingNote ? '标记/文案表' : '推送句';
     if (!canFixMissing) {
       halfStuck += 1;
+      // 2026-11-18 小鱼丸：这句提示原来写死走 origPath()，可"从没打成功过"的安装根本没生成 orig，
+      // 于是它指着一个不存在的文件让人去 diff。先看目录里到底有什么，再决定下一步。
+      const orig = origAnyPath(t);
+      const hasOrig = Boolean(orig);
+      const ver = versionOf(t.pkgDir);
       console.log(`✗ ${t.member}: 标记在、${which}没找到落点 → ${t.file}`);
       console.log('  判不了：可能是「只打了一半」，也可能是上游自己修了这句——我们的检查用的是自己写下的措辞，不是语义。');
-      console.log(`  下一步：先看 diff——把 ${path.basename(t.file)} 与 ${path.basename(origPath(t))} 对一下；若上游已自行修复，不要回滚。`);
-      console.log(`  真要回滚：先把当前文件另存为 ${path.basename(t.file)}.bak-<时间>（别让「下一步」不可逆），再把 orig 复制回去、重跑本脚本。`);
+      if (hasOrig) {
+        console.log(`  下一步：先看 diff——把 ${path.basename(t.file)} 与 ${path.basename(orig)} 对一下；若上游已自行修复，不要回滚。`);
+        console.log(`  真要回滚：先把当前文件另存为 ${path.basename(t.file)}.bak-<时间>（别让「下一步」不可逆），再把 orig 复制回去、重跑本脚本。`);
+      } else {
+        console.log('  这台没有 orig 可对：它从没成功打过补丁，所以没留下原样副本（不是放错了位置，是根本没生成过）。');
+        console.log('  下一步：先看 diff / changelog 确认上游是不是自己修了这句；要补就手工补那半，或从同版本另一台拷一份 look.js.orig-* 过来。');
+      }
+      if (!ver) console.log('  （orig 名字里的 unknown 不是版本号：那是「版本没读到」，不是插件版本叫 unknown。）');
       continue;
     }
     if (readOnly) {
@@ -274,6 +285,19 @@ for (const t of targets) {
 
 function origPath(t) {
   return `${t.file}.orig-${versionOf(t.pkgDir) || 'unknown'}`;
+}
+// 目录里真正存在的那份 orig（不按当前版本名猜——版本读不到时名字会变，文件还在）
+function origAnyPath(t) {
+  const dir = path.dirname(t.file);
+  const base = `${path.basename(t.file)}.orig-`;
+  try {
+    for (const name of fs.readdirSync(dir)) {
+      if (name.startsWith(base)) return path.join(dir, name);
+    }
+  } catch {
+    return null;
+  }
+  return null;
 }
 function ensureBackups(t) {
   const orig = origPath(t);

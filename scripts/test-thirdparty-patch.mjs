@@ -6,7 +6,7 @@
 //
 // 用法：node scripts/test-thirdparty-patch.mjs（PASS/FAIL 计数器在最后）
 
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, linkSync, statSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, linkSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -141,6 +141,52 @@ console.log('第三方补丁：行为测试');
   ok('先分清"判不了"（可能是上游自己修了）', r.out.includes('上游自己修了这句'));
   ok('回滚前要求先备份当前文件', r.out.includes('另存为') && r.out.includes('.bak-'));
   ok('提示不要直接回滚（先看 diff）', r.out.includes('先看 diff'));
+  rmSync(root, { recursive: true, force: true });
+}
+
+// 3c2. 从没成功打过补丁（标记在、但 orig 从没生成过）：不能让人去 diff 一个不存在的文件
+//      2026-11-18 小鱼丸：假塘里只有 look.js 一个文件，提示却写"与 look.js.orig-unknown 对一下"——
+//      指向不存在的文件。判据：报缺席前先列目录真实有什么。
+{
+  const { root, file } = makePond();
+  run(['--pond', root]);
+  const patched = readFileSync(file, 'utf8');
+  const stuck = patched.replace(
+    /if \(src && TRANSCRIPT_NOTE\[src\]\) \{[\s\S]*?\n  \}/,
+    'lines.push(TRANSCRIPT_NOTE[src] || "");',
+  );
+  writeFileSync(file, stuck, 'utf8');
+  for (const name of readdirSync(path.dirname(file))) {
+    if (name.startsWith('look.js.orig-')) rmSync(path.join(path.dirname(file), name));
+  }
+  const r = run(['--check', '--pond', root]);
+  ok('没有 orig 时 --check exit 1', r.code === 1, `实际 ${r.code}`);
+  ok('明说"没有 orig 可对"', r.out.includes('没有 orig 可对'));
+  ok('不再让人去 diff 一个不存在的文件', !r.out.includes('对一下；若上游已自行修复'));
+  ok('给出替代下一步（手工补 / 从同版本另一台拿）', r.out.includes('从同版本另一台'));
+  rmSync(root, { recursive: true, force: true });
+}
+
+// 3c3. orig 存在但版本名读不到：按目录里真实的那份对，而不是按当前 version 拼一个不存在的名字
+{
+  const { root, file, pkg } = makePond();
+  run(['--pond', root]);
+  const patched = readFileSync(file, 'utf8');
+  const stuck = patched.replace(
+    /if \(src && TRANSCRIPT_NOTE\[src\]\) \{[\s\S]*?\n  \}/,
+    'lines.push(TRANSCRIPT_NOTE[src] || "");',
+  );
+  writeFileSync(file, stuck, 'utf8');
+  const dir = path.dirname(file);
+  const origName = readdirSync(dir).find((n) => n.startsWith('look.js.orig-'));
+  const renamed = 'look.js.orig-0.7.0';
+  rmSync(path.join(dir, renamed), { force: true });
+  if (origName && origName !== renamed) rmSync(path.join(dir, origName));
+  writeFileSync(path.join(dir, renamed), ORIGINAL, 'utf8');
+  writeFileSync(path.join(pkg, 'package.json'), JSON.stringify({ name: 'dsh-bili-eyes' }), 'utf8'); // 版本读不到
+  const r = run(['--check', '--pond', root]);
+  ok('版本读不到时仍能指出目录里真实那份 orig', r.out.includes(renamed), r.out.trim().split('\n').slice(-4).join(' / '));
+  ok('并说明 unknown 是"版本没读到"', r.out.includes('版本没读到'));
   rmSync(root, { recursive: true, force: true });
 }
 
