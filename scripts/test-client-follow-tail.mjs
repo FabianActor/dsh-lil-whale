@@ -33,7 +33,9 @@ ok('回到贴底时收起提示', /if \(!atBottom\) return\s*\n\s*if \(historyAb
 ok('markRead 后重量分割线', /historyVisitedRef\.current = false[\s\S]{0,240}measureHistory\(\)/.test(src))
 
 // 3. 构建标记（人刷新后靠它确认拿到的是这一版）
-ok('client build v51', src.includes('client build v51 · follow-tail-long'))
+// 期望跟着实现走：r328 把标记从 v51/follow-tail-long 换成 v52/line-cite（气泡行号），
+// 行为没变，变的只是这个字符串——所以这里同步改，不算回归（§27 期望变）。
+ok('client build v52', src.includes('client build v52 · line-cite'))
 
 console.log(`test-client-follow-tail：合计 ${total}，PASS ${pass}，FAIL ${total - pass}`)
 process.exit(pass === total ? 0 : 1)
