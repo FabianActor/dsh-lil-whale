@@ -20,6 +20,8 @@
 
 ## [未发布]
 
+- **一键开关鱼塘的用法写进用户文档**（r331，用户可见：是，README/起停）：README 的「起停」新增「只想记住一件事」一小节——`scripts\bin\` 两个 `.cmd` 各做什么、三步用法、双击窗口一闪是正常的、需要 PowerShell 7、别直接关主 dsh 的窗口（鱼会被作业对象带走、账上记 `unclean`）、拷到桌面会过时；`docs/detail/怎么启动和关闭鱼塘.md` 顶部加同款「0. 只想记住一件事」。
+
 - **插件截图与市场声明**（r330，用户可见：否，仓库素材）：两个包目录各加 `screenshots/`（群聊、私聊、鱼塘、设置页四张）与 `screenshots.json`——这是 awesome 插件市场的约定（放在 `package.json` 旁边、1–8 张相对路径、不许 `..` 爬出插件目录）。`scripts/check-awesome-screenshots.mjs` 校验声明形状与图片存在；发行包与 npm 包里都不含这些图（`files` 白名单 + `pack.ps1` 排除）。
 
 - **r329**（无行为变化，测试跟上）：`test-client-follow-tail` 的构建标记期望从 `client build v51 · follow-tail-long` 改成 `v52 · line-cite`——r328 换的是标记字符串，不是行为。

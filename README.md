@@ -334,7 +334,26 @@ pwsh -File scripts\fish.ps1 up all -BrowserMainOnly   # 起鱼塘：主 dsh 开�
 pwsh -File scripts\fish.ps1 down all -Yes             # 停鱼塘：先鱼后主，每条写 stopped
 ```
 
-想双击就去 `scripts\bin\` 里双击（`Run All Whales.cmd` / `Stop All Whales.cmd`）——那里的 `.cmd` 永远是最新的；拷到桌面就等于冻结了当时那份。
+### 只想记住一件事：双击 `scripts\bin` 里那两个脚本
+
+`scripts\bin\` 里有两个 `.cmd`，就是"一键开关整个鱼塘"：
+
+| 双击 | 实际执行 | 效果 |
+|---|---|---|
+| `Run All Whales.cmd` | `fish.ps1 up all -BrowserMainOnly` | 主 dsh 打开一个浏览器窗，其余鱼在后台起、不开窗 |
+| `Stop All Whales.cmd` | `fish.ps1 down all -Yes` | 先关小鱼、最后关主 dsh，每条鱼账上写一行 `stopped` |
+
+用法三步：
+
+1. 双击 `Run All Whales.cmd`；
+2. 等主 dsh 的窗口自己打开。第一次可能要等 10–30 秒；**`.cmd` 的窗口一闪就没是正常的**——它只负责把进程拉起来，`up` 拿到带 token 的地址就返回了；
+3. 收工双击 `Stop All Whales.cmd`。**别直接关主 dsh 的窗口**：那样也能停，但鱼会被作业对象一起带走，账上没有 `stopped`，下次启动记成 `unclean`（不等于崩溃，只是账难看）。
+
+前提与注意：
+
+- 需要 PowerShell 7（`pwsh`）。没有的话 `.cmd` 会直接打印装法（`winget install --id Microsoft.PowerShell -e`），装完**开一个新终端**再双击。
+- 想看见输出（排查用）就别双击，改用上面的命令行——双击模式按设计是静默的。
+- `scripts\bin\` 里的永远是最新的；**拷到桌面会冻结当时那份**，脚本一更新，桌面副本就悄悄过时。
 
 鱼塘工具栏有一个勾选框：**「起主 dsh 时把鱼也带起来」**（默认开，存在 `pool\state\settings.json` 的 `autoStartFish`）。勾上：起主 dsh 就等于起鱼塘；关掉：只起巡守（空鱼塘），调试用。改完下次启动主 dsh 生效。
 
