@@ -20,6 +20,11 @@
 
 ## [未发布]
 
+- **fishtalk 串池事故的判据落纸 + 一次删除事故的补救**（r306，用户可见：否，文档与数据）：
+  - 事故：为把宿主 said.jsonl 里小鱼丸留的一行挪回她自己家，脚本里用了 \System.Management.Automation.Internal.Host.InternalHost（PowerShell 只读自动变量）⇒ 赋值失败、路径变成主机对象，行没搬成，随后 Remove-Item 把整个宿主 .fishtalk 删掉，那一行丢了。
+  - 补救：从群消息 #1763 的引用原文精确恢复（45 字，166 B），按原时间放回 homes\\fishball\\.fishtalk\\said.jsonl 第一行；她重启后的新写入已落在自己家（文件 295 B / 2 行），隔离生效。
+  - 判据页新增 §70「共享位置只能被显式选中」、§71「观测装置不能长在它观测的对象里」、§72「一句话有两个身份（by=写入者 / of=主人）」——三条都收自四条鱼的复验与讨论。
+  - 教训：\System.Management.Automation.Internal.Host.InternalHost、\C:UsersFabian 这类 PowerShell 只读自动变量在搬数据的脚本里会静默变成对象；路径变量一律用 \/\，删之前先打印解析后的绝对路径。
 - **fishtalk 语料按鱼隔离**（r305，用户可见：是，装了 fishtalk 的鱼各有一份语料）：
   - 现象：fishtalk 默认把语料存 `~/.fishtalk`（`os.homedir()`），而宿主家目录对鱼进程可写。第一条喂语的鱼（小鱼丸）把 308 条 B 站评论写进了宿主那份，宿主与后续的鱼都会读到同一份语料。
   - 修法：`scripts/fish.ps1` 起鱼时注入 `FISHTALK_HOME=<她的家>\.fishtalk`，与 XDG 注入同一处（数据 churn 只在鱼自己家）。已把误写进宿主的 308 条语料与 pack 挪回 `homes\fishball\.fishtalk`，宿主那份只剩自己的 `said.jsonl`；小满重启后同样隔离。
