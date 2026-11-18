@@ -152,9 +152,56 @@ function versionOf(pkgDir) {
 // --check 只看标记在不在，所以"只打了一份"会照样报"已打过补丁"。这里补一层：同一版本的多份
 // 安装内容必须一致；不一致就点名（判据：检查器能看见的，也包括"彼此是不是同一版"）。
 // 换行与 BOM 不算差异（包里可能被 eol 规则转成 CRLF）。
+function normalizedHashOf(text) {
+  const clean = String(text).replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
+  return crypto.createHash('sha256').update(clean, 'utf8').digest('hex');
+}
 function normalizedHash(file) {
-  const text = fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
-  return crypto.createHash('sha256').update(text, 'utf8').digest('hex');
+  return normalizedHashOf(fs.readFileSync(file, 'utf8'));
+}
+
+// 2026-11-18 LeeaCP（r303）：期望内容比 mtime / 多数派都硬。
+// 打补丁的脚本知道"打完应该长什么样"：拿上游原文跑同一套变换就能算出来。
+// 与期望一致 = 新；不一致 = 旧，而且能直接报第一处差在哪一行。
+function patchedFrom(originalText, eol) {
+  if (!NOTE_RE.test(originalText) || !PUSH_OLD_RE.test(originalText)) return null;
+  let next = originalText.replace(NOTE_RE, NOTE_NEW(eol)).replace(PUSH_OLD_RE, PUSH_NEW(eol));
+  if (!NO_TRANS_OLD_RE.test(next)) return null;
+  next = next.replace(NO_TRANS_OLD_RE, NO_TRANS_NEW(eol));
+  const g2 = applyGen2(next, eol);
+  return g2.ok ? g2.next : null;
+}
+
+// 同版本里任一安装留下的 orig 就是上游原文（四台同版本时字节相同）。
+function expectedTextOf(list) {
+  for (const t of list) {
+    const orig = origAnyPath(t);
+    if (!orig) continue;
+    let text;
+    try {
+      text = fs.readFileSync(orig, 'utf8');
+    } catch {
+      continue;
+    }
+    const eol = text.includes('\r\n') ? '\r\n' : '\n';
+    const expected = patchedFrom(text, eol);
+    if (expected) return expected;
+  }
+  return null;
+}
+
+// 第一处差异（只用于人读：报行号 + 两边那行的前 80 字）。
+function firstDiffLine(expectedText, actualText) {
+  const a = expectedText.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').split('\n');
+  const b = actualText.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').split('\n');
+  const n = Math.max(a.length, b.length);
+  for (let i = 0; i < n; i += 1) {
+    if ((a[i] ?? '') !== (b[i] ?? '')) {
+      const clip = (s) => (s === undefined ? '(没有这一行)' : s.trim().slice(0, 80) || '(空行)');
+      return { line: i + 1, expected: clip(a[i]), actual: clip(b[i]) };
+    }
+  }
+  return null;
 }
 
 function consistencyOf(targets) {
@@ -181,12 +228,23 @@ function consistencyOf(targets) {
       }
     }
     if (groups.size > 1) {
-      // 2026-11-18 LeeaCP（r299）：只说"内容不同"之后，人还得自己去找是哪一份。
-      // 这里把每组、每份的路径与 mtime 都摆出来，并点名"最早修改"的那一组——
-      // 它通常就是没跟上的那份；这是线索，不是结论。
+      // 2026-11-18 LeeaCP（r299/r303）：先说清"哪几份互相一样"，再拿期望内容分新旧。
+      // mtime 只留作线索（被单独 append 过的那份反而更新，方向可能反）。
+      const expectedText = expectedTextOf(list);
+      const expectedHash = expectedText ? normalizedHashOf(expectedText) : null;
       const arr = [...groups.values()].sort((x, y) => y.newestAt - x.newestAt);
+      for (const g of arr) {
+        g.matchesExpected = expectedHash === null ? null : g.hash === expectedHash;
+        if (g.matchesExpected === false && g.targets.length > 0) {
+          try {
+            g.diff = firstDiffLine(expectedText, fs.readFileSync(g.targets[0].file, 'utf8'));
+          } catch {
+            g.diff = null;
+          }
+        }
+      }
       const earliest = arr.reduce((acc, g) => (!acc || g.newestAt < acc.newestAt ? g : acc), null);
-      problems.push({ version, groups: arr, earliest });
+      problems.push({ version, groups: arr, earliest, expectedKnown: expectedHash !== null });
     }
   }
   return { byVersion, problems };
@@ -547,7 +605,26 @@ if (checkOnly) {
       });
       if (p.earliest) {
         const names = p.earliest.targets.map((t) => t.member).join('、');
-        console.log(`  最早修改的是 ${names}（${fmtMs(p.earliest.newestAt)}）——要找差的，先看这一组。`);
+        console.log(`  最早修改的是 ${names}（${fmtMs(p.earliest.newestAt)}）——线索，不是结论（被单独 append 过的那份反而更新）。`);
+      }
+      // 2026-11-18 LeeaCP（r303）：期望内容才是判据；mtime/多数派都只是证据的形状。
+      if (p.expectedKnown) {
+        const same = p.groups.filter((g) => g.matchesExpected === true);
+        const stale = p.groups.filter((g) => g.matchesExpected === false);
+        if (same.length > 0) {
+          const names = same.reduce((acc, g) => acc.concat(g.targets.map((t) => t.member)), []).join('、');
+          console.log(`  与期望一致的是 ${names}（期望 = 拿同版本的 orig 跑同一套变换算出来的「打完应该长什么样」）。`);
+        }
+        for (const g of stale) {
+          const names = g.targets.map((t) => t.member).join('、');
+          if (g.diff) {
+            console.log(`  与期望不一致的是 ${names}——第一处差异在 L${g.diff.line}：期望「${g.diff.expected}」≠ 实际「${g.diff.actual}」。它们才是旧的。`);
+          } else {
+            console.log(`  与期望不一致的是 ${names}（内容读不到，没法给出差异行）。`);
+          }
+        }
+      } else {
+        console.log('  （同版本里没有 orig 副本，算不出期望内容；mtime 只当线索，别当结论。）');
       }
     }
     console.log('  NEXT: 逐份跑 --dry-run 看差在哪，再重跑补丁；差异大的一份先与同版本另一台对 diff。');

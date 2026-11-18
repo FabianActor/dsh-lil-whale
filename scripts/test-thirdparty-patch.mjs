@@ -6,7 +6,7 @@
 //
 // 用法：node scripts/test-thirdparty-patch.mjs（PASS/FAIL 计数器在最后）
 
-import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, readFileSync, readdirSync, rmSync, linkSync, statSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, readFileSync, readdirSync, rmSync, linkSync, statSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -436,7 +436,23 @@ console.log('第三方补丁：行为测试');
   // 否则人还得自己到四台里去找。这里点名"最早修改"的那一组（线索，不是结论）。
   ok('多安装：每组列出路径与 mtime', /look\.js（\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}）/.test(drift.out), drift.out.slice(-600));
   ok('多安装：点名哪一组最早修改（名字 + 时间）', /最早修改的是 a（\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}）/.test(drift.out), drift.out.slice(-600));
+  // 2026-11-18 LeeaCP（r303）：期望内容才是判据——a 与期望一致，b 是旧的，且能报第一处差异。
+  ok('期望内容：与期望一致的是 a', /与期望一致的是 a/.test(drift.out), drift.out.slice(-800));
+  ok('期望内容：点名与期望不一致的是 b', /与期望不一致的是 b/.test(drift.out), drift.out.slice(-800));
+  ok('期望内容：给出第一处差异行号', /第一处差异在 L\d+/.test(drift.out), drift.out.slice(-800));
   rmSync(a.root, { recursive: true, force: true });
+
+  // 多数派/mtime 会指错人：三份里两份新、一份被单独改成"看起来打了、其实不是期望内容"。
+  // 只有跟期望比不会——这是 LeeaCP 私信里那条「期望值才是判据」的反例。
+  const r = makePondMulti(['a', 'b', 'c']);
+  run(['--pond', r.root]);
+  const origC = `${r.files.c}.orig-0.8.3`;
+  ok('回退用例：orig 副本存在', existsSync(origC));
+  appendFileSync(r.files.c, '\n// drift: c 被单独追加过，mtime 最新\n', 'utf8'); // 标记都在，内容不是期望
+  const back = run(['--check', '--pond', r.root]);
+  ok('回退用例：--check exit 1', back.code === 1, `exit=${back.code}`);
+  ok('回退用例：期望内容点名 c 是旧的（不按 mtime/多数派指 a、b）', /与期望不一致的是 c/.test(back.out), back.out.slice(-800));
+  rmSync(r.root, { recursive: true, force: true });
 
   // 不同版本各自打好：不比内容，但要说清"版本不同"
   const d = makePondMulti(['a', 'b'], { b: '0.8.4' });
