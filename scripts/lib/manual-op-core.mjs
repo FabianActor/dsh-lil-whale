@@ -47,8 +47,15 @@ export function formatManualOp({ ts, kind = 'manual-rm', by, removed = 0, bytes 
   if (byText === '') throw new Error('缺少 by（谁做的）');
   if (noteText === '') throw new Error('缺少 note（做了什么、为什么）——空着不如不写');
   if (!MANUAL_KINDS.includes(kind)) throw new Error(`kind 只认 ${MANUAL_KINDS.join(' / ')}：${kind}`);
+  // by 也是行内字段：换行能造出第二行，竖线能造出第二个 by（小鱼丸 2026-11-18 20:2x 实测两枪都进了账）。
+  if (/[\r\n|]/.test(byText)) throw new Error('by 里不要换行或竖线（它是一行账里的字段值）');
+  if (!/^[A-Za-z0-9_.-]{1,32}$/.test(byText)) throw new Error(`by 只许字母/数字/下划线/点/连字符，1–32 位：${byText}`);
   if (/[\r\n]/.test(noteText)) throw new Error('note 里不要换行（一行一个动作）');
   if (noteText.includes('|')) throw new Error('note 里不要竖线（竖线是字段分隔符）');
   if (!ts || String(ts).trim() === '') throw new Error('缺少 ts');
-  return `${String(ts).trim()} | ${kind} | fmt=${MANUAL_FMT} by=${byText} removed=${countArg(removed, 'removed')} bytes=${countArg(bytes, 'bytes')} note=${noteText}`;
+  const line = `${String(ts).trim()} | ${kind} | fmt=${MANUAL_FMT} by=${byText} removed=${countArg(removed, 'removed')} bytes=${countArg(bytes, 'bytes')} note=${noteText}`;
+  // 最后一道：这一行必须正好是"两段竖线分隔、没有换行"——拼出来的东西再自己验一次。
+  if (/\r|\n/.test(line)) throw new Error('格式化结果是多行：有一个字段没洗干净');
+  if ((line.match(/\|/g) || []).length !== 2) throw new Error(`格式化结果竖线数不对（期望 2，实际 ${(line.match(/\|/g) || []).length}）：${line}`);
+  return line;
 }

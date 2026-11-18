@@ -14,7 +14,7 @@
  *
  * 2026-11-18 r342。
  */
-import { appendFileSync, mkdirSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { formatManualOp, parseAt, tsLocal } from './lib/manual-op-core.mjs';
@@ -59,7 +59,7 @@ try {
   line = formatManualOp({ ts: tsLocal(when), kind, by, removed, bytes, note });
 } catch (e) {
   console.error(e.message);
-  console.error('NEXT: 补全 --by/--note，或把 note 里的换行/竖线去掉');
+  console.error('NEXT: 补全 --by/--note，或把 by/note 里的换行或竖线去掉');
   process.exit(2);
 }
 
@@ -68,7 +68,24 @@ if (dry) {
   process.exit(0);
 }
 
+function nonEmptyLines(text) {
+  return String(text ?? '').split('\n').filter((l) => l.trim() !== '');
+}
+
+const before = existsSync(file) ? nonEmptyLines(readFileSync(file, 'utf8')).length : 0;
+
 mkdirSync(dirname(file), { recursive: true });
 appendFileSync(file, line + '\n', 'utf8');
-console.log(`appended ${file}`);
+
+// 不变量（小鱼丸 2026-11-18 20:2x 私聊建议）：一次调用之后，账本行数只许 +1。
+// 它同时挡住"字段里的换行造出第二行"和"同一行写两次"——追加式账本没有回滚，所以必须当场发现。
+const lines = nonEmptyLines(readFileSync(file, 'utf8'));
+const after = lines.length;
+const last = lines[lines.length - 1] ?? '';
+if (after !== before + 1 || last !== line) {
+  console.error(`xx 账本行数不对：调用前 ${before} 行，调用后 ${after} 行（期望 ${before + 1}）；最后一行${last === line ? '与写入一致' : '与写入不一致'}`);
+  console.error('NEXT: 这行不合法就别再重试；先看账本尾部，人工决定要不要留痕');
+  process.exit(3);
+}
+console.log(`appended ${file} line=${after}`);
 console.log(line);

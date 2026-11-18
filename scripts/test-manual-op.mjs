@@ -33,6 +33,10 @@ ok('tsLocal 形状', /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(tsLocal(new Da
 
 throws('缺 note 抛错', () => formatManualOp({ ...base, note: '  ' }), 'note');
 throws('缺 by 抛错', () => formatManualOp({ ...base, by: '' }), 'by');
+throws('by 换行抛错', () => formatManualOp({ ...base, by: 'lee\n2026-11-18 20:00:00 | manual-rm | fmt=1 by=someone' }), 'by');
+throws('by 竖线抛错', () => formatManualOp({ ...base, by: 'lee|by=mallory' }), 'by');
+throws('by 空格抛错', () => formatManualOp({ ...base, by: 'lee x' }), 'by');
+throws('by 太长抛错', () => formatManualOp({ ...base, by: 'a'.repeat(33) }), 'by');
 throws('坏 kind 抛错', () => formatManualOp({ ...base, kind: 'rm' }), 'kind');
 throws('note 换行抛错', () => formatManualOp({ ...base, note: 'a\nb' }), '换行');
 throws('note 竖线抛错', () => formatManualOp({ ...base, note: 'a|b' }), '竖线');
