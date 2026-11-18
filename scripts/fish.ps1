@@ -516,7 +516,9 @@ function Start-Fish($member) {
       $xdgLine = "`$env:XDG_CONFIG_HOME='$(Join-Path $xdgRoot 'config')'; `$env:XDG_DATA_HOME='$(Join-Path $xdgRoot 'data')'; `$env:XDG_STATE_HOME='$(Join-Path $xdgRoot 'state')'; `$env:XDG_CACHE_HOME='$(Join-Path $xdgRoot 'cache')'; "
       Write-Host ("{0}：bili/压缩状态用她自己的目录（{1}）" -f $member.Label, $xdgRoot)
     }
-    "${cfgLine}${xdgLine}`$env:DSH_HOME='$($member.DshHome)'; `$env:DSH_PROFILE='$($member.Profile)'; dsh --profile $($member.Profile) --port $fishPort --no-open"
+    # 2026-11-18 r305：fishtalk 默认存 ~/.fishtalk，多条鱼会和宿主共用一份语料；给每条鱼指到自己家里。
+    $ftLine = if ($member.Home) { "`$env:FISHTALK_HOME='$(Join-Path $member.Home '.fishtalk')'; " } else { '' }
+    "${cfgLine}${xdgLine}${ftLine}`$env:DSH_HOME='$($member.DshHome)'; `$env:DSH_PROFILE='$($member.Profile)'; dsh --profile $($member.Profile) --port $fishPort --no-open"
   }
   if ($openWindow -and $Console) {
     Start-Visible -Command $command -WorkingDirectory $cwd -OutLog $out
