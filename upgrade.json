@@ -14,6 +14,30 @@
   },
   "entries": [
     {
+      "version": "1.11.0",
+      "at": "2026-11-18",
+      "summary": "群聊/私聊气泡显示消息行号并可点击复制引用；补充插件市场截图与一键开关鱼塘的用法说明。",
+      "requires": [
+        "package",
+        "restart"
+      ],
+      "restart": [
+        "all"
+      ],
+      "commands": [
+        "pwsh -File app\\scripts\\fish.ps1 upgrade-check",
+        "pwsh -File app\\scripts\\doctor.ps1"
+      ],
+      "verify": [
+        "面板刷新后控制台报 client build v52 · line-cite；群聊/私聊气泡时间后有 #行号，点一下显示「已复制」，粘贴得到 `群 #N` 或 `私聊 <a>__<b> #N`",
+        "logs\\plugin-boot.log 最近一行 pkg 是 @fabianactor/dsh-lil-whale-group@1.11.0",
+        "鱼群设置页「版本」显示 1.11.0",
+        "doctor 全过"
+      ],
+      "breaking": [],
+      "note": "只换代码，不动 pool\\ 与 homes\\ 里的数据。截图只进仓库用于插件市场展示，不进 npm 包。"
+    },
+    {
       "version": "1.10.0",
       "at": "2026-11-18",
       "summary": "dsh 插件页显示图标与中英文名；鱼群设置页显示当前版本并能检查 npm 更新；日志表头改为\"格式变了才写一次\"，巡守自检行的每个计数自带口径。",
