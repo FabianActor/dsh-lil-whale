@@ -1,4 +1,4 @@
-﻿#requires -Version 7.0
+#requires -Version 7.0
 # scripts\release-check.ps1 —— 拟发版检查
 #
 # 为什么要有它：平时所有验证都在**工作目录**里做，而工作目录里混着本机配置、临时脚本、
@@ -288,6 +288,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '第三方补丁' (($tpOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '第三方补丁' '检查器只读、补丁可重打、起鱼与读升级单时自动跑（test-thirdparty-patch.mjs）' }
   } else { Fail '第三方补丁' 'scripts\test-thirdparty-patch.mjs 不在包里' }
+  # ── 4z. 谱系校验（2026-11-18，小鱼丸 #1709：父写坏但键齐时两边都绿）──────────
+  $famTest = Join-Path $pkg 'scripts\test-family-check.mjs'
+  if (Test-Path $famTest) {
+    $famOut = & node $famTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '谱系校验' (($famOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '谱系校验' '父只允许 null 或存在的键；doctor 真的跑 gen-family --check（test-family-check.mjs）' }
+  } else { Fail '谱系校验' 'scripts\test-family-check.mjs 不在包里' }
 # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {

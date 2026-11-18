@@ -71,9 +71,11 @@ const now = {
   // 2026-11-17 r238：--parent none / 空 = 根鱼（并列、无家长），名册里写 null。
  parent: (() => {
    const p = opt('parent')
-   if (p === undefined) return prev.parent ?? null
-   if (p === '' || p === 'none') return null
-   return p
+   const raw = p === undefined ? (prev.parent ?? null) : p
+   if (raw === null || raw === undefined) return null
+   if (raw === '' || raw === 'none') return null
+   if (typeof raw !== 'string') die(`parent 只允许 null 或一个名册里的键，实际是 ${JSON.stringify(raw)}`, '修 pool\\members.json 里这一格（根写 null）')
+   return raw
  })(),
   bornAt: opt('bornAt') || prev.bornAt || new Date().toISOString().slice(0, 10),
   home: opt('home') || prev.home || null,
@@ -86,9 +88,11 @@ const now = {
   lifecycle: opt('lifecycle') || prev.lifecycle || 'active',
 }
 
-// 父必须存在（除了人类和根）
-if (now.parent && !raw.members[now.parent] && now.parent !== 'lee') {
-  die(`--parent 指向不存在的人：${now.parent}`, `先加 ${now.parent}，或改成 lee`)
+// 父必须存在（2026-11-18 r293：显式判，不用 truthiness；根已经在上面归一成 null）
+if (now.parent !== null && !raw.members[now.parent]) {
+  // 例外只给 `lee`：首次安装时宿主可能还没写进名册（安装顺序决定的）。
+  // 注意这条例外在 lee 被归档后会从"死路"变成"活路"——归档 lee 时顺手核一遍 parent=lee 的节点。
+  if (now.parent !== 'lee') die(`--parent 指向不存在的人：${now.parent}`, `先加 ${now.parent}，或改成 lee / none`)
 }
 if (now.parent === key) die('不能自己是自己的爹', '换一个 --parent')
 

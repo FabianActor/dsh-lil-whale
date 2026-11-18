@@ -1916,7 +1916,11 @@ function apply(ctx) {
     member: bootMember ?? '(unresolved)',
     suspect: homeLooksRight ? undefined : `selfHome 里既没有 START.md 也没有 dsh-home；配置可能指错了地方`,
   }
-  bootLog({ note: 'boot', ...bootRecord })
+  // 小鱼丸/小满 #1670–#1672（2026-11-18）：镜像到 pool\group\plugin.log 的那一行原来 spread 的是
+  // bootRecord，而 note 只临时贴在 bootLog 的参数里 ⇒ 同一批 boot 行在群里那本没有 note。
+  // 修法不是补一个词，而是"一次拼好、两处都用同一个对象"：以后 bootRecord 加字段，镜像自动跟上。
+  const bootRecordWithNote = { note: 'boot', ...bootRecord }
+  bootLog(bootRecordWithNote)
   // P4（2026-11-16 第三份装机沉淀）：只把两个 bundle add 进 profile（最小安装）时，
   // 没有安装器来问"鱼塘放哪"，也没有配置文件 ⇒ 默认值会把 homes/pool 建在仓库旁边
   // （实测：<workspace>\whale-src\ 里同时出现仓库和 homes/pool）。用户以为数据在别处，
@@ -1937,7 +1941,7 @@ function apply(ctx) {
     } catch {}
   }
   try {
-    appendFileSync(join(GROUP_DIR, 'plugin.log'), JSON.stringify({ at: new Date().toISOString(), ...bootRecord }) + '\n', 'utf8')
+    appendFileSync(join(GROUP_DIR, 'plugin.log'), JSON.stringify({ at: new Date().toISOString(), ...bootRecordWithNote }) + '\n', 'utf8')
   } catch {}
 
   // 无人值守：成员进程把自己那段会话挂上（工具要经过 session-controller 才挂得上）
@@ -2446,7 +2450,7 @@ function apply(ctx) {
   // 而且 doctor 会为鱼自己的日志报一条假 WARN（它们的文件里本来就没有那个写者）。
   // 账本行要自证归属：谁写的（pid）、写给谁（to）——2026-11-16 第三条鱼 #754。
   // 旧行没有这两个字段，不能拿它们反推写者（判据 §37）。
-  watchmanLog('log-format', `fmt=3 since=${new Date().toISOString()} changed=skip,wake-skip,deliver fields=deny,note,reason pid=${process.pid} to=${ownMember()}`)
+  watchmanLog('log-format', `fmt=3 since=${new Date().toISOString()} changed=skip,wake-skip,deliver fields=deny,note,reason field-since=codeFp:r255,member:r292,note:r293 pid=${process.pid} to=${ownMember()}`)
 
   if (isMainProcess()) {
     // 自启动：开关在 pool\state\settings.json，默认关；开着的用户才走这一支。

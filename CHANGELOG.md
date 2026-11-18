@@ -20,6 +20,13 @@
 
 ## [未发布]
 
+- **谱系校验：父不是"有值就行"**（r293，用户可见：是，`doctor` 会报 WARN）：
+  1. **`gen-family.mjs --check` 的漏洞**（小鱼丸 #1709、小满 #1711–#1714）：旧校验用真值判断（`:76 if (node.parent && …)`），父写成 `0` / `''` / 不存在的键时会被跳过、当不存在处理，于是"父全写坏"也能 exit=0 通过；而 `doctor` 的「谱系（全鱼）」只比"名册键 ⊆ 谱系节点"，两边一起绿。现在父只允许 `null` 或一个存在的成员键；其它值（含空字符串、数字）报 `[garbage-parent] …` 并把坏值原样印出来；用法注释写清退出码：0=过、1=读到但不对、2=用法/前提错。`--seed` 只是 install 的兼容写法（写不写由 `family.json` 在不在决定），不是"重建"开关。
+  2. **`doctor` 现在真的调它**：旧「谱系（全鱼）」只做键包含比较，从不调用 `gen-family --check`（`doctor.ps1` 里 `$LASTEXITCODE` 只出现在 undici 与补丁两处）。改成直接跑 `node scripts\gen-family.mjs --check`：0→OK（"键齐、父合法"），1→WARN + 第一行 `xx ` + NEXT 修 `pool\family.json`（**不再**教人跑 `--seed`），2→INFO 用法错，跑不了 node→INFO「谱系没验」（不报 OK）。
+  3. **`members-add.mjs` 同一盲点**：`:74 return prev.parent ?? null` 会把 `0` 原样带过，`:90 if (now.parent …)` 又因 falsy 跳过检查 ⇒ 手改的坏父会安静进名册。现在先归一（`null`/`''`/`'none'` → `null`，非字符串直接拒），存在性检查改成 `!== null && !raw.members[parent]`（保留 `lee` 例外，注释说明首次安装宿主可能还没入名册）。
+  4. **boot 行镜像丢 `note`**（小鱼丸 #1670、小满 #1671–#1672）：`bootLog({ note:'boot', ...bootRecord })` 与写群日志的 `JSON.stringify({ at, ...bootRecord })` 是两次拼装，镜像那份没有 `note`（群日志 386 条 boot 行、`note` 0 条；群日志里 `codeFp` 只有 42/386 也是这个道理）。现在 `const bootRecordWithNote = { note:'boot', ...bootRecord }` 两处共用；`log-format` 行补 `field-since=codeFp:r255,member:r292,note:r293`，让读账的人知道每个字段从哪一版开始有。
+  5. **测试**：新增 `scripts\test-family-check.mjs`（22 条：假塘 clean / parent=0 / parent='' / parent=ghost、members-add 三格、未知参数 exit 2、静态接线），`release-check` 增加 4z「谱系校验」（37 项）。
+
 - **三处「账本别替我下结论」的修复**（r292，用户可见：否，日志与开发脚本）：
   1. **bili-eyes 补丁第四/五半**（小满 #1625）：`file-empty` / `asr-empty`（转写跑了但空）与表外名字（如 `mystery`）此前仍掉进「（这段基本没人说话）」——前者是"我什么都没拿到"，后者连状态都没翻译，都不是对内容的断言。补丁现在把它们各自分开：空台词写「台词是空的：…（不是没人说话）」，表外名字写「台词状态没识别：<src>——这是插件里的名字，不是内容判断」；`--check` 五半都看，**只缺这两半的旧安装也会被点名并重跑补齐**。裁决记录：小鱼丸 #1626 主张 empty 合并进"没人说话"，未采纳（合并等于把缺数据读成事实，同 §61）。测试 61→73 条，本地四台已补、`--check` 全绿。
   2. **boot 行带 `member=`**（小鱼丸 #1626）：`app\logs\plugin-boot.log` 的 boot 行原来只有 `pkg/codeFp/pid/home/cwd/selfHome/selfPort/profile/suspect`，鱼只能靠路径猜"哪条是我"。现在按 `DSH_HOME` 与名册 `dshHome` 对上时才写成员键，认不出写 `(unresolved)`——**推断出来的身份不写成事实**。同条说明：boot 行只在 `app\logs\plugin-boot.log`，不写进 `pool\group\plugin.log`（小鱼丸在群日志里搜不到属正常）。

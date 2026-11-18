@@ -6,7 +6,11 @@
 // 用法：
 //   node scripts\gen-family.mjs              # 生成 docs\detail\鱼塘谱系.md
 //   node scripts\gen-family.mjs --check      # 只校验，不写文件（CI / doctor 用）
-//   node scripts\gen-family.mjs --seed       # 用 members.json 初始化 family.json（没有时自动做）
+//   node scripts\gen-family.mjs --seed       # 兼容 install.ps1 的旧用法：family.json 不存在时初始化（现在也是默认行为）
+//
+// `--check` 退出码（2026-11-18 r293 起写进纸）：0 通过；1 读到了、但它不对（父非法/父不存在/环）；
+// 2 我读不了（参数不认识、名册或 family.json 读不了）。"--seed 会重建"是旧注释的误读，
+// 真正决定写不写的是 family.json 在不在（install.ps1 靠这个初始化；doctor 永远只跑 --check）。
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -71,9 +75,21 @@ for (const [key, m] of Object.entries(members)) {
 if (added) console.log(`✓ 谱系补了 ${added} 个节点`)
 
 // ---------- 校验 ----------
+// 小鱼丸 #1709/#1710、小满 #1711–#1713（2026-11-18）：旧写法 `node.parent && !family.nodes[node.parent]`
+// 用 truthiness 判父——`0` / `false` / `''` 全是 falsy ⇒ 校验直接跳过，然后 :93 又把它们当根，
+// 于是"父写坏 + 键都在"两边都绿，文档还把 0 印成"没有父"。值域只有一个拼法：
+//   null（根）或一个存在的字符串键。其它（含 ''、数字、布尔、对象）一律 [garbage-parent] 报出来。
 const errors = []
+const parentProblem = (p) => {
+  if (p === null || p === undefined) return null
+  if (typeof p !== 'string') return `[garbage-parent] 只允许 null 或一个存在的成员键，实际是 ${JSON.stringify(p)}`
+  if (p === '') return '[garbage-parent] 空字符串不是"没有父"的写法（没有父写 null）'
+  if (!family.nodes[p]) return `parent=${p} 不存在`
+  return null
+}
 for (const [key, node] of Object.entries(family.nodes)) {
-  if (node.parent && !family.nodes[node.parent]) errors.push(`${key} 的 parent=${node.parent} 不存在`)
+  const why = parentProblem(node.parent)
+  if (why) errors.push(`${key} ${why}`)
   if (node.parent === key) errors.push(`${key} 自己是自己的爹`)
 }
 // 环检测

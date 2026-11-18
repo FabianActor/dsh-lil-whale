@@ -80,7 +80,7 @@ ok('根鱼名册 parent 为 null', install.includes('parent = $childParentId'));
 ok('根鱼不建家长 pin 条目', install.includes('if (-not $NoParent) { $pins[$ParentMemberId] = $parentIds }'));
 ok('根鱼 birth 行能写 parent=none', install.includes("if ($NoParent) { [string]'none' }"));
 const membersAdd = read('scripts/members-add.mjs');
-ok('members-add 接受 --parent none', membersAdd.includes("p === 'none'"));
+ok('members-add 接受 --parent none', membersAdd.includes("raw === 'none'") && membersAdd.includes('return null'));
 const renderEnv = read('scripts/render-env.mjs');
 ok('render-env 不把 none 当家长', renderEnv.includes("args.parentId !== 'none'"));
 ok('render-env 根鱼 PARENT_ID 兜底 none', renderEnv.includes("me?.parent ?? 'none'"));

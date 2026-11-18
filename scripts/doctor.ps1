@@ -614,12 +614,42 @@ try {
     $familyKeys = @($famObj.nodes.PSObject.Properties.Name)
     $onlyMember = @($memberKeys | Where-Object { $familyKeys -notcontains $_ })
     $onlyFamily = @($familyKeys | Where-Object { $memberKeys -notcontains $_ })
-    if ($onlyMember.Count) {
-      Add-Row '谱系（全鱼）' 'WARN' ('名册里有人在谱系里没有节点：' + ($onlyMember -join '、')) 'NEXT: node scripts\gen-family.mjs --seed 重生成；报错就按报错修 pool\family.json'
+    $keyNote = if ($onlyMember.Count) {
+      '名册里有人在谱系里没有节点：' + ($onlyMember -join '、')
     } elseif ($onlyFamily.Count) {
-      Add-Row '谱系（全鱼）' 'OK' ('名册都在谱系里（另有 ' + $onlyFamily.Count + ' 个历史节点：' + ($onlyFamily -join '、') + '）')
+      '名册都在谱系里（另有 ' + $onlyFamily.Count + ' 个历史节点：' + ($onlyFamily -join '、') + '）'
     } else {
-      Add-Row '谱系（全鱼）' 'OK' ('名册与谱系节点一致：' + ($memberKeys -join '、'))
+      '名册与谱系节点一致：' + ($memberKeys -join '、')
+    }
+    # 父与环：直接问 gen-family --check（小鱼丸 #1709：doctor 只比"键齐不齐"，父写坏了也报 OK）。
+    # 这里不再重写一份 PowerShell 版——同一件事两份实现时，退化的永远是没人看的那份。
+    $genFamily = Join-Path $Cfg.Root 'scripts\gen-family.mjs'
+    $gfCode = $null
+    $gfLines = @()
+    if (Test-Path -LiteralPath $genFamily) {
+      try {
+        $gfRaw = & node $genFamily --check 2>&1
+        $gfCode = $LASTEXITCODE           # 先落码再看输出：码与输出同生同死（小鱼丸 #1726）
+        $gfLines = @($gfRaw | ForEach-Object { "$_" })
+      } catch {
+        $gfCode = 'launch-failed'
+        $gfLines = @($_.Exception.Message)
+      }
+    }
+    if ($onlyMember.Count) {
+      Add-Row '谱系（全鱼）' 'WARN' ('名册里有人在谱系里没有节点：' + ($onlyMember -join '、')) 'NEXT: 跑 node scripts\gen-family.mjs，按它的报错修 pool\family.json（真源）'
+    } elseif ($gfCode -eq 0) {
+      Add-Row '谱系（全鱼）' 'OK' ('键齐、父合法（gen-family --check）：' + $keyNote)
+    } elseif ($gfCode -eq 1) {
+      $gfFirst = ($gfLines | Where-Object { $_ -match '^xx ' } | Select-Object -First 1)
+      if (-not $gfFirst) { $gfFirst = ($gfLines | Where-Object { $_.Trim() } | Select-Object -First 1) }
+      Add-Row '谱系（全鱼）' 'WARN' ('谱系校验不过（gen-family --check exit 1）：' + $gfFirst) 'NEXT: 按上面那句修 pool\family.json（真源），再跑 node scripts\gen-family.mjs --check'
+    } elseif ($gfCode -eq 2) {
+      $gfFirst = ($gfLines | Where-Object { $_.Trim() } | Select-Object -First 1)
+      Add-Row '谱系（全鱼）' 'INFO' ('谱系没验（gen-family --check 用法/前提错，exit 2）：' + $gfFirst) 'NEXT: 先修用法/前提（不是谱系数据坏了），再跑 node scripts\gen-family.mjs --check'
+    } else {
+      $gfFirst = ($gfLines | Where-Object { $_.Trim() } | Select-Object -First 1)
+      Add-Row '谱系（全鱼）' 'INFO' ('谱系没验（跑不了 node 或 gen-family 异常退出；exit=' + $gfCode + '）：' + $gfFirst) 'NEXT: 确认这台能跑 node，再跑 node scripts\gen-family.mjs --check'
     }
   } else {
     Add-Row '谱系（全鱼）' 'INFO' '还没有名册或还没有 family.json（干净安装后两者都会在）'
