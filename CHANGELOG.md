@@ -19,6 +19,7 @@
 3. **顺序**：`[未发布]` 永远在最上面，下面是版本段（新→旧）；历史段（r1–r206）保留原样。
 
 ## [未发布]
+- r321 · 2026-11-18 · 【内部】判据 §80：基线有三种方向（正常 / 已知错 / 预期变更），每格四样（字段/方向/从何时起/依据）；第二、三条鱼 #2003 补出"预期变更"档——变了才是对，不变就是没生效。
 - r320 · 2026-11-18 · 【可见：日志口径】`roster-audit` 升 `fmt=4`：`homes=` 只数带 `dsh-home\` 的鱼家，非鱼家目录列进 `other:lee(no-dsh-home)`；`home-check` 的 skip 写成 `lee:watcher(home:C:\Users\Fabian\.dsh)`。起因：小肥鱼 #1997/#2000、小鱼丸 #1999 读账发现 `homes=5` 里混进了放私人物件的 `homes\lee`，而 lee 又被标成 `home-outside-pond`，两句话对读像自相矛盾。测试 26 条。
 - r319 · 2026-11-18 · 【内部】语料池只放真人（第四条鱼误喂事故）：`fishtalk_feed(source=text)` 默认把鱼自己的话记成 `human`，三条已在 `homes\xiaoman\notes\fishtalk-误喂-2026-11-18\` 存档（补 `by=`）并清空原池；判据 §68 补记"同池分母与分子必须同作者"；上游草稿补 `feed` 来源必须显式声明、`corpus` 记写入者。
 - r318 · 2026-11-18 · 【内部】保留名计数的更正与"绿也要带分母"（小鱼丸私信 #15）：`Get-Variable` 里 ReadOnly/Constant 实为 **20 个**（21 是 `$host`/`$HOME` 大小写重数），`release-check` 4aa 文案与判据 §73 同步改成 20；`test-ps-reserved-names.mjs` 的 `ok()` 在通过时也打印 detail（分母不能只在红的时候出现）。
