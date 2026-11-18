@@ -359,6 +359,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '草稿恢复' (($cdOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '草稿恢复' '切走时 flush、定时器归零、切回按现存草稿重放（test-client-draft.mjs）' }
   } else { Fail '草稿恢复' 'scripts\test-client-draft.mjs 不在包里' }
+  # ── 4ai. 归档清单（2026-11-19 r354：搬文件→写清单→改状态；重跑以清单为准，不重扫目录）──
+  $amTest = Join-Path $pkg 'scripts\test-archive-manifest.mjs'
+  if (Test-Path $amTest) {
+    $amOut = & node $amTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '归档清单' (($amOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '归档清单' '事件流 archive-start/moved/archive-done、重放以清单为准、对不上会报（test-archive-manifest.mjs）' }
+  } else { Fail '归档清单' 'scripts\test-archive-manifest.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {

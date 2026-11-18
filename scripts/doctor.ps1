@@ -652,6 +652,44 @@ try {
 } catch {
   Add-Row '谱系（全鱼）' 'WARN' ("读不了名册或谱系：{0}" -f $_.Exception.Message) 'NEXT: 看 pool\members.json 与 pool\family.json 是不是合法 JSON'
 }
+# 4c1b. 归档完整性（2026-11-19 r354）：归档目录有没有身份证、记录和磁盘对不对得上
+#   旧版（r354 之前）只有 manifest.json、没有事件流——那不是坏，是"它不知道自己做到哪一步"。
+#   判据：记录不许被现实修正 ⇒ 对不上的先报，不替人修（那是证据，不是待办）。
+try {
+  $archiveRoot = Join-Path $Cfg.PoolDir 'archive'
+  if (-not (Test-Path -LiteralPath $archiveRoot)) {
+    Add-Row '归档完整性' 'INFO' '还没有归档目录（没归档过鱼）'
+  } else {
+    $checkScript = Join-Path $Cfg.Root 'scripts\check-archive-manifests.mjs'
+    if (-not (Test-Path -LiteralPath $checkScript)) {
+      Add-Row '归档完整性' 'INFO' '检查器不在（scripts\check-archive-manifests.mjs），跳过'
+    } else {
+      $aOut = @(& node $checkScript --pool $Cfg.PoolDir 2>&1 | ForEach-Object { "$_" })
+      $aChecked = 0
+      foreach ($line in $aOut) {
+        if ($line -match '^checked=(\d+)$') { $aChecked = [int]$Matches[1] }
+      }
+      $aBad = @($aOut | Where-Object { $_ -match '^(mismatch|partial|broken|nomanifest) ' })
+      $aLegacy = @($aOut | Where-Object { $_ -match '^legacy ' })
+      $aOk = @($aOut | Where-Object { $_ -match '^ok ' })
+      if ($aChecked -eq 0) {
+        Add-Row '归档完整性' 'INFO' 'archive\ 下还没有 fish-* 归档'
+      } elseif ($aBad.Count -gt 0) {
+        $aFirst = ($aBad | Select-Object -First 2) -join '；'
+        Add-Row '归档完整性' 'WARN' ("$($aBad.Count) 个归档没搬完或与记录对不上：$aFirst") 'NEXT: 重跑 node scripts\archive-fish.mjs --member <键>（有事件流的会接着补）；mismatch 的先别修——那是有人动过归档的证据'
+      } elseif ($aLegacy.Count -gt 0) {
+        $aNames = (($aLegacy | Select-Object -First 3) | ForEach-Object { ($_ -split ' ')[1] }) -join '、'
+        Add-Row '归档完整性' 'INFO' ("$($aOk.Count) 个完整；$($aLegacy.Count) 个是旧版清单（没有事件流，r354 之前）：$aNames")
+      } else {
+        Add-Row '归档完整性' 'OK' ("$aChecked 个归档：事件流完整、moved 与盘上哈希一致")
+      }
+    }
+  }
+} catch {
+  Add-Row '归档完整性' 'WARN' ("检查归档时出错：{0}" -f $_.Exception.Message) 'NEXT: 手动跑 node scripts\check-archive-manifests.mjs --pool <鱼塘根>'
+}
+
+# 4c2. 端口登记：名册里的 port 必须唯一（2026-11-13 他要的）
 # 4c2. 端口登记：名册里的 port 必须唯一（2026-11-13 他要的）
 try {
   if ($Cfg.MembersFile -and (Test-Path -LiteralPath $Cfg.MembersFile)) {
