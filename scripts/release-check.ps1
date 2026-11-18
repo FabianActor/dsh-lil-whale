@@ -309,7 +309,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '保留名赋值' (($psOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '保留名赋值' '不向 $HOME/$Host/$PID 等 20 个只读自动变量赋值（test-ps-reserved-names.mjs）' }
   } else { Fail '保留名赋值' 'scripts\test-ps-reserved-names.mjs 不在包里' }
-# ── 5. 模板残留 ─────────────────────────────────────────────────────
+  # ── 4ab. 消息行号（2026-11-18，Fabian：气泡上要能引用历史消息）────────────
+  $mlTest = Join-Path $pkg 'scripts\test-message-lines.mjs'
+  if (Test-Path $mlTest) {
+    $mlOut = & node $mlTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '消息行号' (($mlOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '消息行号' '物理行号含空行/坏行；群与私聊的气泡都能复制引用（test-message-lines.mjs）' }
+  } else { Fail '消息行号' 'scripts\test-message-lines.mjs 不在包里' }# ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {
     if (Select-String -Path $tpl -Pattern '\{\{[A-Z_]+\}\}' -Quiet) { Ok '模板占位符' '模板里是占位符（正常），装的时候会填' }

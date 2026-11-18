@@ -675,11 +675,42 @@ function insertNewline(el, value, setValue) {
     growTextarea(el)
   })
 }
-const Bubble = React.memo(function Bubble({ config, message, onMention, animate = false }) {
+// 点消息头上的行号复制引用：`群 #1763` / `私聊 fabian__lee2 #3`。
+// 优先用 Clipboard API；不安全的上下文（非 https/非 localhost）会没有这个对象，
+// 落到老办法（临时 textarea + execCommand），失败就返回 false，让调用方不显示「已复制」。
+async function copyToClipboard(text) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch {
+    // 继续走兜底
+  }
+  try {
+    const area = document.createElement('textarea')
+    area.value = text
+    area.setAttribute('readonly', '')
+    area.style.position = 'fixed'
+    area.style.top = '-1000px'
+    area.style.opacity = '0'
+    document.body.appendChild(area)
+    area.select()
+    const ok = document.execCommand('copy')
+    area.remove()
+    return ok
+  } catch {
+    return false
+  }
+}
+
+const Bubble = React.memo(function Bubble({ config, message, onMention, animate = false, citePrefix = '' }) {
       // 只在挂载时决定「要不要动画」：否则后续每次重渲染都会让老消息重新弹一遍。
       const animateOnMount = useRef(animate).current
       // 点图片打开官方看图器（大图、点外面关）。
       const [previewIndex, setPreviewIndex] = useState(-1)
+      // 行号点一下复制引用；1.2 秒内显示「已复制」当回执。
+      const [lineCopied, setLineCopied] = useState(false)
       const images = Array.isArray(message.images) ? message.images : (message.image ? [message.image] : [])
       const imageSrcs = images.map((image) => imageUrlOf(image))
       const humanId = config?.humanId ?? 'fabian'
@@ -689,6 +720,18 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       const targetTo = message.toSeat ? `${message.to}@${message.toSeat}` : message.to
       const target = message.to && message.to !== 'all' ? ` → ${targetName(config, targetTo)}` : ''
       const time = formatStamp(message.ts)
+      // 行号：引用地址。群是 messages.jsonl 的行，私聊是 pool\dm\<pair>.jsonl 的行。
+      // 文件是 append-only，行号不会变；点一下复制成别人能直接引用的形状。
+      const lineNo = typeof message.line === 'number' && message.line > 0 ? message.line : 0
+      const cite = lineNo > 0 ? `${citePrefix} #${lineNo}`.trim() : ''
+      const copyCite = () => {
+        if (!cite) return
+        copyToClipboard(cite).then((ok) => {
+          if (!ok) return
+          setLineCopied(true)
+          window.setTimeout(() => setLineCopied(false), 1200)
+        })
+      }
       return h(React.Fragment, null,
         h('div', {
           style: {
@@ -719,7 +762,15 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
               display: 'flex', alignItems: 'baseline', gap: 6,
               fontSize: 12, color: 'var(--dsw-alias-label-tertiary)',
             },
-          }, h('span', null, who + target), h('span', null, time)),
+          },
+          h('span', null, who + target),
+          h('span', null, time),
+          lineNo > 0 ? h('span', {
+            key: 'line',
+            title: lineCopied ? '已复制' : `点击复制引用：${cite}`,
+            onClick: copyCite,
+            style: { cursor: 'pointer', fontSize: 11, color: 'var(--dsw-alias-label-caption)', userSelect: 'none' },
+          }, lineCopied ? '已复制' : `#${lineNo}`) : null),
           h('div', {
             style: {
               padding: '8px 12px', borderRadius: 'var(--dsw-radius-lg, 12px)',
@@ -1554,7 +1605,12 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       // 同群聊：打字不重排私聊历史。
       const dmListNode = useMemo(
         () => withDivider(messages, String(seenDm[activePeer] ?? ''), (message, index) => h(Bubble, {
-          key: `${message.ts}-${index}`, config, message, animate: animateRef.current,
+          key: `${message.ts}-${index}`,
+          config,
+          message,
+          animate: animateRef.current,
+          // 私聊引用要写清是哪一本：pool\dm\<a>__<b>.jsonl，键按字典序排（与文件命名同规则）。
+          citePrefix: `私聊 ${[(config?.humanId ?? 'fabian'), activePeer].sort().join('__')}`,
         })),
         [messages, seenDm, activePeer, config],
       )
@@ -2252,6 +2308,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
             message,
             animate: animateRef.current,
             onMention: mentionTo,
+            citePrefix: '群',
           }), dividerRef)
           if (visibleStart === 0) return nodes
           const earlier = h(
@@ -3718,7 +3775,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v51 · follow-tail-long:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v52 · line-cite:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')

@@ -13,6 +13,7 @@ import { Socket } from 'node:net'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
 import { config } from './config.js'
+import { parseMessageLines } from './messages-core.js'
 
 export const name = '@fabianactor/dsh-lil-whale-group-ui'
 export const inject = ['webServer', 'agents']
@@ -474,31 +475,9 @@ function lastTsOf(file) {
 
 function readMessages(file = MESSAGES) {
   if (!existsSync(file)) return []
-  const out = []
-  for (const line of readFileSync(file, 'utf8').split(/\r?\n/)) {
-    const text = line.trim()
-    if (!text) continue
-    try {
-      const record = JSON.parse(text)
-      // 投影要带全：面板靠这些字段画图、画「→ 某人的哪一段」、判断私聊/群。早先只留了
-      // ts/from/to/text/kind，结果她发的图在面板里根本不显示 —— 记录里有、列表里没有。
-      out.push({
-        ts: record.ts,
-        from: record.from,
-        to: record.to,
-        text: record.text,
-        kind: record.kind ?? 'say',
-        ...(record.s ? { s: record.s } : {}),
-        ...(record.channel ? { channel: record.channel } : {}),
-        ...(record.toSeat ? { toSeat: record.toSeat } : {}),
-        ...(record.image ? { image: record.image } : {}),
-        ...(Array.isArray(record.images) && record.images.length > 0 ? { images: record.images } : {}),
-      })
-    } catch {
-      // 半截行（另一个进程正在写）——跳过，下一次轮询就整了
-    }
-  }
-  return out
+  // 投影与行号在 lib/messages-core.js：行号是物理行号（空行/半截行也算），
+  // 它是面板上 #1763 这个引用地址的来源（r328）。
+  return parseMessageLines(readFileSync(file, 'utf8'))
 }
 
 function readBody(req, limit = 256 * 1024) {
