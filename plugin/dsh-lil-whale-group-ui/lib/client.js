@@ -1863,7 +1863,19 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
         if (composingRef.current) return
         draftValueRef.current = value
         if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
-        draftTimerRef.current = setTimeout(() => writeDraft(GROUP_DRAFT_KEY, value), 300)
+        draftTimerRef.current = setTimeout(() => {
+          draftTimerRef.current = null
+          writeDraft(GROUP_DRAFT_KEY, value)
+        }, 300)
+      }, [])
+      // 切 tab 不会卸载这个页面组件，只卸载输入框 —— 页面级的卸载清理够不着，
+      // 所以切走时自己把还没落盘的那 300ms 写掉（2026-11-19 草稿复活 bug 的其中一半）。
+      const flushGroupDraft = useCallback(() => {
+        if (draftTimerRef.current) {
+          clearTimeout(draftTimerRef.current)
+          draftTimerRef.current = null
+        }
+        writeDraft(GROUP_DRAFT_KEY, draftValueRef.current)
       }, [])
       // 卸载（切 tab / 关面板）时把还没落盘的那 300ms 存掉，别让人刚打的字随组件一起消失。
       useEffect(() => () => {
@@ -1900,6 +1912,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       const switchTab = useCallback((key) => {
         if (key === tab) return
         if (key !== 'group') {
+          flushGroupDraft()
           setTab(key)
           return
         }
@@ -1912,8 +1925,20 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
           setTab('group')
           tabSplashTimer.current = setTimeout(() => setTabSplash(false), 420)
         })
-      }, [tab])
+      }, [tab, flushGroupDraft])
       useEffect(() => () => { if (tabSplashTimer.current) clearTimeout(tabSplashTimer.current) }, [])
+      // 从私聊/鱼塘切回来时，输入框是新建的：defaultValue 用的是页面挂载那一刻的草稿，
+      // 之后再改、再删都不在它里面。按"现在存的那份"重放一次，删掉的草稿就不会回来
+      // （2026-11-19 他报的 bug：删掉输入框、切去私聊、再回群聊，旧字又出现）。
+      useEffect(() => {
+        if (tab !== 'group') return
+        const el = inputRef.current
+        if (!el) return
+        const stored = readDraft(GROUP_DRAFT_KEY)
+        el.value = stored
+        setHasText(stored.trim() !== '')
+      }, [tab])
+
       const [unread, setUnread] = useState({ group: 0, dm: {}, total: 0 })
       // 群聊"上次看到哪儿"：进这一页时冻结一次，线不跟着新消息往下跑。
       const seenGroupRef = useRef(null)
@@ -3775,7 +3800,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v52 · line-cite:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v53 · presence-draft:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')

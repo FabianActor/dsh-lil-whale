@@ -42,6 +42,7 @@ import { pruneMediaCache, mediaCacheStats, MEDIA_CACHE_MAX_AGE_DAYS } from './me
 import { rosterAuditCounts, buildRosterAuditLine } from './roster-audit-core.js'
 import { shouldWriteLogFormat, buildLogFormatDetail } from './log-format-core.js'
 import { refreshSleepStatus } from './sleep-status.js'
+import { mergeHeartbeat } from './presence-core.js'
 import { cleanName, nameTaken, historyAfterRename, canRename, renameAnnouncement, NAME_MAX } from './rename-core.js'
 import {
   parseIntents,
@@ -1545,16 +1546,12 @@ function writePresence(member, agent) {
   try {
     const file = join(PRESENCE_DIR, `${member}.json`)
     ensureParent(file)
-    // `wakeKind`/`wakeAt` 是"最近一次被叫起来走的是哪条通道"，由 markWakeMarker 写。
-    // 它不能被心跳覆盖掉：否则面板永远分不清"在回群"和"在跟你私聊"。
+    // `wakeKind`/`wakeAt`/`groupWakeAt` 是"最近一次被叫起来走的是哪条通道"，由 markWakeMarker 写。
+    // 心跳只该刷新 `status`/`at`：以前这里只把 groupWakeAt 抄回来，另外两个每 5 秒被洗掉，
+    // 面板于是只剩"十分钟内从群叫醒过"这一条线索 —— 2026-11-19 他报的「在回私聊却显示正在忙」。
+    // 现在整条合并交 presence-core.mergeHeartbeat()，新增字段不用回来改这里。
     const prev = readJson(file, null)
-    const groupWakeAt = Number(prev?.groupWakeAt) || 0
-    writeJson(file, {
-      member,
-      status: typeof agent?.status === 'string' ? agent.status : 'idle',
-      at: Date.now(),
-      ...(groupWakeAt > 0 ? { groupWakeAt } : {}),
-    })
+    writeJson(file, mergeHeartbeat(prev, agent?.status, Date.now(), member))
   } catch {
     // 写不进去不能耽误叫醒
   }

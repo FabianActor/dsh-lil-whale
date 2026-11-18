@@ -19,6 +19,11 @@
 3. **顺序**：`[未发布]` 永远在最上面，下面是版本段（新→旧）；历史段（r1–r206）保留原样。
 
 ## [未发布]
+- r353 · 2026-11-19 · 群面板两处显示 bug：正在回复/正在忙的判据、删掉的草稿又回来（用户可见：是，群面板）
+  - 旧行为：鱼在回**私聊**时，群里显示「正在回复」、私聊里显示「正在忙」；群聊输入框写了字再删掉、切去私聊、回到群聊，删掉的字又出现。
+  - 新行为：忙态按"这一次是从哪个通道叫醒的"显示（私聊唤醒 ⇒ 私聊「正在回复」、群里「正在忙」；群唤醒反过来）；草稿在切走时先把还没落盘的那 300ms 写掉，切回来按现存草稿重放，不会再被页面挂载时的旧快照复活。
+  - 根因：心跳每 5 秒重写 presence 时只抄回 groupWakeAt、把 wakeKind/wakeAt 洗掉了；草稿快照只在页面挂载时读一次，而切 tab 不卸载页面组件。
+  - 内部：新增 `lib/presence-core.js`（host/ui 各一份纯函数）、`test-presence-reason`/`test-client-draft`、release-check 4ag/4ah；client build v53 · presence-draft。
 - r352 · 2026-11-19 · 巡守账搬出鱼的家、改成整池一本：`pool\state\watchman.log`。旧行为：`WATCHMAN_LOG = <写者进程的 selfHome>\logs\watchman.log`，宿主与各鱼按各自配置各写各的，同一件事散在几家，读的人得先问“这是谁的进程”；新行为：所有进程写同一本，靠行里的 `pid=` / `to=` 分辨写者与收件人。插件在加载时做一次迁移：旧文件在、新文件不在 ⇒ `rename` 过去并在账首补一行 `home-moved from=… to=… at=…`；两边都在 ⇒ 旧文件改名 `watchman.legacy-<时间戳>.log` 留档并写 `home-moved-conflict`（不删任何人的账）。`doctor` 9c 与 `verify-pending.ps1` 改读新位置，轮转目标本来就有 `pool\state`；旧路径的轮转文件留在原处、只读历史（内部，日志）
 
 - r351 · 2026-11-19 · 转写补丁脚本支持 `--also-root <DSH_HOME>`：宿主自己的 profile 也可能装 `dsh-bili-eyes`（它不在 `homes\` 下面，默认扫描看不见）；带这个参数时把 `<DSH_HOME>\profiles\<p>\node_modules\dsh-bili-eyes` 也算进去，member 标成 `宿主/<p>`。默认不扫——"扫到几处安装"这个数只由鱼塘内容决定，不由这台机器碰巧还装了什么决定；缺参数 exit 2。`--check` 仍只读（内部，脚本）

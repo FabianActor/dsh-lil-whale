@@ -345,6 +345,20 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '巡守账位置' (($wlOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '巡守账位置' '写点只在 pool\state\watchman.log、旧路径只出现在迁移与 home-moved 行里（test-watchman-ledger.mjs）' }
   } else { Fail '巡守账位置' 'scripts\test-watchman-ledger.mjs 不在包里' }
+  # ── 4ag. 忙态判据（2026-11-19 r353：心跳洗掉唤醒记号，群页一律「正在回复」）──
+  $prTest = Join-Path $pkg 'scripts\test-presence-reason.mjs'
+  if (Test-Path $prTest) {
+    $prOut = & node $prTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '忙态判据' (($prOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '忙态判据' '心跳只改 status/at、dm/group/self 三种输入各自读对（test-presence-reason.mjs）' }
+  } else { Fail '忙态判据' 'scripts\test-presence-reason.mjs 不在包里' }
+  # ── 4ah. 草稿恢复（2026-11-19 r353：切 tab 未卸载页面，删掉的草稿又被旧快照复活）──
+  $cdTest = Join-Path $pkg 'scripts\test-client-draft.mjs'
+  if (Test-Path $cdTest) {
+    $cdOut = & node $cdTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '草稿恢复' (($cdOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '草稿恢复' '切走时 flush、定时器归零、切回按现存草稿重放（test-client-draft.mjs）' }
+  } else { Fail '草稿恢复' 'scripts\test-client-draft.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {

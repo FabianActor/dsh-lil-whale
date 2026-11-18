@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
 import { config } from './config.js'
 import { parseMessageLines } from './messages-core.js'
+import { presenceReasonOf } from './presence-core.js'
 
 export const name = '@fabianactor/dsh-lil-whale-group-ui'
 export const inject = ['webServer', 'agents']
@@ -45,8 +46,8 @@ const PINS = join(GROUP_DIR, 'pins.json')
 const POOL_STATE = config().poolStateDir || join(GROUP_DIR, '..', 'state')
 const PRESENCE_DIR = join(POOL_STATE, 'presence')
 const PRESENCE_FRESH_MS = 20_000
-// 群唤醒之后多久之内还算「在回群里」。要比一次长回合宽：首 token 几十秒到几分钟。
-const GROUP_WAKE_TTL_MS = 10 * 60_000
+// 「这一轮从哪条通道被叫起来」的保鲜期（读取规则在 presence-core.js）。
+// 要比一次长回合宽：首 token 几十秒到几分钟。
 
 // 头像照片：一个人一张，文件名固定 `<成员>.<扩展名>`，换一张就覆盖旧的。
 // 上限 1.5 MB —— 够一张头像了；再大就是有人把整张截图塞进来，不该让群目录跟着长胖。
@@ -1091,20 +1092,12 @@ export function apply(ctx) {
             const beat = JSON.parse(readFileSync(join(PRESENCE_DIR, `${member}.json`), 'utf8'))
             const at = Number(beat?.at) || 0
             if (Date.now() - at <= PRESENCE_FRESH_MS) {
-              // reason 是"这一轮从哪来"，不是"这句话回谁"：
-              // 群唤醒会留 groupWakeAt，十分钟内算群里的；其余一律算"在别处忙"，
-              // 因为宿主这里根本没有更细的信息，宁可含糊也不要编。
-              // 2026-11-13：分三档。原来只有 groupWakeAt，私聊唤醒没留痕，
-              // 于是"在回私聊"被一律显示成「正在忙」（他报的 bug）。
-              const wakeAt = Number(beat?.wakeAt) || 0
-              const kind = String(beat?.wakeKind ?? '')
-              const fresh = wakeAt > 0 && Date.now() - wakeAt <= GROUP_WAKE_TTL_MS
-              // 兼容旧心跳：只有 groupWakeAt 的那些进程。
-              const legacyAt = Number(beat?.groupWakeAt) || 0
-              const legacyFresh = legacyAt > 0 && Date.now() - legacyAt <= GROUP_WAKE_TTL_MS
+              // reason 回答"这一轮从哪来"，不是"这句话回谁"——规则在 presence-core.js。
+              // 2026-11-19：心跳曾经把 wakeKind/wakeAt 洗掉，于是只剩「十分钟内从群叫醒」
+              // 这一条线索，两种忙态总显示在错的一边；写入端已改成整条合并，这里只负责读。
               members[member] = {
                 status: beat?.status === 'idle' ? 'idle' : 'working',
-                reason: fresh ? (kind === 'dm' ? 'dm' : 'group') : (legacyFresh ? 'group' : 'self'),
+                reason: presenceReasonOf(beat, Date.now()),
               }
             }
           } catch {
@@ -1120,7 +1113,9 @@ export function apply(ctx) {
           const busy = agent?.status !== 'idle'
           if (busy) {
             const prev = members[member]
-            members[member] = { status: 'working', reason: prev?.reason === 'group' ? 'group' : 'self' }
+            // 本进程只知道"忙不忙"，不知道"为什么忙"——只改 status，别动 reason
+            // （尤其别把 dm 压成 self：那会让私聊页把"正在回你"读成"正在忙"）。
+            members[member] = { ...(prev ?? {}), status: 'working', ...(prev?.reason ? {} : { reason: 'self' }) }
           }
         }
       } catch {
