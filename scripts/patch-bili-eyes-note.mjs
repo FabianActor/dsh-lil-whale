@@ -24,9 +24,15 @@
 // 原地写会把 store 里那份也改掉；pnpm 校验内容 hash 时发现名字与内容对不上，install/verify
 // 可能重新解包，补丁就没了——不用等升级。所以从今天起：写入前先断开硬链接（写临时文件再 rename，
 // 得到独立 inode），并把 store 那份恢复成上游原样；以后跑完 pnpm install 顺手 --check。
+//
+// 2026-11-18 LeeaCP（r298）：断开硬链接之后，"改一处、四处一起变"这个便利没有了——
+// 四份是四个 inode，谁只改一份，另外三份会静默停在旧版，而 --check 只看标记在不在，
+// 照样报"已打过补丁"。所以 --check 现在多比一层：同一个插件版本的多份安装，内容必须一致；
+// 不一致报「补丁版本不齐」，并指出是哪几台。判据：检查器能看见的，要包括"彼此是不是同一版"。
 
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -140,6 +146,36 @@ function versionOf(pkgDir) {
   } catch {
     return '';
   }
+}
+
+// 2026-11-18 LeeaCP（r298）：断链后四份是四个 inode，只改一份不会带着另外三份一起变。
+// --check 只看标记在不在，所以"只打了一份"会照样报"已打过补丁"。这里补一层：同一版本的多份
+// 安装内容必须一致；不一致就点名（判据：检查器能看见的，也包括"彼此是不是同一版"）。
+// 换行与 BOM 不算差异（包里可能被 eol 规则转成 CRLF）。
+function normalizedHash(file) {
+  const text = fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
+  return crypto.createHash('sha256').update(text, 'utf8').digest('hex');
+}
+
+function consistencyOf(targets) {
+  const byVersion = new Map();
+  for (const t of targets) {
+    const v = versionOf(t.pkgDir) || '(版本没读到)';
+    if (!byVersion.has(v)) byVersion.set(v, []);
+    byVersion.get(v).push(t)
+  }
+  const problems = [];
+  for (const [version, list] of byVersion) {
+    if (list.length < 2) continue;
+    const groups = new Map();
+    for (const t of list) {
+      const h = normalizedHash(t.file);
+      if (!groups.has(h)) groups.set(h, []);
+      groups.get(h).push(t);
+    }
+    if (groups.size > 1) problems.push({ version, groups: [...groups.values()] });
+  }
+  return { byVersion, problems };
 }
 
 // ---- 硬链接（pnpm store）处理 ----
@@ -462,6 +498,21 @@ if (checkOnly) {
   }).length;
   if (bad > 0) {
     console.log(`检查：还有 ${bad} 个安装没打全补丁（含只打了一半的）。`);
+    process.exit(1);
+  }
+  // 2026-11-18 LeeaCP（r298）：补丁都"在"之后，再比一次"是不是同一版"。
+  const { byVersion, problems } = consistencyOf(targets);
+  if (byVersion.size > 1) {
+    const list = [...byVersion.entries()].map(([v, l]) => `${v} ×${l.length}`).join('、');
+    console.log(`· 安装的插件版本不同：${list}（各自按自己的版本判补丁，不合并比较）`);
+  }
+  if (problems.length > 0) {
+    console.log('检查：补丁版本不齐——同版本的多份安装内容不同。');
+    for (const p of problems) {
+      const groups = p.groups.map((g) => `${g.map((t) => t.member).join('、')}（${g.length} 份）`).join(' ／ ');
+      console.log(`  ✗ 插件 ${p.version}：${groups}`);
+    }
+    console.log('  NEXT: 逐份跑 --dry-run 看差在哪，再重跑补丁；差异大的一份先与同版本另一台对 diff。');
     process.exit(1);
   }
   console.log('检查：全部已打补丁。');

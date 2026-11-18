@@ -6,7 +6,7 @@
 //
 // 用法：node scripts/test-thirdparty-patch.mjs（PASS/FAIL 计数器在最后）
 
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, linkSync, statSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, readFileSync, readdirSync, rmSync, linkSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -59,6 +59,23 @@ function makePond() {
   const file = path.join(dir, 'look.js');
   writeFileSync(file, ORIGINAL, 'utf8');
   return { root, file, pkg };
+}
+
+// 2026-11-18 LeeaCP（r298）：造多份安装的鱼塘——断链之后每份是独立文件，
+// "只改一份"必须能被 --check 看见。
+function makePondMulti(keys = ['a', 'b'], versions = {}) {
+  const root = mkdtempSync(path.join(tmpdir(), 'llw-tpp-multi-'));
+  const files = {};
+  for (const k of keys) {
+    const pkg = path.join(root, 'homes', k, 'dsh-home', 'profiles', k, 'node_modules', 'dsh-bili-eyes');
+    const dir = path.join(pkg, 'src');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(pkg, 'package.json'), JSON.stringify({ name: 'dsh-bili-eyes', version: versions[k] || '0.8.3' }), 'utf8');
+    const file = path.join(dir, 'look.js');
+    writeFileSync(file, ORIGINAL, 'utf8');
+    files[k] = file;
+  }
+  return { root, files };
 }
 
 console.log('第三方补丁：行为测试');
@@ -396,6 +413,35 @@ console.log('第三方补丁：行为测试');
   ok('通道交付的 woke 行带 to=/channel=/pending=', /trigger=channel to=\$\{member\} channel=\$\{channel\.key\} pending=/.test(lib));
 }
 
+
+// 8. 2026-11-18 LeeaCP（r298）：断开硬链接后"改一处、四处一起变"没了——
+//    只打一份，另外几份会静默停在旧版，而 --check 只看标记在不在。
+//    --check 要多比一层：同版本的多份安装，内容必须一致。
+{
+  const a = makePondMulti(['a', 'b']);
+  const patchAll = run(['--pond', a.root]);
+  ok('多安装：一起打补丁 exit 0', patchAll.code === 0, patchAll.out.slice(-200));
+  const same = run(['--check', '--pond', a.root]);
+  ok('多安装：内容一致时 --check exit 0', same.code === 0, same.out.slice(-200));
+  ok('多安装：一致时不说"版本不齐"', !/版本不齐/.test(same.out), same.out.slice(-300));
+
+  // 只改一份（模拟"只给一条鱼打了、另外没打"）：标记都在，只有内容变了
+  appendFileSync(a.files.b, '\n// drift: 只改了 b 这一份\n', 'utf8');
+  const drift = run(['--check', '--pond', a.root]);
+  ok('多安装：只改一份时 --check exit 1', drift.code === 1, `exit=${drift.code}`);
+  ok('多安装：点名"补丁版本不齐"', /补丁版本不齐/.test(drift.out), drift.out.slice(-300));
+  ok('多安装：两份成员都点到（a、b）', /a/.test(drift.out) && /b/.test(drift.out), drift.out.slice(-300));
+  ok('多安装：给出下一步（逐份 --dry-run）', /逐份跑 --dry-run/.test(drift.out), drift.out.slice(-300));
+  rmSync(a.root, { recursive: true, force: true });
+
+  // 不同版本各自打好：不比内容，但要说清"版本不同"
+  const d = makePondMulti(['a', 'b'], { b: '0.8.4' });
+  run(['--pond', d.root]);
+  const mixed = run(['--check', '--pond', d.root]);
+  ok('多版本：各自补齐时 --check exit 0', mixed.code === 0, mixed.out.slice(-300));
+  ok('多版本：说明"安装的插件版本不同"', /安装的插件版本不同/.test(mixed.out), mixed.out.slice(-300));
+  rmSync(d.root, { recursive: true, force: true });
+}
 
 console.log(`test-thirdparty-patch：合计 ${pass + fail}，PASS ${pass}，FAIL ${fail}`);
 process.exit(fail > 0 ? 1 : 0);
