@@ -20,6 +20,9 @@
 
 ## [未发布]
 
+- **安装文档补两行环境变量与手动起鱼的坑**（r307，用户可见：否，文档）：
+  - `XDG_*` 只在 `<DSH_HOME>\xdg` 存在时由启动器注入；`FISHTALK_HOME` 由启动器指向 `<家>\.fishtalk`。
+  - 写明：手动起鱼不经过启动器，这两个必须自己设，否则 XDG 状态与 fishtalk 语料会落到共享位置（2026-11-18 已发生过一次串池）。
 - **fishtalk 串池事故的判据落纸 + 一次删除事故的补救**（r306，用户可见：否，文档与数据）：
   - 事故：为把宿主 said.jsonl 里小鱼丸留的一行挪回她自己家，脚本里用了 \System.Management.Automation.Internal.Host.InternalHost（PowerShell 只读自动变量）⇒ 赋值失败、路径变成主机对象，行没搬成，随后 Remove-Item 把整个宿主 .fishtalk 删掉，那一行丢了。
   - 补救：从群消息 #1763 的引用原文精确恢复（45 字，166 B），按原时间放回 homes\\fishball\\.fishtalk\\said.jsonl 第一行；她重启后的新写入已落在自己家（文件 295 B / 2 行），隔离生效。
