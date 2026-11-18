@@ -38,6 +38,7 @@ import {
   DEFAULT_SLEEP_FROM,
   DEFAULT_SLEEP_TO, normalizeSleepArgs } from './sleep-core.js'
 import { wakeWordingOf, previewTextOf } from './wake-preview-core.js'
+import { pruneMediaCache, MEDIA_CACHE_MAX_AGE_DAYS } from './media-cache-core.js'
 import { rosterAuditCounts, buildRosterAuditLine } from './roster-audit-core.js'
 import { shouldWriteLogFormat, buildLogFormatDetail } from './log-format-core.js'
 import { refreshSleepStatus } from './sleep-status.js'
@@ -3776,6 +3777,34 @@ async function crashNotify() {
   }
 }
 
+// 媒体缓存清理（r333）：bili-eyes 只按容量删最旧的，没有按时间清；
+// 这里每小时看一次，把放太久的视频缓存删掉。删不掉要留 error 行——
+// "提醒"落到没有写权限的鱼身上就是永远做不到（第三条鱼 2026-11-18 私信），
+// 而"没人管"和"有人试过但没权限"在账上差一行就分不出来。
+const MEDIA_CACHE_DIR = join(CFG.poolDir, 'cache', 'bili-eyes', 'media')
+let lastMediaPruneAt = 0
+function maybePruneMediaCache() {
+  const now = Date.now()
+  if (now - lastMediaPruneAt < 3600_000) return
+  lastMediaPruneAt = now
+  let result
+  try {
+    result = pruneMediaCache({ dir: MEDIA_CACHE_DIR })
+  } catch (error) {
+    watchmanLog('error', `note=media-prune-failed reason=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)}`)
+    return
+  }
+  for (const item of result.failed) {
+    watchmanLog('error', `note=media-prune-failed file=${item.name || '-'} reason=${item.code}`)
+  }
+  if (result.removed > 0) {
+    watchmanLog(
+      'note',
+      `note=media-prune removed=${result.removed} bytes=${result.bytes} older-than-days=${MEDIA_CACHE_MAX_AGE_DAYS} failed=${result.failed.length}`,
+    )
+  }
+}
+
 // 日志轮转：每小时最多一次，起一个独立进程去切（A.86）。
 let lastLogRotateAt = 0
 function maybeRotateLogs() {
@@ -3827,6 +3856,7 @@ async function watchmanTick() {
   try { writeSleepStatus() } catch { /* 面板显示失败不该炸巡守 */ }
   try { writeWakeCaps() } catch { /* 写不出生效值也不该炸巡守 */ }
   try { maybeRotateLogs() } catch { /* 同上 */ }
+  try { maybePruneMediaCache() } catch { /* 清缓存失败不该炸巡守 */ }
 }
 
 export { name, inject, apply }
