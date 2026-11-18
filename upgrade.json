@@ -14,6 +14,30 @@
   },
   "entries": [
     {
+      "version": "1.12.0",
+      "at": "2026-11-19",
+      "summary": "巡守账搬到 pool\\state\\watchman.log（自动迁移一次）；群面板两个显示 bug 修复；归档清单补事件流。",
+      "requires": [
+        "package",
+        "restart"
+      ],
+      "restart": [
+        "all"
+      ],
+      "commands": [
+        "pwsh -File app\\scripts\\fish.ps1 upgrade-check",
+        "pwsh -File app\\scripts\\doctor.ps1"
+      ],
+      "verify": [
+        "重启后 pool\\state\\watchman.log 出现，且账首有一行 home-moved；旧的 homes\\<写者>\\logs\\watchman.log 不再追加",
+        "roster-audit 首行是 fmt=5，行尾带 media=files:… bytes:… oldest:…",
+        "群面板控制台报 client build v53 · presence-draft；鱼回私聊时，群里显示「正在忙」、私聊显示「正在回复」",
+        "boot 行 pkg=@fabianactor/dsh-lil-whale-group@1.12.0；doctor 全过（含「归档完整性」一格）"
+      ],
+      "breaking": [],
+      "note": "账本迁移在插件加载时自动做一次，不要手动搬运行中的旧文件；已有归档保持原样（doctor 会标 legacy），下次归档才走事件流。"
+    },
+    {
       "version": "1.11.0",
       "at": "2026-11-18",
       "summary": "群聊/私聊气泡显示消息行号并可点击复制引用；补充插件市场截图与一键开关鱼塘的用法说明。",
