@@ -10,8 +10,8 @@
  *   - `members=5(fish;keys=6;not-fish=fabian)` —— 5 是鱼；名册 6 个键；fabian 是人，不进这个数
  *   - `homes=4(fish-home:…;other:lee(no-dsh-home))` —— 只有带 `dsh-home\` 的目录才是鱼家；
  *     `homes\` 下别的目录（例如 lee 放自己东西的 `homes\lee`）单独列，不混进"家"里
- *   - `home-check=4(fish;skip=lee:watcher(home:C:\Users\Fabian\.dsh))` —— 只有 4 条鱼参与
- *     「家↔名册」比对；巡守被跳过，并带上它真正的家在哪
+ *   - `home-check=4(fish;skip=lee:watcher;watcher-home-from=members)` —— 只有 4 条鱼参与
+ *     「家↔名册」比对；巡守被跳过（身份=`watcher`），它的家在 `members.json` 里查
  *   - `pins=5(keys:…)` —— 钉住会话的成员**键**（不是鱼数），名字也列出来
  * 旧行（`fmt=1` / `fmt=2`）不改：读的人先看 `fmt` 再决定按哪版读（`docs\detail\日志都记在哪.md`）。
  *
@@ -66,19 +66,17 @@ export function rosterAuditCounts({ rosterKeys = [], fishEntries = [], humanKeys
  * 拼一行。`problems` 非空时事件名是 `roster-mismatch`，否则 `roster-audit` 并以 `ok` 收尾。
  */
 export function buildRosterAuditLine({ ts, counts, problems = [] }) {
-  const skip = counts.watcherKeys
-    .map((key) => {
-      const home = counts.watcherHomes?.[key]
-      return home ? `${key}:watcher(home:${home})` : `${key}:watcher`
-    })
-    .join(',')
+  // 巡守的家不写进这一列：路径里带 `:` 和 `\\`，套在括号里会让"按 ( 切"的读者
+  // 静默丢掉整截家信息（小鱼丸 2026-11-18 #20 用三种朴素切法验出来的）。
+  // 写成"从名册读"反而无歧义：身份（watcher）在这里，位置在 members.json 里。
+  const skip = counts.watcherKeys.map((key) => `${key}:watcher`).join(',')
   const other = counts.otherHomeKeys?.length
     ? counts.otherHomeKeys.map((key) => `${key}(no-dsh-home)`).join(',')
     : 'none'
   const parts = [
     `members=${counts.fishKeys.length}(fish;keys=${counts.rosterKeys.length};not-fish=${namesOf(counts.humanKeys)})`,
     `homes=${counts.homeKeys.length}(fish-home:${namesOf(counts.homeKeys)};other:${other})`,
-    `home-check=${counts.homeChecked.length}(fish;skip=${skip || 'none'})`,
+    `home-check=${counts.homeChecked.length}(fish;skip=${skip || 'none'}${skip ? ';watcher-home-from=members' : ''})`,
     `pins=${counts.pinKeys.length}(keys:${namesOf(counts.pinKeys)})`,
   ]
   const kind = problems.length ? 'roster-mismatch' : 'roster-audit'

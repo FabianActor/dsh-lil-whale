@@ -51,14 +51,18 @@ ok('行首：时间 | roster-audit | fmt=4', line.startsWith('2026-11-18 07:10:0
 ok('干净行以 ok 收尾', line.endsWith(' ok'))
 ok('members 写明是鱼、分母 6 键、人不在数里', line.includes('members=5(fish;keys=6;not-fish=fabian)'))
 ok('homes 只数鱼家（含 dsh-home），名字排序列出来', line.includes('homes=4(fish-home:fishball,lee2,whale,xiaoman;other:lee(no-dsh-home))'))
-ok('home-check 写明只有 4 条鱼、lee 被跳过且家在名册里写的是哪', line.includes('home-check=4(fish;skip=lee:watcher(home:C:\\Users\\Fabian\\.dsh))'))
+ok('home-check 写明只有 4 条鱼、lee 被跳过（身份）且家从名册读', line.includes('home-check=4(fish;skip=lee:watcher;watcher-home-from=members)'))
 ok('不再出现有歧义的 home-outside-pond', !line.includes('home-outside-pond'))
 ok('pins 写明数的是键、名字列出来（不是鱼数）', line.includes('pins=5(keys:fishball,lee,lee2,whale,xiaoman)'))
 ok('旧口径字段不再出现（scope= / exclude=）', !line.includes('scope=') && !line.includes('exclude='))
 ok('一行只出现一次 members=', line.split('members=').length === 2)
+ok('这行不再把家路径塞进括号（按任何分隔符切都不丢字段）', !line.includes('home:C:'))
+const homeCheckPart = (line.match(/home-check=[^ ]+/) || [''])[0]
+ok('整行括号左右相等', (line.match(/\(/g) || []).length === (line.match(/\)/g) || []).length)
+ok('home-check 这一格没有嵌套括号（按 ( 切也不会丢字段）', (homeCheckPart.match(/\(/g) || []).length === 1 && (homeCheckPart.match(/\)/g) || []).length === 1)
 ok('home-check 的 4 = members 的 5 − 巡守 1', counts.homeChecked.length === counts.fishKeys.length - 1)
 ok('巡守仍算在 members 里（只是不参与家比对）', counts.fishKeys.includes('lee') && !counts.homeChecked.includes('lee'))
-ok('巡守的家仍被认出来（skip 里带 home）', counts.watcherHomes.lee === 'C:\\Users\\Fabian\\.dsh')
+ok('巡守的家仍被认出来（counts 里有，但不进这行）', counts.watcherHomes.lee === 'C:\\Users\\Fabian\\.dsh')
 
 // ---- 人也被钉了会话：pins 会变成 6，但名单里写着是谁，不会被读成多了一条鱼 ----
 const humanPinned = buildRosterAuditLine({
