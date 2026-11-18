@@ -331,6 +331,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '人工操作账' (($moOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '人工操作账' '行形固定、空 note/by 拒绝、note 不许多行或多竖线（test-manual-op.mjs）' }
   } else { Fail '人工操作账' 'scripts\test-manual-op.mjs 不在包里' }
+  # ── 4ae. 起停账的上一轮判断（2026-11-18 r348：unclean 几乎每次启动都亮，改成读自己的 runs 账）──
+  $rsTest = Join-Path $pkg 'scripts\test-run-state.mjs'
+  if (Test-Path $rsTest) {
+    $rsOut = & node $rsTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '起停账判据' (($rsOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '起停账判据' '新行写 reason=no-stop-record、旧名仍认、巡守支复用块 3 的 previousRun（test-run-state.mjs）' }
+  } else { Fail '起停账判据' 'scripts\test-run-state.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {

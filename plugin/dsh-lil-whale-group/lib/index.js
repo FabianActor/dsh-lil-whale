@@ -220,7 +220,7 @@ const WATCHMAN_LOG = join(SELF_HOME, 'logs', 'watchman.log')
 // 因为 `watchman.log` 只有巡守那条鱼写，成员进程的起停**根本没记账**，
 // 而 `close.log` 只有 `fish.ps1 down` 才写，直接关窗/杀进程不留痕。
 // 现在每个进程都往 `pool\state\runs\<成员>.log` 记 started/stopped，
-// 下次启动时若上一轮没写 stopped，就补一行 resumed（reason=unclean）。
+// 下次启动时若上一轮没写 stopped，就补一行 resumed（reason=no-stop-record；旧行写的是 unclean）。
 // 巡守那条鱼照旧写 `watchman.log`（她的 morning-read 每天读它，格式不动）。
 const RUNS_DIR = join(POOL_STATE, 'runs')
 
@@ -1101,28 +1101,6 @@ function settleMarks() {
  * 于是"重启带起来的"和"崩了又爬起来的"在纸上长得一模一样（又是那个形状）。
  * 这里只回答一个问题：尾巴里最后一条 started 之后有没有 stopped。
  */
-function lastRunState() {
-  try {
-    if (!existsSync(WATCHMAN_LOG)) return null
-    const stamped = readFileSync(WATCHMAN_LOG, 'utf8').slice(-8192)
-      .split('\n')
-      .filter((line) => /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \|/.test(line))
-    if (stamped.length === 0) return null
-    let startAt = -1
-    let stopAt = -1
-    for (let i = stamped.length - 1; i >= 0; i -= 1) {
-      const m = stamped[i].match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \| (\w+) \|/)
-      if (!m) continue
-      if (m[1] === 'stopped' && stopAt < 0) stopAt = i
-      if (m[1] === 'started' && startAt < 0) startAt = i
-      if (startAt >= 0 && stopAt >= 0) break
-    }
-    if (startAt < 0) return { closed: null, startedAt: null }
-    return { closed: stopAt > startAt, startedAt: stamped[startAt].slice(0, 19) }
-  } catch {
-    return null
-  }
-}
 
 function lastLogGapSec() {
   try {
@@ -2437,13 +2415,21 @@ function apply(ctx) {
   // 3. 每个进程都记自己的起停（不只巡守那条）。
   //    上一轮没写 stopped = 上一轮不是正常收尾的（关窗、被杀、崩了都算），
   //    补一行 resumed 之后才写这一轮的 started —— "没了"和"正常退出"从今天起分得开。
+  // 2026-11-18 r348（小肥鱼私聊）：`reason=unclean` 改名 `no-stop-record`。
+  // 她那本 watchman.log 全史 resumed=97、stopped=1 ⇒ 这个字段几乎每次启动都亮；
+  // 恒亮的字段不携带"上次是不是崩了"的信息，它说的是"这里没人留收尾行"——那是结构，不是事故。
+  // 名字要按它真正回答的问题起；旧行里的 `unclean` 保留原样（历史不改），读端两种都认。
+  // 上一轮的状态只能在这里取一次：这一块马上会往 runs 账写这一轮的 started，
+  // 之后再读同一份账会读到自己刚写的那行（永远 open）——巡守那一支复用这个变量。
+  let previousRun = null
   {
     const self = ownMember()
     const startedAtMs = Date.now()
     const lastRun = lastRunStateOf(self)
+    previousRun = lastRun
     const prevText = lastRun.closed === null ? 'unknown' : lastRun.closed ? 'closed' : 'open'
     if (prevText === 'open') {
-      runLog(self, 'resumed', `fmt=2 reason=unclean previous-start=${lastRun.startedAt ?? 'unknown'} pid=${process.pid}`)
+      runLog(self, 'resumed', `fmt=2 reason=no-stop-record previous-start=${lastRun.startedAt ?? 'unknown'} pid=${process.pid}`)
     }
     // 家/端口要按「这条鱼自己」写（2026-11-13 12:38 发现：lee 的账写成 home=lil-whale、port=3082）。
     const ownRec = MEMBERS[self] ?? {}
@@ -2496,11 +2482,16 @@ function apply(ctx) {
     const gapText = logProbe.gap !== null ? `${logProbe.gap}s` : logProbe.missing ? 'none' : 'unseen'
     // 起停必须成对：上一轮没写 stopped 时，"崩了又爬起来"和"正常重启"在纸上长得一模一样。
     // 所以这里补一行 resumed，并把结论写进 started（prev-run=closed|open|unknown）。
-    const lastRun = lastRunState()
+    // 2026-11-18 r348：判断依据从 `watchman.log` 换成**自己的 runs 账**（上一块已取好，存在 previousRun）。
+    // 为什么：watchman.log 按 SELF_HOME 落盘，而宿主的 SELF_HOME 指向第一条鱼的家（配置里 selfHome），
+    // 这本文件里既有巡守的行、也有那条鱼自己的行；拿它判断"我上次收尾了吗"会问错主语。
+    // runs\<成员>.log 是"停的人记账"（fish.ps1 强杀后补 stopped），主语固定是这个成员：
+    // 有 stopped ⇒ closed；没有 ⇒ `no-stop-record`（字段名就说它回答什么，不要说"崩了"）。
+    const lastRun = previousRun
     const prevText = lastRun === null || lastRun.closed === null ? 'unknown' : lastRun.closed ? 'closed' : 'open'
     if (prevText === 'open') {
       // fmt=2 起，resumed/started/stopped 三条带版本号。**没有 fmt 字段的行按 fmt=1 读**（2026-11-12 小肥鱼要求：缺省值必须被定义。
-  watchmanLog('resumed', `fmt=2 reason=unclean previous-start=${lastRun?.startedAt ?? 'unknown'} pid=${process.pid}`)
+      watchmanLog('resumed', `fmt=2 reason=no-stop-record previous-start=${lastRun.startedAt ?? 'unknown'} pid=${process.pid}`)
     }
     watchmanLog('started', `fmt=2 pid=${process.pid} prev-run=${prevText} gap=${gapText} tail-errors=${logProbe.tailErrors} interval=${WATCH.intervalMs / 1000}s port=${WATCH.port} cap=${WATCH.maxWakesPerDay}/day errors_today_own=${readErrorCount(ownMember())} errors_today_peer=${readErrorCount(peerMember())} exe=${pwshInfo()}`)
     // 2026-11-15 19:05 第二条鱼：规则可以改，改过的地方必须有日期 ——
@@ -3611,13 +3602,16 @@ function readCrashNotifyEnabled() {
   } catch { return true }
 }
 
-function lastUncleanOf(key) {
+// 2026-11-18 r348：这一行说明"上一轮没留收尾行"，不是"上一轮崩了"。
+// 新行写 `reason=no-stop-record`；旧行里的 `reason=unclean` 不改历史，读端两种都认。
+function lastNoStopRecordOf(key) {
   try {
     const file = join(POOL_STATE, 'runs', `${key}.log`)
     if (!existsSync(file)) return null
     const lines = readFileSync(file, 'utf8').split(/\r?\n/).filter((line) => line.trim())
     for (let i = lines.length - 1; i >= 0; i -= 1) {
-      if (lines[i].includes('| resumed |') && lines[i].includes('reason=unclean')) return lines[i].slice(0, 19)
+      if (!lines[i].includes('| resumed |')) continue
+      if (lines[i].includes('reason=no-stop-record') || lines[i].includes('reason=unclean')) return lines[i].slice(0, 19)
     }
     return null
   } catch { return null }
@@ -3751,7 +3745,7 @@ async function crashNotify() {
   seen ??= {}
   let changed = false
   for (const member of watchedMembers()) {
-    const at = lastUncleanOf(member.key)
+    const at = lastNoStopRecordOf(member.key)
     if (at === null || seen[member.key] === at) continue
     seen[member.key] = at
     changed = true

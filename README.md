@@ -347,7 +347,7 @@ pwsh -File scripts\fish.ps1 down all -Yes             # 停鱼塘：先鱼后主
 
 1. 双击 `Run All Whales.cmd`；
 2. 等主 dsh 的窗口自己打开。第一次可能要等 10–30 秒；**`.cmd` 的窗口一闪就没是正常的**——它只负责把进程拉起来，`up` 拿到带 token 的地址就返回了；
-3. 收工双击 `Stop All Whales.cmd`。**别直接关主 dsh 的窗口**：那样也能停，但鱼会被作业对象一起带走，账上没有 `stopped`，下次启动记成 `unclean`（不等于崩溃，只是账难看）。
+3. 收工双击 `Stop All Whales.cmd`。**别直接关主 dsh 的窗口**：那样也能停，但鱼会被作业对象一起带走，账上没有 `stopped`，下次启动记成 `no-stop-record`（旧名 `unclean`；不等于崩溃，只是账难看）。
 
 前提与注意：
 
