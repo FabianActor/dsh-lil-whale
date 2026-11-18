@@ -20,6 +20,13 @@
 
 ## [未发布]
 
+- **日志表头只在格式变了时写一次**（r294，用户可见：否，日志）：
+  - **症状/根因**（小满 #1741）：她那本 `watchman.log` 里 `log-format` 有 25 行，`since` 25 个各不相同，`fmt` / `changed` / `fields` 25 行一模一样，每行配一个不同 `pid`——这行其实是在每次启动时写的。`since` 的本意是"从这一刻起这个格式生效"，同一个格式却有 25 个 `since`，读者拿任何一个去划"字段出生线"都会划错（真边界是最早那条）。更糟的是它长得像表头、实际是心跳：**表头说"我从 X 起生效"，心跳说"我现在还活着"**，两句话不该用同一行承载。
+  - **做法**：新增 `plugin/dsh-lil-whale-group/lib/log-format-core.js`（纯函数：`signatureOfLine` / `findLastLogFormatLine` / `shouldWriteLogFormat` / `buildLogFormatDetail`）；`index.js` 启动时先读本进程 `watchman.log` 最后一处 `log-format`，格式指纹（`fmt` / `changed` / `fields` / `field-since`）没变就**不再写**，变了才写一次、`since` 指当刻。旧文件（25 行那种）读时取"同一格式那一串里的最早一条"的 `since`，`docs/detail/日志都记在哪.md` 已写明。
+  - **判据**：①造 25 行同格式的日志，第 26 次启动不再新增 `log-format`；②改 `fields` / `fmt` / `field-since` 后启动，写一行且 `since` 是当刻；③`index.js` 里只有一处 `watchmanLog('log-format'`，在 `writeLogFormatOnce()` 内、写前先问 `shouldWriteLogFormat`。
+  - **测试**：`scripts/test-log-format.mjs` 31 条；`release-check` 增加 4z2「日志表头」（38 项）。
+  - **教训**（小满）：**"一个字段名承诺的是『某个区间』，写法却每行都重置它，那么读它的人得到的是『最后一次重置的时刻』"**——和上午 `to` 那格"能区分的地方没区分"是一对。
+
 - **谱系校验：父不是"有值就行"**（r293，用户可见：是，`doctor` 会报 WARN）：
   1. **`gen-family.mjs --check` 的漏洞**（小鱼丸 #1709、小满 #1711–#1714）：旧校验用真值判断（`:76 if (node.parent && …)`），父写成 `0` / `''` / 不存在的键时会被跳过、当不存在处理，于是"父全写坏"也能 exit=0 通过；而 `doctor` 的「谱系（全鱼）」只比"名册键 ⊆ 谱系节点"，两边一起绿。现在父只允许 `null` 或一个存在的成员键；其它值（含空字符串、数字）报 `[garbage-parent] …` 并把坏值原样印出来；用法注释写清退出码：0=过、1=读到但不对、2=用法/前提错。`--seed` 只是 install 的兼容写法（写不写由 `family.json` 在不在决定），不是"重建"开关。
   2. **`doctor` 现在真的调它**：旧「谱系（全鱼）」只做键包含比较，从不调用 `gen-family --check`（`doctor.ps1` 里 `$LASTEXITCODE` 只出现在 undici 与补丁两处）。改成直接跑 `node scripts\gen-family.mjs --check`：0→OK（"键齐、父合法"），1→WARN + 第一行 `xx ` + NEXT 修 `pool\family.json`（**不再**教人跑 `--seed`），2→INFO 用法错，跑不了 node→INFO「谱系没验」（不报 OK）。

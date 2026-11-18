@@ -1,4 +1,4 @@
-#requires -Version 7.0
+﻿#requires -Version 7.0
 # scripts\release-check.ps1 —— 拟发版检查
 #
 # 为什么要有它：平时所有验证都在**工作目录**里做，而工作目录里混着本机配置、临时脚本、
@@ -295,6 +295,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '谱系校验' (($famOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '谱系校验' '父只允许 null 或存在的键；doctor 真的跑 gen-family --check（test-family-check.mjs）' }
   } else { Fail '谱系校验' 'scripts\test-family-check.mjs 不在包里' }
+  # ── 4z2. 日志表头（2026-11-18，小满 #1741：同一格式被 25 个 since 重置）──────────
+  $lfTest = Join-Path $pkg 'scripts\test-log-format.mjs'
+  if (Test-Path $lfTest) {
+    $lfOut = & node $lfTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '日志表头' (($lfOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '日志表头' '格式没变不重复写 since；变了才写一次（test-log-format.mjs）' }
+  } else { Fail '日志表头' 'scripts\test-log-format.mjs 不在包里' }
 # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {

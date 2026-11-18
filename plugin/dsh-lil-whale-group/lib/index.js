@@ -39,6 +39,7 @@ import {
   DEFAULT_SLEEP_TO, normalizeSleepArgs } from './sleep-core.js'
 import { wakeWordingOf, previewTextOf } from './wake-preview-core.js'
 import { rosterAuditCounts, buildRosterAuditLine } from './roster-audit-core.js'
+import { shouldWriteLogFormat, buildLogFormatDetail } from './log-format-core.js'
 import { refreshSleepStatus } from './sleep-status.js'
 import { cleanName, nameTaken, historyAfterRename, canRename, renameAnnouncement, NAME_MAX } from './rename-core.js'
 import {
@@ -938,6 +939,17 @@ function writeWakeCaps() {
 
 function wakeCapsLine() {
   return 'caps=' + wakeCapsText({ ...WAKE_RESOLVED, maxWakesPerDay: WATCH.maxWakesPerDay })
+}
+
+// 表头只在"格式真的变了"时写一次。
+// 2026-11-18 r294（小满 #1741）：旧写法每次启动写一行、`since` 每次重置，
+// 同一格式于是有 25 个 `since`——读者拿去划"字段出生线"必然划错。
+// 现在先看这本日志最后一行 log-format：格式没变就不写；变了才写，并让 `since` 指这一刻。
+function writeLogFormatOnce() {
+  const decision = shouldWriteLogFormat({ lines: readLinesOf(WATCHMAN_LOG) })
+  if (!decision.write) return false
+  watchmanLog('log-format', buildLogFormatDetail({ since: new Date().toISOString(), pid: process.pid, to: ownMember() }))
+  return true
 }
 
 function watchmanLog(result, why) {
@@ -2450,7 +2462,9 @@ function apply(ctx) {
   // 而且 doctor 会为鱼自己的日志报一条假 WARN（它们的文件里本来就没有那个写者）。
   // 账本行要自证归属：谁写的（pid）、写给谁（to）——2026-11-16 第三条鱼 #754。
   // 旧行没有这两个字段，不能拿它们反推写者（判据 §37）。
-  watchmanLog('log-format', `fmt=3 since=${new Date().toISOString()} changed=skip,wake-skip,deliver fields=deny,note,reason field-since=codeFp:r255,member:r292,note:r293 pid=${process.pid} to=${ownMember()}`)
+  // 2026-11-18 r294：只写一次（格式没变就不写第二行）——小满 #1741 那句
+  // "一个字段名承诺的是『某个区间』，写法却每行都重置它，读者得到的是最后一次重置的时刻"。
+  writeLogFormatOnce()
 
   if (isMainProcess()) {
     // 自启动：开关在 pool\state\settings.json，默认关；开着的用户才走这一支。
