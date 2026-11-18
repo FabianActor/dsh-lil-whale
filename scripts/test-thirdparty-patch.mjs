@@ -96,6 +96,8 @@ console.log('第三方补丁：行为测试');
   ok('补了 file-failed', text.includes("'file-failed'"));
   ok('补了 no-audio', text.includes("'no-audio'"));
   ok('带上了 transcript.error', text.includes('const why = String(result.transcript?.error'));
+  // 2026-11-18 小鱼丸 #1623：没有 transcript 对象时也是一句自己的话，不能掉进"没人说话"
+  ok('第三半：没有 transcript 对象时有自己的一句', text.includes('没有拿到转写结果') && text.includes('else if (!result.transcript)'));
   ok('留了原始副本 look.js.orig-0.8.3（能重打也要能回退）', readFileSync(`${file}.orig-0.8.3`, 'utf8') === ORIGINAL);
   ok('留了当日备份 look.js.bak-20261118', readFileSync(`${file}.bak-20261118`, 'utf8') === ORIGINAL);
   ok('打完再 --check 应 exit 0', run(['--check', '--pond', root]).code === 0);
@@ -299,6 +301,22 @@ console.log('第三方补丁：行为测试');
   ok('--detach 后各鱼仍是补丁版（第三半也补上）', stillPatched);
   ok('--detach 后各自独立（nlink=1）', statSync(aFile).nlink === 1 && statSync(bFile).nlink === 1);
   ok('--detach 后 --check 仍绿', run(['--check', '--pond', root]).code === 0);
+  rmSync(root, { recursive: true, force: true });
+}
+
+// 3f. 只缺第三半时 --check 要报出来、重跑要能补上（2026-11-18 小鱼丸 #1623）
+{
+  const { root, file } = makePond();
+  run(['--pond', root]);
+  const three = readFileSync(file, 'utf8');
+  const two = three.replace(/  else if \(!result\.transcript\) \{[\s\S]*?\n  \}\n/, '');
+  writeFileSync(file, two, 'utf8');
+  const c = run(['--check', '--pond', root]);
+  ok('只缺第三半时 --check exit 1', c.code === 1, `实际 ${c.code}`);
+  ok('并点名"没有转写结果"', c.out.includes('没有转写结果'));
+  const f = run(['--pond', root]);
+  ok('重跑能把第三半补上', f.code === 0 && readFileSync(file, 'utf8').includes('没有拿到转写结果'));
+  ok('补完 --check 绿', run(['--check', '--pond', root]).code === 0);
   rmSync(root, { recursive: true, force: true });
 }
 
