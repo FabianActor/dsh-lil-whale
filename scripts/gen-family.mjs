@@ -240,7 +240,9 @@ if (renamed.length) {
   lines.push('')
 }
 
-const out = join(REPO, 'docs', 'detail', '鱼塘谱系.md')
+// 2026-11-19 r388（小鱼丸 #2275 的旁支）：测试用临时塘跑"写模式"时，投影会落到仓库里把真图盖掉。
+// 显式给个出口，只在测试里设；正常路径不设这个环境变量。
+const out = process.env.LIL_WHALE_GEN_FAMILY_OUT || join(REPO, 'docs', 'detail', '鱼塘谱系.md')
 if (checkOnly) {
   console.log('✓ 谱系校验通过（鱼根：' + fishRoots.join('、') + '，' + Object.keys(family.nodes).length + ' 个节点）')
   // 2026-11-19 r385 第二问：存下来的根和现在算的一样吗。
