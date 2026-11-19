@@ -14,6 +14,30 @@
   },
   "entries": [
     {
+      "version": "1.12.1",
+      "at": "2026-11-19",
+      "summary": "诊断与账本形状修正：台词栏不再写假原因、media 清理失败分目录/文件、代码指纹补历史账、manual-op 输出统一形状。",
+      "requires": [
+        "package",
+        "restart"
+      ],
+      "restart": [
+        "all"
+      ],
+      "commands": [
+        "pwsh -File app\\scripts\\fish.ps1 upgrade-check",
+        "pwsh -File app\\scripts\\doctor.ps1"
+      ],
+      "verify": [
+        "重启后 boot 行 pkg=@fabianactor/dsh-lil-whale-group@1.12.1；doctor 全过",
+        "装了 bili-eyes 并跑过补丁的机器：node scripts\\patch-bili-eyes-note.mjs --check --also-root \"<DSH_HOME>\" 报全部已打；台词栏 no-key 句是「这次没拿到字幕，转写也没跑起来」",
+        "pool\\state\\code-fp.json 存在；pool\\state\\watchman.log 里有 note=code-fp-baseline（首次）或 note=code-fp-changed",
+        "node scripts\\manual-op.mjs --json --dry-run --by <名字> --removed 1 --bytes 1 --note <说明> 输出是 {ok, dryRun, file, eof, line} 这一套键"
+      ],
+      "breaking": [],
+      "note": "只换代码；账本、草稿、名册与数据文件都不动。第三方补丁那两条只在装过 dsh-bili-eyes 的机器上可见。"
+    },
+    {
       "version": "1.12.0",
       "at": "2026-11-19",
       "summary": "巡守账搬到 pool\\state\\watchman.log（自动迁移一次）；群面板两个显示 bug 修复；归档清单补事件流。",
