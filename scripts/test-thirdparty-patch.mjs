@@ -121,6 +121,31 @@ console.log('第三方补丁：行为测试');
   rmSync(root, { recursive: true, force: true });
 }
 
+// 3a. gen3（2026-11-19 小鱼丸 #2199）：要动作的三句必须带"下一步"，观测句不动作。
+{
+  const { root, file } = makePond();
+  run(['--pond', root]);
+  const text = readFileSync(file, 'utf8');
+  ok('gen3：no-key 带下一步', text.includes('没有台词：本机转写服务没开，也没有字幕；下一步：要转写就先开本机转写服务'));
+  ok('gen3：asr-failed 带下一步', text.includes('台词没转成：转写服务报错了（不是没人说话）；下一步：修好转写服务后重看（或先看画面/简介）'));
+  ok('gen3：file-failed 带下一步', text.includes('台词文件读不了（不是没人说话）；下一步：换一个文件或重下'));
+  ok('gen3：观测句不加动作（no-audio）', text.includes("'no-audio': '这段没有音轨（不是没人说话）'"));
+  ok('gen3：观测句不加动作（file-empty）', /'file-empty': '[^']*（不是没人说话）'/.test(text) && !/'file-empty': '[^']*下一步/.test(text));
+  // 造"gen2 老版本"：把三句的下一步后缀去掉，模拟已经打过前五半的安装。
+  const gen2 = text
+    .replace('；下一步：要转写就先开本机转写服务', '')
+    .replace('；下一步：修好转写服务后重看（或先看画面/简介）', '')
+    .replace('；下一步：换一个文件或重下', '');
+  writeFileSync(file, gen2, 'utf8');
+  const bad = run(['--check', '--pond', root]);
+  ok('gen2 老安装 --check exit 1', bad.code === 1, '实际 ' + bad.code);
+  ok('gen2 老安装点名还差下一步', bad.out.includes('还差「下一步」三句'));
+  const up = run(['--pond', root]);
+  ok('重跑能补上下一步三句', up.code === 0 && up.out.includes('补上「下一步」三句'), up.out.trim().split('\n').slice(-2).join(' / '));
+  ok('补完 --check 绿', run(['--check', '--pond', root]).code === 0);
+  rmSync(root, { recursive: true, force: true });
+}
+
 // 3b. 打了一半（标记在、推送句没补）：只读时能看见"可以补"，真打要补上另一半
 {
   const { root, file } = makePond();

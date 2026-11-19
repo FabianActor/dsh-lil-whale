@@ -81,13 +81,33 @@ const UNKNOWN_NEW = (indent, eol) => [
   `${indent}}`,
   `${indent}else if (result.plan?.inputs && result.plan.inputs.speechRate === 0) lines.push('（这段基本没人说话：音乐或环境声）');`,
 ].join(eol);
+// gen3（2026-11-19 小鱼丸 #2199 + 她的 scan-gap-action）：文案表的"要动作"三句只有状态
+// 没有下一步；观测句不加，动作句加。做法与 gen2 同形：靠固定文案判"有没有"，不靠版本号。
+const GEN3_TEXT = '；下一步：';
+const GEN3_PAIRS = [
+  [
+    "'no-key': '没有台词：本机转写服务没开，也没有字幕',",
+    `'no-key': '没有台词：本机转写服务没开，也没有字幕${GEN3_TEXT}要转写就先开本机转写服务',`,
+  ],
+  [
+    "'asr-failed': '台词没转成：转写服务报错了（不是没人说话）',",
+    `'asr-failed': '台词没转成：转写服务报错了（不是没人说话）${GEN3_TEXT}修好转写服务后重看（或先看画面/简介）',`,
+  ],
+  [
+    "'file-failed': '台词文件读不了（不是没人说话）',",
+    `'file-failed': '台词文件读不了（不是没人说话）${GEN3_TEXT}换一个文件或重下',`,
+  ],
+];
+
 const NOTE_NEW = (eol) => [
   'const TRANSCRIPT_NOTE = {',
-  "  'no-key': '没有台词：本机转写服务没开，也没有字幕',",
+  // gen3（2026-11-19 小鱼丸 #2199 与 scan-gap-action）：要动手的那三句得带"下一步"。
+  // 观测句（no-audio / file-empty / asr-empty / 没人说话）不加——它们不是让读者去做什么。
+  `  'no-key': '没有台词：本机转写服务没开，也没有字幕${GEN3_TEXT}要转写就先开本机转写服务',`,
   '  none: \'没有台词\',',
   `  ${MARK}`,
-  "  'asr-failed': '台词没转成：转写服务报错了（不是没人说话）',",
-  "  'file-failed': '台词文件读不了（不是没人说话）',",
+  `  'asr-failed': '台词没转成：转写服务报错了（不是没人说话）${GEN3_TEXT}修好转写服务后重看（或先看画面/简介）',`,
+  `  'file-failed': '台词文件读不了（不是没人说话）${GEN3_TEXT}换一个文件或重下',`,
   "  'no-audio': '这段没有音轨（不是没人说话）',",
   // 第四半（2026-11-18 小满 #1625）：转写跑了但结果是空的——"空"不是"没人说话"的断言。
   // 2026-11-18 小鱼丸说这两句可以合并进"没人说话"；裁决不合并：文案表是把状态翻译成
@@ -97,7 +117,26 @@ const NOTE_NEW = (eol) => [
   '};',
 ].join(eol);
 
-// 第三半（2026-11-18 小鱼丸 #1623）：result.transcript 整个缺席时，src 是 undefined，
+// gen3 是否已在：三句里至少一句带"下一步"，且三句原句都不再原样存在。
+// （只查一句会漏：某台机器可能被手改过一句，另两句还旧。）
+function hasGen3(text) {
+  return (
+    text.includes("没有台词：本机转写服务没开，也没有字幕" + GEN3_TEXT) &&
+    text.includes("台词没转成：转写服务报错了（不是没人说话）" + GEN3_TEXT) &&
+    text.includes("台词文件读不了（不是没人说话）" + GEN3_TEXT)
+  );
+}
+
+// 把"要动作"的三句从旧措辞换成带下一步的新措辞（幂等；已经新的不动）。
+function applyGen3(text) {
+  let next = text;
+  for (const [from, to] of GEN3_PAIRS) {
+    if (!next.includes(to)) next = next.replace(from, () => to);
+  }
+  return hasGen3(next) ? { ok: true, next } : { ok: false, why: '三句「要动作」的文案没有一处能换成带下一步的版本（插件版本可能变了）' };
+}
+
+
 // 既不进表、又继续落到 speechRate===0 那句 => 「这一栏没给」被冒充成「没人说话」。
 // 产家（source 的取值）表补不到它，因为这一格压根没有 source。
 const NO_TRANS_TEXT = '（没有拿到转写结果：这一栏没给，不代表没人说话）';
@@ -399,6 +438,8 @@ let halfFixed = 0;   // 只打了一半，本次补上另一半
 let thirdPending = 0; // 前两半已在、只缺「没有转写结果」那半（只读模式）
 let thirdFixed = 0;   // 同上，本次补上
 let latePending = 0;  // 三半已在、只缺「空台词/未识别」两半（只读模式）
+let gen3Pending = 0;  // 前五半已在、只缺「下一步」三句（只读模式）
+let gen3Fixed = 0;    // 同上，本次补上
 let lateFixed = 0;    // 同上，本次补上
 let already = 0;
 let halfStuck = 0;   // 只打了一半，且缺的那半找不到落点（要人拿 orig 回滚）
@@ -428,6 +469,25 @@ for (const t of targets) {
       writePatched(t, g2.next);
       lateFixed += 1;
       console.log(`✓ ${t.member}: 补上「空台词 / 表外名字」两半`);
+      continue;
+    }
+    // gen3（2026-11-19 小鱼丸 #2199）：前五半都在，还差「要动作」三句的"下一步"。
+    if (!hasGen3(text)) {
+      const g3 = applyGen3(text);
+      if (!g3.ok) {
+        failed += 1;
+        console.log(`✗ ${t.member}: ${g3.why} → ${t.file}`);
+        continue;
+      }
+      if (readOnly) {
+        console.log(`— ${t.member}: 还差「下一步」三句，可以补（${checkOnly ? '--check，未写入' : 'dry-run，未写入'}）`);
+        gen3Pending += 1;
+        continue;
+      }
+      ensureBackups(t);
+      writePatched(t, g3.next);
+      gen3Fixed += 1;
+      console.log(`✓ ${t.member}: 补上「下一步」三句`);
       continue;
     }
     already += 1;
@@ -591,9 +651,9 @@ function ensureBackups(t) {
 
 console.log('');
 if (readOnly) {
-  console.log(`小计：${targets.length} 个安装 · 可打 ${patchable} · 可补一半 ${halfFixed} · 还差无转写 ${thirdPending} · 还差空台词/未识别 ${latePending} · 已有 ${already} · 无法自动补 ${halfStuck} · 失败 ${failed} · 未写盘`);
+  console.log(`小计：${targets.length} 个安装 · 可打 ${patchable} · 可补一半 ${halfFixed} · 还差无转写 ${thirdPending} · 还差空台词/未识别 ${latePending} · 还差下一步 ${gen3Pending} · 已有 ${already} · 无法自动补 ${halfStuck} · 失败 ${failed} · 未写盘`);
 } else {
-  console.log(`小计：${targets.length} 个安装 · 本次打 ${patchable} · 本次补一半 ${halfFixed} · 补无转写 ${thirdFixed} · 补空台词/未识别 ${lateFixed} · 已有 ${already} · 无法自动补 ${halfStuck} · 失败 ${failed}${detachMode ? ` · 断开硬链接 ${detached}` : ''}`);
+  console.log(`小计：${targets.length} 个安装 · 本次打 ${patchable} · 本次补一半 ${halfFixed} · 补无转写 ${thirdFixed} · 补空台词/未识别 ${lateFixed} · 补下一步 ${gen3Fixed} · 已有 ${already} · 无法自动补 ${halfStuck} · 失败 ${failed}${detachMode ? ` · 断开硬链接 ${detached}` : ''}`);
 }
 if (checkOnly) {
   const bad = targets.filter((t) => {
@@ -601,7 +661,7 @@ if (checkOnly) {
     const hasMark = s.includes(MARK);
     const hasPush = /const why = String\(result\.transcript\?\.error/.test(s);
     const hasNoTrans = s.includes(NO_TRANS_TEXT);
-    return !(hasMark && hasPush && hasNoTrans && hasGen2(s));
+    return !(hasMark && hasPush && hasNoTrans && hasGen2(s) && hasGen3(s));
   }).length;
   if (bad > 0) {
     console.log(`检查：还有 ${bad} 个安装没打全补丁（含只打了一半的）。`);
@@ -659,6 +719,6 @@ if (checkOnly) {
   }
   console.log('检查：全部已打补丁。');
 }
-const needsWork = patchable + halfFixed + thirdPending + latePending;
+const needsWork = patchable + halfFixed + thirdPending + latePending + gen3Pending;
 process.exit(failed > 0 || halfStuck > 0 || (checkOnly && needsWork > 0) ? 1 : 0);
 
