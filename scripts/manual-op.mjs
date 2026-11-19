@@ -10,11 +10,14 @@
  * 用法：
  *   node scripts/manual-op.mjs --by lee --removed 3 --bytes 18117679 --note "清过期视频缓存（宿主让转告小肥鱼）"
  *   node scripts/manual-op.mjs --by lee --at "2026-11-18 19:29:50" --removed 3 --bytes 18117679 --note "补记当时那笔"
- *   [--kind manual-rm|manual-other] [--file <日志路径>] [--dry-run]
+ *   [--kind manual-rm|manual-other] [--file <日志路径>] [--dry-run] [--json]
  *   node scripts/manual-op.mjs --fix-eof [--file <日志路径>]   # 上一行没换行结尾时只补一个换行
  *
  * 2026-11-18 r342；r347 按小鱼丸私聊补两处：NEXT 要按错误类型说人话、
  * 追加前先看末字节（否则两条记录会粘成一行，行数不变量看不出问题）。
+ * r357 按小鱼丸 2026-11-19 群：机器读的输出统一一套键——干跑和真跑都给
+ * `{ok, dryRun, file, eof:{state:'ok'|'not-newline',bytes?,tail?}, line}`，
+ * 真跑另带 `lineNo`；真跑默认仍是给眼睛看的散文，加 `--json` 才吐这套。
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -37,6 +40,7 @@ const bytes = arg('bytes', '0');
 const note = arg('note');
 const atText = arg('at');
 const dry = process.argv.includes('--dry-run');
+const json = process.argv.includes('--json');
 const fixEof = process.argv.includes('--fix-eof');
 const stateDir = cfg.poolStateDir || join(cfg.poolDir, 'state');
 const file = arg('file') || join(stateDir, 'manual-ops.log');
@@ -103,7 +107,7 @@ if (eof) {
   // dry-run 的用途是诊断（r356，小鱼丸 2026-11-19 群）：真跑确实该被拒，但"若补一个换行会写成什么样"
   // 仍是它该回答的问题——只报拒绝，读的人容易以为是自己参数写错。
   if (dry) {
-    console.log(JSON.stringify({ ok: false, dryRun: true, file, refused: 'eof-not-newline', eof: { bytes: eof.bytes, tail: eof.tail }, wouldAppend: line }, null, 2));
+    console.log(JSON.stringify({ ok: false, dryRun: true, file, refused: 'eof-not-newline', eof: { state: 'not-newline', bytes: eof.bytes, tail: eof.tail }, line }, null, 2));
     console.error(`xx 账本末行没有换行结尾（${eof.bytes} 字节，尾部是「${eof.tail}」）；真跑会被拒，上面只是"若补一个换行之后的追加结果"。`);
     console.error(`NEXT: 先补一个换行：node scripts/manual-op.mjs --fix-eof --file "${file}"，然后重跑这次记账。`);
     process.exit(2);
@@ -114,7 +118,7 @@ if (eof) {
 }
 
 if (dry) {
-  console.log(JSON.stringify({ ok: true, dryRun: true, file, eof: 'ok', line }, null, 2));
+  console.log(JSON.stringify({ ok: true, dryRun: true, file, eof: { state: 'ok' }, line }, null, 2));
   process.exit(0);
 }
 
@@ -136,6 +140,10 @@ if (after !== before + 1 || last !== line) {
   console.error(`xx 账本行数不对：调用前 ${before} 行，调用后 ${after} 行（期望 ${before + 1}）；最后一行${last === line ? '与写入一致' : '与写入不一致'}`);
   console.error('NEXT: 这行不合法就别再重试；先看账本尾部，人工决定要不要留痕');
   process.exit(3);
+}
+if (json) {
+  console.log(JSON.stringify({ ok: true, dryRun: false, file, eof: { state: 'ok' }, line, lineNo: after }, null, 2));
+  process.exit(0);
 }
 console.log(`appended ${file} line=${after}`);
 console.log(line);

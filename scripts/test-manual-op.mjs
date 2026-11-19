@@ -85,9 +85,14 @@ ok('接线：--fix-eof 存在', CLI.includes('--fix-eof'));
 ok('接线：NEXT 按 hint 分路（charset）', CLI.includes('charset:'));
 ok('接线：字符集 NEXT 说明允许范围', CLI.includes('1–32 位 ASCII'));
 ok('接线：旧的"把 by/note 里的换行或竖线去掉"已退役', !CLI.includes('把 by/note 里的换行或竖线去掉'));
-// r356（小鱼丸 2026-11-19 群）：dry-run 常被拿来诊断，被末字节闸挡住时也要给出"若补换行会写成什么样"。
-ok('接线：dry-run 给出 refused= 与 wouldAppend=', CLI.includes("refused: 'eof-not-newline'") && CLI.includes('wouldAppend: line'));
-ok('接线：dry-run 被拒时仍 exit 2（fail-closed）', /if \(dry\) \{[\s\S]*?wouldAppend[\s\S]*?process\.exit\(2\)/.test(CLI));
+// r356/r357（小鱼丸 2026-11-19 群）：dry-run 常被拿来诊断，被末字节闸挡住时也要给出"若补换行会写成什么样"；
+// 机器读的形状统一一套键（ok / dryRun / file / eof{state,bytes?,tail?} / line；真跑另带 lineNo）。
+ok('接线：dry-run 被拒时给 refused= 与 eof.state=not-newline', CLI.includes("refused: 'eof-not-newline'") && CLI.includes("state: 'not-newline'"));
+ok('接线：dry-run 被拒时仍带 line', /refused: 'eof-not-newline'[\s\S]{0,200}?\bline\b/.test(CLI));
+ok('接线：dry-run 被拒时仍 exit 2（fail-closed）', /if \(dry\) \{[\s\S]*?state: 'not-newline'[\s\S]*?process\.exit\(2\)/.test(CLI));
+ok('接线：dry-run 成功时 eof.state=ok 且带 line', CLI.includes("eof: { state: 'ok' }, line"));
+ok('接线：真跑加 --json 时吐同一套形状并带 lineNo', CLI.includes('dryRun: false') && CLI.includes('lineNo: after'));
+ok('接线：--json 写进用法注释', CLI.includes('[--json]'));
 
 if (fails.length) {
   console.error(`test-manual-op：合计 ${pass + fails.length}，PASS ${pass}，FAIL ${fails.length}`);
