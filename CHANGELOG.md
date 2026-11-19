@@ -20,6 +20,8 @@
 
 ## [未发布]
 
+- **r386 · 2026-11-19 · 日志页补一句：`oldest-used` 不回答"最早下载的那份"（内部，文档）**：这条不是行为变化，是读法补漏——`media=` 的 `oldest-used` 读的是文件 `mtime`（最近一次被用到），要"最早来的那份"得看 `CreationTime` 或下载账（目前没有下载账）；两个问题长得像，别拿一个字段答。用户可见：否（文档）。
+
 - **r385 · 2026-11-19 · 谱系根落盘：`family.json` 顶层加 `roots` / `rootsOrder` / `rootsAt`（内部，数据）**：旧行为——"谁是鱼根"要读者拿 `family.json` 的 `parent` 自己找空父、再读 `members.json` 的 `kind` 过滤掉 human；只看 `family.json` 会数出 3 个根。新行为——`gen-family.mjs` 每次运行把鱼根按 key 排序写进顶层三格（`roots`、`rootsOrder=key`、`rootsAt` 只在值变化时更新）；`--check` 增答第二问"存的和算的一样吗"（没有=INFO、一致=绿、不一致=exit 1，并区分"没扣 human"与"手改过"）；`鱼塘谱系.md` 头多投影一行当前鱼根。用户可见：否（数据/文档）。
 
 - **r384 · 2026-11-19 · `media=` 那格的 `oldest:` 改名 `oldest-used:`（内部，日志）**：旧行为——`roster-audit` 行尾写 `media=… oldest:MM-DD`，名字读起来像"最老那份是哪天下的"，实际取的是文件 `mtime`，而插件命中缓存会 `utimesSync` 把它拨到"最近一次被用到"；prune 按 mtime 判 7 天（LRU 语义，还有人在用就不清）没变。新行为——改叫 `oldest-used:MM-DD`，`fmt=5` 进位 `fmt=6`；旧行不改，读的人先看 `fmt`。用户可见：否（日志）。
