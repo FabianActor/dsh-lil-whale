@@ -108,7 +108,7 @@ if (eof) {
   // 仍是它该回答的问题——只报拒绝，读的人容易以为是自己参数写错。
   if (dry) {
     console.log(JSON.stringify({ ok: false, dryRun: true, file, refused: 'eof-not-newline', eof: { state: 'not-newline', bytes: eof.bytes, tail: eof.tail }, line }, null, 2));
-    console.error(`xx 账本末行没有换行结尾（${eof.bytes} 字节，尾部是「${eof.tail}」）；真跑会被拒，上面只是"若补一个换行之后的追加结果"。`);
+    console.error(`xx 账本末行没有换行结尾（${eof.bytes} 字节，尾部是「${eof.tail}」）；若先补一个换行，会追加的是上面 JSON 里的 line 那一行（真跑同样会被拒）。`);
     console.error(`NEXT: 先补一个换行：node scripts/manual-op.mjs --fix-eof --file "${file}"，然后重跑这次记账。`);
     process.exit(2);
   }
