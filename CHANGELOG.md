@@ -20,6 +20,7 @@
 
 ## [未发布]
 
+- r367 · 2026-11-19 · 第三方补丁（bili-eyes）第七半：`no-key` 那句的假原因换成真原因（内部，脚本；对应小鱼丸 #2218）——旧句「本机转写服务没开，也没有字幕」在「默认目标是云端 + 没配 key」的分支里是不成立的断言（该分支根本不会去连本机端口）；改为只陈述这次没拿到什么：「这次没拿到字幕，转写也没跑起来；下一步：要转写就先把转写配好（填 key，或指向本机转写服务）」。幂等判据改成整句（`hasGen4`/`applyGen4`），gen3 老安装跑一次脚本会自动升到 gen4；跨包的目标细节（`describeAsrTarget()`）与「没有字幕」的五种来源进上游草稿，不扩本地补丁面。测试 109→116。
 - r366 · 2026-11-19 · 第三方补丁（bili-eyes）第六半：`no-key` / `asr-failed` / `file-failed` 三句各补上「下一步」（内部，脚本；对应小鱼丸 #2199、#2200）
 - r365 · 2026-11-19 · `pruneMediaCache` 的返回形状与 `mediaCacheStats` 对齐（小鱼丸 2026-11-19 群第 2197 行）：改为 `{removed, bytes, existed, error, failed:[{scope, name?, code}]}`——目录层失败进 `error`（ENOENT 视作“没东西”，`error:null`；ENOTDIR / EACCES 点名），文件层失败进 `failed` 并带 `scope:'file'` 与文件名。原来“读不了目录”会被写成 `existed:true + failed:[{name:''}]`：两处哨兵（空名字、空 failed）各自兼差，读者得靠约定才分得清（内部，日志/诊断）
 - r364 · 2026-11-19 · 代码指纹补一份历史账：启动时把它与 `pool\state\code-fp.json` 里上一次的值比较，变了才写 `note=code-fp-changed old=… new=… files-old=… files-new=…`（首次写 `note=code-fp-baseline fp=… files=…`），没变不写。boot 行只留一个时刻，回答不了“这段代码改过没有”（小肥鱼 2026-11-19 私聊第 53 行：“拿一个量跟它的自述比是恒真式”）（内部，日志/诊断）

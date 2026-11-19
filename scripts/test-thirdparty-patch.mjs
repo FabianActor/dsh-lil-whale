@@ -126,14 +126,17 @@ console.log('第三方补丁：行为测试');
   const { root, file } = makePond();
   run(['--pond', root]);
   const text = readFileSync(file, 'utf8');
-  ok('gen3：no-key 带下一步', text.includes('没有台词：本机转写服务没开，也没有字幕；下一步：要转写就先开本机转写服务'));
+  ok('gen4：no-key 不再说"本机转写服务没开"（那句是假原因）', !text.includes('本机转写服务没开'));
+  ok('gen4：no-key 说的是这次没拿到什么', text.includes('没有台词：这次没拿到字幕，转写也没跑起来'));
+  ok('gen4：no-key 的下一步是"把转写配好"，不是"开本机服务"', text.includes('；下一步：要转写就先把转写配好（填 key，或指向本机转写服务）'));
   ok('gen3：asr-failed 带下一步', text.includes('台词没转成：转写服务报错了（不是没人说话）；下一步：修好转写服务后重看（或先看画面/简介）'));
   ok('gen3：file-failed 带下一步', text.includes('台词文件读不了（不是没人说话）；下一步：换一个文件或重下'));
   ok('gen3：观测句不加动作（no-audio）', text.includes("'no-audio': '这段没有音轨（不是没人说话）'"));
   ok('gen3：观测句不加动作（file-empty）', /'file-empty': '[^']*（不是没人说话）'/.test(text) && !/'file-empty': '[^']*下一步/.test(text));
-  // 造"gen2 老版本"：把三句的下一步后缀去掉，模拟已经打过前五半的安装。
+  // 造"gen2 老版本"：把 no-key 换回上游原句、再去掉另两句的下一步后缀，
+  // 模拟已经打过前五半、但没打过六半（下一步）与七半（真原因）的安装。
   const gen2 = text
-    .replace('；下一步：要转写就先开本机转写服务', '')
+    .replace('没有台词：这次没拿到字幕，转写也没跑起来；下一步：要转写就先把转写配好（填 key，或指向本机转写服务）', '没有台词：本机转写服务没开，也没有字幕')
     .replace('；下一步：修好转写服务后重看（或先看画面/简介）', '')
     .replace('；下一步：换一个文件或重下', '');
   writeFileSync(file, gen2, 'utf8');
@@ -143,6 +146,28 @@ console.log('第三方补丁：行为测试');
   const up = run(['--pond', root]);
   ok('重跑能补上下一步三句', up.code === 0 && up.out.includes('补上「下一步」三句'), up.out.trim().split('\n').slice(-2).join(' / '));
   ok('补完 --check 绿', run(['--check', '--pond', root]).code === 0);
+  rmSync(root, { recursive: true, force: true });
+}
+
+// 3a2. gen4（2026-11-19 小鱼丸 #2218）：`no-key` 那句原来把"默认目标是云端、没配 key"
+//      说成"本机转写服务没开"——句子里的原因必须是这段代码手里真有的那个量。
+{
+  const { root, file } = makePond();
+  run(['--pond', root]);
+  const full = readFileSync(file, 'utf8');
+  // 退回 gen3：no-key 换回"本机转写服务没开；下一步：要转写就先开本机转写服务"
+  const gen3Text = full.replace(
+    '没有台词：这次没拿到字幕，转写也没跑起来；下一步：要转写就先把转写配好（填 key，或指向本机转写服务）',
+    '没有台词：本机转写服务没开，也没有字幕；下一步：要转写就先开本机转写服务',
+  );
+  writeFileSync(file, gen3Text, 'utf8');
+  ok('gen3 老安装被判"还差真原因"', run(['--check', '--pond', root]).out.includes('还差「没有台词」那句的真原因'));
+  const bad = run(['--check', '--pond', root]);
+  ok('gen3 老安装 --check exit 1', bad.code === 1, '实际 ' + bad.code);
+  const up = run(['--pond', root]);
+  ok('重跑补上真原因', up.code === 0 && up.out.includes('补上「没有台词」那句的真原因'), up.out.trim().split('\n').slice(-2).join(' / '));
+  ok('补完 --check 绿', run(['--check', '--pond', root]).code === 0);
+  ok('补完不再出现假原因那句话', !readFileSync(file, 'utf8').includes('本机转写服务没开'));
   rmSync(root, { recursive: true, force: true });
 }
 
