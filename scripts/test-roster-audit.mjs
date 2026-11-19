@@ -51,7 +51,7 @@ const line = buildRosterAuditLine({
   media: { existed: true, files: 3, bytes: 18117679, oldestMs: new Date('2026-11-15T10:00:00').getTime() },
 })
 
-ok('行首：时间 | roster-audit | fmt=5', line.startsWith('2026-11-18 07:10:00 | roster-audit | fmt=5 '))
+ok('行首：时间 | roster-audit | fmt=6', line.startsWith('2026-11-18 07:10:00 | roster-audit | fmt=6 '))
 ok('干净行以 ok 收尾', line.endsWith(' ok'))
 ok('members 写明是鱼、分母 6 键、人不在数里', line.includes('members=5(fish;keys=6;not-fish=fabian)'))
 ok('homes 只数鱼家（含 dsh-home），名字排序列出来', line.includes('homes=4(fish-home:fishball,lee2,whale,xiaoman;other:lee(no-dsh-home))'))
@@ -59,7 +59,7 @@ ok('home-check 写明只有 4 条鱼、lee 被跳过（身份）且家从名册�
 ok('不再出现有歧义的 home-outside-pond', !line.includes('home-outside-pond'))
 ok('pins 写明数的是键、名字列出来（不是鱼数）', line.includes('pins=5(keys:fishball,lee,lee2,whale,xiaoman)'))
 // 2026-11-18 19:5x（第三条鱼）：媒体缓存现状挂在同一行上，"没删"与"没清过"才分得开。
-ok('media 格写文件数、字节数、最老一份的月-日', line.includes('media=files:3 bytes:18117679 oldest:11-15'))
+ok('media 格写文件数、字节数、最久没被用到那份的月-日', line.includes('media=files:3 bytes:18117679 oldest-used:11-15'))
 ok('这行的 media 不是 unknown（插件拿到了 stats）', !line.includes('media=unknown'))
 ok('旧口径字段不再出现（scope= / exclude=）', !line.includes('scope=') && !line.includes('exclude='))
 ok('一行只出现一次 members=', line.split('members=').length === 2)
@@ -111,7 +111,7 @@ const noWatcher = buildRosterAuditLine({
 })
 ok('没巡守时 skip=none', noWatcher.includes('home-check=2(fish;skip=none)'))
 
-// ---- 媒体缓存三态：unknown（没算/失败）/ no-dir（没下过）/ 空目录（oldest:none），不共用缺省 ----
+// ---- 媒体缓存三态：unknown（没算/失败）/ no-dir（没下过）/ 空目录（oldest-used:none），不共用缺省 ----
 // "unknown 不带原因"等于把"没记"与"试过、失败了"混成一句（第三条鱼 2026-11-18 私信）。
 ok('没给 media 时写 media=unknown:not-collected', noHuman.includes('media=unknown:not-collected'))
 const noDir = buildRosterAuditLine({ ts: '2026-11-18 07:10:00', counts, media: { existed: false, error: null } })
@@ -126,7 +126,7 @@ const emptyDir = buildRosterAuditLine({
   counts,
   media: { existed: true, files: 0, bytes: 0, oldestMs: null },
 })
-ok('空目录写 files:0 bytes:0 oldest:none', emptyDir.includes('media=files:0 bytes:0 oldest:none'))
+ok('空目录写 files:0 bytes:0 oldest-used:none', emptyDir.includes('media=files:0 bytes:0 oldest-used:none'))
 
 // ---- 差集行：问题原样带上，且不写 ok ----
 const bad = buildRosterAuditLine({
@@ -134,7 +134,7 @@ const bad = buildRosterAuditLine({
   counts,
   problems: ['only-in-homes=ghost', 'only-in-members=lee2'],
 })
-ok('有问题时事件名是 roster-mismatch', bad.includes('| roster-mismatch | fmt=5 '))
+ok('有问题时事件名是 roster-mismatch', bad.includes('| roster-mismatch | fmt=6 '))
 ok('问题 token 原样保留', bad.includes('only-in-homes=ghost') && bad.includes('only-in-members=lee2'))
 ok('有问题时不写 ok', !bad.endsWith(' ok') && bad.endsWith('only-in-members=lee2'))
 
@@ -143,6 +143,7 @@ ok('index.js 导入 rosterAuditCounts / buildRosterAuditLine', index.includes("f
 ok('index.js 用 buildRosterAuditLine 拼行', index.includes('buildRosterAuditLine({ ts, counts, problems, media })'))
 ok('index.js 把媒体缓存现状读出来传下去', index.includes('mediaCacheStats({ dir: MEDIA_CACHE_DIR })'))
 ok('index.js 不再自己拼 fmt=2 的自检行', !index.includes('roster-audit | fmt=2'))
+ok('fmt=6 起 media 那格叫 oldest-used（不再叫 oldest）', line.includes('oldest-used:') && !line.includes(' oldest:'))
 ok('index.js 会读名册全部键（分母）', index.includes('function rosterAllKeys()'))
 // 2026-11-18 15:3x：`homes\` 下的目录不都是鱼家——只把含 `dsh-home\` 的算家，其余进 other。
 ok('index.js 按 dsh-home 分辨鱼家', index.includes("existsSync(join(POND_ROOT, 'homes', name, 'dsh-home'))"))

@@ -22,12 +22,18 @@
  * `other` 列出非鱼家目录，`skip` 的说明也改成"角色 + 真正的家"。
  *
  * `fmt=5`（2026-11-18 19:5x，第三条鱼私信）：末尾加一格 `media=`，把共享视频缓存的现状挂在这条
- * 周期行上——`media=files:3 bytes:18117679 oldest:11-15`（没有目录 `media=no-dir`，空目录
- * `oldest:none`）。原因是 prune 事件行"没东西可删就不写"，于是"机制没跑"和"跑了但没东西"同形；
+ * 周期行上——`media=files:3 bytes:18117679 oldest-used:11-15`（没有目录 `media=no-dir`，空目录
+ * `oldest-used:none`）。原因是 prune 事件行"没东西可删就不写"，于是"机制没跑"和"跑了但没东西"同形；
  * 这一格让"它看过目录"有凭据，而不必每小时写一条事件。
+ *
+ * `fmt=6`（2026-11-19，小鱼丸核缓存时发现）：把 `oldest:` 改名 `oldest-used:`。这一格取的是
+ * 文件的 `mtime`，而 bili-eyes 命中缓存时会 `utimesSync(file, now, now)`（"还有人用"就把时间
+ * 拨到现在），所以它答的是"最久没被用到的那份，最近一次被用到是何时"，不是"哪天下的"。
+ * prune 按 `mtime` 判 7 天本来就是 LRU 语义（还有人在用就不清），机制不动，只把名字改成它
+ * 真正在答的问题。
  */
 
-const FMT = 5
+const FMT = 6
 
 function namesOf(list) {
   return list && list.length ? list.join(',') : 'none'
@@ -78,7 +84,7 @@ export function rosterAuditCounts({ rosterKeys = [], fishEntries = [], humanKeys
  * 拼一行。`problems` 非空时事件名是 `roster-mismatch`，否则 `roster-audit` 并以 `ok` 收尾。
  *
  * `media`（可选）：`mediaCacheStats()` 的结果。三种状态三句话，不共用缺省：
- *   - 给了且读到了 ⇒ `media=files:… bytes:… oldest:…`；
+ *   - 给了且读到了 ⇒ `media=files:… bytes:… oldest-used:…`；
  *   - 父目录在、缓存目录还没建 ⇒ `media=no-dir`（正常：还没下过）；
  *   - 试过、失败了 ⇒ `media=unknown:<原因>`（`EACCES`=读不到、`ENOENT`=父目录也不在、别的写码）。
  * "`unknown` 不带原因"等于把"没记"和"试过、失败了"混成一句（第三条鱼 2026-11-18 私信）。
@@ -97,7 +103,7 @@ export function buildRosterAuditLine({ ts, counts, problems = [], media = null }
       : media.error
         ? `media=unknown:${media.error}`
         : media.existed
-          ? `media=files:${media.files} bytes:${media.bytes} oldest:${media.oldestMs === null ? 'none' : dateOf(media.oldestMs)}`
+          ? `media=files:${media.files} bytes:${media.bytes} oldest-used:${media.oldestMs === null ? 'none' : dateOf(media.oldestMs)}`
           : 'media=no-dir'
   const parts = [
     `members=${counts.fishKeys.length}(fish;keys=${counts.rosterKeys.length};not-fish=${namesOf(counts.humanKeys)})`,
