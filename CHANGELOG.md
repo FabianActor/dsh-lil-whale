@@ -20,6 +20,8 @@
 
 ## [未发布]
 
+- **r385 · 2026-11-19 · 谱系根落盘：`family.json` 顶层加 `roots` / `rootsOrder` / `rootsAt`（内部，数据）**：旧行为——"谁是鱼根"要读者拿 `family.json` 的 `parent` 自己找空父、再读 `members.json` 的 `kind` 过滤掉 human；只看 `family.json` 会数出 3 个根。新行为——`gen-family.mjs` 每次运行把鱼根按 key 排序写进顶层三格（`roots`、`rootsOrder=key`、`rootsAt` 只在值变化时更新）；`--check` 增答第二问"存的和算的一样吗"（没有=INFO、一致=绿、不一致=exit 1，并区分"没扣 human"与"手改过"）；`鱼塘谱系.md` 头多投影一行当前鱼根。用户可见：否（数据/文档）。
+
 - **r384 · 2026-11-19 · `media=` 那格的 `oldest:` 改名 `oldest-used:`（内部，日志）**：旧行为——`roster-audit` 行尾写 `media=… oldest:MM-DD`，名字读起来像"最老那份是哪天下的"，实际取的是文件 `mtime`，而插件命中缓存会 `utimesSync` 把它拨到"最近一次被用到"；prune 按 mtime 判 7 天（LRU 语义，还有人在用就不清）没变。新行为——改叫 `oldest-used:MM-DD`，`fmt=5` 进位 `fmt=6`；旧行不改，读的人先看 `fmt`。用户可见：否（日志）。
 
 - **r383 · 2026-11-19 · 旧账归档写成通用约定，撤掉本机运维记录**（内部，文档）：r382 记的是「这台机器上手工整理了 4 个文件」，不可复现、也不进包，按 r381 的口径从正文撤掉；日志页改成通用约定——迁移时留档的 `watchman.legacy-*.log` 可整批移到备份目录并附 README（来源/行数/时长/sha256），池账的 `home-moved-conflict` 不动，这次动账在 `manual-ops.log` 记一行。

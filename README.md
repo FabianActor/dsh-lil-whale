@@ -219,7 +219,7 @@ lil-whale/                      鱼塘根（不在 git 里）
     lil-whale.config.example.json  配置模板（真的那份不进版本库；第二条鱼各有一份 lil-whale.config.<键>.json）
   pool/                         共享区（不在任何一条鱼的家里面）
     members.json                名册：谁是谁、叫什么、端口、家长是谁
-    family.json                 谱系真源：家长、出生、状态、改名史
+    family.json                 谱系真源：家长、出生、状态、改名史（顶层 roots 是根缓存）
     dm/                         私聊（双向隐私窗口，不放进 group）
     group/                      messages.jsonl、群.md、pins.json、images/、avatars/
     state/                      cursors/、wakes/、presence/、runs/、mode/、usage/、watchman-*.json、acl/

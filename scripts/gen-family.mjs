@@ -116,6 +116,28 @@ const roots = Object.entries(family.nodes)
   .filter(([, n]) => n.parent === null || n.parent === undefined)
   .map(([k]) => k)
 const fishRoots = roots.filter((k) => (members[k] || {}).kind !== 'human')
+
+// 2026-11-19 r385（小鱼丸 / 小满 2026-11-19 群 #1675–#1692 讨论定稿）：根是派生值，落盘要带
+// 「值 / 排序规则 / 写入时刻」三样——否则每个读的人都得同时读 members.json 自己重算，
+// 只看 family.json 会把 human 的根也算进来（曾经数出 3 个根）。
+const rootsSorted = [...fishRoots].sort()
+const rootsOrder = 'key'
+{
+  let storedRoots = null
+  if (existsSync(familyFile)) {
+    try {
+      const prev = JSON.parse(readFileSync(familyFile, 'utf8'))
+      if (Array.isArray(prev.roots)) storedRoots = prev.roots
+    } catch {
+      /* family.json 坏了上面已经 die 过，这里只兜一次 */
+    }
+  }
+  const sameRoots = storedRoots !== null && JSON.stringify([...storedRoots].map(String).sort()) === JSON.stringify(rootsSorted)
+  family.roots = rootsSorted
+  family.rootsOrder = rootsOrder
+  // 只有值真的变了（或第一次写）才换时刻：在日子上"没变"的账不能每次重写。
+  if (!sameRoots || typeof family.rootsAt !== 'string') family.rootsAt = new Date().toISOString()
+}
 if (fishRoots.length < 1) errors.push('谱系里一条鱼都没有')
 
 if (errors.length) {
@@ -169,6 +191,7 @@ lines.push('> 这份文件是**生成的**，别手改。真源是 `pool\\family
 lines.push('> 重新生成：`node scripts\\gen-family.mjs`', '')
 lines.push('> 名字是公开口径：宿主，以及按出生顺序的「第 N 条鱼」；真名只住在名册里。', '')
 lines.push('> 2026-11-17 起允许**多个鱼根**（并列，不互为依据）：`fish.ps1 new -Parent none` 建出来的鱼自成一个根，进谱系但不挂在任何鱼下面。看到两棵树不是错。', '')
+lines.push('> 当前鱼根：' + rootsSorted.join('、') + '（按 key 排；`rootsOrder=key`）。这一格是**派生值**，存在 `family.json` 里给不读名册的读者用，由本脚本每次运行核对。', '')
 
 lines.push('## 图', '', '```mermaid', 'graph TD')
 for (const key of Object.keys(family.nodes).sort()) {
@@ -220,6 +243,27 @@ if (renamed.length) {
 const out = join(REPO, 'docs', 'detail', '鱼塘谱系.md')
 if (checkOnly) {
   console.log('✓ 谱系校验通过（鱼根：' + fishRoots.join('、') + '，' + Object.keys(family.nodes).length + ' 个节点）')
+  // 2026-11-19 r385 第二问：存下来的根和现在算的一样吗。
+  // "校验通过"只说数据合法，不说这一格对得上——两件事分开问，才不会一绿遮两样。
+  let prevFamily = null
+  if (existsSync(familyFile)) {
+    try { prevFamily = JSON.parse(readFileSync(familyFile, 'utf8')) } catch { prevFamily = null }
+  }
+  const prevRoots = Array.isArray(prevFamily?.roots) ? prevFamily.roots.map(String) : null
+  if (prevRoots === null) {
+    console.log('· 根的值：family.json 里还没有这一格（下次运行会写；老文件都这样）')
+  } else if (JSON.stringify([...prevRoots].sort()) !== JSON.stringify(rootsSorted)) {
+    const unfiltered = [...roots].sort()
+    const hint = JSON.stringify([...prevRoots].sort()) === JSON.stringify(unfiltered)
+      ? '（它把 human 也算成根了：写的人没按 members.json 的 kind 过滤）'
+      : '（既不是算出来的、也不是没扣 human 的：手改过，下次运行会按算的写回）'
+    console.error('xx family.json 里的 roots 对不上：存 ' + prevRoots.join('、') + '；算 ' + rootsSorted.join('、') + hint)
+    process.exit(1)
+  } else if (prevFamily?.rootsOrder === 'key') {
+    console.log('· 根的值：' + rootsSorted.join('、') + '（与算的一致，rootsOrder=key）')
+  } else {
+    console.log('· 根的值：' + rootsSorted.join('、') + '（与算的一致；但 rootsOrder=' + String(prevFamily?.rootsOrder) + ' 不认识——读的人只能报第三态，别猜）')
+  }
   process.exit(0)
 }
 // 2026-11-15 小肥鱼咬的第一口：她盯的是"文件变"，她关心的是"集合变"。

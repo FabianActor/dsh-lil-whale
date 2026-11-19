@@ -34,6 +34,15 @@ function ok(name, cond, detail) {
 
 const root = mkdtempSync(join(tmpdir(), 'llw-family-'))
 
+function writeRoots(dir, roots, order) {
+  const file = join(dir, 'pool', 'family.json')
+  const fam = JSON.parse(readFileSync(file, 'utf8'))
+  fam.roots = roots
+  fam.rootsOrder = order
+  fam.rootsAt = '2026-11-19T00:00:00.000Z'
+  writeFileSync(file, JSON.stringify(fam, null, 2) + '\n', 'utf8')
+}
+
 function makeCase(name, familyParent, opts = {}) {
   const dir = join(root, name)
   mkdirSync(join(dir, 'pool'), { recursive: true })
@@ -172,6 +181,49 @@ function run(cwd, args, cfgFile, extraEnv = {}) {
   ok('doctor：调 gen-family --check', /gen-family\.mjs['"\s]+--check|--check['"\s]+2>&1/.test(doctor) || /genFamily --check/.test(doctor), '找不到调用')
   ok('doctor：不再出现「--seed 重生成」的 NEXT', !/--seed 重生成/.test(doctor), '旧 NEXT 还在')
   ok('doctor：谱系格有 exit 1 分支', /gen-family --check exit 1/.test(doctor), '没找到映射文案')
+}
+
+// 8b) family.roots：派生值带「值 / 排序规则 / 写入时刻」（2026-11-19 r385）
+{
+  const c = makeCase('roots-missing', 'lee')
+  const r = run(REPO, [GEN, '--check'], c.cfgFile)
+  ok('roots：老文件没有这一格时 check 仍 exit 0', r.code === 0, `exit=${r.code}`)
+  ok('roots：老文件没有这一格时报"还没有这一格"', /还没有这一格/.test(r.out), r.out.slice(0, 300))
+
+  const c2 = makeCase('roots-write', 'lee')
+  const w1 = run(REPO, [GEN], c2.cfgFile)
+  ok('roots：生成时写进 family.json', w1.code === 0, `exit=${w1.code} ${w1.out.slice(0, 200)}`)
+  const fam1 = JSON.parse(readFileSync(join(c2.dir, 'pool', 'family.json'), 'utf8'))
+  ok('roots：roots = [lee]', JSON.stringify(fam1.roots) === '["lee"]', JSON.stringify(fam1.roots))
+  ok('roots：rootsOrder = key', fam1.rootsOrder === 'key', String(fam1.rootsOrder))
+  ok('roots：rootsAt 是时间串', typeof fam1.rootsAt === 'string' && !Number.isNaN(Date.parse(fam1.rootsAt)), String(fam1.rootsAt))
+  const w2 = run(REPO, [GEN], c2.cfgFile)
+  ok('roots：第二遍"家里没变"', /家里没变/.test(w2.out), w2.out.slice(0, 200))
+  const fam2 = JSON.parse(readFileSync(join(c2.dir, 'pool', 'family.json'), 'utf8'))
+  ok('roots：第二遍 rootsAt 没变', fam1.rootsAt === fam2.rootsAt, `${fam1.rootsAt} vs ${fam2.rootsAt}`)
+
+  const c3 = makeCase('roots-good', 'lee')
+  writeRoots(c3.dir, ['lee'], 'key')
+  const g = run(REPO, [GEN, '--check'], c3.cfgFile)
+  ok('roots：存的和算的一致时 check exit 0', g.code === 0, `exit=${g.code} ${g.out.slice(0, 200)}`)
+  ok('roots：一致时打出"与算的一致"', /与算的一致/.test(g.out), g.out.slice(0, 300))
+
+  const c4 = makeCase('roots-human', 'lee')
+  writeRoots(c4.dir, ['lee', 'fabian'], 'key')
+  const h = run(REPO, [GEN, '--check'], c4.cfgFile)
+  ok('roots：把 human 也算成根时 exit 1', h.code === 1, `exit=${h.code}`)
+  ok('roots：给出"没扣 human"的提示', /human/.test(h.out), h.out.slice(0, 300))
+
+  const c5 = makeCase('roots-hand', 'lee')
+  writeRoots(c5.dir, ['ghost'], 'key')
+  const q = run(REPO, [GEN, '--check'], c5.cfgFile)
+  ok('roots：手改过的值 exit 1', q.code === 1, `exit=${q.code}`)
+  ok('roots：手改时给差集', /存 ghost/.test(q.out) && /算 lee/.test(q.out), q.out.slice(0, 300))
+
+  const c6 = makeCase('roots-unknown-order', 'lee')
+  writeRoots(c6.dir, ['lee'], 'born')
+  const u = run(REPO, [GEN, '--check'], c6.cfgFile)
+  ok('roots：rootsOrder 不认识时 exit 0 但报第三态', u.code === 0 && /不认识/.test(u.out), `exit=${u.code} ${u.out.slice(0, 300)}`)
 }
 
 // 9) 静态接线：boot 行镜像用同一个对象（note 不再只贴给 bootLog）
