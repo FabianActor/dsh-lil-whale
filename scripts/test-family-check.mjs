@@ -177,7 +177,7 @@ function run(cwd, args, cfgFile, extraEnv = {}) {
 // 9) 静态接线：boot 行镜像用同一个对象（note 不再只贴给 bootLog）
 {
   const src = readFileSync(INDEX_JS, 'utf8')
-  ok('index.js：boot 一次拼好（bootRecordWithNote）', /const bootRecordWithNote = \{ note: 'boot', \.\.\.bootRecord \}/.test(src))
+  ok('index.js：boot 一次拼好（bootRecordWithNote）', /const bootRecordWithNote = \{ at: new Date\(\)\.toISOString\(\), note: 'boot', \.\.\.bootRecord \}/.test(src))
   ok('index.js：bootLog 与镜像都用 bootRecordWithNote', /bootLog\(bootRecordWithNote\)/.test(src) && /\.\.\.bootRecordWithNote/.test(src))
   ok('index.js：镜像不再单独 spread bootRecord', !/\.\.\.bootRecord \}\)/.test(src), '还有旧镜像')
 }
