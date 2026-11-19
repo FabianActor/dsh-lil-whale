@@ -85,6 +85,9 @@ ok('接线：--fix-eof 存在', CLI.includes('--fix-eof'));
 ok('接线：NEXT 按 hint 分路（charset）', CLI.includes('charset:'));
 ok('接线：字符集 NEXT 说明允许范围', CLI.includes('1–32 位 ASCII'));
 ok('接线：旧的"把 by/note 里的换行或竖线去掉"已退役', !CLI.includes('把 by/note 里的换行或竖线去掉'));
+// r356（小鱼丸 2026-11-19 群）：dry-run 常被拿来诊断，被末字节闸挡住时也要给出"若补换行会写成什么样"。
+ok('接线：dry-run 给出 refused= 与 wouldAppend=', CLI.includes("refused: 'eof-not-newline'") && CLI.includes('wouldAppend: line'));
+ok('接线：dry-run 被拒时仍 exit 2（fail-closed）', /if \(dry\) \{[\s\S]*?wouldAppend[\s\S]*?process\.exit\(2\)/.test(CLI));
 
 if (fails.length) {
   console.error(`test-manual-op：合计 ${pass + fails.length}，PASS ${pass}，FAIL ${fails.length}`);

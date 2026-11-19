@@ -100,6 +100,14 @@ try {
 // 行数只 +1，后面的不变量也抓不到。检查必须在写之前，代价是一次 read。
 const eof = existsSync(file) ? endOfFileProblem(readFileSync(file)) : null;
 if (eof) {
+  // dry-run 的用途是诊断（r356，小鱼丸 2026-11-19 群）：真跑确实该被拒，但"若补一个换行会写成什么样"
+  // 仍是它该回答的问题——只报拒绝，读的人容易以为是自己参数写错。
+  if (dry) {
+    console.log(JSON.stringify({ ok: false, dryRun: true, file, refused: 'eof-not-newline', eof: { bytes: eof.bytes, tail: eof.tail }, wouldAppend: line }, null, 2));
+    console.error(`xx 账本末行没有换行结尾（${eof.bytes} 字节，尾部是「${eof.tail}」）；真跑会被拒，上面只是"若补一个换行之后的追加结果"。`);
+    console.error(`NEXT: 先补一个换行：node scripts/manual-op.mjs --fix-eof --file "${file}"，然后重跑这次记账。`);
+    process.exit(2);
+  }
   console.error(`xx 账本末行没有换行结尾（${eof.bytes} 字节，尾部是「${eof.tail}」）；现在追加会把两条记录粘成一行。`);
   console.error(`NEXT: 先补一个换行：node scripts/manual-op.mjs --fix-eof --file "${file}"，然后重跑这次记账。`);
   process.exit(2);
