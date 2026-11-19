@@ -366,6 +366,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '归档清单' (($amOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '归档清单' '事件流 archive-start/moved/archive-done、重放以清单为准、对不上会报（test-archive-manifest.mjs）' }
   } else { Fail '归档清单' 'scripts\test-archive-manifest.mjs 不在包里' }
+  # ── 4aj. 代码指纹历史（2026-11-19 r364：变化时才写一行，让“改过没有”能从账上答）──
+  $cfhTest = Join-Path $pkg 'scripts\test-code-fp-history.mjs'
+  if (Test-Path $cfhTest) {
+    $cfhOut = & node $cfhTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '代码指纹历史' (($cfhOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '代码指纹历史' '指纹变化才记一行（code-fp-changed），boot 行不再被拿来跟自己比（test-code-fp-history.mjs）' }
+  } else { Fail '代码指纹历史' 'scripts\test-code-fp-history.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {

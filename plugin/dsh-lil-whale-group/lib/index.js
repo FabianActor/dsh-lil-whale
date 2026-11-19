@@ -12,6 +12,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renam
 import { printableText } from './text-clean.js'
 import { sayProblemOf, channelProblemOf } from './say-core.js'
 import { codeFingerprint } from './code-fp.js'
+import { codeFpChangeOf, codeFpHistoryLine, codeFpLedgerOf, CODE_FP_LEDGER } from './code-fp-history-core.js'
 import { join, dirname, basename } from 'node:path'
 import { homedir } from 'node:os'
 import { pathToFileURL, fileURLToPath } from 'node:url'
@@ -183,6 +184,9 @@ const GROUP_DIR = CFG.groupDir
 // 不在任何一条鱼的家里 —— 它们记的是"谁读到哪、谁被叫过"，是共享的。
 // 共享区在家之外（pool），她家里有 Junction 指回去，所以她的路径没变。
 const POOL_STATE = CFG.poolStateDir
+// 代码指纹的历史账（2026-11-19，小鱼丸私聊第 53 行）：上一次启动记下的值，
+// 让“这段代码改过没有”能从账上答，而不是靠谁记性好。
+const CODE_FP_LEDGER_FILE = join(POOL_STATE, CODE_FP_LEDGER)
 // 图片：字节进 images\<yyyymm>\<id>.<ext>，消息里只记 id/ext/bytes。
 // 用内容哈希当 id —— 同一张图发两次只落一份，而且天然不可变（可以永久缓存）。
 const IMAGES_DIR = join(GROUP_DIR, 'images')
@@ -1830,6 +1834,20 @@ function logLine(record) {
  * repoRoot 来自 `import.meta.url`（这一行代码自己站在哪），配置写错也改不动它。
  */
 const BOOT_LOG = join(CFG.repoRoot, 'logs', 'plugin-boot.log')
+function recordCodeFpHistory() {
+  try {
+    const prev = readJson(CODE_FP_LEDGER_FILE, null)
+    const change = codeFpChangeOf(prev, CODE_FP)
+    if (change.kind !== 'same') {
+      const line = codeFpHistoryLine(change)
+      if (line !== null) watchmanLog('note', line)
+    }
+    writeJson(CODE_FP_LEDGER_FILE, codeFpLedgerOf(CODE_FP, new Date().toISOString()))
+  } catch {
+    // 历史账写不进去不该拦住启动；下一个能写的地方会把它写出来
+  }
+}
+
 function bootLog(record) {
   try {
     mkdirSync(dirname(BOOT_LOG), { recursive: true })
@@ -1950,6 +1968,9 @@ function apply(ctx) {
   // 修法不是补一个词，而是"一次拼好、两处都用同一个对象"：以后 bootRecord 加字段，镜像自动跟上。
   const bootRecordWithNote = { note: 'boot', ...bootRecord }
   bootLog(bootRecordWithNote)
+  // 小鱼丸私聊第 53 行（2026-11-19）：boot 行只留了一个时刻的指纹，
+  // 回答不了“改过没有”；在值变化时补一行，账上有历史值才判得动。
+  recordCodeFpHistory()
   // P4（2026-11-16 第三份装机沉淀）：只把两个 bundle add 进 profile（最小安装）时，
   // 没有安装器来问"鱼塘放哪"，也没有配置文件 ⇒ 默认值会把 homes/pool 建在仓库旁边
   // （实测：<workspace>\whale-src\ 里同时出现仓库和 homes/pool）。用户以为数据在别处，
