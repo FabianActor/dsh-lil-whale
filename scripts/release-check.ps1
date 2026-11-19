@@ -387,6 +387,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '只读写入口' (($swOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '只读写入口' '只读模式下写门先抛；补丁脚本里没有裸写调用（"先方括号、后剥层"的扫描；test-safe-write.mjs）' }
   } else { Fail '只读写入口' 'scripts\test-safe-write.mjs 不在包里' }
+  # ── 4am. 日志轮转（2026-11-19：已切下来的份又被切、转了删了都没账；fi-0005）──
+  $rotTest = Join-Path $pkg 'scripts\test-rotate-logs.mjs'
+  if (Test-Path $rotTest) {
+    $rotOut = & node $rotTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '日志轮转' (($rotOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '日志轮转' '已切下来的份不再切；同类收回 3 份；轮转/丢弃落 rotate.log（test-rotate-logs.mjs）' }
+  } else { Fail '日志轮转' 'scripts\test-rotate-logs.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {
