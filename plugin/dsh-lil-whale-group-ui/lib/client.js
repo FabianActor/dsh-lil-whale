@@ -2119,8 +2119,11 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
 
       // 贴底了就把"回到历史未读"收掉：人已经看见最新的了，留着只剩误导。
       // 2026-11-17 第 2 条：清完红点后来新消息，长消息把分割线顶出视口上沿，提示又亮。
+      // 2026-11-19 第 3 条：贴底时提示消失、稍一上滑又出现——"到底"本身就是"已经见过这截"的证据，
+      // 记进 historyVisitedRef；之后同一根线不再亮，等读完一批（markRead）才放行。
       useEffect(() => {
         if (!atBottom) return
+        historyVisitedRef.current = true
         if (historyAboveRef.current) { historyAboveRef.current = false; setHistoryAbove(false) }
       }, [atBottom])
 
@@ -3800,7 +3803,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v53 · presence-draft:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v54 · history-pill-stay:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')

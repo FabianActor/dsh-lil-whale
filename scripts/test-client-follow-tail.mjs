@@ -29,13 +29,13 @@ ok('deps 变化后仍补三次（0 / 200ms / 800ms）', src.includes('setTimeout
 
 // 2. 「回到历史未读」不能在贴底时亮
 ok('measureHistory 受 atBottom 约束', src.includes('lineAbove && !historyVisitedRef.current && !atBottomRef.current'))
-ok('回到贴底时收起提示', /if \(!atBottom\) return\s*\n\s*if \(historyAboveRef\.current\) \{ historyAboveRef\.current = false; setHistoryAbove\(false\) \}/.test(src))
+ok('回到贴底时收起提示并记成「来过」', /if \(!atBottom\) return\s*\n\s*historyVisitedRef\.current = true\s*\n\s*if \(historyAboveRef\.current\) \{ historyAboveRef\.current = false; setHistoryAbove\(false\) \}/.test(src))
 ok('markRead 后重量分割线', /historyVisitedRef\.current = false[\s\S]{0,240}measureHistory\(\)/.test(src))
 
 // 3. 构建标记（人刷新后靠它确认拿到的是这一版）
 // 期望跟着实现走：r328 把标记从 v51/follow-tail-long 换成 v52/line-cite（气泡行号），
 // 行为没变，变的只是这个字符串——所以这里同步改，不算回归（§27 期望变）。
-ok('client build v53', src.includes('client build v53 · presence-draft'))
+ok('client build v53', src.includes('client build v54 · history-pill-stay'))
 
 console.log(`test-client-follow-tail：合计 ${total}，PASS ${pass}，FAIL ${total - pass}`)
 process.exit(pass === total ? 0 : 1)
