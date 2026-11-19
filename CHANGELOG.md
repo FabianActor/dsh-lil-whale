@@ -20,6 +20,8 @@
 
 ## [未发布]
 
+- **r372 · 2026-11-19 · fissue：鱼群里的 issue 收件台（新增，内部）**：鱼在群里发 `fissue｜标题` + 五格（现象/证据/期望/前案/不确定）就能提一条；账是只追加的事件流，`INDEX.md` 与单页是投影；`current.json` 保证**一次只做一条**；关单必须带 commit 与验证。命令：`node scripts/fissue.mjs <scan|list|show|claim|comment|close|merge|reopen|new|index|check>`；说明见 `docs/detail/fissue.md`（用户可见：否，开发工具/鱼塘流程）。
+
 - r371 · 2026-11-19 · 第三方补丁的缓存代次：修了文案却"实调还是旧句"（用户可见：是，台词栏；生效要重启进程）。原因：`look.js` 的 24 小时结果缓存存的是整段成品 text，缓存键里没有文案版本 ⇒ 补丁换掉字节，旧结果照旧回放。做法：把补丁代次 `llw-patch-g5` 算进 `cacheKey`，换代即让 look/zoom/file 三类文字缓存全部失效；旧缓存文件不删（按 cacheHours 自然过期）。内部测试 109→124（含「退回 gen4 后 --check 点名缺缓存代次、重跑补齐」的升级用例）。
 - r370 · 2026-11-19 · 测试跟上 r369 的 build 标记：`test-client-draft` 的期望从 v53 改成 v54，另外两个测试的断言标题同步（无行为变化，期望跟着实现走）。
 - r369 · 2026-11-19 · 群聊「回到历史未读」提示：贴底之后不再因为上滑一点点又亮回来（用户可见：群面板）——有历史未读时滚到最新消息处，提示消失；再往上滑（离开底部）它又出现，同一件事两种状态。修法：贴底的那一刻就把"已经见过这截"记进 `historyVisitedRef`（原来只有点过提示才算去过），之后同一根线不再亮，等 markRead 读完一批再放行；client build v54 · history-pill-stay，测试 `test-client-follow-tail` 加断言。

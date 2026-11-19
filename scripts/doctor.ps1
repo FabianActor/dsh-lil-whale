@@ -1352,6 +1352,41 @@ try {
     }
   }
 } catch { Add-Row '第三方补丁' 'WARN' ('核不了：{0}' -f $_.Exception.Message) }
+
+# 9e. fissue 账（2026-11-19 r372）：鱼在群里提的 issue 收在哪、有没有卡住。
+#     收件人是我，最容易出的错不是丢，是**收了忘了做**——所以除了自洽检查，还报"正在做哪条"。
+try {
+  $fissueDir = Join-Path $Cfg.PoolDir 'fissue'
+  $fissueScript = Join-Path $Cfg.Root 'scripts\fissue.mjs'
+  if (-not (Test-Path -LiteralPath $fissueScript)) {
+    Add-Row 'fissue 账' 'INFO' '收件台脚本不在这一版仓库里——跳过'
+  } elseif (-not (Test-Path -LiteralPath $fissueDir)) {
+    Add-Row 'fissue 账' 'INFO' '还没有 fissue（一条都没提过；鱼在群里发 `fissue｜标题` 六个小节就会建）'
+  } else {
+    # --json 是多行 JSON：别只取第一行（2026-11-19 第一次跑就只拿到 '{'，summary 读成空）
+    $fOut = @(& node $fissueScript check --json 2>$null)
+    $fCode = $LASTEXITCODE
+    $fText = (@($fOut) -join "`n")
+    $fSummary = ''
+    $fProblems = @()
+    if ($fText) {
+      try { $fObj = $fText | ConvertFrom-Json; $fSummary = [string]$fObj.summary; $fProblems = @($fObj.problems) } catch { }
+    }
+    $curText = '（没在做）'
+    $curPath = Join-Path $fissueDir 'current.json'
+    if (Test-Path -LiteralPath $curPath) {
+      try {
+        $cur = Get-Content -LiteralPath $curPath -Raw -Encoding utf8 | ConvertFrom-Json
+        if ($cur.num) { $curText = ('在做 fi-{0}' -f [int]$cur.num) }
+      } catch { }
+    }
+    if ($fCode -ne 0) {
+      Add-Row 'fissue 账' 'WARN' ('账不自洽：' + (($fProblems | Select-Object -First 2) -join '；')) 'NEXT: node scripts\fissue.mjs check 看全部；投影坏了用 node scripts\fissue.mjs index 重生成（事件流别手改）'
+    } else {
+      Add-Row 'fissue 账' 'OK' ($fSummary + '｜' + $curText)
+    }
+  }
+} catch { Add-Row 'fissue 账' 'WARN' ('核不了：{0}' -f $_.Exception.Message) }
 # ---- 输出 ----
 Write-Host ''
 Write-Host '小肥鱼体检' -ForegroundColor Cyan
