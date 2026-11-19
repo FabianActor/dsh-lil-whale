@@ -156,6 +156,43 @@ function applyGen4(text) {
   return { ok: true, next: text.replace(GEN4_OLD_NO_KEY, () => GEN4_NEW_NO_KEY) };
 }
 
+// gen5（2026-11-19 小鱼丸 #2237）：结果缓存存的是整段成品 text，而缓存键里不含文案版本。
+// ⇒ 补丁落盘后，24 小时内看过的同一条片仍会原样回放旧句——"修了但看不见"，且每改一版文案
+// 都要让所有鱼手动清一次缓存（鱼对 dsh-home 只读，清不掉）。把补丁代次放进 cacheKey 即可：
+// 换代 = 旧缓存键全部失效；旧 JSON 留在 cache 目录按 cacheHours 自然过期，不删、也不用删。
+const CACHE_TAG = 'llw-patch-g5';
+const CACHE_KEY_OLD = "function cacheKey(parts) { return crypto.createHash('sha1').update(JSON.stringify(parts)).digest('hex').slice(0, 16); }";
+const CACHE_KEY_NEW = (eol) => [
+  '// 2026-11-19 本地补丁：缓存键带补丁代次——文案改了，旧缓存不再被原样回放。',
+  `const PATCH_CACHE_TAG = '${CACHE_TAG}';`,
+  "function cacheKey(parts) { return crypto.createHash('sha1').update(JSON.stringify([PATCH_CACHE_TAG, parts])).digest('hex').slice(0, 16); }",
+].join(eol);
+
+function hasCacheTag(text) {
+  return text.includes(`const PATCH_CACHE_TAG = '${CACHE_TAG}';`);
+}
+
+function applyCacheTag(text, eol) {
+  if (hasCacheTag(text)) return { ok: true, next: text };
+  if (!text.includes(CACHE_KEY_OLD)) {
+    return { ok: false, why: '找不到 cacheKey 的落点（插件版本可能变了）' };
+  }
+  return { ok: true, next: text.replace(CACHE_KEY_OLD, () => CACHE_KEY_NEW(eol)) };
+}
+
+// 一次补到最新：gen3 → gen4 → gen5。每一步都是幂等的（已在就不动）；
+// 任何一步找不到落点就停在那一步之前——不写半份"看着像最新"的文件。
+function finishPatch(text, eol) {
+  let cur = text;
+  const g3 = applyGen3(cur);
+  if (g3.ok) cur = g3.next;
+  const g4 = applyGen4(cur);
+  if (g4.ok) cur = g4.next;
+  const g5 = applyCacheTag(cur, eol);
+  if (g5.ok) cur = g5.next;
+  return cur;
+}
+
 
 // 既不进表、又继续落到 speechRate===0 那句 => 「这一栏没给」被冒充成「没人说话」。
 // 产家（source 的取值）表补不到它，因为这一格压根没有 source。
@@ -259,7 +296,8 @@ function patchedFrom(originalText, eol) {
   const g3 = applyGen3(g2.next);
   if (!g3.ok) return null;
   const g4 = applyGen4(g3.next);
-  return g4.ok ? g4.next : null;
+  if (!g4.ok) return null;
+  return finishPatch(g4.next, eol);
 }
 
 // 同版本里任一安装留下的 orig 就是上游原文（四台同版本时字节相同）。
@@ -466,6 +504,8 @@ let gen3Pending = 0;  // 前五半已在、只缺「下一步」三句（只读�
 let gen3Fixed = 0;    // 同上，本次补上
 let gen4Pending = 0;  // 前六半已在、只差 `no-key` 那句的真原因（只读模式）
 let gen4Fixed = 0;    // 同上，本次补上
+let cachePending = 0; // 七半已在、只差「结果缓存带补丁代次」（只读模式）
+let cacheFixed = 0;   // 同上，本次补上
 let lateFixed = 0;    // 同上，本次补上
 let already = 0;
 let halfStuck = 0;   // 只打了一半，且缺的那半找不到落点（要人拿 orig 回滚）
@@ -492,7 +532,7 @@ for (const t of targets) {
         continue;
       }
       ensureBackups(t);
-      writePatched(t, g2.next);
+      writePatched(t, finishPatch(g2.next, eol));
       lateFixed += 1;
       console.log(`✓ ${t.member}: 补上「空台词 / 表外名字」两半`);
       continue;
@@ -512,7 +552,7 @@ for (const t of targets) {
       }
       ensureBackups(t);
       const g3ThenG4 = applyGen4(g3.next);
-      writePatched(t, g3ThenG4.ok ? g3ThenG4.next : g3.next);
+      writePatched(t, finishPatch(g3ThenG4.ok ? g3ThenG4.next : g3.next, eol));
       gen3Fixed += 1;
       console.log(`✓ ${t.member}: 补上「下一步」三句${g3ThenG4.ok ? '（并带上「没有台词」那句的真原因）' : ''}`);
       continue;
@@ -531,9 +571,28 @@ for (const t of targets) {
         continue;
       }
       ensureBackups(t);
-      writePatched(t, g4.next);
+      writePatched(t, finishPatch(g4.next, eol));
       gen4Fixed += 1;
       console.log(`✓ ${t.member}: 补上「没有台词」那句的真原因`);
+      continue;
+    }
+    // gen5（2026-11-19 小鱼丸 #2237）：文案全在，但结果缓存会把旧文案原样回放 24 小时。
+    if (!hasCacheTag(text)) {
+      const g5 = applyCacheTag(text, eol);
+      if (!g5.ok) {
+        failed += 1;
+        console.log(`✗ ${t.member}: ${g5.why} → ${t.file}`);
+        continue;
+      }
+      if (readOnly) {
+        console.log(`— ${t.member}: 还差「结果缓存带补丁代次」，可以补（${checkOnly ? '--check，未写入' : 'dry-run，未写入'}）`);
+        cachePending += 1;
+        continue;
+      }
+      ensureBackups(t);
+      writePatched(t, g5.next);
+      cacheFixed += 1;
+      console.log(`✓ ${t.member}: 补上缓存代次（旧结果缓存不再回放旧文案）`);
       continue;
     }
     already += 1;
@@ -571,7 +630,7 @@ for (const t of targets) {
       console.log(`✗ ${t.member}: ${g2third.why} → ${t.file}`);
       continue;
     }
-    writePatched(t, g2third.next);
+    writePatched(t, finishPatch(g2third.next, eol));
     thirdFixed += 1;
     console.log(`✓ ${t.member}: 补上「没有转写结果」分支`);
     continue;
@@ -635,7 +694,7 @@ for (const t of targets) {
       continue;
     }
     ensureBackups(t);
-    writePatched(t, g2half.next);
+    writePatched(t, finishPatch(g2half.next, eol));
     halfFixed += 1;
     console.log(`✓ ${t.member}: 补上了另一半（${which}）`);
     continue;
@@ -660,7 +719,7 @@ for (const t of targets) {
     console.log(`✗ ${t.member}: ${g2full.why} → ${t.file}`);
     continue;
   }
-  next = g2full.next;
+  next = finishPatch(g2full.next, eol);
   if (readOnly) {
     console.log(`— ${t.member}: 可以打（${checkOnly ? '--check，未写入' : 'dry-run，未写入'}）`);
     patchable += 1;
@@ -697,9 +756,9 @@ function ensureBackups(t) {
 
 console.log('');
 if (readOnly) {
-  console.log(`小计：${targets.length} 个安装 · 可打 ${patchable} · 可补一半 ${halfFixed} · 还差无转写 ${thirdPending} · 还差空台词/未识别 ${latePending} · 还差下一步 ${gen3Pending} · 还差真原因 ${gen4Pending} · 已有 ${already} · 无法自动补 ${halfStuck} · 失败 ${failed} · 未写盘`);
+  console.log(`小计：${targets.length} 个安装 · 可打 ${patchable} · 可补一半 ${halfFixed} · 还差无转写 ${thirdPending} · 还差空台词/未识别 ${latePending} · 还差下一步 ${gen3Pending} · 还差真原因 ${gen4Pending} · 还差缓存代次 ${cachePending} · 已有 ${already} · 无法自动补 ${halfStuck} · 失败 ${failed} · 未写盘`);
 } else {
-  console.log(`小计：${targets.length} 个安装 · 本次打 ${patchable} · 本次补一半 ${halfFixed} · 补无转写 ${thirdFixed} · 补空台词/未识别 ${lateFixed} · 补下一步 ${gen3Fixed} · 补真原因 ${gen4Fixed} · 已有 ${already} · 无法自动补 ${halfStuck} · 失败 ${failed}${detachMode ? ` · 断开硬链接 ${detached}` : ''}`);
+  console.log(`小计：${targets.length} 个安装 · 本次打 ${patchable} · 本次补一半 ${halfFixed} · 补无转写 ${thirdFixed} · 补空台词/未识别 ${lateFixed} · 补下一步 ${gen3Fixed} · 补真原因 ${gen4Fixed} · 补缓存代次 ${cacheFixed} · 已有 ${already} · 无法自动补 ${halfStuck} · 失败 ${failed}${detachMode ? ` · 断开硬链接 ${detached}` : ''}`);
 }
 if (checkOnly) {
   const bad = targets.filter((t) => {
@@ -707,7 +766,7 @@ if (checkOnly) {
     const hasMark = s.includes(MARK);
     const hasPush = /const why = String\(result\.transcript\?\.error/.test(s);
     const hasNoTrans = s.includes(NO_TRANS_TEXT);
-    return !(hasMark && hasPush && hasNoTrans && hasGen2(s) && hasGen4(s));
+    return !(hasMark && hasPush && hasNoTrans && hasGen2(s) && hasGen4(s) && hasCacheTag(s));
   }).length;
   if (bad > 0) {
     console.log(`检查：还有 ${bad} 个安装没打全补丁（含只打了一半的）。`);
@@ -765,6 +824,6 @@ if (checkOnly) {
   }
   console.log('检查：全部已打补丁。');
 }
-const needsWork = patchable + halfFixed + thirdPending + latePending + gen3Pending + gen4Pending;
+const needsWork = patchable + halfFixed + thirdPending + latePending + gen3Pending + gen4Pending + cachePending;
 process.exit(failed > 0 || halfStuck > 0 || (checkOnly && needsWork > 0) ? 1 : 0);
 

@@ -40,6 +40,9 @@ const ORIGINAL = [
   "  none: '没有台词',",
   '};',
   '',
+  '// ── 缓存（0.8.3 的 look.js:141；gen5 把补丁代次算进这个键）──',
+  "function cacheKey(parts) { return crypto.createHash('sha1').update(JSON.stringify(parts)).digest('hex').slice(0, 16); }",
+  '',
   'function compactCells(result) {',
   '  const lines = [];',
   '  const src = result.transcript?.source;',
@@ -534,6 +537,33 @@ console.log('第三方补丁：行为测试');
   ok('also-root：不扫时鱼塘里没有东西，扫了之后能看见宿主/web', /宿主\/web.*可以打/.test(dry.out), dry.out.slice(-400));
   rmSync(fake, { recursive: true, force: true });
   rmSync(emptyPond, { recursive: true, force: true });
+}
+
+// 3a3. gen5（2026-11-19 小鱼丸 #2237）：结果缓存把整段成品 text 存下来、键里又没有文案版本，
+//      于是"字节已经换了、实调还是旧句"——修了但看不见。把补丁代次算进 cacheKey，换代即全失效。
+{
+  const { root, file } = makePond();
+  run(['--pond', root]);
+  const full = readFileSync(file, 'utf8');
+  ok('gen5：打完带 PATCH_CACHE_TAG', full.includes("const PATCH_CACHE_TAG = 'llw-patch-g5';"));
+  ok('gen5：cacheKey 把补丁代次算进键里', full.includes('JSON.stringify([PATCH_CACHE_TAG, parts])'));
+  ok('gen5：注释说清为什么（旧缓存回放）', full.includes('旧缓存不再被原样回放'));
+  // 退回 gen4：把缓存块换回上游那一行
+  const cacheOld = "function cacheKey(parts) { return crypto.createHash('sha1').update(JSON.stringify(parts)).digest('hex').slice(0, 16); }";
+  const cacheNew = [
+    '// 2026-11-19 本地补丁：缓存键带补丁代次——文案改了，旧缓存不再被原样回放。',
+    "const PATCH_CACHE_TAG = 'llw-patch-g5';",
+    "function cacheKey(parts) { return crypto.createHash('sha1').update(JSON.stringify([PATCH_CACHE_TAG, parts])).digest('hex').slice(0, 16); }",
+  ].join('\n');
+  writeFileSync(file, full.replace(cacheNew, cacheOld), 'utf8');
+  const bad = run(['--check', '--pond', root]);
+  ok('gen4 老安装 --check exit 1', bad.code === 1, '实际 ' + bad.code);
+  ok('gen4 老安装点名"还差结果缓存带补丁代次"', bad.out.includes('还差「结果缓存带补丁代次」'), bad.out.slice(-300));
+  const up = run(['--pond', root]);
+  ok('重跑补上缓存代次', up.code === 0 && up.out.includes('补上缓存代次'), up.out.trim().split('\n').slice(-2).join(' / '));
+  ok('补完 --check 绿', run(['--check', '--pond', root]).code === 0);
+  ok('补完带 PATCH_CACHE_TAG', readFileSync(file, 'utf8').includes("const PATCH_CACHE_TAG = 'llw-patch-g5';"));
+  rmSync(root, { recursive: true, force: true });
 }
 
 console.log(`test-thirdparty-patch：合计 ${pass + fail}，PASS ${pass}，FAIL ${fail}`);
