@@ -33,6 +33,7 @@
 // 不一致报「补丁版本不齐」，并指出是哪几台。判据：检查器能看见的，要包括"彼此是不是同一版"。
 
 import fs from 'node:fs';
+import { writeText, renameFile, copyFileTo } from './lib/safe-write.mjs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -422,22 +423,22 @@ function writePatched(t, next) {
     nlink = 1;
   }
   if (nlink <= 1) {
-    fs.writeFileSync(t.file, next, 'utf8');
+    writeText(readOnly, t.file, next);
     return false;
   }
   const before = fs.readFileSync(t.file, 'utf8');
   const links = hardLinksOf(t.file).filter((p) => normPath(p) !== normPath(t.file));
   // 1) 先断开自己：写临时文件再 rename（rename 只换目录项，新文件是独立 inode）
   const tmp = `${t.file}.tmp-${process.pid}`;
-  fs.writeFileSync(tmp, next, 'utf8');
-  fs.renameSync(tmp, t.file);
+  writeText(readOnly, tmp, next);
+  renameFile(readOnly, tmp, t.file);
   // 2) store 那份恢复成补丁前的内容：优先用 .orig-<版本>，没有就用刚读到的原内容
   const orig = origPath(t);
   const original = fs.existsSync(orig) ? fs.readFileSync(orig, 'utf8') : before;
   for (const p of links) {
     if (p.includes(`${path.sep}profiles${path.sep}`)) continue; // 别的鱼那份各打各的
     try {
-      if (fs.readFileSync(p, 'utf8') !== original) fs.writeFileSync(p, original, 'utf8');
+      if (fs.readFileSync(p, 'utf8') !== original) writeText(readOnly, p, original);
     } catch {
       /* 没有权限就不硬来，--check 会报告 store 仍是补丁内容 */
     }
@@ -465,8 +466,8 @@ function detachGroup() {
   for (const t of group) {
     const cur = fs.readFileSync(t.file, 'utf8'); // 保持当前内容（补丁版）
     const tmp = `${t.file}.tmp-${process.pid}`;
-    fs.writeFileSync(tmp, cur, 'utf8');
-    fs.renameSync(tmp, t.file);
+    writeText(readOnly, tmp, cur);
+    renameFile(readOnly, tmp, t.file);
     detached += 1;
     console.log(`— ${t.member}: 已断开与 pnpm store 的硬链接（内容保持补丁版）`);
   }
@@ -474,7 +475,7 @@ function detachGroup() {
     if (p.includes(`${path.sep}profiles${path.sep}`)) continue;
     if (original === null) continue;
     try {
-      if (fs.readFileSync(p, 'utf8') !== original) fs.writeFileSync(p, original, 'utf8');
+      if (fs.readFileSync(p, 'utf8') !== original) writeText(readOnly, p, original);
       console.log(`— pnpm store 已恢复原样：${p}`);
     } catch {
       console.log(`! pnpm store 恢复失败（没有权限）：${p}`);
@@ -749,9 +750,9 @@ function origAnyPath(t) {
 }
 function ensureBackups(t) {
   const orig = origPath(t);
-  if (!fs.existsSync(orig)) fs.copyFileSync(t.file, orig);
+  if (!fs.existsSync(orig)) copyFileTo(readOnly, t.file, orig);
   const bak = `${t.file}.bak-20261118`;
-  if (!fs.existsSync(bak)) fs.copyFileSync(t.file, bak);
+  if (!fs.existsSync(bak)) copyFileTo(readOnly, t.file, bak);
 }
 
 console.log('');

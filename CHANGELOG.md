@@ -20,6 +20,8 @@
 
 ## [未发布]
 
+- **r377** 补丁脚本的只读门收成一处（内部/脚本；fi-0003，LeeaCP #2266）：旧行为——`--check` / `--dry-run` 的只读保证靠 7 个调用点各自 `if (readOnly)`，漏一处就静默写盘，而且"漏了"与"没漏"在输出上长得一样。现在所有落盘动作只走 `scripts\lib\safe-write.mjs`（每个入口第一行拦 readOnly，过门才写）；新增静态扫描 `scripts\lib\scan-write-calls.mjs`（先抓 `fs['writeFileSync'](...)` 方括号形态、再剥注释/普通串/模板串/正则，报 `文件:行号` 与原文，第一行声明"动态拼名、变量取属性、模板里的调用不查"）；`scripts\test-safe-write.mjs` 26 条（4 种真调用必须红、4 种假调用必须绿、顺序敏感一格、"补丁脚本里裸写 0 处"）；`release-check` 加「只读写入口」。
+
 - **r376** boot 行的 `at` 只生成一次、两本账共用（内部/日志；fi-0002，小鱼丸 #2263）：旧行为——`bootLog()` 与到 `pool\group\plugin.log` 的镜像写各自调一次 `new Date().toISOString()`，同一进程同一次启动的两条 boot 行差 1–2ms（70 次启动：相同 34、差 1ms 33、差 2ms 1），"at+pid join"只有在同毫秒时成立。现在 `bootRecordWithNote` 里生成一次 `at`，`bootLog` 认 `record.at`、镜像写直接 spread 同一对象；`layout-warning` 同样带 `at`。join 键仍是 `(pid, note)`，`at` 只用来比差。
 
 - **r375** 日志 kind 声明两处按提报人复验修正（内部/日志；fi-0001 跟进，小满 #2269）：①老账没有 `kinds=` 时改用代码清单对照（`declaredSource=code`）——原先"不知道就不报"，未知 kind 在老账里照样隐形；②`log-format` 是表头那一行自己的 kind，不算正文，从 `LOG_KINDS` 与对账里剔除（否则任何带新表头的账都会把自己报成未声明）。`audit-log-kinds --json` 新增 `declaredSource`；`doctor` 那格分「账自己声明 / 按代码清单 / 只数不判」三种措辞。

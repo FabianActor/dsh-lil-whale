@@ -380,6 +380,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '未读红点' (($crOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '未读红点' '计数只信服务端、离开前补记一次、读失败五秒后重试（test-client-unread.mjs）' }
   } else { Fail '未读红点' 'scripts\test-client-unread.mjs 不在包里' }
+  # ── 4al. 只读写入口（2026-11-19：--check/--dry-run 的只读保证原来靠 7 个调用点各自判断；fi-0003）──
+  $swTest = Join-Path $pkg 'scripts\test-safe-write.mjs'
+  if (Test-Path $swTest) {
+    $swOut = & node $swTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '只读写入口' (($swOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '只读写入口' '只读模式下写门先抛；补丁脚本里没有裸写调用（"先方括号、后剥层"的扫描；test-safe-write.mjs）' }
+  } else { Fail '只读写入口' 'scripts\test-safe-write.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {

@@ -157,3 +157,11 @@ Get-Content homes\<键>\dsh-home\bili-eyes\history.jsonl -Tail 3
 
   同理没做进本地补丁的还有「没有字幕」的五种来源（匿名 / brief / 真无轨 / 下载失败 / 登录过期）：`source` 在 `pipeline.js` 就定好了，`look.js` 只拿到结果——要带出原因得改另一个包，也进上游草稿。
 - **第八半：缓存键带补丁代次**（2026-11-19 小鱼丸 #2237）：补丁改的是文案，但 `look.js:245` 的 24 小时结果缓存存的是**整段成品 text**、缓存键里又没有文案版本——于是"字节已经换了，实调还是旧句"。她的反例：四份 `look.js` 都是 gen4（31,553 B、mtime 09:24:48），实调 `BV12K4y1K7mr` 仍输出「本机转写服务没开」，命中的是 `at=09:09:02` 那条旧缓存。鱼对 `dsh-home` 只读，清不掉（`rm.log` 里是 `EPERM status=failed`）。做法：把补丁代次算进 `cacheKey`——`const PATCH_CACHE_TAG = 'llw-patch-g5';` + `JSON.stringify([PATCH_CACHE_TAG, parts])`；换代即让 `look`/`zoom`/`file` 三类文字缓存全部失效，旧 JSON 不删（留 24h 自然过期，也不需要删）。幂等判据=`hasCacheTag`（文件里有没有当前代次的 `PATCH_CACHE_TAG`），`patchedFrom` 的"期望内容"也链上这一代，`--check` 缺这半算「没打全」。**补丁落盘后要重启对应进程**才会加载新代码；没重启前看到的仍是旧句——这不是补丁没打上，是进程还没换。测试 109→124 条。
+
+## 9. 只读门收成一处（fi-0003，2026-11-19）
+
+以前 `--check` / `--dry-run` 的"只读"靠调用点自己记得判：`scripts\patch-bili-eyes-note.mjs` 里有 7 处 `if (readOnly)`。漏一处，检查就会顺手写盘，而且输出上看不出来。
+
+现在落盘只走 `scripts\lib\safe-write.mjs`：每个入口第一行先问 readOnly，过门才写；补丁脚本只许出现这些封装。配套 `scripts\lib\scan-write-calls.mjs` 做静态扫描（先抓方括号形态、再剥注释/普通字符串/模板字符串/正则；报 `文件:行号` 与那一行原文，第一行声明"动态拼名、变量取属性、模板里的调用不查"），`scripts\test-safe-write.mjs` 26 条夹具把它钉住。
+
+验收：`node scripts\test-safe-write.mjs` 应 26 PASS；再把补丁脚本里任意一处封装换回 `fs.writeFileSync(...)`，`test-safe-write` 必须点名到那一行。
