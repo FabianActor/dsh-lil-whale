@@ -24,11 +24,12 @@ function ok(name, cond, detail = '') {
     console.log(`  xx  ${name}${detail ? '：' + detail : ''}`)
   }
 }
-function run(dir, extra = []) {
+function run(dir, extra = [], env = {}) {
   return spawnSync(process.execPath, [SCRIPT, '--dir', dir, '--state-dir', dir, ...extra], {
     cwd: APP,
     encoding: 'utf8',
     timeout: 30000,
+    env: { ...process.env, ...env },
   })
 }
 function rotatedNames(dir) {
@@ -111,5 +112,17 @@ try {
   rmSync(root, { recursive: true, force: true })
 }
 
+  console.log('— 配置与账本失败：不静默 —')
+  const badCfg = run(dir, ['--dry-run'], { LIL_WHALE_CONFIG: join(root, 'nope.json') })
+  const badText = badCfg.stdout + badCfg.stderr
+  ok('给了坏配置：退出码非 0', badCfg.status !== 0, 'status=' + badCfg.status)
+  ok('给了坏配置：点名 LIL_WHALE_CONFIG、不出现 roots=code', /LIL_WHALE_CONFIG/.test(badText) && !/roots=code/.test(badCfg.stdout), badText.trim().split(/\r?\n/)[0])
+  const dir3 = join(root, 'logs3')
+  mkdirSync(dir3, { recursive: true })
+  bigFile(dir3, 'fake3.log')
+  mkdirSync(join(dir3, 'rotate.log'), { recursive: true })
+  const r5 = run(dir3)
+  ok('账本写不进：输出 ledger-failed', /ledger-failed/.test(r5.stdout), r5.stdout.trim().split(/\r?\n/)[0])
+  ok('账本写不进：退出码非 0', r5.status !== 0, 'status=' + r5.status)
 console.log(`test-rotate-logs：合计 ${pass + fail}，PASS ${pass}，FAIL ${fail}`)
 process.exit(fail > 0 ? 1 : 0)

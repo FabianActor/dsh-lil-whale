@@ -43,33 +43,60 @@ function argValues(name) {
 }
 
 // 2026-11-16 r195：日志在哪儿，不能只按"脚本被放在哪"推。
-// 写日志的插件读 lil-whale.config.json（或 LIL_WHALE_CONFIG）；自定义布局时两套推导会分叉，
-// 轮转就永远扫不到真正在长的日志（第三方装机实测 P6）。配置读得到就按配置，读不到才退回按位置推。
+// 2026-11-19 r393（fi-0006 小鱼丸）：给了 `LIL_WHALE_CONFIG` 却读不到，过去是静默 return null、
+// 接下来按脚本位置推——而脚本就在 `<鱼塘>\app\scripts` 里，回退恰好指向真鱼塘；现在照 gen-family 的口径：
+// 给了就必须用，读不到就报错退出（exit 2），不再悄悄换一本账扫；没给也没配置才回退，并打一句人话。
+function configFatal(message, next) {
+  console.log('xx ' + message)
+  console.log('NEXT: ' + next)
+  process.exit(2)
+}
+
 function rootsFromConfig() {
-  const file = process.env.LIL_WHALE_CONFIG || join(APP, 'lil-whale.config.json')
-  if (!existsSync(file)) return null
+  const explicit = String(process.env.LIL_WHALE_CONFIG ?? '').trim()
+  const file = explicit || join(APP, 'lil-whale.config.json')
+  let raw
   try {
-    const cfg = JSON.parse(readFileSync(file, 'utf8'))
-    const poolDir = cfg.poolDir || (cfg.selfHome ? resolve(cfg.selfHome, '..', '..', 'pool') : null)
-    if (!poolDir) return null
-    const membersFile = cfg.membersFile || join(poolDir, 'members.json')
-    const homes = []
-    try {
-      const roster = JSON.parse(readFileSync(membersFile, 'utf8'))
-      for (const m of Object.values(roster?.members ?? {})) {
-        if (m?.home) homes.push(m.home)
-      }
-    } catch {
-      // 名册读不到就只扫 pool，不影响轮转
+    raw = readFileSync(file, 'utf8')
+  } catch (error) {
+    const code = error && error.code ? error.code : 'UNKNOWN'
+    const why = code === 'ENOENT' ? '指向的文件不存在' : '读不出来（' + code + '）'
+    if (explicit) {
+      configFatal('LIL_WHALE_CONFIG ' + why + '：' + file, '把 LIL_WHALE_CONFIG 改成存在的文件，或直接不设它（不设时按脚本位置推；这里不会改读仓库里那份配置）')
     }
-    return { pond: resolve(poolDir, '..'), poolDir: resolve(poolDir), homes }
-  } catch {
+    if (code !== 'ENOENT') {
+      configFatal('仓库里的 lil-whale.config.json ' + why + '：' + file, '修好或删掉这个文件；不会按脚本位置推一个可能不对的鱼塘')
+    }
     return null
   }
+  let cfg
+  try {
+    cfg = JSON.parse(raw)
+  } catch {
+    configFatal('配置文件不是有效 JSON：' + file, '修好它（或删掉，让脚本按位置推）')
+  }
+  const poolDir = cfg.poolDir || (cfg.selfHome ? resolve(cfg.selfHome, '..', '..', 'pool') : null)
+  if (!poolDir) {
+    configFatal('配置里没有 poolDir（也没有 selfHome 可以推）：' + file, '补上 poolDir，别让轮转猜鱼塘在哪')
+  }
+  const membersFile = cfg.membersFile || join(poolDir, 'members.json')
+  const homes = []
+  try {
+    const roster = JSON.parse(readFileSync(membersFile, 'utf8'))
+    for (const m of Object.values(roster?.members ?? {})) {
+      if (m?.home) homes.push(m.home)
+    }
+  } catch {
+    // 名册读不到就只扫 pool，不影响轮转
+  }
+  return { pond: resolve(poolDir, '..'), poolDir: resolve(poolDir), homes }
 }
 
 const cfgRoots = rootsFromConfig()
 const POND = cfgRoots?.pond ?? POND_BY_CODE
+if (!cfgRoots) {
+  console.log('note: 没有配置（LIL_WHALE_CONFIG 未设，仓库里也没有 lil-whale.config.json），按脚本位置推鱼塘根：' + POND)
+}
 const POOL = cfgRoots?.poolDir ?? join(POND, 'pool')
 const explicitDirs = argValues('--dir').map((d) => resolve(d))
 const STATE_DIR = resolve(argValue('--state-dir') ?? join(POOL, 'state'))
@@ -129,18 +156,25 @@ function hash12(file) {
   }
 }
 
+let rotated = 0
+let dropped = 0
+let failed = 0
+
 const lines = []
 function account(level, text) {
   lines.push(`${localTs(new Date())} | ${level} | ${text}`)
 }
 
 function flushLedger() {
-  if (DRY || lines.length === 0) return
+  if (DRY || lines.length === 0) return true
   try {
     appendFileSync(LEDGER, lines.join('\n') + '\n', 'utf8')
+    return true
   } catch (error) {
-    // 账本自己写不进去，只能打在 stdout（巡守那边是 ignore，但至少手动跑时能看见）
+    // 账本写不进去也是这一轮失败：过去只在 stdout 打一行、退出码 0，看起来像成功（fi-0006）
+    failed++
     console.log(`ledger-failed ${rel(LEDGER)} why=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)}`)
+    return false
   }
 }
 
@@ -151,9 +185,6 @@ for (const d of explicitDirs.length
   scannedDirs.add(d)
 }
 
-let rotated = 0
-let dropped = 0
-let failed = 0
 for (const file of targets) {
   if (file === LEDGER) continue
   let st
@@ -256,8 +287,11 @@ for (const dir of scannedDirs) {
 
 // 一行汇总：让"这一小时干了什么"不用逐行拼。
 account('note', `note=log-rotate rotated=${rotated} dropped=${dropped} failed=${failed} scanned=${targets.length} roots=${explicitDirs.length ? 'args' : cfgRoots ? 'config' : 'code'} pid=${process.pid}`)
-flushLedger()
+const ledgerOk = flushLedger()
 
 console.log(
   `${DRY ? 'dry-run ' : ''}done rotated=${rotated} dropped=${dropped} failed=${failed} scanned=${targets.length} roots=${explicitDirs.length ? 'args' : cfgRoots ? 'config' : 'code'}${DRY ? '' : ' ledger=' + rel(LEDGER)}`,
 )
+
+// 有失败（轮转/丢弃/账本写不进去）就非 0：巡守那边是 detached ignore，但手动跑与测试要看得出
+process.exitCode = failed > 0 ? 1 : 0
