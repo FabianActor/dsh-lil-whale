@@ -134,7 +134,11 @@ ok('对账：已声明的 kind 不进 undeclared', kindAudit.undeclared.length =
 ok('对账：未声明 kind 带行数', kindAudit.undeclared[0].count === 2)
 ok('对账：声明了但账上没出现单列 missing', kindAudit.missing.includes('deliver') && !kindAudit.missing.includes('started'))
 const legacyAudit = auditKinds(['2026-11-19 10:23:24 | started | fmt=2 pid=1'])
-ok('老账没有声明时 undeclared 为空（不知道，不等于没漏）', legacyAudit.declared === null && legacyAudit.undeclared.length === 0)
+ok('不给对照清单时 declared=none，只数不判', legacyAudit.declared === null && legacyAudit.declaredSource === 'none' && legacyAudit.undeclared.length === 0)
+const legacyCode = auditKinds(['2026-11-19 12:00:00 | bogus-kind | x=1'], LOG_KINDS)
+ok('老账 + 代码清单：未知 kind 也能红（小满 #2269 ①）', legacyCode.declaredSource === 'code' && legacyCode.undeclared.length === 1 && legacyCode.undeclared[0].kind === 'bogus-kind')
+ok('表头行自己的 kind 不参与对账（小满 #2269 ③）', auditKinds([newLine(0)]).seen.length === 0)
+ok('kinds= 清单里没有 log-format（正文清单不含表头）', !LOG_KINDS.includes('log-format'))
 
 // ── 5. 接线：表头只能有一个写口，且先问再写 ─────────────────
 ok('index.js 从 log-format-core 取判断函数', index.includes("from './log-format-core.js'"))

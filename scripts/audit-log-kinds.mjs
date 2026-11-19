@@ -53,7 +53,7 @@ try {
   process.exit(2)
 }
 
-const audit = auditKinds(text.split(/\r?\n/))
+const audit = auditKinds(text.split(/\r?\n/), LOG_KINDS)
 const undeclared = audit.undeclared
 const okAll = undeclared.length === 0
 
@@ -64,7 +64,8 @@ if (asJson) {
         ok: okAll,
         file,
         declared: audit.declared,
-        declaredIsLegacy: audit.declared === null,
+        declaredSource: audit.declaredSource,
+        declaredIsLegacy: audit.declaredSource === 'code',
         kindsInCode: LOG_KINDS,
         seen: audit.seen,
         undeclared,
@@ -74,12 +75,13 @@ if (asJson) {
       2,
     ),
   )
-} else if (audit.declared === null) {
-  console.log(`ok 账上还没有 kinds= 声明（r374 之前的账）：${file}`)
+} else if (audit.declaredSource === 'none') {
+  console.log(`ok 没有 kinds= 声明、也没有代码清单可对照（只数不判）：${file}`)
   console.log(`   代码声明的 ${LOG_KINDS.length} 类：${LOG_KINDS.join(',')}`)
   console.log(`   账上出现过 ${audit.seen.length} 类：${audit.seen.map((item) => `${item.kind}×${item.count}`).join(', ')}`)
 } else {
-  console.log(`${okAll ? 'ok' : 'ff'} kind 对账：声明 ${audit.declared.length} 类，账上出现 ${audit.seen.length} 类`)
+  const sourceNote = audit.declaredSource === 'code' ? '老账没有 kinds=，按代码清单对照' : '账自己声明'
+  console.log(`${okAll ? 'ok' : 'ff'} kind 对账（${sourceNote}）：声明 ${audit.declared.length} 类，账上出现 ${audit.seen.length} 类`)
   for (const item of undeclared) console.log(`   未声明：${item.kind} ×${item.count}`)
   if (undeclared.length > 0) {
     console.log('NEXT: 把未声明的 kind 加进 plugin\\dsh-lil-whale-group\\lib\\log-format-core.js 的 LOG_KINDS（清单就是声明）')

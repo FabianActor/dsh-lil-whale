@@ -23,7 +23,9 @@
 //   1. `kinds=` 把代码会写的 kind 列成完整清单（这张表就是声明；加一个 kind 必须改它）；
 //   2. `auditKinds()` 拿账上出现过的 kind 跟它对，报"未声明的 kind 有几行"。
 // 判据（小满）：「声明描述它想管的 kind，检查器该报它不管的 kind 有几行」。
-export const LOG_KINDS = ['deliver', 'error', 'log-format', 'note', 'resumed', 'skip', 'started', 'stopped', 'wake', 'wake-caps', 'wake-skip', 'wake-try', 'woke']
+// 2026-11-19 fi-0001 小满复验 #2269：`kinds=` 声明的是**正文事件**；`log-format` 是表头这一行自己的 kind，
+// 不属于正文清单（否则每本带新表头的账都会把自己报成未声明）。所以这里不收它，对账时也不数它。
+export const LOG_KINDS = ['deliver', 'error', 'note', 'resumed', 'skip', 'started', 'stopped', 'wake', 'wake-caps', 'wake-skip', 'wake-try', 'woke']
 
 export const LOG_FORMAT_SIG = `fmt=3 changed=skip,wake-skip,deliver fields=deny,note,reason field-since=codeFp:r255,member:r292,note:r293 kinds=${LOG_KINDS.join(',')}`
 
@@ -128,26 +130,34 @@ export function declaredKindsOf(lines) {
 }
 
 // 对账：账上出现过的 kind 逐类计数，跟声明比。
-//   declared：声明清单（null=老账，没有 kinds= 行）
+//   declared：真正拿来对照的清单（表头的 kinds=，或老账时用 fallbackKinds=代码里的 LOG_KINDS）
+//   declaredSource：'header'（账自己声明的）| 'code'（账太老、按代码清单对照）| 'none'（没有对照）
 //   seen： [{ kind, count }] 按 kind 排序
 //   undeclared：账上有、声明里没有（这才是 fi-0001 要报的那一类）
 //   missing：声明里有、账上还没出现（用来区分"声明了但没用过"）
+// 2026-11-19 小满复验 #2269 指出：老账没有 kinds= 时若直接判"不知道"，
+// `bogus-kind` 这类整类隐形的 kind 在老账里依然报不出来 ⇒ 默认用代码清单对照（'code'），
+// 只有调用方明确不给 fallback 才是 'none'（"判不了"）。
 export function auditKinds(lines, fallbackKinds = null) {
   const list = Array.isArray(lines) ? lines : []
   const seenMap = new Map()
   for (const row of list) {
     const kind = kindOfLine(row)
-    if (!kind) continue
+    // 表头行自己的 kind 不进正文清单（fi-0001，小满 #2269）。
+    if (!kind || kind === 'log-format') continue
     seenMap.set(kind, (seenMap.get(kind) ?? 0) + 1)
   }
   const seen = [...seenMap.entries()]
     .map(([kind, count]) => ({ kind, count }))
     .sort((a, b) => (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0))
-  const declared = declaredKindsOf(list) ?? (Array.isArray(fallbackKinds) ? fallbackKinds : null)
-  if (declared === null) return { declared: null, seen, undeclared: [], missing: [] }
+  const headerKinds = declaredKindsOf(list)
+  const declared = headerKinds ?? (Array.isArray(fallbackKinds) ? fallbackKinds : null)
+  const declaredSource = headerKinds !== null ? 'header' : declared !== null ? 'code' : 'none'
+  if (declared === null) return { declared: null, declaredSource, seen, undeclared: [], missing: [] }
   const declaredSet = new Set(declared)
   return {
     declared,
+    declaredSource,
     seen,
     undeclared: seen.filter((item) => !declaredSet.has(item.kind)),
     missing: [...declaredSet].filter((kind) => !seenMap.has(kind)).sort(),

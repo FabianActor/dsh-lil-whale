@@ -1326,13 +1326,15 @@ try {
     }
     if ($null -eq $kaObj) {
       Add-Row '日志 kind 声明' 'WARN' '对账脚本没给出 JSON'
-    } elseif ($kaObj.declaredIsLegacy) {
-      Add-Row '日志 kind 声明' 'INFO' '账上还没有 kinds= 声明（r374 之前的账）；重启巡守后新表头会带上'
+    } elseif ($kaObj.declaredSource -eq 'none') {
+      Add-Row '日志 kind 声明' 'INFO' '账上还没有 kinds= 声明，也没有代码清单可对照——只数不判'
     } elseif (@($kaObj.undeclared).Count -gt 0) {
       $kaList = @($kaObj.undeclared | ForEach-Object { '{0}×{1}' -f $_.kind, $_.count }) -join ', '
       Add-Row '日志 kind 声明' 'WARN' ('账上有未声明的 kind：' + $kaList) 'NEXT: 把这类 kind 加进 plugin\dsh-lil-whale-group\lib\log-format-core.js 的 LOG_KINDS（清单就是声明；只加一行）'
     } else {
-      Add-Row '日志 kind 声明' 'OK' ('清单 {0} 类；账上出现 {1} 类，都在清单里' -f @($kaObj.kindsInCode).Count, @($kaObj.seen).Count)
+      $kaHow = '账自己声明'
+      if ($kaObj.declaredSource -eq 'code') { $kaHow = '老账没有 kinds=，按代码清单对照' }
+      Add-Row '日志 kind 声明' 'OK' ('{0}；清单 {1} 类，账上出现 {2} 类，都在清单里' -f $kaHow, @($kaObj.declared).Count, @($kaObj.seen).Count)
     }
   }
 } catch { Add-Row '日志 kind 声明' 'WARN' ('核不了：{0}' -f $_.Exception.Message) }
