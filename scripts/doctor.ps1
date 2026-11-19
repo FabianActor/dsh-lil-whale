@@ -634,7 +634,15 @@ try {
     if ($onlyMember.Count) {
       Add-Row '谱系（全鱼）' 'WARN' ('名册里有人在谱系里没有节点：' + ($onlyMember -join '、')) 'NEXT: 跑 node scripts\gen-family.mjs，按它的报错修 pool\family.json（真源）'
     } elseif ($gfCode -eq 0) {
-      Add-Row '谱系（全鱼）' 'OK' ('键齐、父合法（gen-family --check）：' + $keyNote)
+      # 2026-11-19 r387（小鱼丸群 #2275）：exit 0 不等于"全部可读"——rootsOrder 是值域外的词时，
+      # gen-family 值对、只印一句第三态、不改退出码（写的人 die、读的人不 die）；
+      # doctor 若只印 OK，那句就没人看见。这里把"认不出"当 WARN 露出来，退出码照旧不动。
+      $gfOrderOdd = ($gfLines | Where-Object { $_ -match 'rootsOrder=.*不认识' } | Select-Object -First 1)
+      if ($gfOrderOdd) {
+        Add-Row '谱系（全鱼）' 'WARN' ('键齐、父合法；但根的顺序规则认不出：' + $gfOrderOdd.Trim()) 'NEXT: 把 pool\family.json 的 rootsOrder 改成 key（下次跑 node scripts\gen-family.mjs 会按 key 写回）'
+      } else {
+        Add-Row '谱系（全鱼）' 'OK' ('键齐、父合法（gen-family --check）：' + $keyNote)
+      }
     } elseif ($gfCode -eq 1) {
       $gfFirst = ($gfLines | Where-Object { $_ -match '^xx ' } | Select-Object -First 1)
       if (-not $gfFirst) { $gfFirst = ($gfLines | Where-Object { $_.Trim() } | Select-Object -First 1) }

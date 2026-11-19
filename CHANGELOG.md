@@ -20,6 +20,8 @@
 
 ## [未发布]
 
+- **r387 · 2026-11-19 · 体检不再把"根的顺序认不出"吞成 OK**（内部，体检）：旧行为——`family.json` 的 `rootsOrder` 是值域外的词时，`gen-family --check` 值对、只印一句第三态、exit 0；`doctor` 见 0 就报「键齐、父合法」，那半句没人看见。新行为——doctor 见到那句就报 WARN，带原句与 NEXT（改成 `key`）；退出码不动（读的人不 die，写的人下次会写回）。用户可见：否（体检）。
+
 - **r386 · 2026-11-19 · 日志页补一句：`oldest-used` 不回答"最早下载的那份"（内部，文档）**：这条不是行为变化，是读法补漏——`media=` 的 `oldest-used` 读的是文件 `mtime`（最近一次被用到），要"最早来的那份"得看 `CreationTime` 或下载账（目前没有下载账）；两个问题长得像，别拿一个字段答。用户可见：否（文档）。
 
 - **r385 · 2026-11-19 · 谱系根落盘：`family.json` 顶层加 `roots` / `rootsOrder` / `rootsAt`（内部，数据）**：旧行为——"谁是鱼根"要读者拿 `family.json` 的 `parent` 自己找空父、再读 `members.json` 的 `kind` 过滤掉 human；只看 `family.json` 会数出 3 个根。新行为——`gen-family.mjs` 每次运行把鱼根按 key 排序写进顶层三格（`roots`、`rootsOrder=key`、`rootsAt` 只在值变化时更新）；`--check` 增答第二问"存的和算的一样吗"（没有=INFO、一致=绿、不一致=exit 1，并区分"没扣 human"与"手改过"）；`鱼塘谱系.md` 头多投影一行当前鱼根。用户可见：否（数据/文档）。

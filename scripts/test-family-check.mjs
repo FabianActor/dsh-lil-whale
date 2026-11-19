@@ -181,6 +181,7 @@ function run(cwd, args, cfgFile, extraEnv = {}) {
   ok('doctor：调 gen-family --check', /gen-family\.mjs['"\s]+--check|--check['"\s]+2>&1/.test(doctor) || /genFamily --check/.test(doctor), '找不到调用')
   ok('doctor：不再出现「--seed 重生成」的 NEXT', !/--seed 重生成/.test(doctor), '旧 NEXT 还在')
   ok('doctor：谱系格有 exit 1 分支', /gen-family --check exit 1/.test(doctor), '没找到映射文案')
+  ok('doctor：根的顺序认不出时不再只报 OK（r387，小鱼丸 #2275）', /根的顺序规则认不出/.test(doctor), 'doctor 把第三态吞掉了')
 }
 
 // 8b) family.roots：派生值带「值 / 排序规则 / 写入时刻」（2026-11-19 r385）
