@@ -49,6 +49,7 @@ function fullMessage(title, extra = {}) {
     现象: '切 tab 后草稿复活',
     证据: '实机：删空 → 切私聊 → 切回群，原文又出现',
     期望: '删掉的就该不在了',
+    验收: '刷新面板后删空 → 切走 → 切回，输入框应为空',
     前案: '搜过 messages.jsonl 没有同样描述',
     不确定: '不确定是不是只在有历史草稿时复现',
     ...extra,
@@ -73,21 +74,21 @@ section('投递解析');
 const parsed = parseFissueMessage(fullMessage('草稿复活'));
 ok('六格齐全 ok', parsed.ok === true, `missing=${parsed.missing.join('、')}`);
 ok('标题取标记行', parsed.title === '草稿复活', parsed.title);
-ok('五个小节都有值', FIELD_LABELS.every((l) => parsed.fields[l]), JSON.stringify(parsed.fields));
+ok('六个小节都有值', FIELD_LABELS.length === 6 && FIELD_LABELS.every((l) => parsed.fields[l]), JSON.stringify(parsed.fields));
 const missingPrior = parseFissueMessage(fullMessage('缺前案', { 前案: null }));
 ok('缺「前案」→ 不收且点名', missingPrior.ok === false && missingPrior.missing.includes('前案'), missingPrior.missing.join('、'));
 ok('没有标记 → 不收（missing=标记）', parseFissueMessage('随便一句话').missing[0] === '标记');
-const halfColon = parseFissueMessage('fissue|半角冒号标题\n现象:值一\n证据:值二\n期望:值三\n前案:值四\n不确定:值五');
+const halfColon = parseFissueMessage('fissue|半角冒号标题\n现象:值一\n证据:值二\n期望:值三\n验收:值六\n前案:值四\n不确定:值五');
 ok('半角冒号与半角竖线都认', halfColon.ok === true && halfColon.title === '半角冒号标题', JSON.stringify(halfColon.missing));
-const multi = parseFissueMessage('fissue｜多行值\n现象：第一行\n第二行还在现象里\n证据：证据\n期望：期望\n前案：前案\n不确定：不确定');
+const multi = parseFissueMessage('fissue｜多行值\n现象：第一行\n第二行还在现象里\n证据：证据\n期望：期望\n验收：验收\n前案：前案\n不确定：不确定');
 ok('小节值可跨行', multi.fields['现象'] === '第一行\n第二行还在现象里', JSON.stringify(multi.fields['现象']));
-ok('标题写成「标题：」也认', parseFissueMessage('fissue｜标题：被剥离\n现象：a\n证据：b\n期望：c\n前案：d\n不确定：e').title === '被剥离');
+ok('标题写成「标题：」也认', parseFissueMessage('fissue｜标题：被剥离\n现象：a\n证据：b\n期望：c\n验收：v\n前案：d\n不确定：e').title === '被剥离');
 
 section('事件折叠');
 const t0 = '2026-11-19T01:00:00.000Z';
 const events = [
-  { ev: 'open', num: 1, at: t0, from: 'xiaoman', title: '甲', msg: 42, fields: { 现象: 'p', 证据: 'e', 期望: 'x', 前案: 'f', 不确定: 'u' } },
-  { ev: 'open', num: 2, at: t0, from: 'fishball', title: '乙', fields: { 现象: 'p', 证据: 'e', 期望: 'x', 前案: 'f', 不确定: 'u' } },
+  { ev: 'open', num: 1, at: t0, from: 'xiaoman', title: '甲', msg: 42, fields: { 现象: 'p', 证据: 'e', 期望: 'x', 验收: 'v', 前案: 'f', 不确定: 'u' } },
+  { ev: 'open', num: 2, at: t0, from: 'fishball', title: '乙', fields: { 现象: 'p', 证据: 'e', 期望: 'x', 验收: 'v', 前案: 'f', 不确定: 'u' } },
   { ev: 'assign', num: 1, at: t0, to: 'lee' },
   { ev: 'comment', num: 1, at: t0, from: 'lee', text: '收到' },
   { ev: 'merge', num: 2, at: t0, into: 1, why: '同一条' },
@@ -104,9 +105,16 @@ ok('折叠无自洽问题', folded.problems.length === 0, folded.problems.join('
 
 section('事件流校验');
 ok('完整事件流通过', validateEvents(events).ok === true, validateEvents(events).problems.join('；'));
-const gap = [...events, { ev: 'open', num: 4, at: t0, title: '跳号', fields: { 现象: 'p', 证据: 'e', 期望: 'x', 前案: 'f', 不确定: 'u' } }];
+// 2026-11-19：旧五格（缺验收）不判红；但缺硬栏仍判红。
+const legacyOpen = [{ ev: 'open', num: 1, at: t0, title: '旧五格', fields: { 现象: 'p', 证据: 'e', 期望: 'x', 前案: 'f', 不确定: 'u' } }];
+ok('旧五格（缺验收）不判红', validateEvents(legacyOpen).ok === true, validateEvents(legacyOpen).problems.join('；'));
+const hardMissing = [{ ev: 'open', num: 1, at: t0, title: '缺现象', fields: { 证据: 'e', 期望: 'x', 验收: 'v', 前案: 'f', 不确定: 'u' } }];
+ok('缺「现象」仍判红', validateEvents(hardMissing).problems.some((p) => p.includes('缺「现象」')));
+const legacyPage = renderIssue(foldIssues(legacyOpen).issues.get(1), { generatedAt: '2026-11-19 09:00' });
+ok('旧五格页面标出「验收」没写', legacyPage.includes('（没写；旧五格格式，开工前补一句可复算的验法）'));
+const gap = [...events, { ev: 'open', num: 4, at: t0, title: '跳号', fields: { 现象: 'p', 证据: 'e', 期望: 'x', 验收: 'v', 前案: 'f', 不确定: 'u' } }];
 ok('跳号被点名', validateEvents(gap).problems.some((p) => p.includes('不连续')), validateEvents(gap).problems.join('；'));
-const noCommit = [{ ev: 'open', num: 1, at: t0, title: 't', fields: { 现象: 'p', 证据: 'e', 期望: 'x', 前案: 'f', 不确定: 'u' } }, { ev: 'close', num: 1, at: t0, by: 'lee', verify: 'x' }];
+const noCommit = [{ ev: 'open', num: 1, at: t0, title: 't', fields: { 现象: 'p', 证据: 'e', 期望: 'x', 验收: 'v', 前案: 'f', 不确定: 'u' } }, { ev: 'close', num: 1, at: t0, by: 'lee', verify: 'x' }];
 ok('close 没有 commit 被点名', validateEvents(noCommit).problems.some((p) => p.includes('没有 commit')));
 const orphan = [{ ev: 'assign', num: 9, at: t0, to: 'lee' }];
 ok('事件指向不存在的号被点名', foldIssues(orphan).problems.length > 0);

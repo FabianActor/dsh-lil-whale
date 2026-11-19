@@ -1305,6 +1305,38 @@ try {
   }
 } catch { Add-Row '格式分界' 'WARN' ('核不了：{0}' -f $_.Exception.Message) }
 
+# 9d. 日志 kind 声明（2026-11-19 fi-0001，小满群第 2260 行）：
+#     `changed=` 声明的是"格式变过的事件"，不是"账上所有 kind"——于是 `error`（1129 行）
+#     从来没被任何声明覆盖，她的检查器只看"声明了且有行"/"声明了但 0 行"，两格都不进。
+#     现在表头带 `kinds=` 整类清单；这一格报"账上出现、但没被声明的 kind 有几行"。
+#     声明写漏是常态——检查器不能拿"声明过的"当全集。
+try {
+  $kindAudit = Join-Path $Cfg.Root 'scripts\audit-log-kinds.mjs'
+  $wm9d = Join-Path $Cfg.PoolState 'watchman.log'
+  if (-not (Test-Path -LiteralPath $kindAudit)) {
+    Add-Row '日志 kind 声明' 'INFO' '对账脚本不在这一版仓库里——跳过'
+  } elseif (-not (Test-Path -LiteralPath $wm9d)) {
+    Add-Row '日志 kind 声明' 'INFO' '还没有 pool\state\watchman.log，等巡守启动'
+  } else {
+    $kaOut = @(& node $kindAudit --file $wm9d --json 2>$null)
+    $kaText = (@($kaOut) -join ([char]10))
+    $kaObj = $null
+    if ($kaText) {
+      try { $kaObj = $kaText | ConvertFrom-Json } catch { }
+    }
+    if ($null -eq $kaObj) {
+      Add-Row '日志 kind 声明' 'WARN' '对账脚本没给出 JSON'
+    } elseif ($kaObj.declaredIsLegacy) {
+      Add-Row '日志 kind 声明' 'INFO' '账上还没有 kinds= 声明（r374 之前的账）；重启巡守后新表头会带上'
+    } elseif (@($kaObj.undeclared).Count -gt 0) {
+      $kaList = @($kaObj.undeclared | ForEach-Object { '{0}×{1}' -f $_.kind, $_.count }) -join ', '
+      Add-Row '日志 kind 声明' 'WARN' ('账上有未声明的 kind：' + $kaList) 'NEXT: 把这类 kind 加进 plugin\dsh-lil-whale-group\lib\log-format-core.js 的 LOG_KINDS（清单就是声明；只加一行）'
+    } else {
+      Add-Row '日志 kind 声明' 'OK' ('清单 {0} 类；账上出现 {1} 类，都在清单里' -f @($kaObj.kindsInCode).Count, @($kaObj.seen).Count)
+    }
+  }
+} catch { Add-Row '日志 kind 声明' 'WARN' ('核不了：{0}' -f $_.Exception.Message) }
+
 # 9b. 工具数（每条鱼）：账本里只有数字，但"变少"本身就是一条该报的事。
 #     第三条鱼 2026-11-15 19:05：工具消失是静默的，能加一行检查就加一行。
 try {
@@ -1377,7 +1409,7 @@ try {
     if (Test-Path -LiteralPath $curPath) {
       try {
         $cur = Get-Content -LiteralPath $curPath -Raw -Encoding utf8 | ConvertFrom-Json
-        if ($cur.num) { $curText = ('在做 fi-{0}' -f [int]$cur.num) }
+        if ($cur.num) { $curText = ('在做 fi-{0}' -f (([int]$cur.num).ToString('0000'))) }  # 编号存储是整数、展示补零（4 位起、过万自动加宽）
       } catch { }
     }
     if ($fCode -ne 0) {

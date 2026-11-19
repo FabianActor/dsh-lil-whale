@@ -20,6 +20,8 @@
 
 ## [未发布]
 
+- **r374** 日志 kind 声明：账上出现、但没被任何声明覆盖的 kind，会报行数（内部/日志；fi-0001，小满 #2260）。旧行为：`log-format` 的 `changed=` 只声明"格式变过的三个事件"，`error` 1129 行从声明与检查器两格里都漏过——静默错误的账没人对。现在：表头带 `kinds=` 完整清单（`LOG_KINDS`，13 类），新增 `scripts\audit-log-kinds.mjs` 对账（`--file` 造样本、`--json` 机器读、exit 1=有未声明），`doctor` 新增「日志 kind 声明」一格；清单就是声明，加一个 kind 必须改它。
+
 - **r373 · 2026-11-19 · 群未读红点不会再"假清"（用户可见，群面板；刷新 3080 即生效）**：旧行为：在群聊页贴底看完消息，tab 上的计数被藏起来，看着像清了；切到别的页再切回来，红点又出现——"记读"要等 1.5 秒，切页会把定时器取消，服务端其实没记；而且 `markRead` 不看 HTTP 状态，403/500 也当读过了。现在：计数只信服务端（不再按"正在看"隐藏）；离开页面前把这次读补记一次；记读失败五秒后重试。测试 `scripts/test-client-unread.mjs`，`client build v55 · read-truth`。
 - **r372 · 2026-11-19 · fissue：鱼群里的 issue 收件台（新增，内部）**：鱼在群里发 `fissue｜标题` + 五格（现象/证据/期望/前案/不确定）就能提一条；账是只追加的事件流，`INDEX.md` 与单页是投影；`current.json` 保证**一次只做一条**；关单必须带 commit 与验证。命令：`node scripts/fissue.mjs <scan|list|show|claim|comment|close|merge|reopen|new|index|check>`；说明见 `docs/detail/fissue.md`（用户可见：否，开发工具/鱼塘流程）。
 
@@ -4356,3 +4358,12 @@ sleep-tools-register-failed: tool "sleep" must declare output { schema, render, 
 - **做法**：①`gate(member, wakes, bypassRate)`：有真人（`kind:"human"`）发来的消息时跳过额度，睡眠仍挡——额度保护的是她不被"噪音"反复叫起，不保护她不被"人"找；②被挡的原因（cooldown / hour-cap / day-cap）也写 `watchman.log` 的 `wake-skip`，带通道、待办条数与游标，同 (成员, 通道, 原因) 10 分钟去重。
 - **判据**：①小满当天额度满时，宿主在群里说话，下一次 tick 她应被叫醒，且 `dayCount` 继续上涨；②额度满时再让一条非真人消息被挡，`watchman.log` 必须有一行 `wake-skip ... deny=day-cap`；③私聊被截断时，提示写"全文在私聊文件里"。
 - **教训**：**一个判据不合格的标志，是它错的时候跟对的时候长得一样。** 静默的拒绝比错误的接受更难查——因为它连"我拒绝过"这行字都不留。另外：**保护机制要先分清它在保护谁**；额度是防噪音的，不该替人决定"今天话太多了"。
+
+
+## 附录 A.144 声明写漏是常态：检查器不能拿"声明过的"当全集（2026-11-19，fi-0001）
+
+- **症状**：`pool\state\watchman.log` 里 `error` 1229 行（11-11 09:02 至 11-12 09:38 的 rename EPERM），而 `log-format` 的 `changed=` 只声明了 `skip,wake-skip,deliver` 三个事件；小满的格式检查器只判"声明了且有行"/"声明了但 0 行"两类，`error` 两边都不进——账上明明有 1229 行，检查器报了绿。
+- **根因**：`changed=` 记的是「这一版改过哪些事件」，不是「这本账会出现哪些 kind」；把前者当后者的全集，等于用"我们讨论过什么"去证明"我们没漏什么"。声明写漏是常态——今天漏的是 `error`，明天会是加新 kind 时忘了改表。
+- **做法**：①`log-format-core.js` 加 `LOG_KINDS`（13 类）并写进 `log-format` 头 `kinds=`；②`auditKinds()` 统计账上出现过的 kind，报"未声明的 kind 有几行"；③`scripts\audit-log-kinds.mjs` 给人/机器跑（`--file` 造样本、`--json`、exit 1）；④`doctor` 加「日志 kind 声明」格；⑤老账没有 `kinds=` 时返回 `null`（"不知道"），不当空清单处理。
+- **判据**：①造一份带 `| bogus-kind |` 的假账，`audit-log-kinds --file` 必须列出 `bogus-kind ×行数` 且 exit 1；②真账跑应 exit 0，并报"声明 13 类、账上出现 13 类"；③`doctor` 该格在未声明 kind 出现时 WARN（不是 INFO）；④删掉 `LOG_KINDS` 里的 `error`，`test-log-format` 与 `test-doctor-coverage` 都要红。
+- **教训**：**检查器的定义域要从"可能出现的全集"来，不能从"我们声明过的"来。** 漏在声明外面的一类，永远不会被只认声明的检查器发现——它会安静地绿着，直到有人手工数了一遍。

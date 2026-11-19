@@ -29,7 +29,9 @@ export const FISSUE_FMT = 1;
 export const MARKER_RE = /^[ \t]*fissue[ \t]*[｜|:：]/u;
 
 /** 五个必填小节的标签（标题从标记行取，不在这里）。 */
-export const FIELD_LABELS = ['现象', '证据', '期望', '前案', '不确定'];
+// 2026-11-19：第二条鱼与第五条鱼同一天提「缺一格验收」——判据要能被别人复算。
+// 验收 = 一行命令 + 一行预期输出（或说明为什么跑不了、看哪里）；写不出验法往往说明期望还没想清。
+export const FIELD_LABELS = ['现象', '证据', '期望', '验收', '前案', '不确定'];
 
 /** 编号补零：4 位起，超过就自然变宽（不截断）。 */
 export function padNum(n) {
@@ -231,7 +233,10 @@ export function validateEvents(events) {
     if (ev.ev === 'open') {
       openNums.push(ev.num);
       if (!String(ev.title ?? '').trim()) problems.push(`${issueId(ev.num)} 的 open 没有标题`);
+      // 2026-11-19：「验收」是后来加的第六格；旧五格（缺验收）不该让 check 判红。
+      // 缺验收只在页面上标注、开工前要一句验法——这是软缺；其余五格仍是硬缺。
       for (const label of FIELD_LABELS) {
+        if (label === '验收') continue;
         if (!String(ev.fields?.[label] ?? '').trim()) problems.push(`${issueId(ev.num)} 缺「${label}」`);
       }
     }
@@ -308,7 +313,10 @@ export function renderIssue(it, { generatedAt = '' } = {}) {
     '',
   ];
   for (const label of FIELD_LABELS) {
-    out.push(`## ${label}`, '', String(fields[label] ?? '（没写）'), '');
+    const raw = String(fields[label] ?? '').trim();
+    // 老五格（2026-11-19 之前）没有「验收」：照收，但页面上把缺的那格标出来。
+    const text = raw !== '' ? raw : (label === '验收' ? '（没写；旧五格格式，开工前补一句可复算的验法）' : '（没写）');
+    out.push(`## ${label}`, '', text, '');
   }
   if (it.closed) {
     out.push('## 关闭证据', '', `- 提交：${it.closed.commit || '（没写）'}`, `- 验证：${it.closed.verify || '（没写）'}`, `- 备注：${it.closed.note || '（没写）'}`, `- 关闭人：${it.closed.by || '?'} · ${it.closed.at || '?'}`, '');

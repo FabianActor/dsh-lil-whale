@@ -218,9 +218,14 @@ function cmdScan() {
     if (!MARKER_RE.test(text)) continue;
     const from = String(rec.from ?? '?');
     const parsed = parseFissueMessage(text);
-    if (!parsed.ok) {
-      rejected.push({ line: i + 1, from, why: `缺 ${parsed.missing.join('、')}` });
-      continue;
+    // 2026-11-19：加了第六格「验收」。老五格照收（缺验收记提示），别因为改格式把已经寄出的信退回。
+    const hardMissing = parsed.missing.filter((label) => label !== '验收')
+    if (hardMissing.length > 0) {
+      rejected.push({ line: i + 1, from, why: `缺 ${hardMissing.join('、')}` })
+      continue
+    }
+    if (parsed.missing.includes('验收')) {
+      hints.push(`${issueId(next + 1)}（群第 ${i + 1} 行）缺「验收」：按旧五格收下，开工前跟提的人要一句能复算的验法`)
     }
     next += 1;
     const ev = {
@@ -293,7 +298,7 @@ function cmdNew() {
   const missing = [];
   if (!title.trim()) missing.push('标题');
   for (const label of FIELD_LABELS) {
-    const value = arg(label) || arg(label === '现象' ? 'symptom' : label === '证据' ? 'evidence' : label === '期望' ? 'expect' : label === '前案' ? 'prior' : 'unsure');
+    const value = arg(label) || arg(label === '现象' ? 'symptom' : label === '证据' ? 'evidence' : label === '期望' ? 'expect' : label === '前案' ? 'prior' : label === '验收' ? 'verify' : 'unsure');
     fields[label] = value;
     if (!String(value).trim()) missing.push(label);
   }

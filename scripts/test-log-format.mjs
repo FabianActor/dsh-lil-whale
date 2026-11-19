@@ -14,6 +14,10 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   LOG_FORMAT_SIG,
+  LOG_KINDS,
+  auditKinds,
+  declaredKindsOf,
+  kindOfLine,
   signatureOfLine,
   signatureOfConstant,
   findLastLogFormatLine,
@@ -50,7 +54,7 @@ ok('老行缺 field-since，指纹不等于当前签名', signatureOfLine(line(o
 ok('非 log-format 行指纹为空', signatureOfLine('2026-11-18 08:18:00 | woke | trigger=channel to=fish') === '')
 ok('字段顺序无关（fields 在前也能认）', signatureOfLine(line(`fields=deny,note,reason ${LOG_FORMAT_SIG.replace(' fields=deny,note,reason', '')} since=x pid=1`)) === SIG)
 ok('常量重排后仍算同一签名（顺序不进指纹）', (() => {
-  const reordered = 'field-since=codeFp:r255,member:r292,note:r293 changed=skip,wake-skip,deliver fmt=3 fields=deny,note,reason'
+  const reordered = `field-since=codeFp:r255,member:r292,note:r293 changed=skip,wake-skip,deliver fmt=3 kinds=${LOG_KINDS.join(',')} fields=deny,note,reason`
   return signatureOfConstant(reordered) === SIG
 })())
 ok('值里出现字面量 fields= 不会把指纹切错', signatureOfLine(line(`${OLD_SIG} since=x pid=1 to=note=fmt=3,fields=evil`)) === signatureOfConstant(OLD_SIG))
@@ -87,7 +91,7 @@ const changedSince = [...mixed, line(LOG_FORMAT_SIG.replace('field-since=codeFp:
 ok('field-since 变了要写', shouldWriteLogFormat({ lines: changedSince }).write === true)
 const changedFmt = [...mixed, line(LOG_FORMAT_SIG.replace('fmt=3', 'fmt=4') + ' since=x pid=3')]
 ok('fmt 变了要写', shouldWriteLogFormat({ lines: changedFmt }).write === true)
-const reorderedTail = [...mixed, line('fields=deny,note,reason fmt=3 changed=skip,wake-skip,deliver field-since=codeFp:r255,member:r292,note:r293 since=x pid=3')]
+const reorderedTail = [...mixed, line(`fields=deny,note,reason fmt=3 changed=skip,wake-skip,deliver field-since=codeFp:r255,member:r292,note:r293 kinds=${LOG_KINDS.join(',')} since=x pid=3`)]
 ok('只是 key 顺序不同，不写（r296）', shouldWriteLogFormat({ lines: reorderedTail }).write === false)
 
 // ── 4. 拼出来的行 ────────────────────────────────────────
@@ -102,6 +106,35 @@ ok('拼出来的行用当前代码解析等于签名', (() => {
   const built = buildLogFormatDetail({ since: 'x', pid: 9, to: 'fish' })
   return signatureOfLine(line(built)) === SIG
 })())
+
+// ── 4b. kind 声明与对账（2026-11-19 fi-0001，小满 #2260）──
+// `changed=` 只声明"格式变过的事件"，`error` 1129 行从声明与检查器两格里都漏过。
+ok('kinds 清单无重复且有序（清单就是声明）', (() => {
+  const sorted = [...LOG_KINDS].sort()
+  return JSON.stringify(sorted) === JSON.stringify(LOG_KINDS) && new Set(LOG_KINDS).size === LOG_KINDS.length
+})())
+ok('签名里带 kinds= 完整清单', LOG_FORMAT_SIG.includes(`kinds=${LOG_KINDS.join(',')}`))
+ok('kinds 重排不算格式变了（按集合比）', signatureOfConstant(LOG_FORMAT_SIG.replace(`kinds=${LOG_KINDS.join(',')}`, `kinds=${[...LOG_KINDS].reverse().join(',')}`)) === SIG)
+ok('kindOfLine 认出账行', kindOfLine('2026-11-19 10:23:24 | started | fmt=2 pid=1') === 'started')
+ok('kindOfLine 不认普通文本', kindOfLine('随便一句话') === '')
+ok('declaredKindsOf 取最后一行清单', (() => {
+  const declared = declaredKindsOf([newLine(0)])
+  return Array.isArray(declared) && declared.length === LOG_KINDS.length
+})())
+ok('老表头没有 kinds= → null（不是空清单）', declaredKindsOf([line(`${OLD_SIG} since=x pid=1`)]) === null)
+const kindAuditLines = [
+  newLine(0),
+  '2026-11-19 10:23:24 | started | fmt=2 pid=1',
+  '2026-11-19 10:23:25 | woke | wid=1 to=fish',
+  '2026-11-19 10:23:26 | bogus-kind | x=1',
+  '2026-11-19 10:23:27 | bogus-kind | x=2',
+]
+const kindAudit = auditKinds(kindAuditLines)
+ok('对账：已声明的 kind 不进 undeclared', kindAudit.undeclared.length === 1 && kindAudit.undeclared[0].kind === 'bogus-kind')
+ok('对账：未声明 kind 带行数', kindAudit.undeclared[0].count === 2)
+ok('对账：声明了但账上没出现单列 missing', kindAudit.missing.includes('deliver') && !kindAudit.missing.includes('started'))
+const legacyAudit = auditKinds(['2026-11-19 10:23:24 | started | fmt=2 pid=1'])
+ok('老账没有声明时 undeclared 为空（不知道，不等于没漏）', legacyAudit.declared === null && legacyAudit.undeclared.length === 0)
 
 // ── 5. 接线：表头只能有一个写口，且先问再写 ─────────────────
 ok('index.js 从 log-format-core 取判断函数', index.includes("from './log-format-core.js'"))
