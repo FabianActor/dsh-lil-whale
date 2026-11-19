@@ -14,6 +14,30 @@
   },
   "entries": [
     {
+      "version": "1.12.2",
+      "at": "2026-11-19",
+      "summary": "群面板未读与历史提示、日志轮转与规则落盘、谱系根缓存等修复；另有诊断与测试口径改进。",
+      "requires": [
+        "package",
+        "restart"
+      ],
+      "restart": [
+        "all"
+      ],
+      "commands": [
+        "pwsh -File app\\scripts\\fish.ps1 upgrade-check",
+        "pwsh -File app\\scripts\\doctor.ps1"
+      ],
+      "verify": [
+        "重启后 boot 行 pkg=@fabianactor/dsh-lil-whale-group@1.12.2；doctor 全过",
+        "面板控制台报 client build v55 · read-truth；群聊读完消息切走再切回，红点不再出现",
+        "pool\\state\\watchman.log 首次启动带 home-moved；roster-audit 首行为 fmt=6 且带 media=",
+        "pool\\state\\rotate.log 有轮转记录；pool\\family.json 顶层有 roots/rootsOrder/rootsAt"
+      ],
+      "breaking": [],
+      "note": "只换代码，不动 pool/homes。装了 dsh-bili-eyes 的机器如跑过本地补丁，重启后按笔记再跑一次 --check 即可。"
+    },
+    {
       "version": "1.12.1",
       "at": "2026-11-19",
       "summary": "诊断与账本形状修正：台词栏不再写假原因、media 清理失败分目录/文件、代码指纹补历史账、manual-op 输出统一形状。",
