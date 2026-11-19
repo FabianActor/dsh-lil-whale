@@ -74,6 +74,22 @@ try {
   ok('第 3 次把多出来的份收掉（收到 3 份）', new RegExp(`dropped=${before - 3}`).test(r3.stdout), `before=${before} after=${after} ${r3.stdout.trim()}`)
   ok('轮转产物只剩 3 份', after === 3, rotatedNames(dir).sort().join(','))
 
+  console.log('— 排序看名字里的时间戳，不看 mtime —')
+  const dir2 = join(root, 'logs2')
+  mkdirSync(dir2, { recursive: true })
+  const names2 = ['fake2.20261101-000000.log', 'fake2.20261102-000000.log', 'fake2.20261103-000000.log', 'fake2.20261104-000000.log']
+  for (const n of names2) writeFileSync(join(dir2, n), 'same', 'utf8')
+  // 故意把名字最老的那份 mtime 设成最新：按 mtime 排会留错人
+  utimesSync(join(dir2, names2[0]), new Date(2026, 10, 19, 12, 0, 0), new Date(2026, 10, 19, 12, 0, 0))
+  for (let i = 1; i < 4; i++) {
+    const t = new Date(2026, 10, i, 0, 0, 0)
+    utimesSync(join(dir2, names2[i]), t, t)
+  }
+  const r4 = run(dir2)
+  const left2 = readdirSync(dir2).filter((n) => /\.\d{8}-\d{6}(?:-\d+)?\.log$/.test(n)).sort()
+  ok('按名字排：丢掉名字最老那份（mtime 最新也不留）', /dropped=1/.test(r4.stdout) && !left2.includes(names2[0]), left2.join(','))
+  ok('留在盘上的是名字最新的三份', left2.join(',') === names2.slice(1).join(','), left2.join(','))
+
   console.log('— 账本：轮转/丢弃/汇总都有行 —')
   const ledger = readLedger(dir)
   ok('写了 rotate.log', ledger.length > 0)

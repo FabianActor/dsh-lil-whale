@@ -200,6 +200,14 @@ for (const file of targets) {
   }
 }
 
+// 切下来的份名字里带着切下来的时刻 `<base>.<YYYYMMDD-HHMMSS>[-n].log`。
+// r392（fi-0005 收尾，小鱼丸发现）：排序看名字里的时间戳，不看 mtime——mtime 会被 checkout / 复制 / 还原改写
+// （她今天实测 lib\ 下三个文件 mtime 比最后一次提交晚 22 分钟），拿它判“谁更老”会把刚切下来的那份当成旧的删掉。
+function nameStampOf(file) {
+  const m = /\.(\d{8}-\d{6})(?:-(\d+))?\.log$/.exec(basename(file))
+  return { stamp: m ? m[1] : '', seq: m && m[2] ? Number(m[2]) : 0 }
+}
+
 // 同类只留最近 KEEP 份：按目录把"切下来的份"按 base 分组，每组的第 KEEP+1 份起删掉。
 // r390 起每次都会扫一遍（不只在新切了一份之后），这样历史上堆下来的也能落回 3 份。
 for (const dir of scannedDirs) {
@@ -221,8 +229,8 @@ for (const dir of scannedDirs) {
     let sorted
     try {
       sorted = files
-        .map((f) => ({ f, mtimeMs: statSync(f).mtimeMs, bytes: statSync(f).size, hash: hash12(f) }))
-        .sort((a, b) => b.mtimeMs - a.mtimeMs)
+        .map((f) => ({ f, ...nameStampOf(f), bytes: statSync(f).size, hash: hash12(f) }))
+        .sort((a, b) => (b.stamp === a.stamp ? b.seq - a.seq : b.stamp.localeCompare(a.stamp)))
     } catch {
       continue
     }
