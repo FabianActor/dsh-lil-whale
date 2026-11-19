@@ -66,6 +66,11 @@ ok('再没有地方调 lastRunState()', !/lastRunState\(\)/.test(SRC));
 ok('started 行仍写 prev-run=', SRC.includes('prev-run=${prevText}'));
 ok('prev-run 三态保留', SRC.includes("'unknown' : lastRun.closed ? 'closed' : 'open'") || SRC.includes(": lastRun.closed ? 'closed' : 'open'"));
 
+// 6. boot 行的 `at` 只能生成一次（fi-0002，小鱼丸群第 2263 行）
+ok('boot 镜像 write 读 record.at，不再各生成一次', SRC.includes('at: record.at ?? new Date().toISOString()'))
+ok('bootRecordWithNote 里带 at', SRC.includes("bootRecordWithNote = { at: new Date().toISOString()"))
+ok('镜像写不再自己造 at', !SRC.includes('JSON.stringify({ at: new Date().toISOString(), ...bootRecordWithNote })'))
+ok('layout-warning 也带同一个 at', SRC.includes("layoutWarn = {\n      at: new Date().toISOString()"))
 console.log(`test-run-state：合计 ${pass + fails.length}，PASS ${pass}，FAIL ${fails.length}`);
 for (const fail of fails) console.log(`  xx ${fail}`);
 process.exit(fails.length === 0 ? 0 : 1);

@@ -1851,7 +1851,10 @@ function recordCodeFpHistory() {
 function bootLog(record) {
   try {
     mkdirSync(dirname(BOOT_LOG), { recursive: true })
-    appendFileSync(BOOT_LOG, JSON.stringify({ at: new Date().toISOString(), ...record }) + '\n', 'utf8')
+    // 2026-11-19 fi-0002（小鱼丸，群第 2263 行）：`at` 原来在 bootLog 与镜像写入处各生成一次，
+    // 同进程同一次启动的两本账能差 1–2ms —— "at+pid join" 只在同毫秒时成立。
+    // 现在 `at` 由调用方一次拼进 record（bootRecordWithNote 里有），两处共用；调用方没给才补一次。
+    appendFileSync(BOOT_LOG, JSON.stringify({ at: record.at ?? new Date().toISOString(), ...record }) + '\n', 'utf8')
   } catch {}
 }
 
@@ -1966,7 +1969,8 @@ function apply(ctx) {
   // 小鱼丸/小满 #1670–#1672（2026-11-18）：镜像到 pool\group\plugin.log 的那一行原来 spread 的是
   // bootRecord，而 note 只临时贴在 bootLog 的参数里 ⇒ 同一批 boot 行在群里那本没有 note。
   // 修法不是补一个词，而是"一次拼好、两处都用同一个对象"：以后 bootRecord 加字段，镜像自动跟上。
-  const bootRecordWithNote = { note: 'boot', ...bootRecord }
+  // 2026-11-19 fi-0002：`at` 在这里生成一次，两本账共用（bootLog 与下面的镜像写都读它）。
+  const bootRecordWithNote = { at: new Date().toISOString(), note: 'boot', ...bootRecord }
   bootLog(bootRecordWithNote)
   // 小鱼丸私聊第 53 行（2026-11-19）：boot 行只留了一个时刻的指纹，
   // 回答不了“改过没有”；在值变化时补一行，账上有历史值才判得动。
@@ -1979,6 +1983,7 @@ function apply(ctx) {
   const repoInPondLayout = basename(CFG.repoRoot) === 'app'
   if (!CFG._exists && !repoInPondLayout) {
     const layoutWarn = {
+      at: new Date().toISOString(),
       note: 'layout-warning',
       why: 'no-config-and-not-pond-layout',
       repoRoot: CFG.repoRoot,
@@ -1987,11 +1992,11 @@ function apply(ctx) {
     }
     bootLog(layoutWarn)
     try {
-      appendFileSync(join(GROUP_DIR, 'plugin.log'), JSON.stringify({ at: new Date().toISOString(), ...layoutWarn }) + '\n', 'utf8')
+      appendFileSync(join(GROUP_DIR, 'plugin.log'), JSON.stringify({ ...layoutWarn }) + '\n', 'utf8')
     } catch {}
   }
   try {
-    appendFileSync(join(GROUP_DIR, 'plugin.log'), JSON.stringify({ at: new Date().toISOString(), ...bootRecordWithNote }) + '\n', 'utf8')
+    appendFileSync(join(GROUP_DIR, 'plugin.log'), JSON.stringify({ ...bootRecordWithNote }) + '\n', 'utf8')
   } catch {}
 
   // 无人值守：成员进程把自己那段会话挂上（工具要经过 session-controller 才挂得上）

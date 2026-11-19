@@ -20,6 +20,8 @@
 
 ## [未发布]
 
+- **r376** boot 行的 `at` 只生成一次、两本账共用（内部/日志；fi-0002，小鱼丸 #2263）：旧行为——`bootLog()` 与到 `pool\group\plugin.log` 的镜像写各自调一次 `new Date().toISOString()`，同一进程同一次启动的两条 boot 行差 1–2ms（70 次启动：相同 34、差 1ms 33、差 2ms 1），"at+pid join"只有在同毫秒时成立。现在 `bootRecordWithNote` 里生成一次 `at`，`bootLog` 认 `record.at`、镜像写直接 spread 同一对象；`layout-warning` 同样带 `at`。join 键仍是 `(pid, note)`，`at` 只用来比差。
+
 - **r375** 日志 kind 声明两处按提报人复验修正（内部/日志；fi-0001 跟进，小满 #2269）：①老账没有 `kinds=` 时改用代码清单对照（`declaredSource=code`）——原先"不知道就不报"，未知 kind 在老账里照样隐形；②`log-format` 是表头那一行自己的 kind，不算正文，从 `LOG_KINDS` 与对账里剔除（否则任何带新表头的账都会把自己报成未声明）。`audit-log-kinds --json` 新增 `declaredSource`；`doctor` 那格分「账自己声明 / 按代码清单 / 只数不判」三种措辞。
 
 - **r374** 日志 kind 声明：账上出现、但没被任何声明覆盖的 kind，会报行数（内部/日志；fi-0001，小满 #2260）。旧行为：`log-format` 的 `changed=` 只声明"格式变过的三个事件"，`error` 1129 行从声明与检查器两格里都漏过——静默错误的账没人对。现在：表头带 `kinds=` 完整清单（`LOG_KINDS`，13 类），新增 `scripts\audit-log-kinds.mjs` 对账（`--file` 造样本、`--json` 机器读、exit 1=有未声明），`doctor` 新增「日志 kind 声明」一格；清单就是声明，加一个 kind 必须改它。
