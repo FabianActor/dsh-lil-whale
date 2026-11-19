@@ -3857,8 +3857,12 @@ function maybePruneMediaCache() {
     watchmanLog('error', `note=media-prune-failed reason=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)}`)
     return
   }
+  // 目录层失败与文件层失败分开写：前者读 error，后者读 failed（小鱼丸 2026-11-19 群第 2197 行）
+  if (result.error !== null) {
+    watchmanLog('error', `note=media-prune-failed scope=dir reason=${result.error}`)
+  }
   for (const item of result.failed) {
-    watchmanLog('error', `note=media-prune-failed file=${item.name || '-'} reason=${item.code}`)
+    watchmanLog('error', `note=media-prune-failed scope=${item.scope ?? 'file'} file=${item.name || '-'} reason=${item.code}`)
   }
   if (result.removed > 0) {
     watchmanLog(

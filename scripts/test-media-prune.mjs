@@ -41,6 +41,7 @@ try {
   ok(result.removed === 2, `删掉 2 个过期文件（实际 ${result.removed}）`)
   ok(result.bytes === 130, `字节数按实际大小累计（实际 ${result.bytes}）`)
   ok(result.failed.length === 0, '没有文件删失败')
+  ok(result.error === null, '读得到目录时 error=null（与 mediaCacheStats 同名同义）')
   ok(!existsSync(oldFile), '过期视频被删')
   ok(!existsSync(olderFile), '过期音频被删')
   ok(existsSync(newFile), '新文件保留')
@@ -52,10 +53,23 @@ try {
   rmSync(empty, { recursive: true, force: true })
 
   const missing = pruneMediaCache({ dir: join(root, 'no-such-dir'), now })
-  ok(missing.existed === false && missing.removed === 0 && missing.failed.length === 0, '缺目录不算错（从没下过视频）')
+  ok(
+    missing.existed === false && missing.removed === 0 && missing.failed.length === 0 && missing.error === null,
+    '缺目录不算错（从没下过视频；error 也是 null）',
+  )
 
   const noArg = pruneMediaCache({})
-  ok(noArg.existed === false, '没给 dir 时当作不存在')
+  ok(noArg.existed === false && noArg.error === 'NO-ARG', '没给 dir 时 error=NO-ARG（没算，不是没东西）')
+
+  // 目录位置给了个普通文件：ENOTDIR 要能被点名，而不是被吞成“没东西”
+  // （单独的临时目录，别把探针文件留进 root，否则后面的现状快照会多算一份）
+  const notDirRoot = mkdtempSync(join(tmpdir(), 'llw-media-notdir-'))
+  const notDirPath = join(notDirRoot, 'not-a-dir')
+  writeFileSync(notDirPath, Buffer.alloc(3))
+  const notDir = pruneMediaCache({ dir: notDirPath, now })
+  ok(notDir.existed === false && notDir.error === 'ENOTDIR', `路径是文件 ⇒ existed=false、error=ENOTDIR（实际 ${notDir.error}）`)
+  ok(notDir.failed.length === 0, '目录层失败只记 error，不往 failed 里塞空名字')
+  rmSync(notDirRoot, { recursive: true, force: true })
   ok(MEDIA_CACHE_MAX_AGE_DAYS === 7, '默认保留 7 天')
 
   // ---- 现状快照：不删东西，只数；给周期行提供"有没有东西"的对照 ----
@@ -80,11 +94,17 @@ ok(indexText.includes("'cache', 'bili-eyes', 'media'"), 'index.js 指向鱼塘�
 ok(indexText.includes('maybePruneMediaCache()'), 'index.js 有 maybePruneMediaCache()')
 ok(indexText.includes('note=media-prune removed='), '成功也留一行账（note=media-prune）')
 ok(indexText.includes('note=media-prune-failed'), '删不掉写 error 行（note=media-prune-failed）')
+ok(indexText.includes('scope=dir reason='), '目录层失败写 scope=dir（与文件层失败分开）')
+ok(indexText.includes('scope=${item.scope ?? \'file\'}'), '文件层失败写 scope=file 与文件名')
 const tickStart = indexText.indexOf('async function watchmanTick()')
 const tickEnd = indexText.indexOf('export { name, inject, apply }')
 ok(tickStart > 0 && tickEnd > tickStart, '能在源码里定位 watchmanTick 与导出段')
 const tickBody = tickStart > 0 && tickEnd > tickStart ? indexText.slice(tickStart, tickEnd) : ''
 ok(tickBody.includes('maybePruneMediaCache()'), '巡守每轮都会走到清理（watchmanTick 里调用）')
+
+const coreText = readFileSync(new URL('../plugin/dsh-lil-whale-group/lib/media-cache-core.js', import.meta.url), 'utf8')
+ok(coreText.includes("scope: 'file'"), '文件层失败带 scope=file（读者知道是哪一层）')
+ok(coreText.includes("error: 'NO-ARG'"), '没给 dir 时 error=NO-ARG')
 
 console.log(`test-media-prune：合计 ${total}，PASS ${pass}，FAIL ${total - pass}`)
 if (pass !== total) process.exit(1)

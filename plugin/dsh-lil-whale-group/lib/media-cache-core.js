@@ -20,18 +20,29 @@ export const MEDIA_CACHE_MAX_AGE_DAYS = 7
 
 /**
  * 删掉 dir 里 mtime 早于 maxAgeDays 的普通文件。
- * 返回 { removed, bytes, failed:[{name,code}], existed }；目录不存在不是错误（existed=false）。
+ *
+ * 返回 { removed, bytes, existed, error, failed }，语义与 mediaCacheStats 对齐
+ * （小鱼丸 2026-11-19 群第 2197 行：两个函数同名同义，读者不用记两套）：
+ *   - existed: true —— 目录读到了；error: null；
+ *   - existed: false, error: null —— 目录还没建（没下过视频），不是失败；
+ *   - existed: false, error: '<CODE>' —— 试过、没读成（ENOTDIR / EACCES …），码进 error；
+ *   - failed: [{ scope:'dir'|'file', name?, code }] —— 只装“具体某一层”的失败；
+ *     目录层失败进 error，文件层失败进 failed（带 name，下一个人才知道该动哪个）。
  */
 export function pruneMediaCache({ dir, maxAgeDays = MEDIA_CACHE_MAX_AGE_DAYS, now = Date.now() } = {}) {
-  const out = { removed: 0, bytes: 0, failed: [], existed: true }
-  if (!dir) return { ...out, existed: false }
+  const out = { removed: 0, bytes: 0, existed: false, error: null, failed: [] }
+  if (!dir) return { ...out, error: 'NO-ARG' }
   let names
   try {
     names = readdirSync(dir)
   } catch (error) {
-    if (error?.code === 'ENOENT') return { ...out, existed: false }
-    return { ...out, failed: [{ name: '', code: error?.code ?? 'error' }] }
+    const code = error?.code ?? 'error'
+    // ENOENT：目录没建 = 没东西可删，不是失败（与 mediaCacheStats 对“父目录还在”的区分不同：
+    // 清理路径不关心“是谁改错了路”，只关心“这一轮没东西可清”——路径算错会由 stats 那格报出来）。
+    if (code === 'ENOENT') return out
+    return { ...out, error: code }
   }
+  out.existed = true
   const cutoff = now - maxAgeDays * 86400_000
   for (const name of names.slice().sort()) {
     const full = join(dir, name)
@@ -42,7 +53,7 @@ export function pruneMediaCache({ dir, maxAgeDays = MEDIA_CACHE_MAX_AGE_DAYS, no
       out.removed += 1
       out.bytes += stat.size
     } catch (error) {
-      out.failed.push({ name, code: error?.code ?? 'error' })
+      out.failed.push({ scope: 'file', name, code: error?.code ?? 'error' })
     }
   }
   return out
