@@ -967,13 +967,17 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
 
     async function markRead(channel, peer) {
       try {
-        await fetch('/group/api/read', {
+        const response = await fetch('/group/api/read', {
           method: 'POST',
           headers: { 'content-type': 'application/json', 'x-llw-panel': '1' },
           body: JSON.stringify({ channel, peer }),
         })
+        // 2026-11-19（Fabian 报"红点清了又回来"）：以前不看 response.ok，
+        // 403/500 也当读过了。返回值给调用方，失败才谈得上重试。
+        return response.ok
       } catch {
         // 清不掉就继续亮着，比假装看过好
+        return false
       }
     }
 
@@ -2161,21 +2165,39 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       // 看过 1.5 秒才算读过：让红点有出现的余地，也不至于一闪就没。
       // 依赖里必须有 atBottom：翻历史回到底部的那一下才是"看见了"；
       // 以前少了它，读完了未读也不清（2026-11-15 第 5 条）。
+      // 2026-11-19（Fabian 报"切走再回来红点又出现"）：两个坑补上——
+      //   ①定时器被 clearTimeout 吞掉：1.5 秒内切走/离开页面，这次"读完"永远不会记；
+      //   ②markRead 失败没人重试，而依赖不变，effect 不会再来一遍。
+      const groupReadTimerRef = useRef(null)
+      const finishGroupRead = useCallback(() => {
+        groupReadTimerRef.current = null
+        void markRead('group').then((ok) => {
+          if (!ok) {
+            // 服务端没记上：五秒后再来一次，别让"清不掉"沉成"以为清掉了"。
+            groupReadTimerRef.current = setTimeout(finishGroupRead, 5000)
+            return
+          }
+          historyVisitedRef.current = false
+          // 读完一批后分割线会挪到新位置：立刻重量，别等下一次滚动。
+          measureHistory()
+          refresh()
+          // 面板读完一批，喊一声；侧边栏红点不用等下一轮轮询。
+          window.dispatchEvent(new Event('dsh-group-read'))
+        })
+      }, [refresh, measureHistory])
       useEffect(() => {
-        if (tab !== 'group' || unread.group === 0 || !atBottom) return
-        if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
-        const timer = setTimeout(() => {
-          void markRead('group').then(() => {
-            historyVisitedRef.current = false
-            // 读完一批后分割线会挪到新位置：立刻重量，别等下一次滚动。
-            measureHistory()
-            refresh()
-            // 面板读完一批，喊一声；侧边栏红点不用等下一轮轮询。
-            window.dispatchEvent(new Event('dsh-group-read'))
-          })
-        }, 1500)
-        return () => clearTimeout(timer)
-      }, [tab, unread.group, refresh, atBottom])
+        if (tab !== 'group' || unread.group === 0 || !atBottom) return undefined
+        if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return undefined
+        const timer = setTimeout(finishGroupRead, 1500)
+        groupReadTimerRef.current = timer
+        return () => {
+          // 切 tab / 离开页面：先把这次"读完"记上，再让定时器走开。
+          clearTimeout(timer)
+          if (groupReadTimerRef.current !== timer) return
+          groupReadTimerRef.current = null
+          void markRead('group')
+        }
+      }, [tab, unread.group, refresh, atBottom, finishGroupRead])
       // 翻历史时底下来了新消息：只数"最后一条之后新增了几条"，回到底部就清零。
       // 不用未读数（未读是服务器口径，可能包含别的窗口看过的，不能当"你还没看"的证据）。
       const lastSeenTsRef = useRef('')
@@ -2417,7 +2439,9 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
                 },
               },
                 item.key === 'group'
-                  ? (unread.group > 0 && !(tab === 'group' && atBottom) ? item.label + ' (' + unread.group + ')' : item.label)
+                  // 2026-11-19：以前"在群聊且贴底"就把计数藏起来，看着像清了；
+                  // 切到别的页又照实显示。现在只信服务端给的数，"清了"就等于真清了。
+                  ? (unread.group > 0 ? item.label + ' (' + unread.group + ')' : item.label)
                   : item.key === 'dm'
                     ? (dmTotal(unread) > 0 ? item.label + ' (' + dmTotal(unread) + ')' : item.label)
                     : item.label,
@@ -3803,7 +3827,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v54 · history-pill-stay:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v55 · read-truth:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')

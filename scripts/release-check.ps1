@@ -373,6 +373,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '代码指纹历史' (($cfhOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '代码指纹历史' '指纹变化才记一行（code-fp-changed），boot 行不再被拿来跟自己比（test-code-fp-history.mjs）' }
   } else { Fail '代码指纹历史' 'scripts\test-code-fp-history.mjs 不在包里' }
+  # ── 4ak. 未读红点（2026-11-19：贴底把计数藏起来=假清，切走再回来又亮；读也没落盘/没重试）──
+  $crTest = Join-Path $pkg 'scripts\test-client-unread.mjs'
+  if (Test-Path $crTest) {
+    $crOut = & node $crTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '未读红点' (($crOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '未读红点' '计数只信服务端、离开前补记一次、读失败五秒后重试（test-client-unread.mjs）' }
+  } else { Fail '未读红点' 'scripts\test-client-unread.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {
