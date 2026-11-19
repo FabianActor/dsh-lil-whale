@@ -26,7 +26,7 @@ export const FISSUE_FMT = 1;
 /** 行首标记：`fissue｜`，全角/半角竖线与冒号都认，前面允许多余空格。 */
 // 故意不带 `$`：标记只占第一行开头，后面哪怕跟很多行内容也应当被认出来
 // （2026-11-19 测试抓到的：带 `$` 时 `test()` 对多行正文直接 false，而 `exec(第一行)` 又能过）。
-export const MARKER_RE = /^[ \t]*fissue[ \t]*[｜|:：]/u;
+export const MARKER_RE = /^[ \t>]*(?:\*\*|__)?[ \t]*fissue[ \t]*[｜|:：]/u;
 
 /** 五个必填小节的标签（标题从标记行取，不在这里）。 */
 // 2026-11-19：第二条鱼与第五条鱼同一天提「缺一格验收」——判据要能被别人复算。
@@ -80,17 +80,26 @@ export function parseFissueMessage(text) {
   if (!first) return { ok: false, title: '', fields: {}, missing: ['标记'], marker: null };
 
   // 标题：标记行剩下的部分；也容忍再写一个"标题："。
-  let title = firstLine.slice(first[0].length).trim().replace(/^标题[ \t]*[：:][ \t]*/u, '').trim();
+  let title = firstLine
+    .slice(first[0].length)
+    .trim()
+    .replace(/^标题[ \t]*[：:][ \t]*/u, '')
+    .replace(/\s*(?:\*\*|__)\s*$/u, '')
+    .trim();
 
   const fields = {};
   let current = null;
-  const labelRe = new RegExp(`^[ \\t]*(${FIELD_LABELS.join('|')})[ \\t]*[：:][ \\t]*(.*)$`, 'u');
+  // 2026-11-19 r389：标签可以整段加粗（`**现象**：…`、`**现象：** …`），空格/下划线两种都认。
+  const labelRe = new RegExp(
+    `^[ \\t]*(?:\\*\\*|__)?[ \\t]*(${FIELD_LABELS.join('|')})[ \\t]*(?:\\*\\*|__)?[ \\t]*[：:][ \\t]*(?:\\*\\*|__)?[ \\t]*(.*)$`,
+    'u',
+  );
   for (const raw of lines.slice(1)) {
     const line = raw.replace(/\r$/u, '');
     const m = labelRe.exec(line);
     if (m) {
       current = m[1];
-      fields[current] = m[2].trim();
+      fields[current] = m[2].trim().replace(/\\s*(?:\\*\\*|__)\\s*$/u, '').trim();
       continue;
     }
     if (current && line.trim()) {

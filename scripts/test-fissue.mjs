@@ -84,6 +84,14 @@ const multi = parseFissueMessage('fissue｜多行值\n现象：第一行\n第二
 ok('小节值可跨行', multi.fields['现象'] === '第一行\n第二行还在现象里', JSON.stringify(multi.fields['现象']));
 ok('标题写成「标题：」也认', parseFissueMessage('fissue｜标题：被剥离\n现象：a\n证据：b\n期望：c\n验收：v\n前案：d\n不确定：e').title === '被剥离');
 
+const bolded = parseFissueMessage('**fissue｜整行加粗的标题**\n现象：a\n证据：b\n期望：c\n验收：v\n前案：d\n不确定：e');
+ok('标记整行加粗也收，标题不带星', bolded.ok === true && bolded.title === '整行加粗的标题', JSON.stringify({ ok: bolded.ok, title: bolded.title }));
+const quoted = parseFissueMessage('> fissue｜引用里也能收\n现象：a\n证据：b\n期望：c\n验收：v\n前案：d\n不确定：e');
+ok('引用块里的标记也收', quoted.ok === true && quoted.title === '引用里也能收', JSON.stringify({ ok: quoted.ok, title: quoted.title }));
+
+const boldLabels = parseFissueMessage('fissue｜标签整段加粗\n**现象**：a\n**证据**：b\n**期望**：c\n**验收**：v\n**前案**：d\n**不确定**：e');
+ok('小节标签加粗也收', boldLabels.ok === true && boldLabels.fields.现象 === 'a', JSON.stringify(boldLabels.missing));
+
 section('事件折叠');
 const t0 = '2026-11-19T01:00:00.000Z';
 const events = [
