@@ -202,5 +202,18 @@ function runCli2(cfgPath) {
 ok('reopen 成功', reopen.code === 0, reopen.out);
 ok('reopen 后回到 open 页', existsSync(join(t2.pond, 'fissue', 'open', 'fi-0002.md')));
 
+section('CLI：游标与文件末尾换行（2026-11-19 fi-0004 漏收）');
+const t3 = makePond();
+const first3 = runClI(['scan'], t3.cfgPath);
+ok('首次扫完', /新收 2 条/u.test(first3.out), first3.out);
+appendFileSync(t3.messages, JSON.stringify({ ts: Date.now(), from: 'xiaoman', to: 'lee', text: fullMessage('第三条：在末尾换行之后') }) + '\n', 'utf8');
+const afterAppend = runClI(['scan'], t3.cfgPath);
+ok('追加一条后能扫到（尾随换行不再多算一行）', /新收 1 条/u.test(afterAppend.out) && afterAppend.out.includes('fi-0003'), afterAppend.out);
+const cursorPath = join(t3.pond, 'fissue', 'cursor.json');
+const cursorObj = JSON.parse(readFileSync(cursorPath, 'utf8'));
+writeFileSync(cursorPath, JSON.stringify({ ...cursorObj, lastLine: cursorObj.lastLine + 5 }), 'utf8');
+const overflow = runClI(['scan'], t3.cfgPath);
+ok('游标越界时回退重扫、且不重复开单', /游标 \d+ 超过群文件/u.test(overflow.out) && /新收 0 条/u.test(overflow.out), overflow.out);
+
 console.log(`\ntest-fissue：合计 ${pass + fail}，PASS ${pass}，FAIL ${fail}`);
 process.exit(fail === 0 ? 0 : 1);

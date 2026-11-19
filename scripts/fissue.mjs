@@ -143,7 +143,11 @@ function readText(flagName) {
 }
 function readLines(path) {
   if (!existsSync(path)) return [];
-  return readFileSync(path, 'utf8').split(/\r?\n/u);
+  const lines = readFileSync(path, 'utf8').split(/\r?\n/u);
+  // 文件以换行结尾时，split 会多出一个空元素。它会让"行数"永远多 1，
+  // 游标因此总停在新消息前面（fi-0004 被漏收的原因，2026-11-19）。
+  if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+  return lines;
 }
 
 function stateNow() {
@@ -197,13 +201,29 @@ function summaryOf(folded) {
 
 function cmdScan() {
   const lines = readLines(MESSAGES);
-  const start = Math.min(readCursor(), lines.length);
+  // 2026-11-19（fi-0004 暴露）：cursor 记的是"上次扫到第几行"，群文件被截短时它可能
+  // 停在行数之外。旧写法把起点夹到 lines.length，正好把最后一行漏掉（fi-0004 就这么没收到）。
+  // 越界时回退一行重扫；已入账的 (行号, 作者) 会被去重跳过，所以重扫不会重复开单。
+  const rawCursor = readCursor();
+  const cursorOverflow = rawCursor > lines.length;
+  const start = cursorOverflow ? Math.max(0, lines.length - 1) : Math.min(rawCursor, lines.length);
   const { events, folded } = stateNow();
+  const alreadyIngested = new Set();
+  for (const it of folded.issues.values()) {
+    if (it.msg != null) alreadyIngested.add(`${it.msg}::${it.from}`);
+  }
+  for (const ev of events) {
+    if (ev.ev === 'reject') alreadyIngested.add(`${ev.line}::${ev.from}`);
+  }
   const maxNum = folded.issues.size === 0 ? 0 : Math.max(...[...folded.issues.keys()]);
   let next = maxNum;
   const added = [];
   const rejected = [];
   const hints = [];
+  const warnings = [];
+  if (cursorOverflow) {
+    warnings.push(`游标 ${rawCursor} 超过群文件 ${lines.length} 行（文件被截过？），这次从第 ${start + 1} 行重扫；已入账的行会跳过`);
+  }
 
   for (let i = start; i < lines.length; i++) {
     const raw = lines[i];
@@ -217,6 +237,7 @@ function cmdScan() {
     const text = String(rec.text ?? '');
     if (!MARKER_RE.test(text)) continue;
     const from = String(rec.from ?? '?');
+    if (alreadyIngested.has(`${i + 1}::${from}`)) continue;
     const parsed = parseFissueMessage(text);
     // 2026-11-19：加了第六格「验收」。老五格照收（缺验收记提示），别因为改格式把已经寄出的信退回。
     const hardMissing = parsed.missing.filter((label) => label !== '验收')
@@ -268,6 +289,7 @@ function cmdScan() {
   const scannedTo = lines.length;
   if (dryRun) {
     console.log(`（dry-run）扫到第 ${scannedTo} 行：会收 ${added.length} 条、退回 ${rejected.length} 条`);
+    for (const w of warnings) console.log(`  ! ${w}`);
     for (const ev of added) console.log(`  + ${issueId(ev.num)} ${ev.title}（来自 ${ev.from}，群第 ${ev.msg} 行）`);
     for (const r of rejected) console.log(`  - 退回：第 ${r.line} 行 ${r.from}：${r.why}`);
     for (const h of hints) console.log(`  ? ${h}`);
@@ -282,10 +304,11 @@ function cmdScan() {
   if (added.length > 0 || rejected.length > 0) writeDerived(folded);
 
   if (json) {
-    console.log(JSON.stringify({ ok: true, scanned: scannedTo, added, rejected, hints }, null, 2));
+    console.log(JSON.stringify({ ok: true, scanned: scannedTo, added, rejected, hints, warnings }, null, 2));
     return;
   }
   console.log(`扫到第 ${scannedTo} 行：新收 ${added.length} 条，退回 ${rejected.length} 条`);
+  for (const w of warnings) console.log(`  ! ${w}`);
   for (const ev of added) console.log(`  + ${issueId(ev.num)} ${ev.title}（来自 ${ev.from}，群第 ${ev.msg} 行）`);
   for (const r of rejected) console.log(`  - 退回：第 ${r.line} 行 ${r.from}：${r.why}（缺栏也会记一笔，去要齐再交）`);
   for (const h of hints) console.log(`  ? ${h}`);

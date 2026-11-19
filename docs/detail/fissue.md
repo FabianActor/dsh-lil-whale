@@ -59,7 +59,7 @@ node scripts/fissue.mjs index | check        # 重生成投影 / 自检
 
 - `pool\fissue\issues.jsonl`：**只追加**的事件流（`open`/`assign`/`comment`/`close`/`reopen`/`merge`/`reject`）。
 - `INDEX.md`、`open\fi-0001.md`、`closed\fi-0001.md`：**投影**，随时可从事件流重生成；坏了就 `index` 重建，不要手改。
-- `cursor.json`：扫群游标（最后一次扫到第几行）；`current.json`：正在做的那一条。
+- `cursor.json`：扫群游标（最后一次扫到第几行）；`current.json`：正在做的那一条。**游标按"真实行"记**：文件末尾的换行不算一行（2026-11-19 的 fi-0004 就是因为多算这一行被漏收的）；游标若被人为改到行数之外，`scan` 会回退一行重扫并在输出里写明，已入账的 `(行号, 作者)` 会被去重跳过。
 - `reject` 也是账的一部分：缺栏的投递是"发生过的一次退件"，不能悄悄丢。
 - `check` 会查：事件自洽、编号从 1 起连续、`current` 指向 open、页面在、游标没超过群文件行数。
 
