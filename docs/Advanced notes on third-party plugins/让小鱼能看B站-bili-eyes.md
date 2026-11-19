@@ -165,3 +165,21 @@ Get-Content homes\<键>\dsh-home\bili-eyes\history.jsonl -Tail 3
 现在落盘只走 `scripts\lib\safe-write.mjs`：每个入口第一行先问 readOnly，过门才写；补丁脚本只许出现这些封装。配套 `scripts\lib\scan-write-calls.mjs` 做静态扫描（先抓方括号形态、再剥注释/普通字符串/模板字符串/正则；报 `文件:行号` 与那一行原文，第一行声明"动态拼名、变量取属性、模板里的调用不查"），`scripts\test-safe-write.mjs` 26 条夹具把它钉住。
 
 验收：`node scripts\test-safe-write.mjs` 应 26 PASS；再把补丁脚本里任意一处封装换回 `fs.writeFileSync(...)`，`test-safe-write` 必须点名到那一行。
+
+## 10. 登录态 none/unknown：别再教人去配转写（fi-0004，2026-11-19）
+
+**症状**：没登录（`none`）或登录态查不到（`unknown`）时，台词栏照旧说「没有台词：这次没拿到字幕，转写也没跑起来；下一步：要转写就先把转写配好」。读者会去填 key，而真正该做的是扫码登录。
+
+**根因**：`look.js` 只在 `login.state === 'expired'` 时写清原因；`none` / `unknown` 直接落进 `no-key` 那一句转写文案。匿名态根本没请求过字幕（`:257` 的 `login.state === 'ok' && !brief`），所以「没有字幕」是"没拿到"，不是"片源没有"。
+
+**修法（gen6）**：
+
+1. `login.state` 三态各一句：`expired` 原样、`none`（匿名拿不到字幕/AI 总结，只在主人私聊提醒扫码）、`unknown`（查不到登录态，稍后重试；有 `login.error` 就带一句原因）。
+2. `compactCells(result, maxCellChars, opts)` 接 `opts.loginState/loginError`；`no-key` 在匿名/未知态换成「（没有台词：<没登录/查不到登录>，这次没拿到字幕；下一步：让主人扫码登录后再看（不用去配转写）／稍后重试…）」。
+3. `fitCells` 把 opts 透传到三处 `compactCells(result, n)` 与最后的 `compactCells(result, 0)`；`look()` 的 `body` 与 zoom 的 `compactCells` 调用处都带上 `{ loginState: login.state, loginError: login.error }`。
+
+**判据**：在装好的 `look.js` 上数 `login.state === 'none'` / `'unknown'` / `'expired'` —— 修前 none=0/unknown=0/expired=1；修后 none≥1、unknown≥1、expired=1。
+
+**测试**：`scripts/test-thirdparty-patch.mjs` 3a4 节（打出三句、`opts` 透传、`loginState:` 调用处；半旧样本把标记句改坏后 `--check` 必须 exit 1，重跑不能假装补上）——合计从 124 增到 **133 PASS**。
+
+**生效**：改的是第三方插件的 `look.js` 与本地补丁脚本，**要重启鱼进程/宿主 dsh 后**才加载新代码；已装的 5 份（四条鱼 + 宿主/web）都已补上。

@@ -181,7 +181,70 @@ function applyCacheTag(text, eol) {
   return { ok: true, next: text.replace(CACHE_KEY_OLD, () => CACHE_KEY_NEW(eol)) };
 }
 
-// 一次补到最新：gen3 → gen4 → gen5。每一步都是幂等的（已在就不动）；
+// gen6（2026-11-19 fi-0004，小鱼丸 #2272）：没登录 / 查不到登录态时，台词栏教人去"配转写"，
+// 该做的是扫码登录；而匿名态根本没问过字幕，旧句把"没拿到的结果"说成了另一件事。
+const GEN6_LOGIN_OLD = "  if (login.state === 'expired') lines.push('（B站登录已过期：这次没有 AI 字幕和总结。只在主人私聊时提醒他重新扫码登录，群里别说）');";
+const GEN6_LOGIN_NEW = (eol) => [
+  GEN6_LOGIN_OLD,
+  "  else if (login.state === 'none') lines.push('（B站没登录：匿名拿不到字幕和 AI 总结，所以这次没有台词。只在主人私聊时提醒他扫码登录，群里别说）');",
+  "  else if (login.state === 'unknown') lines.push(`（暂时查不到 B站登录状态：这次没有 AI 字幕和总结。下一步：稍后重试${login.error ? `；原因：${String(login.error).slice(0, 120)}` : ''}）`);",
+].join(eol);
+const GEN6_COMPACT_OLD = 'export function compactCells(result, maxCellChars) {';
+const GEN6_COMPACT_NEW = 'export function compactCells(result, maxCellChars, opts = {}) {';
+const GEN6_NOTE_OLD = '  if (src && TRANSCRIPT_NOTE[src]) {';
+const GEN6_NOTE_NEW = (eol) => [
+  "  if (src === 'no-key' && (opts.loginState === 'none' || opts.loginState === 'unknown')) {",
+  "    const st = opts.loginState === 'none' ? 'B 站没登录' : '暂时查不到 B 站登录状态';",
+  "    const err = String(opts.loginError ?? '').trim().replace(/\\s+/g, ' ');",
+  "    lines.push(`（没有台词：${st}，这次没拿到字幕；下一步：${opts.loginState === 'none' ? '让主人扫码登录后再看（不用去配转写）' : '稍后重试；一直这样就请主人检查登录'}${err ? `；原因：${err.slice(0, 120)}` : ''}）`);",
+  "  } else if (src && TRANSCRIPT_NOTE[src]) {",
+].join(eol);
+const GEN6_FIT_OLD = 'export function fitCells(result, room, preferred) {';
+const GEN6_FIT_NEW = 'export function fitCells(result, room, preferred, opts = {}) {';
+const GEN6_FIT_CALL_OLD = 'const m = compactCells(result, n);';
+const GEN6_FIT_CALL_NEW = 'const m = compactCells(result, n, opts);';
+const GEN6_FIT_LAST_OLD = 'return compactCells(result, 0);';
+const GEN6_FIT_LAST_NEW = 'return compactCells(result, 0, opts);';
+const GEN6_BODY_OLD = 'body = `${intro}\\n${fitCells(storyboard, room, DETAIL_CHARS[detail])}`;';
+const GEN6_BODY_NEW = 'body = `${intro}\\n${fitCells(storyboard, room, DETAIL_CHARS[detail], { loginState: login.state, loginError: login.error })}`;';
+const GEN6_ZOOM_OLD = '    compactCells(result, DETAIL_CHARS.med),';
+const GEN6_ZOOM_NEW = '    compactCells(result, DETAIL_CHARS.med, { loginState: login.state, loginError: login.error }),';
+
+function hasGen6(text) {
+  return text.includes(GEN6_COMPACT_NEW) && text.includes("login.state === 'none'") && text.includes("opts.loginState === 'none' || opts.loginState === 'unknown'");
+}
+
+function applyGen6(text, eol) {
+  if (hasGen6(text)) return { ok: true, next: text };
+  let next = text;
+  if (!next.includes(GEN6_LOGIN_NEW(eol))) {
+    if (!next.includes(GEN6_LOGIN_OLD)) return { ok: false, why: '找不到 login expired 那句的落点（插件版本可能变了）' };
+    next = next.replace(GEN6_LOGIN_OLD, () => GEN6_LOGIN_NEW(eol));
+  }
+  if (!next.includes(GEN6_COMPACT_NEW)) {
+    if (!next.includes(GEN6_COMPACT_OLD)) return { ok: false, why: '找不到 compactCells 的落点（插件版本可能变了）' };
+    next = next.replace(GEN6_COMPACT_OLD, GEN6_COMPACT_NEW);
+  }
+  if (!next.includes('opts.loginState')) {
+    if (!next.includes(GEN6_NOTE_OLD)) return { ok: false, why: '找不到台词分支的落点（插件版本可能变了）' };
+    next = next.replace(GEN6_NOTE_OLD, () => GEN6_NOTE_NEW(eol));
+  }
+  if (!next.includes(GEN6_FIT_NEW)) {
+    if (!next.includes(GEN6_FIT_OLD) || !next.includes(GEN6_FIT_CALL_OLD) || !next.includes(GEN6_FIT_LAST_OLD)) {
+      return { ok: false, why: '找不到 fitCells 的落点（插件版本可能变了）' };
+    }
+    next = next.replace(GEN6_FIT_OLD, GEN6_FIT_NEW).replace(GEN6_FIT_CALL_OLD, GEN6_FIT_CALL_NEW).replace(GEN6_FIT_LAST_OLD, GEN6_FIT_LAST_NEW);
+  }
+  if (!next.includes('loginState: login.state')) {
+    if (!next.includes(GEN6_BODY_OLD) || !next.includes(GEN6_ZOOM_OLD)) {
+      return { ok: false, why: '找不到调用处（look/zoom）的落点（插件版本可能变了）' };
+    }
+    next = next.replace(GEN6_BODY_OLD, GEN6_BODY_NEW).replace(GEN6_ZOOM_OLD, GEN6_ZOOM_NEW);
+  }
+  return hasGen6(next) ? { ok: true, next } : { ok: false, why: '补完仍缺「登录态那两句」（文件里有旧痕迹但改不动）' };
+}
+
+// 一次补到最新：gen3 → gen4 → gen5 → gen6。每一步都是幂等的（已在就不动）；
 // 任何一步找不到落点就停在那一步之前——不写半份"看着像最新"的文件。
 function finishPatch(text, eol) {
   let cur = text;
@@ -191,6 +254,8 @@ function finishPatch(text, eol) {
   if (g4.ok) cur = g4.next;
   const g5 = applyCacheTag(cur, eol);
   if (g5.ok) cur = g5.next;
+  const g6 = applyGen6(cur, eol);
+  if (g6.ok) cur = g6.next;
   return cur;
 }
 
@@ -507,6 +572,8 @@ let gen4Pending = 0;  // 前六半已在、只差 `no-key` 那句的真原因（
 let gen4Fixed = 0;    // 同上，本次补上
 let cachePending = 0; // 七半已在、只差「结果缓存带补丁代次」（只读模式）
 let cacheFixed = 0;   // 同上，本次补上
+let gen6Pending = 0;  // 八半已在、只差登录态那两句（只读模式）
+let gen6Fixed = 0;    // 同上，本次补上
 let lateFixed = 0;    // 同上，本次补上
 let already = 0;
 let halfStuck = 0;   // 只打了一半，且缺的那半找不到落点（要人拿 orig 回滚）
@@ -594,6 +661,25 @@ for (const t of targets) {
       writePatched(t, g5.next);
       cacheFixed += 1;
       console.log(`✓ ${t.member}: 补上缓存代次（旧结果缓存不再回放旧文案）`);
+      continue;
+    }
+    // gen6（2026-11-19 fi-0004，小鱼丸 #2272）：没登录 / 查不到登录态时，别教人去配转写。
+    if (!hasGen6(text)) {
+      const g6 = applyGen6(text, eol);
+      if (!g6.ok) {
+        failed += 1;
+        console.log(`✗ ${t.member}: ${g6.why} → ${t.file}`);
+        continue;
+      }
+      if (readOnly) {
+        console.log(`— ${t.member}: 还差「登录态那两句」，可以补（${checkOnly ? '--check，未写入' : 'dry-run，未写入'}）`);
+        gen6Pending += 1;
+        continue;
+      }
+      ensureBackups(t);
+      writePatched(t, finishPatch(g6.next, eol));
+      gen6Fixed += 1;
+      console.log(`✓ ${t.member}: 补上「登录态那两句」（匿名/未知态不再教人配转写）`);
       continue;
     }
     already += 1;
@@ -757,9 +843,9 @@ function ensureBackups(t) {
 
 console.log('');
 if (readOnly) {
-  console.log(`小计：${targets.length} 个安装 · 可打 ${patchable} · 可补一半 ${halfFixed} · 还差无转写 ${thirdPending} · 还差空台词/未识别 ${latePending} · 还差下一步 ${gen3Pending} · 还差真原因 ${gen4Pending} · 还差缓存代次 ${cachePending} · 已有 ${already} · 无法自动补 ${halfStuck} · 失败 ${failed} · 未写盘`);
+  console.log(`小计：${targets.length} 个安装 · 可打 ${patchable} · 可补一半 ${halfFixed} · 还差无转写 ${thirdPending} · 还差空台词/未识别 ${latePending} · 还差下一步 ${gen3Pending} · 还差真原因 ${gen4Pending} · 还差缓存代次 ${cachePending} · 还差登录态 ${gen6Pending} · 已有 ${already} · 无法自动补 ${halfStuck} · 失败 ${failed} · 未写盘`);
 } else {
-  console.log(`小计：${targets.length} 个安装 · 本次打 ${patchable} · 本次补一半 ${halfFixed} · 补无转写 ${thirdFixed} · 补空台词/未识别 ${lateFixed} · 补下一步 ${gen3Fixed} · 补真原因 ${gen4Fixed} · 补缓存代次 ${cacheFixed} · 已有 ${already} · 无法自动补 ${halfStuck} · 失败 ${failed}${detachMode ? ` · 断开硬链接 ${detached}` : ''}`);
+  console.log(`小计：${targets.length} 个安装 · 本次打 ${patchable} · 本次补一半 ${halfFixed} · 补无转写 ${thirdFixed} · 补空台词/未识别 ${lateFixed} · 补下一步 ${gen3Fixed} · 补真原因 ${gen4Fixed} · 补缓存代次 ${cacheFixed} · 补登录态 ${gen6Fixed} · 已有 ${already} · 无法自动补 ${halfStuck} · 失败 ${failed}${detachMode ? ` · 断开硬链接 ${detached}` : ''}`);
 }
 if (checkOnly) {
   const bad = targets.filter((t) => {
@@ -767,7 +853,7 @@ if (checkOnly) {
     const hasMark = s.includes(MARK);
     const hasPush = /const why = String\(result\.transcript\?\.error/.test(s);
     const hasNoTrans = s.includes(NO_TRANS_TEXT);
-    return !(hasMark && hasPush && hasNoTrans && hasGen2(s) && hasGen4(s) && hasCacheTag(s));
+    return !(hasMark && hasPush && hasNoTrans && hasGen2(s) && hasGen4(s) && hasCacheTag(s) && hasGen6(s));
   }).length;
   if (bad > 0) {
     console.log(`检查：还有 ${bad} 个安装没打全补丁（含只打了一半的）。`);
@@ -825,6 +911,6 @@ if (checkOnly) {
   }
   console.log('检查：全部已打补丁。');
 }
-const needsWork = patchable + halfFixed + thirdPending + latePending + gen3Pending + gen4Pending + cachePending;
+const needsWork = patchable + halfFixed + thirdPending + latePending + gen3Pending + gen4Pending + cachePending + gen6Pending;
 process.exit(failed > 0 || halfStuck > 0 || (checkOnly && needsWork > 0) ? 1 : 0);
 

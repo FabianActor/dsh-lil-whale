@@ -43,13 +43,35 @@ const ORIGINAL = [
   '// ── 缓存（0.8.3 的 look.js:141；gen5 把补丁代次算进这个键）──',
   "function cacheKey(parts) { return crypto.createHash('sha1').update(JSON.stringify(parts)).digest('hex').slice(0, 16); }",
   '',
-  'function compactCells(result) {',
+  'export function compactCells(result, maxCellChars) {',
   '  const lines = [];',
   '  const src = result.transcript?.source;',
   '  if (src && TRANSCRIPT_NOTE[src]) lines.push(`（${TRANSCRIPT_NOTE[src]}）`);',
   "  else if (result.plan?.inputs && result.plan.inputs.speechRate === 0) lines.push('（这段基本没人说话：音乐或环境声）');",
-  '  return lines;',
+  '  const multi = (result.sheets?.length ?? 0) > 1;',
+  '  for (const sheet of result.sheets ?? []) {',
+  '    if (multi) lines.push(`—— 第 ${sheet.sheet} 张图 ——`);',
+  '    for (const c of sheet.cells ?? []) {',
+  '      const text = maxCellChars > 0 ? truncateAtSentence(String(c.text ?? "").trim(), maxCellChars) : "";',
+  '      lines.push(`格${c.i} ${fmtDur(c.t_start)}–${fmtDur(c.t_end)}${text ? `：「${text}」` : ""}`);',
+  '    }',
+  '  }',
+  '  return lines.join("\\n");',
   '}',
+  '',
+  'export function fitCells(result, room, preferred) {',
+  '  for (const n of [preferred, 60, 36]) {',
+  '    const m = compactCells(result, n);',
+  '    if (m.length <= room) return m;',
+  '  }',
+  '  return compactCells(result, 0);',
+  '}',
+  '',
+  "// login 那句（8.0.3 上游只有 expired 一处写清原因）",
+  "  if (login.state === 'expired') lines.push('（B站登录已过期：这次没有 AI 字幕和总结。只在主人私聊时提醒他重新扫码登录，群里别说）');",
+  '',
+  '    body = `${intro}\\n${fitCells(storyboard, room, DETAIL_CHARS[detail])}`;',
+  '    compactCells(result, DETAIL_CHARS.med),',
   '',
 ].join('\n');
 
@@ -563,6 +585,29 @@ console.log('第三方补丁：行为测试');
   ok('重跑补上缓存代次', up.code === 0 && up.out.includes('补上缓存代次'), up.out.trim().split('\n').slice(-2).join(' / '));
   ok('补完 --check 绿', run(['--check', '--pond', root]).code === 0);
   ok('补完带 PATCH_CACHE_TAG', readFileSync(file, 'utf8').includes("const PATCH_CACHE_TAG = 'llw-patch-g5';"));
+  rmSync(root, { recursive: true, force: true });
+}
+
+// 3a4. gen6（2026-11-19 fi-0004，小鱼丸 #2272）：没登录 / 查不到登录态时，台词栏教人去配转写；
+//      补上登录态三句，并让 no-key 在匿名/未知态换一句能执行的下一步（不是去配 key）。
+{
+  const { root, file } = makePond();
+  run(['--pond', root]);
+  const full = readFileSync(file, 'utf8');
+  ok('gen6：compactCells 接 opts', full.includes('export function compactCells(result, maxCellChars, opts = {}) {'));
+  ok('gen6：expired 后面补了 none', full.includes("login.state === 'none'"));
+  ok('gen6：也补了 unknown', full.includes("login.state === 'unknown'"));
+  ok('gen6：fitCells 透传 opts', full.includes('const m = compactCells(result, n, opts);'));
+  ok('gen6：look/zoom 调用处带 loginState', full.includes('{ loginState: login.state, loginError: login.error }'));
+  ok('gen6：匿名态台词改说不用配转写', full.includes('不用去配转写'));
+  // 半旧样本：把 hasGen6 认的那句标记改坏，--check 要红、重跑不能假装补上
+  const marker = "opts.loginState === 'none' || opts.loginState === 'unknown'";
+  writeFileSync(file, full.replace(marker, "opts.loginState === 'nonex'"), 'utf8');
+  const bad = run(['--check', '--pond', root]);
+  ok('gen6 半旧样本 --check exit 1', bad.code === 1, '实际 ' + bad.code);
+  ok('gen6 半旧样本点名缺登录态或说清补不动', /还差「登录态那两句」|补完仍缺/.test(bad.out), bad.out.slice(-300));
+  const retry = run(['--pond', root]);
+  ok('gen6 半旧样本重跑不假装成功', retry.code !== 0 && retry.out.includes('补完仍缺'), retry.out.slice(-300));
   rmSync(root, { recursive: true, force: true });
 }
 
