@@ -161,7 +161,7 @@ function applyGen4(text) {
 // ⇒ 补丁落盘后，24 小时内看过的同一条片仍会原样回放旧句——"修了但看不见"，且每改一版文案
 // 都要让所有鱼手动清一次缓存（鱼对 dsh-home 只读，清不掉）。把补丁代次放进 cacheKey 即可：
 // 换代 = 旧缓存键全部失效；旧 JSON 留在 cache 目录按 cacheHours 自然过期，不删、也不用删。
-const CACHE_TAG = 'llw-patch-g5';
+const CACHE_TAG = 'llw-patch-g6';
 const CACHE_KEY_OLD = "function cacheKey(parts) { return crypto.createHash('sha1').update(JSON.stringify(parts)).digest('hex').slice(0, 16); }";
 const CACHE_KEY_NEW = (eol) => [
   '// 2026-11-19 本地补丁：缓存键带补丁代次——文案改了，旧缓存不再被原样回放。',
@@ -173,8 +173,14 @@ function hasCacheTag(text) {
   return text.includes(`const PATCH_CACHE_TAG = '${CACHE_TAG}';`);
 }
 
+// 换代不是"从上游打第一次"，而是"上一代换成这一代"：先认现有标记行、只换标签；
+// 认不到标记行，才是第一次打（上游原文里 cacheKey 还是裸 JSON.stringify）。
 function applyCacheTag(text, eol) {
   if (hasCacheTag(text)) return { ok: true, next: text };
+  const tagLine = /const PATCH_CACHE_TAG = '[^']*';/;
+  if (tagLine.test(text)) {
+    return { ok: true, next: text.replace(tagLine, () => `const PATCH_CACHE_TAG = '${CACHE_TAG}';`) };
+  }
   if (!text.includes(CACHE_KEY_OLD)) {
     return { ok: false, why: '找不到 cacheKey 的落点（插件版本可能变了）' };
   }

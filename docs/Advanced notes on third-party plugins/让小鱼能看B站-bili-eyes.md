@@ -156,7 +156,7 @@ Get-Content homes\<键>\dsh-home\bili-eyes\history.jsonl -Tail 3
 - **第七半：`no-key` 那句换掉假原因**（2026-11-19 小鱼丸 #2218）：这一格原来的话是「没有台词：本机转写服务没开，也没有字幕」，但它的实际成因是 `!willTranscribe()`——`asr.js:116` 的默认目标是云端 `https://api.siliconflow.cn/v1`，没配 key 时 `needsCloudKey` 为真、`canTranscribe` 为假，**根本不会去连本机端口**。句子里说的两件事（本机、没开）都不是这个分支手里有的量。现在换成「没有台词：这次没拿到字幕，转写也没跑起来；下一步：要转写就先把转写配好（填 key，或指向本机转写服务）」——只陈述"这次没拿到什么"，把"为什么"留给真正知道它的那条路（`describeAsrTarget()` 在 `dsh-video-storyboard` 的 `asr.js`，跨包，不在本地补丁面；进上游草稿）。幂等判据=整句是否为新版本（`hasGen4`/`applyGen4`）；gen3 老安装跑一次脚本会自动升到 gen4。
 
   同理没做进本地补丁的还有「没有字幕」的五种来源（匿名 / brief / 真无轨 / 下载失败 / 登录过期）：`source` 在 `pipeline.js` 就定好了，`look.js` 只拿到结果——要带出原因得改另一个包，也进上游草稿。
-- **第八半：缓存键带补丁代次**（2026-11-19 小鱼丸 #2237）：补丁改的是文案，但 `look.js:245` 的 24 小时结果缓存存的是**整段成品 text**、缓存键里又没有文案版本——于是"字节已经换了，实调还是旧句"。她的反例：四份 `look.js` 都是 gen4（31,553 B、mtime 09:24:48），实调 `BV12K4y1K7mr` 仍输出「本机转写服务没开」，命中的是 `at=09:09:02` 那条旧缓存。鱼对 `dsh-home` 只读，清不掉（`rm.log` 里是 `EPERM status=failed`）。做法：把补丁代次算进 `cacheKey`——`const PATCH_CACHE_TAG = 'llw-patch-g5';` + `JSON.stringify([PATCH_CACHE_TAG, parts])`；换代即让 `look`/`zoom`/`file` 三类文字缓存全部失效，旧 JSON 不删（留 24h 自然过期，也不需要删）。幂等判据=`hasCacheTag`（文件里有没有当前代次的 `PATCH_CACHE_TAG`），`patchedFrom` 的"期望内容"也链上这一代，`--check` 缺这半算「没打全」。**补丁落盘后要重启对应进程**才会加载新代码；没重启前看到的仍是旧句——这不是补丁没打上，是进程还没换。测试 109→124 条。
+- **第八半：缓存键带补丁代次**（2026-11-19 小鱼丸 #2237）：补丁改的是文案，但 `look.js:245` 的 24 小时结果缓存存的是**整段成品 text**、缓存键里又没有文案版本——于是"字节已经换了，实调还是旧句"。她的反例：四份 `look.js` 都是 gen4（31,553 B、mtime 09:24:48），实调 `BV12K4y1K7mr` 仍输出「本机转写服务没开」，命中的是 `at=09:09:02` 那条旧缓存。鱼对 `dsh-home` 只读，清不掉（`rm.log` 里是 `EPERM status=failed`）。做法：把补丁代次算进 `cacheKey`——`const PATCH_CACHE_TAG = '<当代>';` + `JSON.stringify([PATCH_CACHE_TAG, parts])`；换代即让 `look`/`zoom`/`file` 三类文字缓存全部失效，旧 JSON 不删（留 24h 自然过期，也不需要删）。**换代不止是"从上游打第一次"**：已经装过上一代（如 g5）的机器要能"只换标签"，不能要求它从上游重打（`applyCacheTag` 先认现有标记行、只换标签；认不到标记行才走上游原文那一支）。2026-11-19 gen6 落盘时代次从 `g5` 升到 **`g6`**，正是为了不让 gen6 的新文案被旧缓存原样回放。幂等判据=`hasCacheTag`（文件里有没有当前代次的 `PATCH_CACHE_TAG`），`patchedFrom` 的"期望内容"也链上这一代，`--check` 缺这半算「没打全」。**补丁落盘后要重启对应进程**才会加载新代码；没重启前看到的仍是旧句——这不是补丁没打上，是进程还没换。测试 109→124 条。
 
 ## 9. 只读门收成一处（fi-0003，2026-11-19）
 
@@ -183,3 +183,6 @@ Get-Content homes\<键>\dsh-home\bili-eyes\history.jsonl -Tail 3
 **测试**：`scripts/test-thirdparty-patch.mjs` 3a4 节（打出三句、`opts` 透传、`loginState:` 调用处；半旧样本把标记句改坏后 `--check` 必须 exit 1，重跑不能假装补上）——合计从 124 增到 **133 PASS**。
 
 **生效**：改的是第三方插件的 `look.js` 与本地补丁脚本，**要重启鱼进程/宿主 dsh 后**才加载新代码；已装的 5 份（四条鱼 + 宿主/web）都已补上。
+
+- **第十半：登录态 none/unknown 别再教人配转写**（2026-11-19 小鱼丸 #2272，fi-0004）：匿名/查不到登录态时，旧句让读者去配转写 key，真正该做的是扫码登录；匿名态根本没请求过字幕。gen6 补 `login.state` 三态与 `no-key` 的匿名分支。**缓存代次也随这一代升到 g6**——否则看过的同一条片仍会回放旧句（见第八半）。测试 124→139 条。
+

@@ -567,14 +567,14 @@ console.log('第三方补丁：行为测试');
   const { root, file } = makePond();
   run(['--pond', root]);
   const full = readFileSync(file, 'utf8');
-  ok('gen5：打完带 PATCH_CACHE_TAG', full.includes("const PATCH_CACHE_TAG = 'llw-patch-g5';"));
+  ok('gen5：打完带 PATCH_CACHE_TAG', full.includes("const PATCH_CACHE_TAG = 'llw-patch-g6';"));
   ok('gen5：cacheKey 把补丁代次算进键里', full.includes('JSON.stringify([PATCH_CACHE_TAG, parts])'));
   ok('gen5：注释说清为什么（旧缓存回放）', full.includes('旧缓存不再被原样回放'));
   // 退回 gen4：把缓存块换回上游那一行
   const cacheOld = "function cacheKey(parts) { return crypto.createHash('sha1').update(JSON.stringify(parts)).digest('hex').slice(0, 16); }";
   const cacheNew = [
     '// 2026-11-19 本地补丁：缓存键带补丁代次——文案改了，旧缓存不再被原样回放。',
-    "const PATCH_CACHE_TAG = 'llw-patch-g5';",
+    "const PATCH_CACHE_TAG = 'llw-patch-g6';",
     "function cacheKey(parts) { return crypto.createHash('sha1').update(JSON.stringify([PATCH_CACHE_TAG, parts])).digest('hex').slice(0, 16); }",
   ].join('\n');
   writeFileSync(file, full.replace(cacheNew, cacheOld), 'utf8');
@@ -584,7 +584,7 @@ console.log('第三方补丁：行为测试');
   const up = run(['--pond', root]);
   ok('重跑补上缓存代次', up.code === 0 && up.out.includes('补上缓存代次'), up.out.trim().split('\n').slice(-2).join(' / '));
   ok('补完 --check 绿', run(['--check', '--pond', root]).code === 0);
-  ok('补完带 PATCH_CACHE_TAG', readFileSync(file, 'utf8').includes("const PATCH_CACHE_TAG = 'llw-patch-g5';"));
+  ok('补完带 PATCH_CACHE_TAG', readFileSync(file, 'utf8').includes("const PATCH_CACHE_TAG = 'llw-patch-g6';"));
   rmSync(root, { recursive: true, force: true });
 }
 
@@ -608,6 +608,25 @@ console.log('第三方补丁：行为测试');
   ok('gen6 半旧样本点名缺登录态或说清补不动', /还差「登录态那两句」|补完仍缺/.test(bad.out), bad.out.slice(-300));
   const retry = run(['--pond', root]);
   ok('gen6 半旧样本重跑不假装成功', retry.code !== 0 && retry.out.includes('补完仍缺'), retry.out.slice(-300));
+  rmSync(root, { recursive: true, force: true });
+}
+
+// 3a5. 缓存代次换代（2026-11-19 fi-0004）：已打过的安装是 g5 标签，不能要求它"从上游重打"，
+//      要能只换标签；换完旧缓存键同样失效，新写法不会被 24 小时缓存回放。
+{
+  const { root, file } = makePond();
+  run(['--pond', root]);
+  const patched = readFileSync(file, 'utf8');
+  ok('g6 安装带新标签', patched.includes("const PATCH_CACHE_TAG = 'llw-patch-g6';"));
+  // 伪装成上一代：把标签改回 g5
+  writeFileSync(file, patched.replace("const PATCH_CACHE_TAG = 'llw-patch-g6';", "const PATCH_CACHE_TAG = 'llw-patch-g5';"), 'utf8');
+  const stale = run(['--check', '--pond', root]);
+  ok('g5 老安装 --check exit 1', stale.code === 1, '实际 ' + stale.code);
+  ok('g5 老安装点名还差缓存代次', stale.out.includes('还差「结果缓存带补丁代次」'), stale.out.slice(-300));
+  const up = run(['--pond', root]);
+  ok('换代只换标签、不要求重打上游', up.code === 0 && up.out.includes('补上缓存代次'), up.out.slice(-300));
+  ok('换代后带 g6 标签', readFileSync(file, 'utf8').includes("const PATCH_CACHE_TAG = 'llw-patch-g6';"));
+  ok('换代后 --check 绿', run(['--check', '--pond', root]).code === 0);
   rmSync(root, { recursive: true, force: true });
 }
 
