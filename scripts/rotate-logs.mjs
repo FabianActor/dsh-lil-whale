@@ -16,6 +16,7 @@
 //   node scripts\rotate-logs.mjs --state-dir <目录>  账本放哪（默认 <池>\state）
 import { readdirSync, statSync, renameSync, unlinkSync, readFileSync, existsSync, appendFileSync } from 'node:fs'
 import { join, dirname, basename, resolve } from 'node:path'
+import { createHash } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url)) // <app>\scripts
@@ -118,6 +119,16 @@ function rel(p) {
   return p.startsWith(POND + '\\') || p.startsWith(POND + '/') ? p.slice(POND.length + 1) : p
 }
 
+// r391（fi-0005 小鱼丸建议）：轮转/丢弃两行各带一个内容指纹 12 位——删掉的是唯一一份时，
+// 事后想问“丢的是哪一版”，只有名字不够；与“引用要连 size+hash 一起抄”同一句判据。
+function hash12(file) {
+  try {
+    return createHash('sha256').update(readFileSync(file)).digest('hex').slice(0, 12)
+  } catch {
+    return 'unknown'
+  }
+}
+
 const lines = []
 function account(level, text) {
   lines.push(`${localTs(new Date())} | ${level} | ${text}`)
@@ -170,10 +181,16 @@ for (const file of targets) {
     rotated++
     continue
   }
+  let fromHash = 'unknown'
+  try {
+    fromHash = hash12(file)
+  } catch {
+    fromHash = 'unknown'
+  }
   try {
     renameSync(file, dest)
     rotated++
-    account('note', `note=log-rotate-rotated from=${rel(file)} bytes=${st.size} to=${basename(dest)}`)
+    account('note', `note=log-rotate-rotated from=${rel(file)} bytes=${st.size} to=${basename(dest)} hash=${fromHash}`)
     console.log(`rotated ${rel(file)} (${(st.size / 1024).toFixed(0)} KB) -> ${basename(dest)}`)
   } catch (error) {
     failed++
@@ -204,7 +221,7 @@ for (const dir of scannedDirs) {
     let sorted
     try {
       sorted = files
-        .map((f) => ({ f, mtimeMs: statSync(f).mtimeMs, bytes: statSync(f).size }))
+        .map((f) => ({ f, mtimeMs: statSync(f).mtimeMs, bytes: statSync(f).size, hash: hash12(f) }))
         .sort((a, b) => b.mtimeMs - a.mtimeMs)
     } catch {
       continue
@@ -218,7 +235,7 @@ for (const dir of scannedDirs) {
       try {
         unlinkSync(old.f)
         dropped++
-        account('note', `note=log-rotate-dropped file=${rel(old.f)} bytes=${old.bytes} base=${base}`)
+        account('note', `note=log-rotate-dropped file=${rel(old.f)} bytes=${old.bytes} hash=${old.hash} base=${base}`)
         console.log(`dropped ${rel(old.f)}`)
       } catch (error) {
         failed++

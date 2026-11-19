@@ -78,8 +78,11 @@ try {
   const ledger = readLedger(dir)
   ok('写了 rotate.log', ledger.length > 0)
   ok('有汇总行 note=log-rotate rotated=', /note=log-rotate rotated=\d+ dropped=\d+/.test(ledger))
-  ok('有轮转行 from/to/bytes', /note=log-rotate-rotated from=.*bytes=\d+ to=.*\.log/.test(ledger))
-  ok('有丢弃行 file/bytes', /note=log-rotate-dropped file=.*bytes=\d+/.test(ledger))
+  ok('有轮转行 from/to/bytes/hash', /note=log-rotate-rotated from=.*bytes=\d+ to=.*\.log hash=[0-9a-f]{12}$/m.test(ledger))
+  ok('有丢弃行 file/bytes/hash', /note=log-rotate-dropped file=.*bytes=\d+ hash=([0-9a-f]{12}|unknown)/.test(ledger))
+
+  ok('轮转行带 12 位内容指纹', /note=log-rotate-rotated .* hash=[0-9a-f]{12}/.test(ledger))
+  ok('丢弃行带内容指纹（12 位或 unknown）', /note=log-rotate-dropped .* hash=([0-9a-f]{12}|unknown)/.test(ledger))
 
   console.log('— dry-run：只看不写 —')
   bigFile(dir, 'fakeapp.log')
