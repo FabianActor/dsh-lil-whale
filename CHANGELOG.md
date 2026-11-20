@@ -20,6 +20,11 @@
 
 ## [未发布]
 
+### r395 群聊/私聊点「发图」选完图不进输入框（用户可见）
+
+- 旧行为：点「发图」按钮能打开选择框、也能选中图片，但选完输入框上方什么都不出现，消息发不出去；把图拖进输入框则正常。新行为：选中的图片出现在输入框上方（最多 4 张，可逐张去掉），与拖入、粘贴走同一套校验（只收图片、单张 ≤ 8 MB）。
+- 根因：`<input type="file">` 的 `change` 里先 `event.target.value = ''` 再读 `event.target.files`。`FileList` 是活引用，清空 value 后它变成空列表，于是读出来是 0 张图；拖入不走这个 input，所以没受影响。
+- 内部：改为先把文件摘成数组再清 value（两处：群聊、私聊）；面板 build v57 · image-picker-files；新增 `scripts/test-client-image-picker.mjs` 静态回归与 release-check 4ap。
 ### r394 检查更新改查 GitHub Releases；npm 降为镜像
 
 - 旧行为：设置页的「检查更新」去 npm 查最新版，文档也把 npm 当成安装/升级渠道之一。新行为：改查 GitHub Releases 的最新 tag；「版本」段写明 npm 上只有两块 bundle，安装与更新请走仓库（用户可见：是）。

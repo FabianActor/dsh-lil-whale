@@ -1759,7 +1759,9 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
                   multiple: true,
               style: { display: 'none' },
               onChange: (event) => {
-                const files = event.target.files
+                // FileList 是活的：先摘出文件再清 value。反过来会把 files 清空——
+                // 2026-11-20 他报：点按钮选图选得动、但图不进输入框；拖入正常（拖入不走这个 input）。
+                const files = Array.from(event.target.files ?? [])
                 event.target.value = ''
                 void attachImages(files)
               },
@@ -2734,7 +2736,9 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
                   multiple: true,
                   style: { display: 'none' },
                   onChange: (event) => {
-                    const files = event.target.files
+                    // FileList 是活的：先摘出文件再清 value。反过来会把 files 清空——
+                    // 2026-11-20 他报：点按钮选图选得动、但图不进输入框；拖入正常（拖入不走这个 input）。
+                    const files = Array.from(event.target.files ?? [])
                     event.target.value = ''
                     void attachImages(files)
                   },
@@ -3829,7 +3833,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v56 · update-source-github:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v57 · image-picker-files:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')

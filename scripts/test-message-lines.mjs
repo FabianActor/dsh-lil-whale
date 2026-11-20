@@ -81,7 +81,7 @@ const rec = (over) => JSON.stringify({ ts: over.ts ?? '2026-11-18 10:00', from: 
   check('可点击复制', client.includes('点击复制引用'), true)
   check('有复制函数', client.includes('async function copyToClipboard'), true)
   check('有复制回执', client.includes('已复制'), true)
-  check('build 标记 v55', client.includes('client build v56 · update-source-github'), true)
+  check('build 标记 v55', client.includes('client build v57 · image-picker-files'), true)
 }
 
 if (fail === 0) {

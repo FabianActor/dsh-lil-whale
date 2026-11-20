@@ -401,6 +401,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '检查更新' (($updOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '检查更新' '查的是 GitHub Releases；tag 解析与版本比较有负样本（test-update-check.mjs）' }
   } else { Fail '检查更新' 'scripts\test-update-check.mjs 不在包里' }
+  # ── 4ap. 发图按钮（2026-11-20：FileList 是活的，先清 value 再读会读成空；r395）──
+  $pickTest = Join-Path $pkg 'scripts\test-client-image-picker.mjs'
+  if (Test-Path $pickTest) {
+    $pickOut = & node $pickTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '发图按钮' (($pickOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '发图按钮' '两处 file input 都先摘文件再清 value（test-client-image-picker.mjs）' }
+  } else { Fail '发图按钮' 'scripts\test-client-image-picker.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {
