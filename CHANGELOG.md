@@ -1,6 +1,6 @@
 # 更新日志
 
-**当前版本：1.12.2** ｜ **最后更新：2026-11-19 19:20**（每次升版本号时更新这一行）
+**当前版本：1.12.3** ｜ **最后更新：2026-11-20 20:05**（每次升版本号时更新这一行）
 
 这里记录 **小小肥鱼（lil-whale）** 两个 npm 包的变更：`@fabianactor/dsh-lil-whale-group`（宿主插件）与 `@fabianactor/dsh-lil-whale-group-ui`（面板）。产品设计看 [docs/PRD.md](docs/PRD.md)。
 
@@ -12,25 +12,25 @@
 
 ## 记法（2026-11-17 整理）
 
-1. **只提 commit、没升版本号**（文档、脚本、账本格式、诊断输出）→ 只写进 `## [未发布]`，一条一行：`rNN · 日期 · 一句话`；用户可见的在这句话里标出来。
+1. **只提 commit、没升版本号**（文档、脚本、账本格式、诊断输出）→ 只写进 `## [未发布]
 
-2. **攒一批再升版本**：升不升版本由人决定。升版本时，把 `[未发布]` 里的条目**全部**移进新的 `## [x.y.z] - 日期` 段，并**整合成一段完整的说明**——这一版做了什么、影响谁、旧行为是什么，别只写最后一个 commit；按「修复 / 变更 / 文档」归类，用户可见的排前面、内部改动在条目里标「（内部）」。
-3. **顺序**：`[未发布]` 永远在最上面，下面是版本段（新→旧）；历史段（r1–r206）保留原样。
-4. **第三方插件的本地补丁改动不进正文**：补丁脚本对 bili-eyes 做的改动（文案、缓存代次等）属于工具行为，正文只留一行索引；每代改了什么、为什么，写进 `docs/Advanced notes on third-party plugins/让小鱼能看B站-bili-eyes.md` 的「补丁代次索引」。
+暂无。2026-11-20 的 1.12.3 发布之后还没有新改动。
 
-## [未发布]
+## [1.12.3] - 2026-11-20
 
-### r395 群聊/私聊点「发图」选完图不进输入框（用户可见）
+这一版两条：修好「发图」按钮选完图不进输入框（用户可见），以及把安装与更新统一收归 GitHub 仓库——设置页的「检查更新」改查 GitHub Releases，npm 上两个包降为镜像并已标废弃。
 
-- 旧行为：点「发图」按钮能打开选择框、也能选中图片，但选完输入框上方什么都不出现，消息发不出去；把图拖进输入框则正常。新行为：选中的图片出现在输入框上方（最多 4 张，可逐张去掉），与拖入、粘贴走同一套校验（只收图片、单张 ≤ 8 MB）。
-- 根因：`<input type="file">` 的 `change` 里先 `event.target.value = ''` 再读 `event.target.files`。`FileList` 是活引用，清空 value 后它变成空列表，于是读出来是 0 张图；拖入不走这个 input，所以没受影响。
-- 内部：改为先把文件摘成数组再清 value（两处：群聊、私聊）；面板 build v57 · image-picker-files；新增 `scripts/test-client-image-picker.mjs` 静态回归与 release-check 4ap。
-### r394 检查更新改查 GitHub Releases；npm 降为镜像
+### 修复
 
-- 旧行为：设置页的「检查更新」去 npm 查最新版，文档也把 npm 当成安装/升级渠道之一。新行为：改查 GitHub Releases 的最新 tag；「版本」段写明 npm 上只有两块 bundle，安装与更新请走仓库（用户可见：是）。
-- 旧行为：`怎么升级.md` 第 2 步让人 `dsh plugin add @版本`。新行为：更新方式改为更新 `<鱼塘根>\app\`（`git pull --ff-only` 或新 zip），只有升级单要求时才重跑 `install.ps1`；回滚改成 `git checkout <上一个 tag>`（用户可见：是；本来 `link:` 装法下照旧文档做会装出错的环境）。
-- 旧行为：npm 上两个包没有废弃说明。新行为：已 `npm deprecate`，提示它们只是镜像、安装与升级看 GitHub 仓库（用户可见：是）。
-- 内部：新增 `lib/version-core.js`（Release tag 解析、版本比较、Release JSON）与 `scripts/test-update-check.mjs`（18 条）；面板 build v56 · update-source-github。
+- **群面板：点「发图」选完图不进输入框**（r395，用户可见；刷新 3080 即生效）：点按钮能打开选择框、也能选中图片，但选完输入框上方什么都不出现，消息发不出去；把图拖进输入框则正常。根因是先把 `input.value` 清空、再读 `FileList`——它是活引用，清空后读出来是 0 张。现在群聊与私聊两处都先摘成数组再清空；`build v57 · image-picker-files`。
+
+### 变更
+
+- **安装与更新统一走 GitHub 仓库**（r394，用户可见）：设置页「检查更新」改查 GitHub Releases 的最新 tag；`怎么升级.md` 第 2 步改成更新 `<鱼塘根>\app\`（`git pull --ff-only` 或新 zip），只有升级单要求时才重跑 `install.ps1`，回滚改成 `git checkout <上一个 tag>`。npm 上两个包仍同步发布，但只是镜像，已 `npm deprecate`（`npm i` 时会看到提示）。如果某个 profile 当初是 npm 装的（`dsh plugin --profile <p> list` 里是版本号而不是 `link:` 路径），按升级文档第 2 步改回 `link:` 安装。
+
+### 内部
+
+- 新增 `lib/version-core.js`（Release tag 解析、版本比较、Release JSON）、`scripts/test-update-check.mjs`（18 条）、`scripts/test-client-image-picker.mjs`（5 条），以及 release-check 4ao / 4ap（共 53 项）。
 
 ## [1.12.2] - 2026-11-19
 
