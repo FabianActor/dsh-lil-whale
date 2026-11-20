@@ -121,7 +121,7 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * 版本：读两个包当前版本；「检查更新」才去问 npm。
+     * 版本：读两个包当前版本；「检查更新」才去问 GitHub Releases。
      * 两个包必须一起用，所以两条一起显示、一起说"有没有新的"。
      */
     async function loadVersions() {
@@ -3108,6 +3108,8 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
             : null,
         ),
 
+          h('div', { style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)', marginTop: 6 } },
+            '查的是 GitHub Releases；npm 上只有两块 bundle，安装与更新请走仓库。'),
         h('div', {
           style: { marginTop: 16, fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)' },
         }, status || '改动会自动保存。侧边栏名称要刷新页面才变。'),
@@ -3827,7 +3829,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v55 · read-truth:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v56 · update-source-github:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')

@@ -394,6 +394,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '日志轮转' (($rotOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '日志轮转' '已切下来的份不再切；同类收回 3 份；轮转/丢弃落 rotate.log（test-rotate-logs.mjs）' }
   } else { Fail '日志轮转' 'scripts\test-rotate-logs.mjs 不在包里' }
+  # ── 4ao. 检查更新（2026-11-20：改查 GitHub Releases，npm 降为镜像；r394）──
+  $updTest = Join-Path $pkg 'scripts\test-update-check.mjs'
+  if (Test-Path $updTest) {
+    $updOut = & node $updTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '检查更新' (($updOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '检查更新' '查的是 GitHub Releases；tag 解析与版本比较有负样本（test-update-check.mjs）' }
+  } else { Fail '检查更新' 'scripts\test-update-check.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {

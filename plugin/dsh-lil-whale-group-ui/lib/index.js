@@ -15,6 +15,7 @@ import { createRequire } from 'node:module'
 import { config } from './config.js'
 import { parseMessageLines } from './messages-core.js'
 import { presenceReasonOf } from './presence-core.js'
+import { newerThan, latestReleaseOf, LATEST_RELEASE_API } from './version-core.js'
 
 export const name = '@fabianactor/dsh-lil-whale-group-ui'
 export const inject = ['webServer', 'agents']
@@ -60,7 +61,7 @@ const IMAGE_EXT = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp', gif
 const IMAGE_FMT = 2
 const IMAGE_ALGO = 'sha256'
 
-// 版本：设置页要显示「当前版本」并检查 npm 上的最新版。
+// 版本：设置页要显示「当前版本」并检查 GitHub Releases 上的最新版。
 // 当前版本从两个包自己的 package.json 读（ui 就是自己；host 走模块解析，
 // 解析不到再按同 scope 的兄弟目录找）——不写死数字，免得代码和 package.json 各说各话。
 const UI_PACKAGE = JSON.parse(readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'))
@@ -87,34 +88,21 @@ function versionState() {
   }
 }
 
-/** 只比 x.y.z 的数字段；预发布标签（-rc.1）忽略——给人看的是版本，不是 semver 全集。 */
-function newerThan(latest, current) {
-  if (!latest || !current) return null
-  const a = String(latest).split('-')[0].split('.').map((n) => Number(n) || 0)
-  const b = String(current).split('-')[0].split('.').map((n) => Number(n) || 0)
-  for (let i = 0; i < 3; i += 1) {
-    if ((a[i] ?? 0) > (b[i] ?? 0)) return true
-    if ((a[i] ?? 0) < (b[i] ?? 0)) return false
-  }
-  return false
-}
-
-async function latestOnNpm(packageName) {
+async function latestReleaseOnGitHub() {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 8000)
   try {
-    const response = await fetch(`https://registry.npmjs.org/${packageName.replace('/', '%2F')}/latest`, {
+    const response = await fetch(LATEST_RELEASE_API, {
       signal: controller.signal,
-      headers: { accept: 'application/json' },
+      headers: { accept: "application/vnd.github+json", "user-agent": "dsh-lil-whale-panel" },
     })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const data = await response.json()
-    return typeof data?.version === 'string' ? data.version : null
+    return latestReleaseOf(data)
   } finally {
     clearTimeout(timer)
   }
 }
-
 /**
  * 读不到的图片必须留痕，否则"没有图"和"图丢了"看起来一样（小肥鱼的原话：
  * 校验的价值不在拦住坏路径，在让坏路径有痕迹）。
@@ -914,7 +902,7 @@ export function apply(ctx) {
     },
   }))
 
-  // 版本：当前版本随时能看；「检查更新」才去问 npm。
+  // 版本：当前版本随时能看；「检查更新」才去问 GitHub Releases（npm 只作镜像，不再当渠道）。
   // 网络不通要说清楚，不能装成"已是最新"——那和真的检查过长得一样（§60）。
   disposers.push(ctx.webServer.register({
     kind: 'exact',
@@ -938,14 +926,21 @@ export function apply(ctx) {
         return
       }
       const base = versionState()
-      const result = { checkedAt: new Date().toISOString(), host: { ...base.host }, ui: { ...base.ui } }
-      for (const side of ['host', 'ui']) {
-        try {
-          const latest = await latestOnNpm(result[side].name)
-          result[side].latest = latest
-          result[side].updateAvailable = newerThan(latest, result[side].current)
-        } catch (error) {
-          result[side].error = String(error?.message ?? error)
+      const result = { checkedAt: new Date().toISOString(), source: "github-releases", host: { ...base.host }, ui: { ...base.ui } }
+      // 两个包同一个仓库、同一条 Release：查一次就够，别各查一次（结果不一致时还得分谁对）。
+      let release = null
+      let releaseError = null
+      try {
+        release = await latestReleaseOnGitHub()
+      } catch (error) {
+        releaseError = String(error?.message ?? error)
+      }
+      for (const side of ["host", "ui"]) {
+        if (release) {
+          result[side].latest = release.version
+          result[side].updateAvailable = newerThan(release.version, result[side].current)
+        } else {
+          result[side].error = releaseError
         }
       }
       sendJson(res, 200, result)

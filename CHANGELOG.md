@@ -20,7 +20,12 @@
 
 ## [未发布]
 
-暂无。2026-11-19 的 1.12.2 发布之后还没有新改动。
+### r394 检查更新改查 GitHub Releases；npm 降为镜像
+
+- 旧行为：设置页的「检查更新」去 npm 查最新版，文档也把 npm 当成安装/升级渠道之一。新行为：改查 GitHub Releases 的最新 tag；「版本」段写明 npm 上只有两块 bundle，安装与更新请走仓库（用户可见：是）。
+- 旧行为：`怎么升级.md` 第 2 步让人 `dsh plugin add @版本`。新行为：更新方式改为更新 `<鱼塘根>\app\`（`git pull --ff-only` 或新 zip），只有升级单要求时才重跑 `install.ps1`；回滚改成 `git checkout <上一个 tag>`（用户可见：是；本来 `link:` 装法下照旧文档做会装出错的环境）。
+- 旧行为：npm 上两个包没有废弃说明。新行为：已 `npm deprecate`，提示它们只是镜像、安装与升级看 GitHub 仓库（用户可见：是）。
+- 内部：新增 `lib/version-core.js`（Release tag 解析、版本比较、Release JSON）与 `scripts/test-update-check.mjs`（18 条）；面板 build v56 · update-source-github。
 
 ## [1.12.2] - 2026-11-19
 
