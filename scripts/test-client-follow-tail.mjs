@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 // 群面板「贴底跟随」与「回到历史未读」的静态接线检查。
 //
 // 为什么是静态检查：这两个 bug 都在浏览器里，没有 jsdom 可跑；
@@ -35,7 +35,7 @@ ok('markRead 后重量分割线', /historyVisitedRef\.current = false[\s\S]{0,24
 // 3. 构建标记（人刷新后靠它确认拿到的是这一版）
 // 期望跟着实现走：r328 把标记从 v51/follow-tail-long 换成 v52/line-cite（气泡行号），
 // 行为没变，变的只是这个字符串——所以这里同步改，不算回归（§27 期望变）。
-ok('client build v55', src.includes('client build v57 · image-picker-files'))
+ok('client build v55', src.includes('client build v58 · mention-split'))
 
 console.log(`test-client-follow-tail：合计 ${total}，PASS ${pass}，FAIL ${total - pass}`)
 process.exit(pass === total ? 0 : 1)

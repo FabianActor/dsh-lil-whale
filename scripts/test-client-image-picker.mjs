@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 // 群面板「发图按钮」的静态回归检查。
 //
 // 2026-11-20 他报：点「发图」能选文件、但图不进输入框；拖入正常。
@@ -43,7 +43,7 @@ ok('先复制 → 再清空 → 再交给 attachImages', ordered)
 ok('注释写明 FileList 是活的', src.includes('FileList 是活的'))
 
 // 5. 构建标记：人刷新后靠它确认拿到的是这一版
-ok('client build v57 · image-picker-files', src.includes('client build v57 · image-picker-files'))
+ok('client build v58 · mention-split', src.includes('client build v58 · mention-split'))
 
 console.log(`test-client-image-picker：合计 ${total}，PASS ${pass}，FAIL ${total - pass}`)
 process.exit(pass === total ? 0 : 1)

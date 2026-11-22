@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 // 群面板「未读红点」的三条保证（2026-11-19 Fabian 报：群聊读完、切到别的页再切回来，红点又出现）。
 //
 // 为什么是静态检查：红点真假要浏览器 + 服务端账本一起看，这里没有 jsdom；
@@ -47,7 +47,7 @@ ok('服务端读点写最后一条 ts', HOST.includes('state.group = lastTsOf(ME
 ok("服务端按 ts 之后计数", HOST.includes("String(message.ts ?? '') <= since"))
 
 // 5. 构建标记（人刷新后靠它确认拿到的是这一版；期望跟着实现走，§27）。
-ok('client build v57 · image-picker-files', CLIENT.includes('client build v57 · image-picker-files'))
+ok('client build v58 · mention-split', CLIENT.includes('client build v58 · mention-split'))
 
 console.log(`test-client-unread：合计 ${total}，PASS ${pass}，FAIL ${total - pass}`)
 process.exit(pass === total ? 0 : 1)
