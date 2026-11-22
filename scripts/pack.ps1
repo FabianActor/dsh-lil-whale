@@ -1,4 +1,4 @@
-#requires -Version 7.0
+﻿#requires -Version 7.0
 # 打包：把一个能带走、能装起来跑的项目副本打成 zip
 #
 # 用法：

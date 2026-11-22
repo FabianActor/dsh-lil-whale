@@ -1,4 +1,4 @@
-#requires -Version 7.0
+﻿#requires -Version 7.0
 <#
 .SYNOPSIS
   把一张 SVG 渲染成 PNG（本机 Edge 无头模式，不联网）。只在宿主可用：

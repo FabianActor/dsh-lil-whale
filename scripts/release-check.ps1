@@ -422,6 +422,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '名册值带 key' (($keyOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '名册值带 key' 'buildMembers 出来每个值都有 key；skip 行不再写 to=undefined（test-member-key.mjs）' }
   } else { Fail '名册值带 key' 'scripts\test-member-key.mjs 不在包里' }
+  # ── 4at. PS1 编码（2026-11-22：含中文的脚本要有 BOM 或 #requires；fi-0009／r405）──
+  $ps1Test = Join-Path $pkg 'scripts\test-ps1-encoding.mjs'
+  if (Test-Path $ps1Test) {
+    $ps1Out = & node $ps1Test 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail 'PS1 编码' (($ps1Out | Select-Object -Last 3) -join ' / ') }
+    else { Ok 'PS1 编码' '含中文的 .ps1 都有 BOM 或 #requires 7；fish.ps1 注释属实（test-ps1-encoding.mjs）' }
+  } else { Fail 'PS1 编码' 'scripts\test-ps1-encoding.mjs 不在包里' }
   # ── 4ar. 账本分工（2026-11-22：共享账不带正文，正文只进 intent.log；fi-0008）──
   $noteTest = Join-Path $pkg 'scripts\test-note-lines.mjs'
   if (Test-Path $noteTest) {

@@ -1370,6 +1370,27 @@ try {
   }
 } catch { Add-Row '启动账（runs）' 'WARN' ('核不了：{0}' -f $_.Exception.Message) }
 
+# 9a3. 脚本编码（fi-0009，r405）：含中文的 .ps1 要么带 UTF-8 BOM、要么带 #requires -Version 7。
+#     5.1 把无 BOM 的 UTF-8 按 ANSI 读，报出来的是"缺少 }"，一个字不提编码——这种错很难认。
+try {
+  $ps1Audit = Join-Path $Cfg.Root 'scripts\audit-ps1-encoding.mjs'
+  if (-not (Test-Path -LiteralPath $ps1Audit)) {
+    Add-Row '脚本编码（PS1）' 'INFO' '体检脚本不在这一版仓库里——跳过'
+  } else {
+    $ps1Out = @(& node $ps1Audit --json 2>&1)
+    $ps1Text = (@($ps1Out) -join ([char]10))
+    $ps1Obj = $null
+    if ($ps1Text) { try { $ps1Obj = $ps1Text | ConvertFrom-Json } catch { } }
+    if ($null -eq $ps1Obj) {
+      Add-Row '脚本编码（PS1）' 'WARN' '体检脚本没给出 JSON'
+    } elseif (@($ps1Obj.problems).Count -gt 0) {
+      $ps1Names = @($ps1Obj.problems | ForEach-Object { $_.file }) -join '、'
+      Add-Row '脚本编码（PS1）' 'WARN' ('这些含中文的 .ps1 既没 BOM 也没 #requires 7：' + $ps1Names) 'NEXT: node scripts\add-ps1-bom.mjs 补 BOM（或给脚本加 #requires -Version 7.0）'
+    } else {
+      Add-Row '脚本编码（PS1）' 'OK' ('{0} 个 .ps1 都有交代（BOM 或 #requires 7）' -f $ps1Obj.files)
+    }
+  }
+} catch { Add-Row '脚本编码（PS1）' 'WARN' ('核不了：{0}' -f $_.Exception.Message) }
 # 9b. 工具数（每条鱼）：账本里只有数字，但"变少"本身就是一条该报的事。
 #     第三条鱼 2026-11-15 19:05：工具消失是静默的，能加一行检查就加一行。
 try {

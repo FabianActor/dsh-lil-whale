@@ -1,4 +1,4 @@
-#requires -Version 7.0
+﻿#requires -Version 7.0
 <#
 .SYNOPSIS
   给「画画」装一个不靠浏览器的渲染器（resvg）。

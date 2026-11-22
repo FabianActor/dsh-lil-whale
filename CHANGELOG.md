@@ -23,6 +23,11 @@
 ### r403 · 2026-11-22 · 共享账不再复制正文：watchman 只留 code=，正文只进 intent.log（内部）
 
 - 修 fi-0008（lee 提、小鱼丸补了三处边界）：`watchman.log` 的 `skip` 行原来把原因整句写进共享账，同一句又进她的 `intent.log`；被 5 分钟去重压制时还先 `slice(0,120)`，两本都是残句。现在共享账只写 `to=<key> code=<码> see=intent.log`（压制时 `code=note-suppressed count=N`），整句只写进 `<家>\logs\intent.log`（只压空白、不截断）。拼行逻辑抽到 `plugin/dsh-lil-whale-group/lib/note-core.js`，`scripts\test-note-lines.mjs` 16 格行为测试，`release-check` 加 4ar。
+### r405 · 2026-11-22 · PS1 编码：含中文的脚本要有 BOM 或 #requires（内部，fi-0009）
+
+- 现象：`scripts\fish.ps1` 第 2 行注释写着"UTF-8 BOM"，文件其实没有 BOM；全仓 10 个 `.ps1` 里 5 个无 BOM（都带 `#requires -Version 7.0`，5.1 会给清楚的"要 7.0"，但注释在说谎）。
+- 修法：给 `fish.ps1`、`pack.ps1`、`render-svg.ps1`、`setup-svg-render.ps1`、`verify-pending.ps1` 补 BOM（`scripts\add-ps1-bom.mjs`，只补 BOM、不动内容）；新增 `scripts\audit-ps1-encoding.mjs` 体检（判定在 `scripts\lib\ps1-encoding-core.mjs`）与 `scripts\test-ps1-encoding.mjs` 12 格；`doctor` 新增「脚本编码（PS1）」格；`release-check` 加 4at（57 项）。
+- 判据：Windows PowerShell 5.1 读无 BOM 的 UTF-8 时按 ANSI 解码，中文行坏了却报"缺少 }"；含中文的脚本要么带 BOM，要么带 `#requires -Version 7`（后者能让 5.1 说得清楚）。
 ### r404 · 2026-11-22 · 名册值补 key：skip 行不再写 to=undefined（内部，fi-0010）
 
 - 根因：`buildMembers()` 造出的名册值没有 `key`，`selfPlanTick` 走 `planDue → noteOnce` 拼 `to=${member.key}` 时写成 `to=undefined`（watchman.log 900 行）。`watchedMembers()` 手工补了 key，所以只有这一路坏。
