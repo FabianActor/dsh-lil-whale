@@ -13,6 +13,7 @@ import { printableText } from './text-clean.js'
 import { sayProblemOf, channelProblemOf } from './say-core.js'
 import { noteCodeOf, intentNoteTextOf, watchmanSkipLineOf } from './note-core.js'
 import { membersWithKeys } from './members-core.js'
+import { MENTION_ALL, normalizeMention, defaultMentionOf, wantsWake, mentionTextOf, bumpHeld, heldOf, clearHeld, heldSentenceOf } from './mention-core.js'
 import { codeFingerprint } from './code-fp.js'
 import { codeFpChangeOf, codeFpHistoryLine, codeFpLedgerOf, CODE_FP_LEDGER } from './code-fp-history-core.js'
 import { join, dirname, basename } from 'node:path'
@@ -1760,7 +1761,7 @@ function sayPrivate(from, to, text, image = null, images = null) {
   return record
 }
 
-function say(from, to, text, channel = 'group', s = '', toSeat = '', image = null, images = null) {
+function say(from, to, text, channel = 'group', s = '', toSeat = '', image = null, images = null, mention = undefined) {
   // 2026-11-17 r243：地址在执行时自己检查。
   // 起因：裸 spec 路径下 `parameters.enum` 只是文档（宿主只校验 required/type），
   // 第三条鱼实测 `group_say(to="group")` 成功入账 —— 写进一个没人读的地址，还不报错。
@@ -1786,6 +1787,13 @@ function say(from, to, text, channel = 'group', s = '', toSeat = '', image = nul
   //   channel = 屋里还有没有别人（group 默认 / dm 只有对象一个人）
   // 所以 `to:"fabian"` + 默认 group = 群里公开对他说；私聊要显式 `channel:"dm"`。
   const isDm = channel === 'dm'
+  // mention（2026-11-22）：这条叫醒谁。没写就按发件人/收件人推默认值——
+  // 人类说话默认叫醒所有鱼，鱼说话默认谁都不叫醒；to 指名了某人就叫他。
+  const mentions = isDm
+    ? undefined
+    : (mention === undefined
+        ? defaultMentionOf({ from, to: toKey, members: MEMBERS })
+        : normalizeMention(mention, Object.keys(MEMBERS)))
   if (isDm) return { ...sayPrivate(from, toKey, body, null, list), channel: 'dm' }
   const record = {
     ts: new Date().toISOString(), from, to: toKey, text: body, kind: 'say', channel: 'group',
@@ -1793,6 +1801,8 @@ function say(from, to, text, channel = 'group', s = '', toSeat = '', image = nul
     // 指名某一座位（同一个人的第二段会话）：只有那一段会被叫醒。
     // 不加这个字段 = 叫"这个人"，谁空谁应（仍然只叫一次）。
     ...(toSeat === '' ? {} : { toSeat }),
+    // 叫醒谁（2026-11-22）：与 to 分开；空数组 = 谁都不叫醒。
+    ...(mentions === undefined ? {} : { mention: mentions }),
     // 图片（可选）：只记定位信息，字节在 images\ 下。1 张写 image、多张写 images。
     ...(list.length === 0 ? {} : (list.length === 1 ? { image: list[0] } : { images: list })),
   }
@@ -1819,6 +1829,39 @@ function setCursor(cursors, member, key, value) {
     : (typeof prev === 'number' ? { group: prev } : {})
   box[key] = value
   cursors[member] = box
+}
+
+// ---------- 没叫醒的也要有账（2026-11-22） ----------
+// 游标会往前走（否则每轮都要重扫整段历史），但"你不在的时候群里还积着几条没点你的话"
+// 得能回答。状态按 (成员, 通道) 记在 pool\state\held\<成员>.json —— 不推游标的做法会让
+// 这些消息下次混进预览，看起来像是它们在叫醒你。
+const HELD_DIR = join(POOL_STATE, 'held')
+function heldFileOf(member) {
+  return join(HELD_DIR, `${member}.json`)
+}
+function noteHeld(member, channelKey, count, line, ts) {
+  try {
+    mkdirSync(HELD_DIR, { recursive: true })
+    writeJson(heldFileOf(member), bumpHeld(readJson(heldFileOf(member), null), channelKey, { count, line, ts }))
+  } catch (error) {
+    logLine({ note: 'held-write-failed', member, channel: channelKey, error: String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120) })
+  }
+}
+function heldCountOf(member, channelKey) {
+  try {
+    return heldOf(readJson(heldFileOf(member), null), channelKey)
+  } catch {
+    return 0
+  }
+}
+function clearHeldOf(member, channelKey) {
+  try {
+    const prev = readJson(heldFileOf(member), null)
+    if (prev === null) return
+    writeJson(heldFileOf(member), clearHeld(prev, channelKey))
+  } catch (error) {
+    logLine({ note: 'held-clear-failed', member, channel: channelKey, error: String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120) })
+  }
 }
 /** 往 plugin.log 追一行（自检用，别让它影响主流程）。 */
 function logLine(record) {
@@ -2020,13 +2063,13 @@ function apply(ctx) {
     const buildTool = hostOk && defineTool !== null ? defineTool : (options) => options
     ctx.tools.register(buildTool({
     name: 'group_say',
-    description: '说一句话。默认在群里说（群里的人都看得见，醒着的都会被叫醒）；channel 给 dm 才是私下只对一个人说（不进群记录，别人看不到这个窗口）。to 是"说给谁"，channel 是"还有没有别人在场"。发出即返回，不等对方回复。',
+    description: '说一句话。默认在群里说（群里的人都看得见；叫醒谁看 mention：不写时，鱼默认谁都不叫醒、指名 to 就叫他）。channel 给 dm 才是私下只对一个人说（不进群记录，别人看不到这个窗口）。to 是"说给谁"，mention 是"叫醒谁"，channel 是"还有没有别人在场"。发出即返回，不等对方回复。',
     parameters: {
       to: {
         type: 'string',
         required: true,
         enum: ['all', ...Object.keys(MEMBERS)],
-        description: '说给谁：all = 群里所有人（只能在群里用）；写某个成员的 id 就是指名对他/她说（群里仍然看得见，只有那个人会被叫醒）。给具体的人配 channel dm 就是私下说。',
+        description: '说给谁：all = 群里所有人（只能在群里用）；写某个成员的 id 就是"这句是对他说的"（群里仍然看得见）。不填 mention 时，指名 who 会顺便叫醒他；要只叫醒别人或有选择地叫醒，用 mention。给具体的人配 channel dm 就是私下说。',
       },
       channel: {
         type: 'string',
@@ -2041,6 +2084,10 @@ function apply(ctx) {
       seat: {
         type: 'string',
         description: '可选。指名某一段会话收（会话 id 前 6 位，例如 ae4daa）。不填 = 叫这个人，谁空谁应。只在 group 通道有效。',
+      },
+      mention: {
+        type: 'string',
+        description: '可选。叫醒谁：all = 叫醒所有醒着的鱼；写成员 id（多个用逗号隔开）只叫醒他们；不填时按 to 推默认——to 指名某人就叫他，to=all 时鱼默认谁都不叫醒（人类从面板发的消息默认叫醒所有人）。',
       },
       image: {
         type: 'string',
@@ -2073,19 +2120,22 @@ function apply(ctx) {
           const label = m?.label
           if (label && text.includes(`@${label}`)) mentioned.push(label)
         }
-        const target = value.to && value.to !== 'all' ? MEMBERS[value.to] : null
-        const base = value.channel === 'dm'
-          ? `已写进私聊（${value.ts}）：只有 ${labelOf(value.to)} 看得见，群里不会出现这句。`
-          : value.to && value.to !== 'all'
-            ? (target?.kind === 'human'
-                // 人类不是"被叫醒"的对象：他不跑轮，只会在面板上看到未读。
-                ? `已入群（${value.ts}）：写进群记录，**这条是对 ${labelOf(value.to)} 说的**（他在面板上能看到，不会叫醒任何鱼）。`
-                : `已入群（${value.ts}）：写进群记录，**只有 ${labelOf(value.to)} 会被叫醒**（别人翻记录看得见）。`)
-            : `已入群（${value.ts}）：群里的人都看得见，**醒着的都会被叫醒**。`
-        const hint = value.channel !== 'dm' && value.to === 'all' && mentioned.length > 0
-          ? `\n\n提示：正文里 @ 了 ${mentioned.join('、')}，但 to=all —— 这条会叫醒所有醒着的鱼。只想叫其中一个，就把 to 写成他的 id（例如 to:"lee"），话照样进群、别人看得见。`
+        if (value.channel === 'dm') {
+          return [{ type: 'text', text: `已写进私聊（${value.ts}）：只有 ${labelOf(value.to)} 看得见，群里不会出现这句。` }]
+        }
+        // 回执要说清两件事：这句话去了哪间屋、会叫醒谁（2026-11-22 起 to 与 mention 拆开）。
+        const wakes = mentionTextOf(value.mention, labelOf)
+        const heads = value.mention === 'all'
+          ? '群里的人都看得见，**醒着的都会被叫醒**'
+          : Array.isArray(value.mention) && value.mention.length === 0
+            ? '群里的人都看得见，**不叫醒任何人**（要叫醒谁就把 mention 写出来）'
+            : `群里的人都看得见，**只叫醒 ${wakes}**`
+        const human = Array.isArray(value.mention) && value.mention.some((key) => MEMBERS[key]?.kind === 'human')
+        const base = `已入群（${value.ts}）：${heads}${human ? '（人类不跑轮，会在面板上看到未读）' : ''}。`
+        const quiet = Array.isArray(value.mention) && value.mention.length === 0 && mentioned.length > 0
+          ? `\n\n提示：正文里 @ 了 ${mentioned.join('、')}，但 mention 没写——这条不会叫醒任何人；要叫醒就把 mention 写成成员 id 或 all。`
           : ''
-        return [{ type: 'text', text: base + hint }]
+        return [{ type: 'text', text: base + quiet }]
       },
     },
     execute(args, exec) {
@@ -2142,9 +2192,11 @@ function apply(ctx) {
         image = storeImageFromPath(args.image)
         logLine({ note: 'group_say-image', id: image.id, ext: image.ext, bytes: image.bytes })
       }
+      // mention（2026-11-22）：叫醒谁。不写就交给 say() 推默认值。
+      const mention = normalizeMention(args.mention, Object.keys(MEMBERS))
       const record = say(
         member, args.to, args.text, channel,
-        sid === null ? '' : sid.replace(/^session-/, '').slice(0, 6), toSeat, image,
+        sid === null ? '' : sid.replace(/^session-/, '').slice(0, 6), toSeat, image, null, mention,
       )
       // channel 让发言的人一眼知道这句话去了哪：group = 大家都看得见；dm = 只有对方看得见，且不会叫醒谁。
       return { ts: record.ts, queued: true, channel: record.channel, to: record.to, image: image === null ? '' : `${image.id}.${image.ext}` }
@@ -2399,7 +2451,7 @@ function apply(ctx) {
         }
         // 自动播报：称呼变了，别人得知道（他 2026-11-14 点头要的）。
         try {
-          say(member, 'all', renameAnnouncement(result.from, result.to), 'group')
+          say(member, 'all', renameAnnouncement(result.from, result.to), 'group', '', '', null, null, 'all')
         } catch (error) {
           logLine({ note: 'rename-announce-failed', why: String(error?.message ?? error) })
         }
@@ -2767,6 +2819,10 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
   // 记下"最后递出去的那条"在文件里的绝对行号（1 基）。小肥鱼 2026-11-12 的判据：
   // 只有时间戳的话，两条隔 3 秒的重复仍然只能猜；有行号才能说"同一行递了两次"。
   let lastIncomingIndex = -1
+  // 这条通道里"没叫醒"的消息也要记一笔（2026-11-22）：少叫醒，不等于悄悄丢消息。
+  let heldDelta = 0
+  let heldLastLine = -1
+  let heldLastTs = null
   for (let index = Math.min(sharedSeen, seatSeen); index < lines.length; index += 1) {
     let record
     try {
@@ -2794,7 +2850,14 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
       continue
     }
     if (channel.kind === 'group') {
-      if (record.to !== member && record.to !== 'all') continue
+      // 2026-11-22：叫不叫醒看 mention，不看 to。to 只回答"这话对谁说"。
+      // 老记录没有 mention 字段，wantsWake 按老规则读（to=all 叫醒所有人、to=某人叫他）。
+      if (!wantsWake(record, member)) {
+        heldDelta += 1
+        heldLastLine = index
+        heldLastTs = record.ts ?? null
+        continue
+      }
     } else if (record.to !== member) {
       continue
     }
@@ -2803,6 +2866,8 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
     incomingIndexes.push(index)
     lastIncomingIndex = index
   }
+
+  if (heldDelta > 0) noteHeld(member, channel.key, heldDelta, heldLastLine + 1, heldLastTs)
 
   // 没有写给我的，也把游标推过去，免得下次重复扫
   if (incoming.length === 0) {
@@ -2884,13 +2949,16 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
     backlog,
   })
   const target = channel.kind === 'dm' ? channel.file : READABLE
+  // 没叫醒你的那些话，也要在预览里露一次头（2026-11-22）。
+  const heldCount = channel.kind === 'group' ? heldCountOf(member, channel.key) : 0
+  const heldSentence = heldSentenceOf(heldCount)
 
   // 护栏：宿主构造器没解析到、或造出来的东西没有 id，就别往会话里塞。
   // 宁可这一轮不叫醒（游标不动，下个 tick 再试），也不能写进去一条让整份日志打不开的事件。
   const built = buildUserMessage({
     content: [{
       type: 'text',
-      text: `${head}${where}。\n\n${preview}\n\n去 ${target} ${tailHint}回不回、说什么，你自己定。`,
+      text: `${head}${where}。\n\n${heldSentence === '' ? '' : `${heldSentence}\n\n`}${preview}\n\n去 ${target} ${tailHint}回不回、说什么，你自己定。`,
     }],
     source: { kind: channel.kind === 'dm' ? 'dm' : 'group', form: 'signal' },
   })
@@ -2908,7 +2976,13 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
   // `id` 是构造出来的 user message id，用来跟会话日志对账（见 wakeDeliverLog 的注释）；
   // `last-line` 是那条消息在通道文件里的绝对行号（1 基），`last-from` 是它谁写的。
   // 有这两个字段，"同一条被递了两次"和"我们自己叫了两次"才分得开 —— 只看时间戳分不开。
-  const deliveryNote = `id=${built.id} member=${member} channel=${channel.key} seat=${seat === '' ? '-' : seat} pending=${incoming.length} last-line=${lastIncomingIndex + 1} last-from=${incoming[incoming.length - 1]?.from ?? '-'} last-ts=${lastTs || 0} cursor=${lines.length} prior-cursor=${sharedSeenStored} cursor-state=${cursorLost ? "lost" : firstRead ? "first" : "resumed"} tpl=${tpl} n=${incoming.length} tail=${tailTpl} wtext8=${wtext8} human=${humanIncoming ? 'yes' : 'no'} pkg=${PKG_VERSION}`
+  const lastRecord = incoming[incoming.length - 1]
+  const mentionTag = lastRecord?.mention === 'all'
+    ? 'all'
+    : Array.isArray(lastRecord?.mention)
+      ? (lastRecord.mention.length === 0 ? 'none' : lastRecord.mention.join('+'))
+      : 'legacy'
+  const deliveryNote = `id=${built.id} member=${member} mention=${mentionTag} held=${heldCount} channel=${channel.key} seat=${seat === '' ? '-' : seat} pending=${incoming.length} last-line=${lastIncomingIndex + 1} last-from=${incoming[incoming.length - 1]?.from ?? '-'} last-ts=${lastTs || 0} cursor=${lines.length} prior-cursor=${sharedSeenStored} cursor-state=${cursorLost ? "lost" : firstRead ? "first" : "resumed"} tpl=${tpl} n=${incoming.length} tail=${tailTpl} wtext8=${wtext8} human=${humanIncoming ? 'yes' : 'no'} pkg=${PKG_VERSION}`
   try {
     agent.followup(built)
   } catch (error) {
@@ -2917,6 +2991,8 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
     return false
   }
   wakeDeliverLog('delivered', deliveryNote)
+  // 这些没叫醒的话已经在预览里说过一次了；清掉，别让下一轮的"还有 N 条"重复计数。
+  if (channel.kind === 'group') clearHeldOf(member, channel.key)
   // 小肥鱼 #1627（2026-11-18）：通道交付也是一次"被叫醒"，但过去的 `woke` 行只记推门那几类，
   // 于是"最频繁的群交付"在 watchman.log 里一次都看不见。不改旧行的意思，只把这一类也记进来：
   // trigger=channel。此前的行没有它，只代表当时不记，不代表当时没有通道唤醒（append-only，补不回去）。

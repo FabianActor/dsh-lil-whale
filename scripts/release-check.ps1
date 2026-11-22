@@ -1,4 +1,4 @@
-﻿#requires -Version 7.0
+#requires -Version 7.0
 # scripts\release-check.ps1 —— 拟发版检查
 #
 # 为什么要有它：平时所有验证都在**工作目录**里做，而工作目录里混着本机配置、临时脚本、
@@ -429,6 +429,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail 'PS1 编码' (($ps1Out | Select-Object -Last 3) -join ' / ') }
     else { Ok 'PS1 编码' '含中文的 .ps1 都有 BOM 或 #requires 7；fish.ps1 注释属实（test-ps1-encoding.mjs）' }
   } else { Fail 'PS1 编码' 'scripts\test-ps1-encoding.mjs 不在包里' }
+  # ── 4au. 叫醒谁（2026-11-22：to 说给谁、mention 叫醒谁；r412）─────────
+  $mentionTest = Join-Path $pkg 'scripts\test-mention-wake.mjs'
+  if (Test-Path $mentionTest) {
+    $mentionOut = & node $mentionTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '叫醒谁' (($mentionOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '叫醒谁' 'to/mention 分开；鱼默认不叫醒、人默认叫醒；没叫醒的记 held（test-mention-wake.mjs）' }
+  } else { Fail '叫醒谁' 'scripts\test-mention-wake.mjs 不在包里' }
   # ── 4ar. 账本分工（2026-11-22：共享账不带正文，正文只进 intent.log；fi-0008）──
   $noteTest = Join-Path $pkg 'scripts\test-note-lines.mjs'
   if (Test-Path $noteTest) {

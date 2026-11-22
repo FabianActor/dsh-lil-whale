@@ -1244,9 +1244,26 @@ export function apply(ctx) {
       }
       // 收信人从名册校验，不再写死三条 —— 2026-11-12 19:59 现场：fishball 被这里挡住，
       // 面板回 bad-target，看着像"她不在群里"，其实是名单又抄了一份（A.32 同一个病）。
-      if (to !== 'all' && !Object.prototype.hasOwnProperty.call(MEMBERS, to)) {
-        sendJson(res, 400, { error: 'bad-target' })
+      // mention（2026-11-22）：面板发的话人就是 Fabian —— 默认叫醒所有鱼；
+      // 用 @ 指名了谁（面板把这个存进 mention），就只叫醒那个人，消息照样全群可见。
+      const rawMention = payload?.mention
+      let mention
+      if (rawMention === undefined) {
+        mention = to === 'all' ? 'all' : [to]
+      } else if (rawMention === 'all') {
+        mention = 'all'
+      } else if (Array.isArray(rawMention)) {
+        mention = rawMention.filter((key) => typeof key === 'string' && key !== '')
+      } else {
+        sendJson(res, 400, { error: 'bad-mention' })
         return
+      }
+      if (Array.isArray(mention)) {
+        const unknown = mention.filter((key) => !Object.prototype.hasOwnProperty.call(MEMBERS, key))
+        if (unknown.length > 0) {
+          sendJson(res, 400, { error: 'bad-mention', detail: `不认识的成员：${unknown.join('、')}` })
+          return
+        }
       }
       const now = new Date()
       // toSeat（可选）：指名这个人的哪一段会话收（6 位十六进制）。不填 = 叫这个人，谁空谁应。
@@ -1258,6 +1275,8 @@ export function apply(ctx) {
     // （旧记录里的 s=ui/watch 是历史遗留，纸上已写分界）。
     ts: now.toISOString(), from: HUMAN_ID, to, text, kind: 'say',
         ...(toSeat === '' ? {} : { toSeat }),
+        // 叫醒谁（2026-11-22）：与 to 分开。
+        mention,
         ...(images.length === 0 ? {} : (images.length === 1 ? { image: images[0] } : { images })),
       }
       try {

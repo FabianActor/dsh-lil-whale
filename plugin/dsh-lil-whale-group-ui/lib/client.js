@@ -2260,6 +2260,9 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
             : {
               to: base, text: value,
               ...(seat === '' ? {} : { toSeat: seat }),
+              // mention（2026-11-22）：面板的 @ 现在只决定叫醒谁——消息仍然全群可见。
+              // 没 @ 人（to === 'all'）就是叫醒所有鱼（人说话默认叫醒）；@ 了某人只叫他。
+              mention: to === 'all' ? 'all' : [base],
               ...(images.length === 0 ? {} : { images }),
             }
           const response = await fetch(endpoint, {
