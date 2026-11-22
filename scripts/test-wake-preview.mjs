@@ -35,23 +35,23 @@ function eq(name, got, want) {
 // ---------- 群里：超过 backlogTier（8）条 ----------
 {
   const r = wakeWordingOf({ kind: 'group', who: '小满、小鱼丸', count: 76, firstRead: true, cursorLost: false, backlog: true })
-  eq('first 的正文', r.where, '群里现在有 76 条（小满、小鱼丸）——你还没读过这个群（还没有游标）')
+  eq('first 的正文', r.where, '群里现在有 76 条点了你名字的（小满、小鱼丸）——你还没读过这个群（还没有游标）')
   eq('first 的尾巴', r.tailHint, '先看最后三条；前面的不用补，想看再翻。')
-  eq('first 的模板 id', r.tpl, 'group-first@1')
+  eq('first 的模板 id', r.tpl, 'group-first@2')
   eq('first 的尾巴 id', r.tailTpl, 'tail-no-backfill@1')
 }
 {
   const r = wakeWordingOf({ kind: 'group', who: '小满', count: 76, firstRead: true, cursorLost: true, backlog: true })
-  eq('lost 的正文', r.where, '群里现在有 76 条（小满）——你的读进度不见了（游标这一格是空的），这次按从头算，已经记了一笔账')
+  eq('lost 的正文', r.where, '群里现在有 76 条点了你名字的（小满）——你的读进度不见了（游标这一格是空的），这次按从头算，已经记了一笔账')
   eq('lost 的尾巴', r.tailHint, '先看最后三条；前面的不用补，想看再翻。')
-  eq('lost 的模板 id', r.tpl, 'group-lost@1')
+  eq('lost 的模板 id', r.tpl, 'group-lost@2')
   eq('lost 的尾巴 id', r.tailTpl, 'tail-no-backfill@1')
 }
 {
   const r = wakeWordingOf({ kind: 'group', who: '小鱼丸', count: 12, firstRead: false, cursorLost: false, backlog: true })
-  eq('resumed 的正文', r.where, '你不在的这段时间，群里积了 12 条（小鱼丸）')
+  eq('resumed 的正文', r.where, '你不在的这段时间，群里积了 12 条点了你名字的（小鱼丸）')
   eq('resumed 的尾巴', r.tailHint, '先看最后三条，再看看有没有指名你的。')
-  eq('resumed 的模板 id', r.tpl, 'group-backlog@1')
+  eq('resumed 的模板 id', r.tpl, 'group-backlog@2')
   eq('resumed 的尾巴 id', r.tailTpl, 'tail-named@1')
 }
 
@@ -61,9 +61,9 @@ function eq(name, got, want) {
   const a = wakeWordingOf({ kind: 'group', who: '小满', count: 3, firstRead: true, cursorLost: false, backlog: false })
   const b = wakeWordingOf({ kind: 'group', who: '小满', count: 3, firstRead: true, cursorLost: true, backlog: false })
   const c = wakeWordingOf({ kind: 'group', who: '小满', count: 3, firstRead: false, cursorLost: false, backlog: false })
-  eq('没过档 的正文', a.where, '群里有 3 条新的（小满）')
+  eq('没过档 的正文', a.where, '群里有 3 条点了你名字的（小满）')
   eq('没过档 的尾巴', a.tailHint, '去看看。')
-  eq('没过档 的模板 id', a.tpl, 'group-plain@1')
+  eq('没过档 的模板 id', a.tpl, 'group-plain@2')
   eq('没过档 的尾巴 id', a.tailTpl, 'tail-go@1')
   eq('没过档 不区分 first/lost/resumed（正文）', a.where === b.where && b.where === c.where, true)
   eq('没过档 不区分 first/lost/resumed（尾巴）', a.tailHint === b.tailHint && b.tailHint === c.tailHint, true)

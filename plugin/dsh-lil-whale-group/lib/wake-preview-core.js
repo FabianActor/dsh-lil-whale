@@ -15,16 +15,20 @@
 
 import { createHash } from 'node:crypto'
 
-export function wakeWordingOf({ kind, who, dmWho = '', count, firstRead, cursorLost, backlog }) {
+// 2026-11-22 r413：群消息不再写 to，叫醒只看 mention。预览措辞也跟着改——
+// 旧话"群里有 N 条新的"在新机制下是对的，但不够；点了名才叫醒的，要说"点了你名字的"。
+// 老记录（没有 mention 字段）仍按老话说"新的"，因为它确实可能是 to=all 广播。
+export function wakeWordingOf({ kind, who, dmWho = '', count, firstRead, cursorLost, backlog, woken = 'mention' }) {
+  const pointed = woken === 'mention' ? '点了你名字的' : '新的'
   const where = kind === 'dm'
     ? `${dmWho} 私下跟你说了 ${count} 句`
     : backlog
       ? firstRead
         ? cursorLost
-          ? `群里现在有 ${count} 条（${who}）——你的读进度不见了（游标这一格是空的），这次按从头算，已经记了一笔账`
-          : `群里现在有 ${count} 条（${who}）——你还没读过这个群（还没有游标）`
-        : `你不在的这段时间，群里积了 ${count} 条（${who}）`
-      : `群里有 ${count} 条新的（${who}）`
+          ? `群里现在有 ${count} 条${pointed}（${who}）——你的读进度不见了（游标这一格是空的），这次按从头算，已经记了一笔账`
+          : `群里现在有 ${count} 条${pointed}（${who}）——你还没读过这个群（还没有游标）`
+        : `你不在的这段时间，群里积了 ${count} 条${pointed}（${who}）`
+      : `群里有 ${count} 条${pointed}（${who}）`
   const tailHint = backlog
     ? firstRead
       ? '先看最后三条；前面的不用补，想看再翻。'
@@ -41,9 +45,9 @@ export function wakeWordingOf({ kind, who, dmWho = '', count, firstRead, cursorL
     ? 'dm@1'
     : backlog
       ? firstRead
-        ? cursorLost ? 'group-lost@1' : 'group-first@1'
-        : 'group-backlog@1'
-      : 'group-plain@1'
+        ? cursorLost ? 'group-lost@2' : 'group-first@2'
+        : 'group-backlog@2'
+      : 'group-plain@2'
   const tailTpl = backlog ? (firstRead ? 'tail-no-backfill@1' : 'tail-named@1') : 'tail-go@1'
   // 2026-11-15 21:3x，第二条鱼：tpl 锁的是"选了哪一句"，锁不住"句子里那个数对不对"。
   // 渲染后整句的短指纹跟 tpl 一起记，才能事后重算出同一句话；

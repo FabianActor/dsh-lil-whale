@@ -55,13 +55,15 @@ window.__ModuleLoader__.load({
       toAll: '所有人',
       toLee: '第一条鱼',
       toWhale: '第二条鱼',
-      groupOnly: '在群里说（谁会醒由阀门决定）',
-      toOne: (name) => `只有 ${name} 会被叫醒`,
+      groupOnly: '不叫醒任何人（消息照样在群里）',
+      toOne: (names) => `会叫醒：${names}`,
       typing: (names) => `${names} 正在回复…`,
       // 两档"忙"，群聊私聊同一套：在回这一段（typing）/ 在别处忙（busy，可能就在另一个窗口）。
       // 宿主只给得出 reason，给不出"这句话回谁"——所以文案也只承诺到这一层。
       busy: (names) => `${names} 正在忙…`,
-      mention: '右键 @',
+      mention: '右键点名叫醒',
+      mentionPrefix: '提到了：',
+      mentionAll: '所有人',
       settingsTitle: '小小肥鱼',
       settingsHint: '这些只改显示，不碰她的文件。',
     }
@@ -266,6 +268,22 @@ window.__ModuleLoader__.load({
       const named = config?.seats?.[seat]
       if (typeof named === 'string' && named.trim() !== '') return named
       return `${nameOf(config, base)} · ${seat}`
+    }
+
+    /**
+     * 「提到了谁」（2026-11-22 r413）。群消息不再有 to；叫醒名单只看 mention。
+     * 老记录没有 mention：只有当年指了名（to=成员）才回退显示，to=all 的广播保持原样。
+     * 与宿主投影（scripts/rebuild-group-md.mjs）和 messages-core.js 用同一句话。
+     */
+    function mentionNameOf(config, message) {
+      const mention = message?.mention
+      if (mention === 'all') return t.mentionAll
+      if (Array.isArray(mention)) {
+        return mention.length === 0 ? '' : mention.map((key) => targetName(config, key)).join('、')
+      }
+      const to = message?.to
+      if (typeof to === 'string' && to !== '' && to !== 'all') return targetName(config, to)
+      return ''
     }
 
     const baseStyle = {
@@ -716,9 +734,10 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       const humanId = config?.humanId ?? 'fabian'
   const mine = message.from === humanId
       const who = nameOf(config, message.from, message.s)
-      // 指名到座位的消息，显示"→ 大肥鱼 · 日常"，只写给这个人的显示"→ 大肥鱼"。
-      const targetTo = message.toSeat ? `${message.to}@${message.toSeat}` : message.to
-      const target = message.to && message.to !== 'all' ? ` → ${targetName(config, targetTo)}` : ''
+      // 提到了谁（2026-11-22 r413）：新记录看 mention；老记录按 to 回退，只有当年指了名才写。
+      // to=all 的广播不补"所有人"——那一条当年没有点名，补上去等于改历史。
+      const mentionName = mentionNameOf(config, message)
+      const target = mentionName === '' ? '' : ` · ${t.mentionPrefix}${mentionName}`
       const time = formatStamp(message.ts)
       // 行号：引用地址。群是 messages.jsonl 的行，私聊是 pool\dm\<pair>.jsonl 的行。
       // 文件是 append-only，行号不会变；点一下复制成别人能直接引用的形状。
@@ -882,8 +901,8 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       )
     }
 
-    /** "@ 谁" 的小面板：一行一个成员，头像 + 名字。点「所有人」= 不指定对象。 */
-    function AtPicker({ config, current, seats, onPick, onClose }) {
+    /** "@ 谁" 的小面板（2026-11-22 r413）：多选，选的是"叫醒谁"，不是"说给谁"。 */
+    function AtPicker({ config, mention, onToggle, onPickAll, onClear, onClose }) {
       const [hovered, setHovered] = useState(null)
       const boxRef = useRef(null)
       // 移出去不关；点别处才关。她自己点 @ 钮那种情况由 data-at-anchor 放行，
@@ -903,23 +922,11 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
           document.removeEventListener('keydown', onKey)
         }
       }, [onClose])
-      // 名字下面列出座位：同一个人**真的有几段会话**时才列。
-      // （2026-11-12 他报的"@ 按钮后面有椅子后缀"：以前名册里每人一段也会列一行
-      //   `小肥鱼 · c145f6`，看着像两条鱼。一段就是常态，不列。）
-      const rows = [{ id: 'all', label: t.toAll, plain: true }]
+      // 座位已废弃（2026-11-22，Fabian：`seat 字段已经废弃了`）：@ 只列人和"所有人"，
+      // 不再列椅子后缀——选了也没有新消息会带 toSeat。
+      const rows = [{ id: 'all', label: t.mentionAll, plain: true }]
       const memberIds = Object.keys(config?.names ?? NAMES).filter((id) => id !== (config?.humanId ?? 'fabian'))
-      for (const member of memberIds) {
-        rows.push({ id: member, label: nameOf(config, member) })
-        const mine = (seats ?? []).filter((item) => item.member === member)
-        if (mine.length < 2) continue
-        for (const seat of mine) {
-          rows.push({
-            id: `${member}@${seat.prefix}`,
-            label: config?.seats?.[seat.prefix] || `${nameOf(config, member)} · ${seat.prefix}`,
-            indented: true,
-          })
-        }
-      }
+      for (const member of memberIds) rows.push({ id: member, label: nameOf(config, member) })
       return h('div', {
         ref: boxRef,
         style: {
@@ -930,11 +937,13 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
           boxShadow: '0 8px 28px rgba(0,0,0,0.18)',
         },
       }, rows.map((row) => {
-        const active = (current || 'all') === row.id
+        const active = row.id === 'all'
+          ? mention === 'all'
+          : (Array.isArray(mention) && mention.includes(row.id))
         const lit = active || hovered === row.id
         return h('button', {
           key: row.id,
-          onClick: () => onPick(row.id),
+          onClick: () => (row.id === 'all' ? onPickAll() : onToggle(row.id)),
           onMouseDown: (event) => event.preventDefault(),
           onMouseEnter: () => setHovered(row.id),
           onMouseLeave: () => setHovered(null),
@@ -1855,9 +1864,17 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       const [hasText, setHasText] = useState(() => initialTextRef.current.trim() !== '')
       const draftTimerRef = useRef(null)
       const draftValueRef = useRef(initialTextRef.current)
-      const [to, setTo] = useState('all')
-      // @ 面板选中人的回调要稳定：Bubble 是 memo 的，每次渲染新函数会让 120 个气泡全部重渲染。
-      const mentionTo = useCallback((id) => setTo(id), [])
+      // 叫醒名单（2026-11-22 r413）：'all' 或成员 id 数组；[] = 谁都不叫醒（消息仍全群可见）。
+      const [mention, setMention] = useState([])
+      // @ 面板 / 右键头像的回调要稳定：Bubble 是 memo 的，每次渲染新函数会让 120 个气泡全部重渲染。
+      const mentionTo = useCallback((id) => {
+        setMention((current) => {
+          if (current === 'all') return [id]
+          return current.includes(id) ? current.filter((key) => key !== id) : [...current, id]
+        })
+      }, [])
+      const pickAll = useCallback(() => setMention('all'), [])
+      const clearMention = useCallback(() => setMention([]), [])
       const [error, setError] = useState(null)
       const [sending, setSending] = useState(false)
       // 待发送的图（data URL）。上传在 submit 里做，这里只存"用户选了哪张"。
@@ -2253,16 +2270,14 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
             if (!uploaded.ok) throw new Error(result?.detail ?? `图片上传失败 HTTP ${uploaded.status}`)
             if (result?.image) images.push(result.image)
           }
-          const { base, seat } = splitTarget(to)
           const endpoint = tab === 'dm' ? '/group/api/dm' : '/group/api/send'
           const body = tab === 'dm'
             ? { text: value, ...(images.length === 0 ? {} : { images }) }
             : {
-              to: base, text: value,
-              ...(seat === '' ? {} : { toSeat: seat }),
-              // mention（2026-11-22）：面板的 @ 现在只决定叫醒谁——消息仍然全群可见。
-              // 没 @ 人（to === 'all'）就是叫醒所有鱼（人说话默认叫醒）；@ 了某人只叫他。
-              mention: to === 'all' ? 'all' : [base],
+              text: value,
+              // mention（2026-11-22 r413）：面板的 @ 只决定叫醒谁——消息仍然全群可见。
+              // 不 @ 就是 []（谁都不叫醒，人和鱼同一套）；「所有人」写 'all'。
+              mention,
               ...(images.length === 0 ? {} : { images }),
             }
           const response = await fetch(endpoint, {
@@ -2300,7 +2315,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
         } finally {
           setSending(false)
         }
-      }, [to, sending, refresh, tab, pendingImages.length])
+      }, [mention, sending, refresh, tab, pendingImages.length])
 
       // 两档忙：正在回这一段 / 在别处忙。群聊与私聊同一套文案。
       // 名单从配置（名册）来 —— 写死 lee/whale 时，新鱼的"正在忙"永远不会显示（A.32 同一个病）。
@@ -2587,29 +2602,49 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
                 gap: 10, padding: '10px 12px 8px',
               },
             },
-              to === 'all'
-                ? null
-                : h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
+              mention === 'all'
+                ? h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
                   h('span', {
                     style: {
                       display: 'inline-flex', alignItems: 'center', gap: 6,
-                      padding: '2px 4px 2px 2px', borderRadius: 999,
+                      padding: '2px 6px', borderRadius: 999,
                       background: 'var(--dsw-alias-bg-layer-3, rgba(0,0,0,0.06))',
                       border: '1px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.1))',
                       fontSize: 12, color: 'var(--dsw-alias-label-secondary)',
                     },
                   },
-                    h(Avatar, { config, member: splitTarget(to).base, size: 18 }),
-                    h('span', null, targetName(config, to)),
+                    h('span', null, `${t.mentionPrefix}${t.mentionAll}`),
                     h('button', {
-                      onClick: () => setTo('all'),
-                      title: '取消指定',
+                      onClick: clearMention, title: '清空叫醒名单',
                       style: {
                         width: 16, height: 16, borderRadius: '50%', border: 'none', background: 'transparent',
                         color: 'var(--dsw-alias-label-tertiary)', fontSize: 13, lineHeight: 1, padding: 0,
                         display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
                       },
-                    }, '×'))),
+                    }, '×')))
+                : mention.length === 0
+                  ? null
+                  : h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
+                    ...mention.map((key) => h('span', {
+                      key: `mention-${key}`,
+                      style: {
+                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                        padding: '2px 4px 2px 2px', borderRadius: 999,
+                        background: 'var(--dsw-alias-bg-layer-3, rgba(0,0,0,0.06))',
+                        border: '1px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.1))',
+                        fontSize: 12, color: 'var(--dsw-alias-label-secondary)',
+                      },
+                    },
+                      h(Avatar, { config, member: key, size: 18 }),
+                      h('span', null, nameOf(config, key)),
+                      h('button', {
+                        onClick: () => mentionTo(key), title: '不叫醒他',
+                        style: {
+                          width: 16, height: 16, borderRadius: '50%', border: 'none', background: 'transparent',
+                          color: 'var(--dsw-alias-label-tertiary)', fontSize: 13, lineHeight: 1, padding: 0,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                        },
+                      }, '×')))),
               pendingImages.length > 0
                 ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
                   ...pendingImages.map((src, index) => h('div', { key: `pending-${index}`, style: { position: 'relative' } },
@@ -2683,7 +2718,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
                     void submit()
                   }
                 },
-                placeholder: to === 'all' ? t.placeholder : `对 ${targetName(config, to)} 说…`,
+                placeholder: t.placeholder,
                 rows: 1,
                 style: {
                   border: 'none', outline: 'none', resize: 'none', background: 'transparent',
@@ -2695,7 +2730,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
               h('div', { style: { position: 'relative', display: 'flex', alignItems: 'center', gap: 10 } },
                 h('button', {
                   onClick: () => setPickerOpen((open) => !open),
-                  title: '指定说话对象',
+                  title: '点名叫醒谁（可以多选，选所有人也行）',
                   'data-at-anchor': '1',
                   style: {
                     flex: '0 0 32px', width: 32, height: 32, padding: 0, border: 'none',
@@ -2747,7 +2782,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
                   },
                 }),
                 h('div', { style: { flex: 1, fontSize: 11, color: 'var(--dsw-alias-label-caption)' } },
-                  to === 'all' ? t.groupOnly : t.toOne(targetName(config, to))),
+                  mention === 'all' ? t.toOne(t.mentionAll) : (mention.length === 0 ? t.groupOnly : t.toOne(mention.map((key) => nameOf(config, key)).join('、')))),
                 h('button', {
                   onClick: () => { void submit() },
                   disabled: sending || (!hasText && pendingImages.length === 0),
@@ -2771,9 +2806,10 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
               pickerOpen
                 ? h(AtPicker, {
                   config,
-                  seats,
-                  current: to,
-                  onPick: (id) => { setTo(id); setPickerOpen(false) },
+                  mention,
+                  onToggle: mentionTo,
+                  onPickAll: pickAll,
+                  onClear: clearMention,
                   onClose: () => setPickerOpen(false),
                 })
                 : null,
@@ -3836,7 +3872,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v58 · mention-split:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v59 · mention-only:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')

@@ -13,7 +13,7 @@ import { printableText } from './text-clean.js'
 import { sayProblemOf, channelProblemOf } from './say-core.js'
 import { noteCodeOf, intentNoteTextOf, watchmanSkipLineOf } from './note-core.js'
 import { membersWithKeys } from './members-core.js'
-import { MENTION_ALL, normalizeMention, defaultMentionOf, wantsWake, mentionTextOf, bumpHeld, heldOf, clearHeld, heldSentenceOf } from './mention-core.js'
+import { MENTION_ALL, normalizeMention, wantsWake, mentionTextOf, mentionDisplayOf, bumpHeld, heldOf, clearHeld, heldSentenceOf } from './mention-core.js'
 import { codeFingerprint } from './code-fp.js'
 import { codeFpChangeOf, codeFpHistoryLine, codeFpLedgerOf, CODE_FP_LEDGER } from './code-fp-history-core.js'
 import { join, dirname, basename } from 'node:path'
@@ -1787,30 +1787,25 @@ function say(from, to, text, channel = 'group', s = '', toSeat = '', image = nul
   //   channel = 屋里还有没有别人（group 默认 / dm 只有对象一个人）
   // 所以 `to:"fabian"` + 默认 group = 群里公开对他说；私聊要显式 `channel:"dm"`。
   const isDm = channel === 'dm'
-  // mention（2026-11-22）：这条叫醒谁。没写就按发件人/收件人推默认值——
-  // 人类说话默认叫醒所有鱼，鱼说话默认谁都不叫醒；to 指名了某人就叫他。
+  // mention（2026-11-22 r413）：这条叫醒谁。没写就是 [] —— 谁都不叫醒（人和鱼同一套）。
+  // 叫醒名单只存在 mention 里；群消息不再写 to（它只留给私聊与老记录）。
   const mentions = isDm
     ? undefined
-    : (mention === undefined
-        ? defaultMentionOf({ from, to: toKey, members: MEMBERS })
-        : normalizeMention(mention, Object.keys(MEMBERS)))
+    : (mention === undefined ? [] : normalizeMention(mention, Object.keys(MEMBERS)))
   if (isDm) return { ...sayPrivate(from, toKey, body, null, list), channel: 'dm' }
   const record = {
-    ts: new Date().toISOString(), from, to: toKey, text: body, kind: 'say', channel: 'group',
+    ts: new Date().toISOString(), from, text: body, kind: 'say', channel: 'group',
     ...(s === '' ? {} : { s }),
-    // 指名某一座位（同一个人的第二段会话）：只有那一段会被叫醒。
-    // 不加这个字段 = 叫"这个人"，谁空谁应（仍然只叫一次）。
-    ...(toSeat === '' ? {} : { toSeat }),
-    // 叫醒谁（2026-11-22）：与 to 分开；空数组 = 谁都不叫醒。
-    ...(mentions === undefined ? {} : { mention: mentions }),
+    // 叫醒谁（2026-11-22 r413）：空数组 = 谁都不叫醒。群消息不再写 to / toSeat。
+    mention: mentions,
     // 图片（可选）：只记定位信息，字节在 images\ 下。1 张写 image、多张写 images。
     ...(list.length === 0 ? {} : (list.length === 1 ? { image: list[0] } : { images: list })),
   }
   appendFileSync(MESSAGES, JSON.stringify(record) + '\n', 'utf8')
-  // 投影里带上收信人：指名和公开在纸上必须长得不一样，否则读记录的人学不到"可以指名"。
-  // 2026-11-12 19:46 起：`**时间 · 谁 → 收信人**`，只有指名（to 是某个成员）才写箭头。
-  const toLabel = toKey !== '' && toKey !== 'all' ? ` → ${labelOf(toKey)}` : ''
-  appendFileSync(READABLE, `**${stamp()} · ${labelOf(from)}${provenanceOf(s)}${toLabel}**\n\n${readableBodyOf(body, list)}\n\n`, 'utf8')
+  // 投影里写「提到了：谁」（2026-11-22 r413，替掉原来的 `→ 收信人`）：
+  // 空名单就什么都不写。读记录的人从这一节看出这条点了谁的名字。
+  const mentionLabel = mentionDisplayOf({ mention: mentions }, labelOf)
+  appendFileSync(READABLE, `**${stamp()} · ${labelOf(from)}${provenanceOf(s)}${mentionLabel}**\n\n${readableBodyOf(body, list)}\n\n`, 'utf8')
   return { ...record, channel: 'group' }
 }
 
@@ -2063,31 +2058,26 @@ function apply(ctx) {
     const buildTool = hostOk && defineTool !== null ? defineTool : (options) => options
     ctx.tools.register(buildTool({
     name: 'group_say',
-    description: '说一句话。默认在群里说（群里的人都看得见；叫醒谁看 mention：不写时，鱼默认谁都不叫醒、指名 to 就叫他）。channel 给 dm 才是私下只对一个人说（不进群记录，别人看不到这个窗口）。to 是"说给谁"，mention 是"叫醒谁"，channel 是"还有没有别人在场"。发出即返回，不等对方回复。',
+    description: '说一句话。默认在群里说（群里的人都看得见；叫醒谁看 mention——不写就谁都不叫醒）。channel 给 dm 才是私下只对 to 那一个人说（不进群记录）。mention 是"叫醒谁"，channel 是"还有没有别人在场"。发出即返回，不等对方回复。',
     parameters: {
-      to: {
+      text: {
         type: 'string',
         required: true,
-        enum: ['all', ...Object.keys(MEMBERS)],
-        description: '说给谁：all = 群里所有人（只能在群里用）；写某个成员的 id 就是"这句是对他说的"（群里仍然看得见）。不填 mention 时，指名 who 会顺便叫醒他；要只叫醒别人或有选择地叫醒，用 mention。给具体的人配 channel dm 就是私下说。',
+        description: '说的话。短一点，像人说话，不要写小作文',
+      },
+      mention: {
+        type: 'string',
+        description: '可选。叫醒谁：all = 叫醒所有醒着的鱼；写成员 id（多个用逗号或顿号隔开）只叫醒他们；不写 = 谁都不叫醒（消息仍然在群里，谁都翻得到）。正文里写 @ 名字只是字，不会叫醒任何人。',
       },
       channel: {
         type: 'string',
         enum: ['group', 'dm'],
         description: 'group（默认）= 在群里说，三个人都看得见；dm = 私下只对 to 那一个人说，写进你俩那段对话的文件，不进群记录。',
       },
-      text: {
+      to: {
         type: 'string',
-        required: true,
-        description: '说的话。短一点，像人说话，不要写小作文',
-      },
-      seat: {
-        type: 'string',
-        description: '可选。指名某一段会话收（会话 id 前 6 位，例如 ae4daa）。不填 = 叫这个人，谁空谁应。只在 group 通道有效。',
-      },
-      mention: {
-        type: 'string',
-        description: '可选。叫醒谁：all = 叫醒所有醒着的鱼；写成员 id（多个用逗号隔开）只叫醒他们；不填时按 to 推默认——to 指名某人就叫他，to=all 时鱼默认谁都不叫醒（人类从面板发的消息默认叫醒所有人）。',
+        enum: ['all', ...Object.keys(MEMBERS)],
+        description: '只有 channel=dm 时用：私下跟谁说（写成员 id）。群里说话不用它——消息照样全群可见，叫醒谁看 mention。',
       },
       image: {
         type: 'string',
@@ -2105,37 +2095,33 @@ function apply(ctx) {
           queued: { type: 'boolean' },
           channel: { type: 'string' },
           to: { type: 'string' },
+          // from / mention 也要声明：宿主的 output schema 是 additionalProperties:false，
+          // 2026-11-22 实机第一次调用就被它拒了（"value.from is not a declared property"）。
+          from: { type: 'string' },
+          // mention 在记录里是 'all' 或数组；输出里压成字符串（all / 逗号分隔 / 空串），
+          // 因为宿主的 schema 子集没有 oneOf，声明数组就漏掉字符串那种形状。
+          mention: { type: 'string' },
           image: { type: 'string' },
         },
       },
-      // 回执要让人一眼看出"这句话去了哪一间屋"。
-      // 2026-11-12 补：还要说清"**谁会收到通知**" —— `to` 是叫醒谁，不是谁看得见。
-      // 小肥鱼 19:18 把一条该给大肥鱼的汇报发成了 to=all，所有人都被叫醒；
-      // 机制没错，是纸面上没写清楚（她的环境.md 只写了"三个房间"，没写 to 的这一层）。
+      // 回执要说清两件事：这句话去了哪间屋、会叫醒谁（2026-11-22 r413 起只看 mention）。
       render: (args, value) => {
-        const mentioned = []
-        const text = typeof args?.text === 'string' ? args.text : ''
-        for (const [key, m] of Object.entries(MEMBERS)) {
-          if (key === value.from) continue
-          const label = m?.label
-          if (label && text.includes(`@${label}`)) mentioned.push(label)
-        }
         if (value.channel === 'dm') {
           return [{ type: 'text', text: `已写进私聊（${value.ts}）：只有 ${labelOf(value.to)} 看得见，群里不会出现这句。` }]
         }
-        // 回执要说清两件事：这句话去了哪间屋、会叫醒谁（2026-11-22 起 to 与 mention 拆开）。
-        const wakes = mentionTextOf(value.mention, labelOf)
-        const heads = value.mention === 'all'
+        // 记录里的 mention 是 'all' 或数组；这里压成字符串再返回（见 output.schema 的说明）。
+        const m = typeof value.mention === 'string' ? value.mention : ''
+        const wakes = m === 'all' ? '所有人' : m === '' ? '不叫醒任何人' : mentionTextOf(m.split(','), labelOf)
+        const heads = m === 'all'
           ? '群里的人都看得见，**醒着的都会被叫醒**'
-          : Array.isArray(value.mention) && value.mention.length === 0
-            ? '群里的人都看得见，**不叫醒任何人**（要叫醒谁就把 mention 写出来）'
+          : m === ''
+            ? '群里的人都看得见，**不叫醒任何人**'
             : `群里的人都看得见，**只叫醒 ${wakes}**`
-        const human = Array.isArray(value.mention) && value.mention.some((key) => MEMBERS[key]?.kind === 'human')
-        const base = `已入群（${value.ts}）：${heads}${human ? '（人类不跑轮，会在面板上看到未读）' : ''}。`
-        const quiet = Array.isArray(value.mention) && value.mention.length === 0 && mentioned.length > 0
-          ? `\n\n提示：正文里 @ 了 ${mentioned.join('、')}，但 mention 没写——这条不会叫醒任何人；要叫醒就把 mention 写成成员 id 或 all。`
+        const text = typeof args?.text === 'string' ? args.text : ''
+        const quiet = m === '' && text.includes('@')
+          ? '\n\n提示：正文里的 @ 只是字，不会叫醒任何人；要叫醒谁就把 mention 写出来。'
           : ''
-        return [{ type: 'text', text: base + quiet }]
+        return [{ type: 'text', text: `已入群（${value.ts}）：${heads}。${quiet}` }]
       },
     },
     execute(args, exec) {
@@ -2160,30 +2146,12 @@ function apply(ctx) {
       const channelProblem = channelProblemOf(args.channel)
       if (channelProblem !== null) throw new Error(channelProblem)
       const channel = args.channel === 'dm' ? 'dm' : 'group'
-      if (channel === 'dm' && args.to === 'all') {
-        throw new Error('私下说话得指名对象：to 不能是 all。要不就 channel 留空（在群里说）。')
-      }
-      // s = 发起这段会话的 id 前 6 位（小肥鱼 2026-11-11 提的）：一个名字可以有两段会话。
-      // 写进去之后"谁说的"从记忆问题变成读取问题。UI 可以不理它。
-      // seat（可选）= 指名要哪一段会话收；不填就是"叫这个人"，谁空谁应。
-      const toSeat = typeof args.seat === 'string' ? args.seat.trim().replace(/^@/, '') : ''
-      if (toSeat !== '' && !/^[0-9a-f]{6}$/.test(toSeat)) {
-        throw new Error('seat 要填会话 id 的前 6 位（例如 ae4daa），或者干脆不填——不填就是叫这个人。')
-      }
-      // 2026-11-12 栽过一次：seat 填成"自己这段"的前缀，收件人对不上任何座位，
-      // 消息进了文件却谁也不会被叫醒（游标照常前进）——发的人以为送出去了。
-      // 座位在发送时校验，别让它变成一个只在收件人那边才失败的地址。
-      if (toSeat !== '' && args.to === 'all') {
-        throw new Error('seat 是"指名某一段会话"，不能和 to=all 一起用——要么点名，要么广播。')
-      }
-      if (toSeat !== '') {
-        const liveSeats = pinnedSessions(args.to).map((id) => seatOfSession(id))
-        if (!liveSeats.includes(toSeat)) {
-          throw new Error(
-            `seat 填错了：${toSeat} 不是 ${labelOf(args.to)} 名下的会话（名下现在是 ${
-              liveSeats.length === 0 ? '一个都没登记' : liveSeats.join(' / ')
-            }）。不填 seat 就是"叫这个人，谁空谁应"。`,
-          )
+      // 2026-11-22 r413：群里说话不再有 to / seat —— 叫醒谁只看 mention。
+      // to 只剩一个用途：dm 时指定私下跟谁说。
+      if (channel === 'dm') {
+        const peer = typeof args.to === 'string' ? args.to.trim() : ''
+        if (peer === '' || peer === MENTION_ALL) {
+          throw new Error('私下说话得指名对象：channel=dm 时 to 要写成员 id（不能是 all）。')
         }
       }
       // 图片：工具参数给的是路径，落盘后消息里只留 id/ext/bytes/month。
@@ -2195,14 +2163,16 @@ function apply(ctx) {
       // mention（2026-11-22）：叫醒谁。不写就交给 say() 推默认值。
       const mention = normalizeMention(args.mention, Object.keys(MEMBERS))
       const record = say(
-        member, args.to, args.text, channel,
-        sid === null ? '' : sid.replace(/^session-/, '').slice(0, 6), toSeat, image, null, mention,
+        member, channel === 'dm' ? String(args.to ?? '').trim() : '', args.text, channel,
+        sid === null ? '' : sid.replace(/^session-/, '').slice(0, 6), '', image, null, mention,
       )
       // channel 让发言的人一眼知道这句话去了哪：group = 大家都看得见；dm = 只有对方看得见，且不会叫醒谁。
       // mention/from 也要带出来：回执靠它说“会叫醒谁”，漏了会读成“（未写，按 to 推）”。
       return {
-        ts: record.ts, queued: true, channel: record.channel, to: record.to,
-        from: record.from, mention: record.mention,
+        ts: record.ts, queued: true, channel: record.channel,
+        ...(record.to === undefined ? {} : { to: record.to }),
+        from: record.from,
+        mention: record.mention === 'all' ? 'all' : (record.mention ?? []).join(','),
         image: image === null ? '' : `${image.id}.${image.ext}`,
       }
     },
@@ -2952,6 +2922,8 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
     firstRead,
     cursorLost,
     backlog,
+    // 2026-11-22 r413：这一批是不是"点了你名字"才来的。老记录（无 mention）按老话说"新的"。
+    woken: incoming.every((record) => record.mention !== undefined) ? 'mention' : 'legacy',
   })
   const target = channel.kind === 'dm' ? channel.file : READABLE
   // 没叫醒你的那些话，也要在预览里露一次头（2026-11-22）。
@@ -3252,7 +3224,7 @@ function selfPlanTick(ctx) {
       if (privateResult) {
         watchmanLog('deliver', `reason=self-plan-private to=${self} plan=${item.id}${privateResult === 'queued' ? ' queued=1' : ''}`)
       } else {
-        say(watcherKey(), self, planDeliveryPublicText(job))
+        say(watcherKey(), self, planDeliveryPublicText(job), 'group', '', '', null, null, [self])
         watchmanLog('deliver', `reason=self-plan-public-fallback to=${self} plan=${item.id}`)
       }
       // 与巡守触发的账同形状（wid / lag / inserted 都要有）：
@@ -3497,7 +3469,7 @@ async function intentTick(member, st, now) {
       `wid=${wid} kind=intent reason=intent:${spec.id} to=${member.key} gate=pass(hour=${counts.hour}/${WAKE.perHour},day=${counts.day}/${WAKE.perDay}) hb-age=${hbAge === null ? 'none' : `${hbAge}s`} deliver=msg at=${localStampOf(s.happenedAt ?? s.firstTrueAt)} atfmt=2`,
     )
     try {
-      say(watcherKey(), member.key, intentDeliveryPublicText(spec, probe.evidence))
+      say(watcherKey(), member.key, intentDeliveryPublicText(spec, probe.evidence), 'group', '', '', null, null, [member.key])
       // lag = 发现比发生晚了多少（事情发生的时刻 → 递出去的时刻），不是"决定→插入"。
       const happenedMs = Date.parse(String(s.happenedAt ?? s.firstTrueAt ?? ''))
       const lagSec = Number.isFinite(happenedMs) ? Math.max(0, Math.round((now.getTime() - happenedMs) / 1000)) : null
@@ -3639,7 +3611,7 @@ async function watchOne(member, st) {
         // 2026-11-16：公共记录只留"到点了"，理由不进记录（进她自己表）。
         const text = planDeliveryPublicText(job)
         try {
-          say(watcherKey(), member.key, text)
+          say(watcherKey(), member.key, text, 'group', '', '', null, null, [member.key])
           watchmanLog(
             'woke',
             dueAt === null
@@ -3680,7 +3652,7 @@ async function watchOne(member, st) {
         )
         markWake(member.key, 'plan')
         try {
-          say(watcherKey(), member.key, planDeliveryPublicText(job))
+          say(watcherKey(), member.key, planDeliveryPublicText(job), 'group', '', '', null, null, [member.key])
           watchmanLog('deliver', `reason=plan-after-wake ${job.tag}（窗是推开的，话已递进去）`)
         } catch (error) {
           watchmanLog(
@@ -3727,7 +3699,7 @@ async function watchOne(member, st) {
         // （selfPlanTick）会在宽限期内再递一次。声明一下，两边只留一条。
         if (claimPlanDelivery(member, job.key)) {
           try {
-            say(watcherKey(), member.key, planDeliveryPublicText(job))
+            say(watcherKey(), member.key, planDeliveryPublicText(job), 'group', '', '', null, null, [member.key])
             watchmanLog('deliver', `reason=plan-after-wake ${job.tag}（窗是推开的，话已递进去）`)
           } catch (error) {
             watchmanLog('error', `note=plan-deliver-failed detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)} ${job.tag}`)
@@ -3888,7 +3860,7 @@ function auditRoster(now = new Date()) {
   watchmanLog('error', `note=roster-mismatch ${problems.join(' ')}`)
   // 只告诉人（fabian）：名册外的鱼叫不动，能看见这件事的只有人。
   try {
-    say(watcherKey(), humanKey(), `巡守自检：名册和家对不上（${problems.join('；')}）。这条是巡守自己发现的，不是谁在说话。`)
+    say(watcherKey(), humanKey(), `巡守自检：名册和家对不上（${problems.join('；')}）。这条是巡守自己发现的，不是谁在说话。`, 'group', '', '', null, null, [humanKey()])
   } catch { /* 递不出去也还有日志 */ }
 }
 
@@ -3925,7 +3897,7 @@ async function crashNotify() {
       continue
     }
     try {
-      say(watcherKey(), humanKey(), `巡守：${labelOf(member.key)} 上次没正常退出（最后记录 ${at}，没写 stopped）。它现在起没起来，鱼塘里能看到。`)
+      say(watcherKey(), humanKey(), `巡守：${labelOf(member.key)} 上次没正常退出（最后记录 ${at}，没写 stopped）。它现在起没起来，鱼塘里能看到。`, 'group', '', '', null, null, [humanKey()])
       watchmanLog('note', `note=crash-notified member=${member.key} at=${at}`)
     } catch (error) {
       watchmanLog('error', `note=crash-notify-failed member=${member.key} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 80)}`)

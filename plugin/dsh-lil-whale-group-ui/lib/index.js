@@ -13,7 +13,7 @@ import { Socket } from 'node:net'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
 import { config } from './config.js'
-import { parseMessageLines } from './messages-core.js'
+import { parseMessageLines, mentionLabelOf } from './messages-core.js'
 import { presenceReasonOf } from './presence-core.js'
 import { newerThan, latestReleaseOf, LATEST_RELEASE_API } from './version-core.js'
 
@@ -448,11 +448,21 @@ function writeUiRead(next) {
   }
 }
 
+function wakesHuman(message) {
+  // 2026-11-22 r413：群消息不再写 to，叫醒名单只看 mention。
+  // 老记录没有 mention：按老规则读——to=all 是广播、to=fabian 是点名叫他。
+  const mention = message.mention
+  if (mention === 'all') return true
+  if (Array.isArray(mention)) return mention.includes(HUMAN_ID)
+  if (mention !== undefined) return false
+  return message.to === 'all' || message.to === HUMAN_ID
+}
+
 function countUnread(file, since, scope = 'all') {
   return readMessages(file).filter((message) => {
     if (message.from === HUMAN_ID) return false
     if (String(message.ts ?? '') <= since) return false
-    if (scope === 'mentions' && message.to !== 'all' && message.to !== HUMAN_ID) return false
+    if (scope === 'mentions' && !wakesHuman(message)) return false
     return true
   }).length
 }
@@ -1228,7 +1238,6 @@ export function apply(ctx) {
         return
       }
       const text = typeof payload?.text === 'string' ? payload.text.trim() : ''
-      const to = payload?.to
       // 图片（可选，最多 4 张）：[{ id, ext, bytes, month, path }]，由 /group/api/image 先上传拿到。
       // 2026-11-15：面板支持多图；记录里 1 张仍写 image、多张写 images（老读者不受影响）。
       let images = []
@@ -1242,14 +1251,18 @@ export function apply(ctx) {
         sendJson(res, 400, { error: 'empty-message', detail: '至少要有文字或一张图片' })
         return
       }
-      // 收信人从名册校验，不再写死三条 —— 2026-11-12 19:59 现场：fishball 被这里挡住，
+      // 2026-11-22 r413：群消息不再写 to，叫醒谁只看 mention。
+      // 面板发话的人就是 Fabian；不 @ 就是 []（谁都不叫醒，消息仍全群可见）。
+      // mention 从名册校验，不再写死三条 —— 2026-11-12 19:59 现场：fishball 被这里挡住，
       // 面板回 bad-target，看着像"她不在群里"，其实是名单又抄了一份（A.32 同一个病）。
-      // mention（2026-11-22）：面板发的话人就是 Fabian —— 默认叫醒所有鱼；
-      // 用 @ 指名了谁（面板把这个存进 mention），就只叫醒那个人，消息照样全群可见。
       const rawMention = payload?.mention
       let mention
       if (rawMention === undefined) {
-        mention = to === 'all' ? 'all' : [to]
+        // 兼容旧面板缓存：它还按 to 发。映射一次，下一版删掉这条分支。
+        const legacyTo = payload?.to
+        mention = legacyTo === 'all'
+          ? 'all'
+          : (typeof legacyTo === 'string' && legacyTo !== '' ? [legacyTo] : [])
       } else if (rawMention === 'all') {
         mention = 'all'
       } else if (Array.isArray(rawMention)) {
@@ -1266,16 +1279,13 @@ export function apply(ctx) {
         }
       }
       const now = new Date()
-      // toSeat（可选）：指名这个人的哪一段会话收（6 位十六进制）。不填 = 叫这个人，谁空谁应。
-      const rawSeat = typeof payload?.toSeat === 'string' ? payload.toSeat.trim() : ''
-      const toSeat = /^[0-9a-f]{6}$/.test(rawSeat) ? rawSeat : ''
       // s = 谁发的：'ui' 表示从面板发的（他没有会话 id）。跟 group_say 写的 s=<会话前6位> 是同一个字段。
       const record = {
         // 2026-11-16：s 只放会话号前 6 位；面板发的话没有"那段会话"，所以不写这个字段
-    // （旧记录里的 s=ui/watch 是历史遗留，纸上已写分界）。
-    ts: now.toISOString(), from: HUMAN_ID, to, text, kind: 'say',
-        ...(toSeat === '' ? {} : { toSeat }),
-        // 叫醒谁（2026-11-22）：与 to 分开。
+        // （旧记录里的 s=ui/watch 是历史遗留，纸上已写分界）。
+        ts: now.toISOString(), from: HUMAN_ID, text, kind: 'say', channel: 'group',
+        // 叫醒谁（2026-11-22 r413）：空数组 = 谁都不叫醒。群消息不再写 to / toSeat。
+        // channel=group 与宿主 say() 写出来的记录保持同一形状——少这个字段，读端就得猜"没有 channel 算哪间屋"。
         mention,
         ...(images.length === 0 ? {} : (images.length === 1 ? { image: images[0] } : { images })),
       }
@@ -1283,11 +1293,11 @@ export function apply(ctx) {
         // 宿主 say() 会先 ensureDir；面板这条路以前没建目录，group 被清掉后第一条消息 500。
         mkdirSync(GROUP_DIR, { recursive: true })
         appendFileSync(MESSAGES, JSON.stringify(record) + '\n', 'utf8')
-        // 投影格式必须和宿主 say() 逐字一致（2026-11-12 19:46 起：指名时写「时间 · 谁 → 收信人」）。
-        // 收信人写在投影里，是为了让"读记录"的人知道这条是在对谁说话——不写，指名和公开在纸上一样。
+        // 投影格式必须和宿主 say() 逐字一致（2026-11-22 r413：`时间 · 谁 · 提到了：X`，空名单不写）。
         const body = readableBodyWithImages(text, images)
-        const toLabel = to !== '' && to !== 'all' ? ` → ${LABEL[to] ?? to}` : ''
-        appendFileSync(READABLE, `**${stamp(now)} · ${LABEL[HUMAN_ID] ?? HUMAN_ID}${toLabel}**\n\n${body}\n\n`, 'utf8')
+        const mentionName = mentionLabelOf(record, (key) => LABEL[key] ?? key)
+        const mentionPart = mentionName === '' ? '' : ` · 提到了：${mentionName}`
+        appendFileSync(READABLE, `**${stamp(now)} · ${LABEL[HUMAN_ID] ?? HUMAN_ID}${mentionPart}**\n\n${body}\n\n`, 'utf8')
       } catch (error) {
         sendJson(res, 500, { error: 'write-failed', detail: String(error?.message ?? error) })
         return

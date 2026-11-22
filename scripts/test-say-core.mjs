@@ -33,6 +33,10 @@ check('私聊指名成员', toProblemOf('whale', KEYS, 'dm'), null)
 check('首尾空白会去掉后认', toProblemOf(' lee ', KEYS), null)
 check('缺省 channel 当作 group', sayProblemOf({ to: 'lee' }, KEYS), null)
 check('空 channel 当作 group', sayProblemOf({ to: 'lee', channel: '' }, KEYS), null)
+// 2026-11-22 r413：群里不再有 to（叫醒谁看 mention），所以 group 不要求 to。
+check('群里没有 to 也算合格（r413）', sayProblemOf({}, KEYS), null)
+check('群里 to 是坏的也不再算地址错（r413 起 to 不进群消息）', sayProblemOf({ to: 'group' }, KEYS), null)
+check('私聊没 to 仍要拦', typeof sayProblemOf({ channel: 'dm' }, KEYS), 'string')
 check('CHANNELS 只有两个值', CHANNELS.join(','), 'group,dm')
 
 // —— 2. 坏地址：必须拦，而且要说出为什么 ——
@@ -55,7 +59,7 @@ const indexJs = readFileSync(join(ROOT, 'plugin', 'dsh-lil-whale-group', 'lib', 
 check('index.js 导入 say-core', /from '\.\/say-core\.js'/.test(indexJs), true)
 check('say() 调 sayProblemOf', /const problem = sayProblemOf\(\{ to, channel \}/.test(indexJs), true)
 check('say() 被拒时留 say-rejected 痕', /say-rejected/.test(indexJs), true)
-check('say() 用 toKey 落盘', /to: toKey/.test(indexJs), true)
+check('群消息记录不再写 to（r413：叫醒只看 mention）', /to: toKey/.test(indexJs), false)
 check("group_say 检查 channel 值域", /channelProblemOf\(args\.channel\)/.test(indexJs), true)
 check('raw-spec 的 reason 改成 host-resolve-pending', /host-resolve-pending/.test(indexJs), true)
 check('旧的 defineTool-unresolved 不再出现', /defineTool-unresolved/.test(indexJs), false)

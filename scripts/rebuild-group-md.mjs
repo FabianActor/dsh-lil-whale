@@ -10,6 +10,8 @@
 //       node scripts\rebuild-group-md.mjs --migrate  格式迁移：跳过差异闸、整本重写（先备份！）
 import {renameSync, readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
 import { config } from '../plugin/dsh-lil-whale-group/lib/config.js'
+// 「提到了谁」的显示规则与面板共用一份（2026-11-22 r413）：投影和气泡不能各写一套。
+import { mentionLabelOf } from '../plugin/dsh-lil-whale-group-ui/lib/messages-core.js'
 
 // 路径从 lil-whale.config.json 读（真源见 plugin/dsh-lil-whale-group/lib/config.js）
 const GROUP_DIR = config().groupDir
@@ -129,22 +131,25 @@ function blockOf(record) {
   const who = labelAt(String(record?.from ?? ''), record?.ts)
   // 来源标注：机器发的（s 不是会话 id）要在纸上写出来，否则和人说的长得一样。
   const origin = provenanceOf(record?.s)
-  // 收信人：2026-11-12 19:46 起的投影格式，只有指名（to 是某个成员）才写箭头。
-  // 不写箭头 = 公开（to:"all"）；读记录的人靠这个分辨"这条在对谁说话"。
-  const to = String(record?.to ?? '')
-  const toLabel = to !== '' && to !== 'all' ? ` → ${labelAt(to, record?.ts)}` : ''
+  // 提到了谁（2026-11-22 r413）：新记录看 mention；老记录只在当年指了名（to 是成员）
+  // 时补成同一句话——to=all 的广播不补，因为那一条当年就没点名，写"所有人"等于改历史。
+  const mention = mentionLabelOf(record, (key) => labelAt(key, record?.ts))
+  const mentionPart = mention === '' ? '' : ` · 提到了：${mention}`
   // 带图的记录也要重建出来 —— 2026-11-12 现场：只有图没有字的消息被这里整条跳过，
   // 于是 群.md 里有那行、重建结果里没有，对不上就成了"说不清的差异"。
   const body = images.length === 0
     ? text
     : `${images.map((image) => `（图片 images/${image.month}/${image.id}.${image.ext}）`).join('\n')}${text === '' ? '' : `\n\n${text}`}`
-  return `**${stampOf(String(record?.ts ?? ''))} · ${who}${origin}${toLabel}**\n\n${body}\n`
+  return `**${stampOf(String(record?.ts ?? ''))} · ${who}${origin}${mentionPart}**\n\n${body}\n`
 }
 
 const blocks = records.map(blockOf).filter(Boolean)
 // 第一行是标题。它是这份文件的一部分，不是某个人说的，所以由脚本负责。
 // 第二行是分界标记：格式被推翻过的地方必须留痕，否则读的人分不清"没写收信人"和"不指名"。
-const HEADER_NOTE = '> 2026-11-12 19:46 起：指名消息的表头写成 `时间 · 谁 → 收信人`（不写箭头 = 公开）。更早的消息也按同一规则重排过，原始备份 `群.md.bak-20261112-194734`。\n'
+const HEADER_NOTE = [
+  '> 2026-11-12 19:46 起：指名消息的表头写成 `时间 · 谁 → 收信人`（不写箭头 = 公开）。更早的消息也按同一规则重排过，原始备份 `群.md.bak-20261112-194734`。',
+  '> 2026-11-22 r413 起：表头改成 `时间 · 谁 · 提到了：X`——叫醒谁只看 mention，箭头不再表示收件人。老记录只在当年指了名时按 `to` 推成同一字样；`to=all` 的广播保持原样（它当年没有点名）。最近一次整本重写前有备份 `群.md.bak-<时间>`。',
+].join('\n') + '\n'
 const rebuilt = `# 群\n\n${HEADER_NOTE}\n` + blocks.join('\n')
 
 /** 行级 LCS，用来把"插入/删除"对齐成块，而不是从头开始错位比。 */
@@ -203,13 +208,33 @@ function classify(hunk, a, b) {
         '当时被渲染成 `undefined`；重建跳过整块，所以这里少了它和它那行表头。',
     }
   }
+  // 表头格式升级（2026-11-22 r413）：旧表头 `… → 收件人` 改成 `… · 提到了：X`。
+  // 整本重写会一次改掉几千行，hunk 里还可能夹着新加的分界说明行；
+  // 所以这里只认两件事：删掉的全是旧箭头表头、插入的全是新表头或分界说明。
+  {
+    const isOldArrowHeader = (line) => /^\*\*.+? · .+? → .+\*\*$/.test(line)
+    const noteLines = new Set(HEADER_NOTE.split('\n'))
+    const isNewHeader = (line) => /^\*\*.+? · .+?(?:（[^）]*）)?(?: · 提到了：.+?)?\*\*$/.test(line)
+    const removedOld = removed.length > 0 && removed.every((line) => isOldArrowHeader(line))
+    const insertedKnown = hunk.ins.map((i) => b[i]).every((line) => noteLines.has(line) || isNewHeader(line))
+    if (removedOld && insertedKnown) {
+      return {
+        known: true,
+        why: '表头格式升级（r413）：`时间 · 谁 → 收件人` 改成 `时间 · 谁 · 提到了：X`；箭头不再表示收件人，老记录只在当年指了名时按 to 推。',
+      }
+    }
+  }
+
   // 改名漂移：投影是"当时的纸"，但写它的人用的是进程启动时缓存的旧显示名。
-  // 只差标题里的名字（时间、来源标注、箭头都一样）时，这一处是可解释的。
-  const headerOf = (line) => /^\*\*(.+?) · (.+?)(（[^）]*）)?( → .+?)?\*\*$/.exec(line);
+  // 只差标题里的名字（时间、来源标注、署件都一致）时，这一处是可解释的。
+  // 2026-11-22 r413：表头从 `→ 收件人` 改成 `· 提到了：X`；先把旧写法归一，改名漂移这一条
+  // 才能在格式升级前后都拿同一把尺子量。
+  const canonicalHeader = (line) => line.replace(' → ', ' · 提到了：')
+  const headerOf = (line) => /^\*\*(.+?) · (.+?)(（[^）]*）)?( · 提到了：.+?)?\*\*$/.exec(canonicalHeader(line));
   const shapeOf = (line) => {
     const m = headerOf(line);
     if (m === null) return null;
-    return `**${m[1]} · <name>${m[3] ?? ''}${m[4] ? ' → <name>' : ''}**`;
+    return `**${m[1]} · <name>${m[3] ?? ''}${m[4] ? ' · 提到了：<names>' : ''}**`;
   };
   if (removed.length > 0 && hunk.ins.length === removed.length) {
     const insLines = hunk.ins.map((i) => b[i]);
@@ -221,6 +246,20 @@ function classify(hunk, a, b) {
       };
     }
   }
+  // r412 的暂存格式（2026-11-22 当天有一段）：mention 写进了 jsonl，但投影只看 to，
+  // 所以 to=all + mention=[某人] 的那几条纸上一片空白。重建补上「提到了：X」。
+  if (removed.length === 1 && hunk.ins.length === 1) {
+    const only = removed[0]
+    const next = hunk.ins.map((i) => b[i])[0]
+    const withoutMention = /^\*\*(.+?)(?: · 提到了：.+)?\*\*$/.exec(next)
+    if (withoutMention !== null && withoutMention[1] === only.slice(2, -2)) {
+      return {
+        known: true,
+        why: 'r412 暂存格式：mention 当时只进了 jsonl、没进投影（投影看的是 to）；重建按 r413 规则补上「提到了：X」。',
+      }
+    }
+  }
+
   // 署名标签变化：2026-11-16 旧数据 s=watch 从「巡守」改成「机器」（第四条鱼发现：
   // s=watch 只说明是旧版机器路径代发，其中一条其实是鱼自己进程递的闹钟）。
   // 只差标题里的括号标签、其余（时间/名字/箭头）一致时，这一处是可解释的。

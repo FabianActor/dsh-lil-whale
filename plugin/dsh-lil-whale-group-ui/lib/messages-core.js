@@ -8,7 +8,7 @@
 // 只靠静态断言证明"代码里写了这件事"，测不到"空行/坏行时行号对不对"。
 
 export function projectMessage(record) {
-  // 投影要带全：面板靠这些字段画图、画「→ 某人的哪一段」、判断私聊/群。早先只留了
+  // 投影要带全：面板靠这些字段画图、画「提到了谁」、判断私聊/群。早先只留了
   // ts/from/to/text/kind，结果她发的图在面板里根本不显示 —— 记录里有、列表里没有。
   const out = {
     ts: record.ts,
@@ -20,9 +20,29 @@ export function projectMessage(record) {
   if (record.s) out.s = record.s
   if (record.channel) out.channel = record.channel
   if (record.toSeat) out.toSeat = record.toSeat
+  // 2026-11-22 r413：叫醒名单。新记录一定有；老记录没有（面板按 to 回退显示）。
+  if (record.mention !== undefined) out.mention = record.mention
   if (record.image) out.image = record.image
   if (Array.isArray(record.images) && record.images.length > 0) out.images = record.images
   return out
+}
+
+/**
+ * 「提到了谁」的显示文案（纯函数，面板与投影共用）。
+ * mention = 'all' → 所有人；数组 → 名字；空数组 → ''（这一节不写）。
+ * 老记录没有 mention：只有当年指了名（to=某人）才推；to=all 的广播不补（不改历史）。
+ * 拆出来是为了两处用同一句话：记录投影（群.md）与面板气泡。
+ */
+export function mentionLabelOf(record, labelOf) {
+  const say = (key) => (typeof labelOf === 'function' ? labelOf(key) : key)
+  const mention = record?.mention
+  if (mention === 'all') return '所有人'
+  if (Array.isArray(mention)) return mention.map(say).join('、')
+  const to = record?.to
+  // 老记录：只有当年指了名（to 是某个成员）才显示；to=all 的广播保持原样，
+  // 补一句"提到了：所有人"等于替它改历史（2026-11-22 r413 的取舍）。
+  if (typeof to === 'string' && to !== '' && to !== 'all') return say(to)
+  return ''
 }
 
 export function parseMessageLines(text) {

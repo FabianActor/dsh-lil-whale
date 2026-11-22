@@ -1,16 +1,15 @@
-// mention —— 这条消息叫醒谁（2026-11-22，Fabian 拍板）
+// mention —— 这条消息叫醒谁（2026-11-22，Fabian 拍板；r413 定稿）
 //
 // 起因：`to` 原来同时回答两个问题——"这话是给谁的"和"该叫醒谁"。
 // 于是每一条 to=all 的群消息，都会把每一头醒着的鱼都拽起来。lee2 一天被叫醒二十几次，
 // 其中没有一句是冲她说的；Fabian 定的分工是：
 //
-//   to      = 这句话在群里对谁说（全群可见；只影响投影里那个箭头和收件人）
-//   mention = 这句话叫醒谁（空数组 = 谁都不叫醒）
-//   @       = 在公开场合里定向说话：只叫醒被点名的人，不惊动别人
+//   mention = 这句话叫醒谁（'all' | 成员 id 数组；空数组 = 谁都不叫醒）
+//   @       = 面板上的多选入口，点谁就把谁写进 mention；正文里的 @ 名字不解析
+//   to      = 只活在两处：私聊（这间屋只开给谁）与 2026-11-22 之前的老记录
 //
-// 默认值按发件人分（Fabian 2026-11-22）：
-//   - 人类在群里说话：默认叫醒所有鱼（他开口的频率低，也不跑轮次）；
-//   - 鱼在群里说话：默认谁都不叫醒（要叫就写 mention）。
+// 默认值人和鱼同一套（Fabian 2026-11-22 修正）：
+//   没写 mention 就是 [] —— 谁都不叫醒。要叫醒谁，就把谁写进 mention。
 //
 // 老记录没有 `mention` 字段，必须按老规则读（to=all 叫醒所有人、to=某人叫醒那个人）——
 // 否则回扫历史时，会把当年真实发生过的叫醒判成"本来不该叫"，账就不认了。
@@ -34,9 +33,9 @@ function keyListOf(input, memberKeys) {
 
 /**
  * 把工具参数/面板传进来的 mention 归一成三种形状：
- *   undefined  没有写（由调用方决定默认值；旧记录也是这个形状）
+ *   undefined  没有写（群消息按 [] 处理；旧记录也是这个形状）
  *   'all'      叫醒所有人
- *   string[]   只叫醒名单里的人；[] = 谁都不叫醒（显式写"不叫醒"）
+ *   string[]   只叫醒名单里的人；[] = 谁都不叫醒
  */
 export function normalizeMention(input, memberKeys) {
   if (input === undefined || input === null) return undefined
@@ -48,21 +47,6 @@ export function normalizeMention(input, memberKeys) {
   if (text === '') return []
   if (text === MENTION_ALL) return MENTION_ALL
   return keyListOf(text, memberKeys)
-}
-
-/**
- * 发消息的人在没写 mention 时的默认值。
- * to 指名了某个人 ⇒ 叫醒他（跟以前一样，@ 一个人就是把他叫起来）；
- * to=all ⇒ 人类说话叫醒所有鱼，鱼说话谁都不叫醒。
- */
-export function defaultMentionOf({ from, to, members }) {
-  const map = members ?? {}
-  const keys = Object.keys(map)
-  if (typeof to === 'string' && to !== '' && to !== MENTION_ALL) {
-    if (!keys.includes(to)) throw new Error(`to 里有不认识的成员：${to}`)
-    return [to]
-  }
-  return map[from]?.kind === 'human' ? MENTION_ALL : []
 }
 
 /**
@@ -83,13 +67,32 @@ export function wantsWake(record, member) {
  * `labelOf` 由调用方给（宿主那边是 labelOf，测试里可以给 key 本身）。
  */
 export function mentionTextOf(mention, labelOf = (key) => key) {
-  if (mention === undefined) return '（未写，按 to 推）'
+  if (mention === undefined) return '（老记录，按 to 推）'
   if (mention === MENTION_ALL) return '所有人'
   if (Array.isArray(mention)) {
     if (mention.length === 0) return '不叫醒任何人'
     return mention.map((key) => labelOf(key)).join('、')
   }
   return '（认不出）'
+}
+
+/**
+ * 投影/气泡上的那半句：「 · 提到了：A、B」/「 · 提到了：所有人」/ 空串。
+ * 新记录看 mention；老记录没有 mention，就按当时的 to 推
+ * （to=all ⇒ 所有人、to=某人 ⇒ 他）—— 读旧记录复现当时的行为，不是今天的规则。
+ */
+export function mentionDisplayOf({ mention, to }, labelOf = (key) => key) {
+  let value = mention
+  if (value === undefined && typeof to === 'string' && to !== '' && to !== MENTION_ALL) {
+    // 老记录只在"当年点了名"时回退显示（to=成员）；to=all 的广播保持空——
+    // 那一条当年没有点名，补一句"提到了：所有人"等于改历史。
+    value = [to]
+  }
+  if (value === undefined || value === null) return ''
+  if (value === MENTION_ALL) return ' · 提到了：所有人'
+  if (!Array.isArray(value) || value.length === 0) return ''
+  const names = value.map((key) => labelOf(key)).filter((name) => typeof name === 'string' && name !== '')
+  return names.length === 0 ? '' : ` · 提到了：${names.join('、')}`
 }
 
 /**

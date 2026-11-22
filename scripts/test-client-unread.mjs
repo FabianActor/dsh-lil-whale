@@ -47,7 +47,7 @@ ok('服务端读点写最后一条 ts', HOST.includes('state.group = lastTsOf(ME
 ok("服务端按 ts 之后计数", HOST.includes("String(message.ts ?? '') <= since"))
 
 // 5. 构建标记（人刷新后靠它确认拿到的是这一版；期望跟着实现走，§27）。
-ok('client build v58 · mention-split', CLIENT.includes('client build v58 · mention-split'))
+ok('client build v59 · mention-only', CLIENT.includes('client build v59 · mention-only'))
 
 console.log(`test-client-unread：合计 ${total}，PASS ${pass}，FAIL ${total - pass}`)
 process.exit(pass === total ? 0 : 1)

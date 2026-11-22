@@ -54,7 +54,12 @@ export function toProblemOf(to, memberKeys, channel = 'group') {
   return null
 }
 
-/** 两个检查合起来：返回第一条原因，没问题返回 null。 */
+/** 两个检查合起来：返回第一条原因，没问题返回 null。
+ *  2026-11-22 r413 起：群里不再有 to（叫醒谁看 mention），所以 group 只查 channel；
+ *  to 只在 dm 里还有意义——"这间屋只开给谁"。 */
 export function sayProblemOf({ to, channel }, memberKeys) {
-  return channelProblemOf(channel) ?? toProblemOf(to, memberKeys, channel || 'group')
+  const channelProblem = channelProblemOf(channel)
+  if (channelProblem !== null) return channelProblem
+  if (channel === 'dm') return toProblemOf(to, memberKeys, 'dm')
+  return null
 }
