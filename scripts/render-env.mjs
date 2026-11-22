@@ -24,7 +24,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { biliSectionOf } from './bili-section.mjs'
+import { biliSectionOf } from '../advanced notes on third-party plugins/让小鱼能看B站-bili-eyes/scripts/bili-section.mjs'
 import { drawSectionOf } from './draw-section.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))

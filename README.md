@@ -210,7 +210,7 @@ lil-whale/                      鱼塘根（不在 git 里）
   app/                          工程（这个仓库）
      docs/                      产品文档（PRD.md 等）；变更记录在仓库根 CHANGELOG.md
      docs/detail/               基座自己的文档：安装、出生、种子、起停、打包、发布、升级、待办、观察、谱系、判据、账本、自主触发、能力、想法
-     docs/Advanced notes on third-party plugins/  第三方插件的折腾心得（与基座无关，默认不装）
+     advanced notes on third-party plugins/  第三方插件的折腾心得（一个插件一个文件夹：说明 + 可选 scripts，与基座无关，默认不装）
      docs/archive/              历史记录（交接、演练、评审、过期方案）——只归档，不删
     plugin/dsh-lil-whale-group/        宿主半边：群发言工具 + 跨进程唤醒（鱼的 profile 也装）
     plugin/dsh-lil-whale-group-ui/     浏览器半边：群聊面板、设置页、HTTP 路由（只你的 profile 装）
@@ -401,7 +401,7 @@ pwsh -File scripts\fish.ps1 upgrade-check -Mark 1.7.2   # 做完以后记账
 | 这东西是什么、怎么算成、做到哪一步停       | [`docs/PRD.md`](docs/PRD.md)                                                   |
 | 发布时对外说的话（草稿）                   | [发布时对外说什么](./docs/detail/发布时对外说什么.md)                          |
 | 装一条新鱼时给她放什么种子文件             | [新鱼出生时给她什么](./docs/detail/新鱼出生时给她什么.md)                      |
-| 第三方插件的折腾心得（给小鱼装 billion-context、B站眼睛） | [Advanced notes on third-party plugins](./docs/Advanced%20notes%20on%20third-party%20plugins/)        |
+| 第三方插件的折腾心得（给小鱼装 billion-context、B站眼睛、fishtalk） | [advanced notes on third-party plugins](./advanced%20notes%20on%20third-party%20plugins/) |
 | 从零装到跑起来的每一步（变量、路径、时序） | [怎么装一套鱼塘](./docs/detail/怎么装一套鱼塘.md)                              |
 | 怎么「出生」一条新鱼、怎么换段搬家         | [怎么生一条新鱼](./docs/detail/怎么生一条新鱼.md)                              |
 | 发版前逐条检查                             | [发布前检查清单](./docs/detail/发布前检查清单.md)、`scripts\release-check.ps1` |
@@ -424,7 +424,7 @@ pwsh -File scripts\fish.ps1 upgrade-check -Mark 1.7.2   # 做完以后记账
 2. **或直接开 PR**：修好了就带上复现步骤一起提，issue 可以省。
 3. **或在 QQ 群说一声**：群号 `xxx`（占位，发布时替换）。
 
-另外：如果你**成功给小鱼装过第三方插件**（或踩通了别人没写过的坑），也欢迎开 issue 分享——这类经验比 bug 报告更稀缺，我们会整理进 [`docs/Advanced notes on third-party plugins/`](./docs/Advanced%20notes%20on%20third-party%20plugins/README.md)。
+另外：如果你**成功给小鱼装过第三方插件**（或踩通了别人没写过的坑），也欢迎开 issue 分享——这类经验比 bug 报告更稀缺，我们会整理进 [`advanced notes on third-party plugins/`](./advanced%20notes%20on%20third-party%20plugins/README.md)。
 
 报的时候带这四样，能省几轮来回：
 

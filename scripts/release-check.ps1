@@ -282,12 +282,12 @@ if ($root) {
     else { Ok '自检行口径' '每个计数自带分母与排除项（test-roster-audit.mjs）' }
   } else { Fail '自检行口径' 'scripts\test-roster-audit.mjs 不在包里' }
     # ── 4y. 第三方补丁（2026-11-18，LeeaCP 问"补丁怎么活过更新"）──────────
-  $tpTest = Join-Path $pkg 'scripts\test-thirdparty-patch.mjs'
+  $tpTest = Join-Path $pkg 'advanced notes on third-party plugins\让小鱼能看B站-bili-eyes\scripts\test-thirdparty-patch.mjs'
   if (Test-Path $tpTest) {
     $tpOut = & node $tpTest 2>&1
     if ($LASTEXITCODE -ne 0) { Fail '第三方补丁' (($tpOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '第三方补丁' '检查器只读、补丁可重打、起鱼与读升级单时自动跑（test-thirdparty-patch.mjs）' }
-  } else { Fail '第三方补丁' 'scripts\test-thirdparty-patch.mjs 不在包里' }
+  } else { Fail '第三方补丁' 'advanced notes on third-party plugins\让小鱼能看B站-bili-eyes\scripts\test-thirdparty-patch.mjs 不在包里' }
   # ── 4z. 谱系校验（2026-11-18，小鱼丸 #1709：父写坏但键齐时两边都绿）──────────
   $famTest = Join-Path $pkg 'scripts\test-family-check.mjs'
   if (Test-Path $famTest) {

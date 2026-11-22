@@ -3,7 +3,7 @@
 // 分三层：
 //   A. safe-write 行为：readOnly 时每个入口都抛，非 readOnly 时真的写；
 //   B. 扫描器夹具：4 种真调用必须红、4 种假调用必须绿、顺序敏感一格必须证明"剥层在前会漏"；
-//   C. 真文件：scripts/patch-bili-eyes-note.mjs 里裸写调用必须是 0。
+//   C. 真文件：advanced notes on third-party plugins/让小鱼能看B站-bili-eyes/scripts/patch-bili-eyes-note.mjs 里裸写调用必须是 0。
 
 import fs from 'node:fs'
 import os from 'node:os'
@@ -82,7 +82,7 @@ const header = describeHits('demo.mjs', []).shift()
 ok('扫描器第一行声明"已知不查"', header === SCANNER_HEADER && header.includes('动态拼名'))
 
 // ── C. 真文件：补丁脚本里裸写调用 0 处 ─────────────────────
-const patchScript = path.join(HERE, 'patch-bili-eyes-note.mjs')
+const patchScript = path.join(HERE, '..', 'advanced notes on third-party plugins', '让小鱼能看B站-bili-eyes', 'scripts', 'patch-bili-eyes-note.mjs')
 const patchSource = fs.readFileSync(patchScript, 'utf8')
 const patchHits = scanWriteCalls(patchSource)
 ok('patch-bili-eyes-note.mjs 里没有裸的写调用', patchHits.length === 0)

@@ -4,7 +4,7 @@
 // 于是"忘了重打"永远查不出来：检查的那一刻它自己把洞补了，然后回你一个 exit 0。
 // 判据：检查器不能在检查的时候改变被检查的东西。
 //
-// 用法：node scripts/test-thirdparty-patch.mjs（PASS/FAIL 计数器在最后）
+// 用法：node advanced notes on third-party plugins\让小鱼能看B站-bili-eyes\scripts\test-thirdparty-patch.mjs（PASS/FAIL 计数器在最后）
 
 import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, readFileSync, readdirSync, rmSync, linkSync, statSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -470,10 +470,10 @@ console.log('第三方补丁：行为测试');
 
 // 6. 静态接线：doctor 有这一格、fish.ps1 的两个自动触发点都在
 {
-  const doctor = readFileSync(path.join(HERE, '..', 'scripts', 'doctor.ps1'), 'utf8');
+  const doctor = readFileSync(path.join(HERE, '..', '..', '..', 'scripts', 'doctor.ps1'), 'utf8');
   ok('doctor 有「第三方补丁（bili-eyes）」格', doctor.includes('第三方补丁（bili-eyes）'));
   ok('doctor 调 --check', doctor.includes('--check'));
-  const fish = readFileSync(path.join(HERE, '..', 'scripts', 'fish.ps1'), 'utf8');
+  const fish = readFileSync(path.join(HERE, '..', '..', '..', 'scripts', 'fish.ps1'), 'utf8');
   ok('fish.ps1 定义 Show-BiliEyesPatchStatus', fish.includes('function Show-BiliEyesPatchStatus'));
   ok('起鱼时自动跑（Invoke-Up 里调用）', /function Invoke-Up[\s\S]*?Show-BiliEyesPatchStatus/.test(fish));
   ok('读升级单时自动跑（Invoke-UpgradeCheck 里调用）', /function Invoke-UpgradeCheck[\s\S]*?Show-BiliEyesPatchStatus/.test(fish));
@@ -481,7 +481,7 @@ console.log('第三方补丁：行为测试');
 
 // 7. 2026-11-18 小鱼丸 #1626 / 小肥鱼 #1627：账本里"我是谁"和"通道交付算不算一次叫醒"
 {
-  const lib = readFileSync(path.join(HERE, '..', 'plugin', 'dsh-lil-whale-group', 'lib', 'index.js'), 'utf8');
+  const lib = readFileSync(path.join(HERE, '..', '..', '..', 'plugin', 'dsh-lil-whale-group', 'lib', 'index.js'), 'utf8');
   ok('boot 行带 member=（名册键）', /member:\s*bootMember \?\? '\(unresolved\)'/.test(lib));
   ok('boot 的 member 只写能证明的（selfMemberKeyRaw）', lib.includes('const bootMember = selfMemberKeyRaw()'));
   ok('通道交付也记一行 woke（trigger=channel）', lib.includes('trigger=channel'));

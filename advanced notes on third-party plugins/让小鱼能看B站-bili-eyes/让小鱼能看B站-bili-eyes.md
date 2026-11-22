@@ -28,7 +28,7 @@ $env:DSH_HOME = "$env:USERPROFILE\.dsh"   # 换成你自己的 DSH_HOME
 dsh plugin --profile web add dsh-bili-eyes@0.8.3    # 会自动写进 profile package.json 的 dsh.profile.bundles
 # 配置：<DSH_HOME>\bili-eyes.json     凭证：<DSH_HOME>\bili-eyes\{credential.json,cookies.txt}
 # 改完 profile 要重启才生效（这条链不触发热重载，但工具表是启动时挂的）
-node app\scripts\patch-bili-eyes-note.mjs --also-root "<DSH_HOME>"   # 补丁脚本默认只扫 homes\，宿主这份要显式加根
+node "advanced notes on third-party plugins\让小鱼能看B站-bili-eyes\scripts\patch-bili-eyes-note.mjs" --also-root "<DSH_HOME>"   # 补丁脚本默认只扫 homes\，宿主这份要显式加根
 ```
 
 判据：重启后宿主的会话工具表多出 **14 件** `bili_*`（2026-11-19 本机装前 70 件）。只读边界与鱼相同：看视频/搜/看评论弹幕默认开，点赞/评论/私信/关注/发动态默认全关。
@@ -127,9 +127,9 @@ Get-Content homes\<键>\dsh-home\bili-eyes\history.jsonl -Tail 3
 - **本地补丁**（幂等脚本，可检查）：
 
   ```
-  node app\scripts\patch-bili-eyes-note.mjs            # 打补丁
-  node app\scripts\patch-bili-eyes-note.mjs --dry-run   # 只看看
-  node app\scripts\patch-bili-eyes-note.mjs --check     # 有没打全；没打全 exit 1
+  node "advanced notes on third-party plugins\让小鱼能看B站-bili-eyes\scripts\patch-bili-eyes-note.mjs"            # 打补丁
+  node "advanced notes on third-party plugins\让小鱼能看B站-bili-eyes\scripts\patch-bili-eyes-note.mjs" --dry-run   # 只看看
+  node "advanced notes on third-party plugins\让小鱼能看B站-bili-eyes\scripts\patch-bili-eyes-note.mjs" --check     # 有没打全；没打全 exit 1
   ```
 
   补三句（`asr-failed` / `file-failed` / `no-audio`），并在失败时把原因附上（`；原因：<error 前 160 字>`）。
@@ -160,7 +160,7 @@ Get-Content homes\<键>\dsh-home\bili-eyes\history.jsonl -Tail 3
 
 ## 9. 只读门收成一处（fi-0003，2026-11-19）
 
-以前 `--check` / `--dry-run` 的"只读"靠调用点自己记得判：`scripts\patch-bili-eyes-note.mjs` 里有 7 处 `if (readOnly)`。漏一处，检查就会顺手写盘，而且输出上看不出来。
+以前 `--check` / `--dry-run` 的"只读"靠调用点自己记得判：`advanced notes on third-party plugins\让小鱼能看B站-bili-eyes\scripts\patch-bili-eyes-note.mjs` 里有 7 处 `if (readOnly)`。漏一处，检查就会顺手写盘，而且输出上看不出来。
 
 现在落盘只走 `scripts\lib\safe-write.mjs`：每个入口第一行先问 readOnly，过门才写；补丁脚本只许出现这些封装。配套 `scripts\lib\scan-write-calls.mjs` 做静态扫描（先抓方括号形态、再剥注释/普通字符串/模板字符串/正则；报 `文件:行号` 与那一行原文，第一行声明"动态拼名、变量取属性、模板里的调用不查"），`scripts\test-safe-write.mjs` 26 条夹具把它钉住。
 
@@ -180,7 +180,7 @@ Get-Content homes\<键>\dsh-home\bili-eyes\history.jsonl -Tail 3
 
 **判据**：在装好的 `look.js` 上数 `login.state === 'none'` / `'unknown'` / `'expired'` —— 修前 none=0/unknown=0/expired=1；修后 none≥1、unknown≥1、expired=1。
 
-**测试**：`scripts/test-thirdparty-patch.mjs` 3a4 节（打出三句、`opts` 透传、`loginState:` 调用处；半旧样本把标记句改坏后 `--check` 必须 exit 1，重跑不能假装补上）——合计从 124 增到 **133 PASS**。
+**测试**：`advanced notes on third-party plugins\让小鱼能看B站-bili-eyes\scripts\test-thirdparty-patch.mjs` 3a4 节（打出三句、`opts` 透传、`loginState:` 调用处；半旧样本把标记句改坏后 `--check` 必须 exit 1，重跑不能假装补上）——合计从 124 增到 **133 PASS**。
 
 **生效**：改的是第三方插件的 `look.js` 与本地补丁脚本，**要重启鱼进程/宿主 dsh 后**才加载新代码；已装的 5 份（四条鱼 + 宿主/web）都已补上。
 

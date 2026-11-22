@@ -8,7 +8,7 @@
 //   真实原因就在 result.transcript.error 里，原代码只读了 .source。
 //
 // 用法：
-//   node app\scripts\patch-bili-eyes-note.mjs [--pond <鱼塘根>] [--dry-run] [--check] [--detach] [--also-root <DSH_HOME>]
+//   node "advanced notes on third-party plugins\让小鱼能看B站-bili-eyes\scripts\patch-bili-eyes-note.mjs" [--pond <鱼塘根>] [--dry-run] [--check] [--detach] [--also-root <DSH_HOME>]
 //   --check   只检查是否已打补丁；有未打的 exit 1（给体检/发版检查用）
 //   --detach  给已经打过的安装断开与 pnpm store 的硬链接，并把 store 那份恢复成原样
 //   --also-root  额外扫一份 `<DSH_HOME>\profiles\*\node_modules\dsh-bili-eyes`（2026-11-19：宿主
@@ -33,14 +33,14 @@
 // 不一致报「补丁版本不齐」，并指出是哪几台。判据：检查器能看见的，要包括"彼此是不是同一版"。
 
 import fs from 'node:fs';
-import { writeText, renameFile, copyFileTo } from './lib/safe-write.mjs';
+import { writeText, renameFile, copyFileTo } from '../../../scripts/lib/safe-write.mjs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const APP_ROOT = path.resolve(HERE, '..');
+const APP_ROOT = path.resolve(HERE, '..', '..', '..'); // scripts -> 插件文件夹 -> advanced notes -> app
 const argv = process.argv.slice(2);
 const opt = (name, def = null) => {
   const i = argv.indexOf(`--${name}`);

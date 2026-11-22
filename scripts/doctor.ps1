@@ -1422,7 +1422,7 @@ try {
 #     LeeaCP 2026-11-18 追问"这个补丁怎么活过更新" ⇒ 光有脚本不够，得有人定期问她一句。
 #     判据：--check 的退出码。0=全打；2=没人装（不算欠）；其余=有安装没打。
 try {
-  $patchScript = Join-Path $Cfg.Root 'scripts\patch-bili-eyes-note.mjs'
+  $patchScript = Join-Path $Cfg.Root 'advanced notes on third-party plugins\让小鱼能看B站-bili-eyes\scripts\patch-bili-eyes-note.mjs'
   if (-not (Test-Path -LiteralPath $patchScript)) {
     Add-Row '第三方补丁（bili-eyes）' 'INFO' '补丁脚本不在这一版仓库里——跳过'
   } else {
@@ -1434,7 +1434,7 @@ try {
     } elseif ($patchCode -eq 2) {
       Add-Row '第三方补丁（bili-eyes）' 'INFO' '没人装 dsh-bili-eyes（不欠）'
     } else {
-      Add-Row '第三方补丁（bili-eyes）' 'WARN' ('有安装没打补丁：转写失败会被写成「没人说话」｜' + $patchTail) 'NEXT: node scripts\patch-bili-eyes-note.mjs（先 --dry-run 看一眼；重装或升级插件后要重打）'
+      Add-Row '第三方补丁（bili-eyes）' 'WARN' ('有安装没打补丁：转写失败会被写成「没人说话」｜' + $patchTail) 'NEXT: node "advanced notes on third-party plugins\让小鱼能看B站-bili-eyes\scripts\patch-bili-eyes-note.mjs"（先 --dry-run 看一眼；重装或升级插件后要重打）'
     }
   }
 } catch { Add-Row '第三方补丁' 'WARN' ('核不了：{0}' -f $_.Exception.Message) }

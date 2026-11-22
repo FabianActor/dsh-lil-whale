@@ -78,7 +78,7 @@
       ],
       "verify": [
         "重启后 boot 行 pkg=@fabianactor/dsh-lil-whale-group@1.12.1；doctor 全过",
-        "装了 bili-eyes 并跑过补丁的机器：node scripts\\patch-bili-eyes-note.mjs --check --also-root \"<DSH_HOME>\" 报全部已打；台词栏 no-key 句是「这次没拿到字幕，转写也没跑起来」",
+        "装了 bili-eyes 并跑过补丁的机器：node advanced notes on third-party plugins\\让小鱼能看B站-bili-eyes\\scripts\\patch-bili-eyes-note.mjs --check --also-root \"<DSH_HOME>\" 报全部已打；台词栏 no-key 句是「这次没拿到字幕，转写也没跑起来」",
         "pool\\state\\code-fp.json 存在；pool\\state\\watchman.log 里有 note=code-fp-baseline（首次）或 note=code-fp-changed",
         "node scripts\\manual-op.mjs --json --dry-run --by <名字> --removed 1 --bytes 1 --note <说明> 输出是 {ok, dryRun, file, eof, line} 这一套键"
       ],

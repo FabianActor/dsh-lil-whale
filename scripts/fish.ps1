@@ -674,14 +674,14 @@ function Invoke-Doctor {
 # 升级/重装就会丢；把检查挂到"你本来就会跑的两个时刻"（起鱼、读升级单），
 # 这样它不靠记性。全打或没人装时静默，只在真丢时嚷一句。
 function Show-BiliEyesPatchStatus {
-  $patchScript = Join-Path $PSScriptRoot 'patch-bili-eyes-note.mjs'
+  $patchScript = Join-Path (Split-Path $PSScriptRoot -Parent) 'advanced notes on third-party plugins\让小鱼能看B站-bili-eyes\scripts\patch-bili-eyes-note.mjs'
   if (-not (Test-Path -LiteralPath $patchScript)) { return }
   $out = @(& node $patchScript --check 2>&1)
   $code = $LASTEXITCODE
   if ($code -eq 0 -or $code -eq 2) { return }
   Write-Host '第三方补丁：有安装没打——「转写失败」会被写成「没人说话」' -ForegroundColor Yellow
   $out | Where-Object { $_ -match '✗|小计：|检查：' } | ForEach-Object { Write-Host ('  ' + $_) -ForegroundColor Yellow }
-  Write-Host '  NEXT: node app\scripts\patch-bili-eyes-note.mjs（先 --dry-run；重装或升级 dsh-bili-eyes 后要重打）' -ForegroundColor Yellow
+  Write-Host '  NEXT: node "advanced notes on third-party plugins\让小鱼能看B站-bili-eyes\scripts\patch-bili-eyes-note.mjs"（先 --dry-run；重装或升级 dsh-bili-eyes 后要重打）' -ForegroundColor Yellow
 }
 function Show-Help {
   @'

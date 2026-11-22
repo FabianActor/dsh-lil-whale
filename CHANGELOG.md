@@ -16,9 +16,15 @@
 
 2. **攒一批再升版本**：升不升版本由人决定。升版本时，把 `[未发布]` 里的条目**全部**移进新的 `## [x.y.z] - 日期` 段，并**整合成一段完整的说明**——这一版做了什么、影响谁、旧行为是什么，别只写最后一个 commit；按「修复 / 变更 / 文档」归类，用户可见的排前面、内部改动在条目里标「（内部）」。
 3. **顺序**：`[未发布]` 永远在最上面，下面是版本段（新→旧）；历史段（r1–r206）保留原样。
-4. **第三方插件的本地补丁改动不进正文**：补丁脚本对 bili-eyes 做的改动（文案、缓存代次等）属于工具行为，正文只留一行索引；每代改了什么、为什么，写进 `docs/Advanced notes on third-party plugins/让小鱼能看B站-bili-eyes.md` 的「补丁代次索引」。
+4. **第三方插件的本地补丁改动不进正文**：补丁脚本对 bili-eyes 做的改动（文案、缓存代次等）属于工具行为，正文只留一行索引；每代改了什么、为什么，写进 `advanced notes on third-party plugins/让小鱼能看B站-bili-eyes/让小鱼能看B站-bili-eyes.md` 的「补丁代次索引」。
 
 ## [未发布]
+
+### r406 · 2026-11-22 · 第三方插件资料重新归置：一个插件一个文件夹，适配脚本收进各自 scripts/（内部）
+
+- 旧：第三方插件的心得在 `docs/Advanced notes on third-party plugins/*.md`，bili-eyes 的三段适配脚本散在 `scripts\`。
+- 新：统一到 `advanced notes on third-party plugins/<插件名>/`——同名说明 `.md` + 可选的 `scripts\`（bili-eyes：`bili-section.mjs`、`patch-bili-eyes-note.mjs`、`test-thirdparty-patch.mjs` 已迁入）；引用路径同步到 doctor、fish.ps1、release-check、render-env、test-safe-write、upgrade.json、README、升级文档；旧 `docs/Advanced notes …` 删除。
+- 用户可见：否。
 
 ### r403 · 2026-11-22 · 共享账不再复制正文：watchman 只留 code=，正文只进 intent.log（内部）
 

@@ -74,7 +74,6 @@ pwsh -File scripts\fish.ps1 acl-check / acl-repair <鱼|all>  # 沙箱通行证�
 | `members-add.mjs` | `install.ps1` 往名册里加成员（整份原子替换） |
 | `pins.mjs` | 整份替换 `pins.json`（哪段会话算谁） |
 | `render-env.mjs` / `tools-from-profile.mjs` | 渲染 `环境.md` / 从 `--dump-config` 数真实工具 |
-| `bili-section.mjs` | 按 profile 里真实的白名单生成 `环境.md` 的「看外面」一节 |
 | `rebuild-group-md.mjs` | 从 `messages.jsonl` 重建 `群.md` 与私聊可读版（`--write` 才写） |
 | `migrate-*.mjs` | 一次性迁移（pool / pond / scope / profile 改名）；头部的坑先看 |
 
