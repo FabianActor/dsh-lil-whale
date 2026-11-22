@@ -2199,7 +2199,12 @@ function apply(ctx) {
         sid === null ? '' : sid.replace(/^session-/, '').slice(0, 6), toSeat, image, null, mention,
       )
       // channel 让发言的人一眼知道这句话去了哪：group = 大家都看得见；dm = 只有对方看得见，且不会叫醒谁。
-      return { ts: record.ts, queued: true, channel: record.channel, to: record.to, image: image === null ? '' : `${image.id}.${image.ext}` }
+      // mention/from 也要带出来：回执靠它说“会叫醒谁”，漏了会读成“（未写，按 to 推）”。
+      return {
+        ts: record.ts, queued: true, channel: record.channel, to: record.to,
+        from: record.from, mention: record.mention,
+        image: image === null ? '' : `${image.id}.${image.ext}`,
+      }
     },
     presentCall: (args) => ({
       card: 'generic',

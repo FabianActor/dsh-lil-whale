@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 /**
  * 群聊草稿的两处接线（2026-11-19 r353）。
  *

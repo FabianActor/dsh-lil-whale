@@ -1,5 +1,6 @@
 // mention（叫醒谁）的纯判据测试 —— 2026-11-22 r412。
 // 只在内存里摆题，不碰真鱼塘（判据交给调用方；这里只验规则本身）。
+import { readFileSync } from 'node:fs'
 import {
   MENTION_ALL,
   normalizeMention,
@@ -96,5 +97,11 @@ ok(!heldSentenceOf(3).includes('君'), '句子不编原因')
 // ---- 兼容：字段名写错时不要静默 ----
 eq(wantsWake({ mention: MENTION_ALL }, 'fabian'), true, '人类也在名单里（只是他不跑轮）')
 
+
+// ---- 源码层：回执要靠 execute 的返回值说“会叫醒谁” ----
+const idxSrc = readFileSync(new URL('../plugin/dsh-lil-whale-group/lib/index.js', import.meta.url), 'utf8')
+ok(idxSrc.includes('from: record.from, mention: record.mention'), 'group_say 的返回值带 from/mention（否则回执读成“未写，按 to 推”）')
+ok(!idxSrc.includes('return { ts: record.ts, queued: true, channel: record.channel, to: record.to, image:'), '旧的一行 return 不在了')
+ok(idxSrc.includes('mentionTextOf(value.mention, labelOf)'), '回执用 mention 文案')
 console.log(`test-mention-wake：合计 ${pass + fail}，PASS ${pass}，FAIL ${fail}`)
 if (fail > 0) process.exit(1)
