@@ -28,6 +28,7 @@ const FAMILIES = [
   { name: 'fissue 账', static: ['fissue 账'], why: '鱼群 issue 收件台的账是否自洽、正在做哪条（r372）' },
   { name: '日志 kind 声明', static: ['日志 kind 声明'], why: '账上出现未声明的 kind 时报行数（fi-0001，r374）' },
   { name: '启动账', static: ['启动账（runs）'], why: '每本 runs 账的每条 started 前面有 stopped/resumed 交代（fi-0007，r402）' },
+  { name: '脚本编码（PS1）', static: ['脚本编码（PS1）'], why: '含中文的 .ps1 要么带 BOM 要么带 #requires 7（fi-0009，r405）' },
   { name: '旧段', static: ['旧段'], why: '名册外的会话近两小时是否被写过' },
   { name: '配置', static: ['配置'], why: '配置文件是否可读、键是否齐全' },
   { name: '默认值', static: ['默认值'], why: '配置里是否写着等于默认值的键' },
