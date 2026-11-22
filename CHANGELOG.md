@@ -23,6 +23,12 @@
 ### r403 · 2026-11-22 · 共享账不再复制正文：watchman 只留 code=，正文只进 intent.log（内部）
 
 - 修 fi-0008（lee 提、小鱼丸补了三处边界）：`watchman.log` 的 `skip` 行原来把原因整句写进共享账，同一句又进她的 `intent.log`；被 5 分钟去重压制时还先 `slice(0,120)`，两本都是残句。现在共享账只写 `to=<key> code=<码> see=intent.log`（压制时 `code=note-suppressed count=N`），整句只写进 `<家>\logs\intent.log`（只压空白、不截断）。拼行逻辑抽到 `plugin/dsh-lil-whale-group/lib/note-core.js`，`scripts\test-note-lines.mjs` 16 格行为测试，`release-check` 加 4ar。
+### r404 · 2026-11-22 · 名册值补 key：skip 行不再写 to=undefined（内部，fi-0010）
+
+- 根因：`buildMembers()` 造出的名册值没有 `key`，`selfPlanTick` 走 `planDue → noteOnce` 拼 `to=${member.key}` 时写成 `to=undefined`（watchman.log 900 行）。`watchedMembers()` 手工补了 key，所以只有这一路坏。
+- 修法：新增 `plugin\dsh-lil-whale-group\lib\members-core.js` 的 `membersWithKeys()`，`buildMembers()` 两个返回点都过它——每个值带自己的 key，兜底名册与真名册同一道加工。
+- 测试：`scripts\test-member-key.mjs` 12 格（行为 7 + 源码层 5）；`release-check` 加 4as（56 项）。历史 900 行 append-only 不改，日志页登记为"旧账缺口"。
+
 ### r402 · 2026-11-22 · runs 账的交代判据进基座（内部）
 
 - 新增 `scripts\check-run-ledger.mjs`（fi-0007，小鱼丸提）：每本 `pool\state\runs\<鱼>.log` 里，第一条可以是 `started`；之后每条 `started` 前紧挨着必须有 `stopped` 或 `resumed`——`resumed` 只解释（上一轮没留账），不开关轮次；`stopped` 只能出现在开着的轮次之后。退出码 `0` 全成立 / `1` 有违规（点名行号）/ `2` 前提错（目录或账本不在，空目录不算成立）。

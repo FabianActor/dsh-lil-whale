@@ -12,6 +12,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renam
 import { printableText } from './text-clean.js'
 import { sayProblemOf, channelProblemOf } from './say-core.js'
 import { noteCodeOf, intentNoteTextOf, watchmanSkipLineOf } from './note-core.js'
+import { membersWithKeys } from './members-core.js'
 import { codeFingerprint } from './code-fp.js'
 import { codeFpChangeOf, codeFpHistoryLine, codeFpLedgerOf, CODE_FP_LEDGER } from './code-fp-history-core.js'
 import { join, dirname, basename } from 'node:path'
@@ -1209,7 +1210,7 @@ function buildMembers() {
         logLine({ note: 'roster-fallback', source: 'builtin', members: Object.keys(out).length })
       } catch {}
     }
-    return out
+    return membersWithKeys(out)
   }
   try {
     const raw = JSON.parse(readFileSync(file, 'utf8'))
@@ -1229,9 +1230,10 @@ function buildMembers() {
       logLine({ note: 'members-unreadable', file, why: String(error?.message ?? error).slice(0, 120) })
     } catch {}
   }
-  return out
+  return membersWithKeys(out)
 }
 
+// 值对象都带自己的 key：planDue/noteOnce 拼 to= 时要用（fi-0010，r404）。
 const MEMBERS = buildMembers()
 
 /**
@@ -3135,6 +3137,8 @@ function planDueMs(at) {
 function selfPlanTick(ctx) {
   if (isMainProcess()) return
   const self = ownMember()
+  // fi-0010（r404）：这里曾取到没有 key 的名册值，日志写成 to=undefined。
+  // 现在 buildMembers() 保证每个值都带 key，这里照旧取即可。
   const member = MEMBERS[self]
   if (!member || member.role === 'watcher') return
   const now = new Date()

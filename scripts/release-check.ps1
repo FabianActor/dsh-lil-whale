@@ -415,6 +415,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '启动账' (($runsOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '启动账' '每条 started 前应有 stopped/resumed 交代；空目录不算成立（test-run-ledger.mjs）' }
   } else { Fail '启动账' 'scripts\test-run-ledger.mjs 不在包里' }
+  # ── 4as. 名册值带 key（2026-11-22：to=undefined 900 行，fi-0010／r404）──
+  $keyTest = Join-Path $pkg 'scripts\test-member-key.mjs'
+  if (Test-Path $keyTest) {
+    $keyOut = & node $keyTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '名册值带 key' (($keyOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '名册值带 key' 'buildMembers 出来每个值都有 key；skip 行不再写 to=undefined（test-member-key.mjs）' }
+  } else { Fail '名册值带 key' 'scripts\test-member-key.mjs 不在包里' }
   # ── 4ar. 账本分工（2026-11-22：共享账不带正文，正文只进 intent.log；fi-0008）──
   $noteTest = Join-Path $pkg 'scripts\test-note-lines.mjs'
   if (Test-Path $noteTest) {
