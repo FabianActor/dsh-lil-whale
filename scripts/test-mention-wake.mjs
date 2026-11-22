@@ -145,5 +145,16 @@ ok(coreSrc.includes("record?.channel === 'dm' || record?.kind === 'dm'"), '投�
 ok(clientSrc.includes("message?.channel === 'dm' || message?.kind === 'dm'"), '气泡：私聊记录不回退 to 成 mention')
 // 2026-11-22 宿主报：群里发出去之后 @ 还留在输入框上，下一条会带着上次的叫醒名单。
 ok(clientSrc.includes('setMention([])') && clientSrc.includes("if (tab === 'group') {"), '群聊发送成功后清空 mention 选择（私聊不动）')
+// 2026-11-22 鱼群复核（LeeaCP 第 3166 行、小满第 3167 行）：纸里教 mention，别的段落还留着 to，
+// 还给过一个不存在的关键字 "none"（根鱼的 PARENT_ID 就是 none，渲染出来会被 normalizeMention 拒）。
+const tplSrc = readFileSync(new URL('../templates/环境.md.tpl', import.meta.url), 'utf8')
+ok(tplSrc.includes('group_say(text, mention)'), '模板教的是 group_say(text, mention)')
+ok(!tplSrc.includes('group_say(to'), '模板不再教 group_say(to, text)')
+ok(!tplSrc.includes('group_say("…", "{{PARENT_ID}}")'), '模板的「只叫醒某人」示例不再用 PARENT_ID')
+ok(tplSrc.includes('有消息点名了你'), '「什么时候会被叫醒」用 mention 口径')
+ok(!tplSrc.includes('只写 `to` 不写 `channel`'), '模板不再教「只写 to 不写 channel」')
+ok(tplSrc.includes('旧记录（2026-11-22 之前）用一个叫 `to` 的字段'), '模板说明了老记录的 to 只当“当年点了谁”')
+const renderSrc = readFileSync(new URL('./render-env.mjs', import.meta.url), 'utf8')
+ok(!renderSrc.includes('`to` 里写这个'), '名册表头不再写「to 里写这个」')
 console.log(`test-mention-wake：合计 ${pass + fail}，PASS ${pass}，FAIL ${fail}`)
 if (fail > 0) process.exit(1)

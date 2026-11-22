@@ -14,24 +14,20 @@
 
 1. **只提 commit、没升版本号**（文档、脚本、账本格式、诊断输出）→ 只写进 `## [未发布]`，一条一行：`rNN · 日期 · 一句话`；用户可见的在这句话里标出来。
 
-### r414 · 2026-11-22 · 老记录推出来的「提到了」自标门牌（用户可见：是）
-
-- 旧：老记录按当年 `to` 推成 `· 提到了：X`，读起来像当年就记了这一格——推出来的和记下来的长得一样。
-- 新：投影与面板气泡只对“推出来”的那节追加 `（按当年 to 推）`，新记录（有 `mention`）不加；`to=all` 的老广播仍不补。
-- `群.md` 整本重写后 2038 条老表头带标记；`rebuild-group-md.mjs` 的分界说明加 r414 一行，差异分类能认出“只差这个后缀”。
-- 面板 build 标记 `v60 · legacy-derived`。
-- 验收：`scripts\test-mention-wake.mjs` 66 格；`release-check` 58 项。
 2. **攒一批再升版本**：升不升版本由人决定。升版本时，把 `[未发布]` 里的条目**全部**移进新的 `## [x.y.z] - 日期` 段，并**整合成一段完整的说明**——这一版做了什么、影响谁、旧行为是什么，别只写最后一个 commit；按「修复 / 变更 / 文档」归类，用户可见的排前面、内部改动在条目里标「（内部）」。
+
 3. **顺序**：`[未发布]` 永远在最上面，下面是版本段（新→旧）；历史段（r1–r206）保留原样。
+
 4. **第三方插件的本地补丁改动不进正文**：补丁脚本对 bili-eyes 做的改动（文案、缓存代次等）属于工具行为，正文只留一行索引；每代改了什么、为什么，写进 `advanced notes on third-party plugins/让小鱼能看B站-bili-eyes/让小鱼能看B站-bili-eyes.md` 的「补丁代次索引」。
 
 ## [未发布]
 
-### r416 共享账的 skip 行带写者：`by=`（fi-0011）
+### r418 · 2026-11-22 · 纸上的「发言」彻底换成 mention：模板 / 名册表头 / 老记录说明一起改（用户可见：否，生成说明的内容）
 
-- 旧行为：`plan-bad-shape` 这类提示由「鱼自己的进程」和「巡守进程」各写一行，两行长得一样，读的人会把"两个写者各一行"读成"坏了两回"。
-- 新行为：`skip` 行带 `by=`（鱼进程写鱼键、巡守写 `lee`）；两边的去重窗口本来就各算各的，`count=` 也是各写者的计数，行上能看出是谁写的。历史行不改。
-- 用户可见：否（日志字段）。
+- 旧：r413 把机制改成 `group_say(text, mention)` 之后，`templates\环境.md.tpl` 还有五处写着旧的 `to` 口径（字段表、名册表头、dm 段、唤醒条件），还给过一个不存在的关键字 `none`——根鱼的 `{{PARENT_ID}}` 渲染成 `none`，`normalizeMention` 会直接拒（LeeaCP 核纸时指出）。
+- 新：模板全篇改成 mention 口径——字段表写 `mention` 并把 `to` 注明为"只在私聊记录里出现"、名册表头改成 `id（叫醒时写这个）`、dm 段不再教"只写 to 不写 channel"、唤醒条件改成"有消息点名了你（mention 里有你，或写了 all）"；记录示例的 `from` 不再塞 `PARENT_ID`；`render-env.mjs` 的名册表头同步。补一句老记录说明："旧记录（2026-11-22 之前）用一个叫 `to` 的字段表示'这话给谁'，也就是当年**打算**叫醒谁；是否真的叫醒了，得看同一时刻的 `woke` / `wake-skip` 行"（旧稿把"打算"写成"只能当点了谁"，反而不准）。另：`homes\<鱼>\bili-duty\` 存在时，"看外面"节补一句"旧探索本已下线，账本还在 `bili-duty\` 下（纯文本）"。
+- 验收：`scripts\test-mention-wake.mjs` 78 格（含模板/名册表头的源码断言）；四家 `环境.md` 先出预览比对、再重生成，doctor「环境说明」指纹 `059b9da5` → `2b40a6da`。
+- 用户可见：否（生成说明的内容）。
 
 ### r417 共享账不许裸行（fi-0012）
 
@@ -39,12 +35,26 @@
 - 新行为：写端兜底——`note`/`hint` 没带 `=` 的自由文本自动降级成 `note=unkeyed detail=…`；新增 `scripts\check-watchman-notes.mjs`（`fmt=3` 之后不许裸行；老缺口只数不红），`doctor`「共享账裸行」一格、`release-check` 4av，`test-watchman-notes.mjs` 12 格。
 - 用户可见：否（日志字段与体检）。
 
+### r416 共享账的 skip 行带写者：`by=`（fi-0011）
+
+- 旧行为：`plan-bad-shape` 这类提示由「鱼自己的进程」和「巡守进程」各写一行，两行长得一样，读的人会把"两个写者各一行"读成"坏了两回"。
+- 新行为：`skip` 行带 `by=`（鱼进程写鱼键、巡守写 `lee`）；两边的去重窗口本来就各算各的，`count=` 也是各写者的计数，行上能看出是谁写的。历史行不改。
+- 用户可见：否（日志字段）。
+
 ### r415 面板两处收尾：群聊发送后清空 @、私聊气泡不再显示「提到了」
 
 - 群聊发送成功后把 @（mention 选择）清空并收起选择面板。此前发出去之后下一条还带着上次的叫醒名单，容易误叫醒人。
 - 私聊气泡不再显示「提到了 xxx（按当年 to 推）」：私聊记录里的 `to` 是收件人（这间屋开给谁），r414 的老记录回退没有先分屋，把它当成了推算出来的叫醒名单。现在投影与气泡都只对群记录做 to 回退。
 - 面板 build 标记 `v61 · dm-no-mention`；`test-mention-wake` 加到 71 格（私聊/群老记录分开断言）。
 - 用户可见：是。
+
+### r414 · 2026-11-22 · 老记录推出来的「提到了」自标门牌（用户可见：是）
+
+- 旧：老记录按当年 `to` 推成 `· 提到了：X`，读起来像当年就记了这一格——推出来的和记下来的长得一样。
+- 新：投影与面板气泡只对“推出来”的那节追加 `（按当年 to 推）`，新记录（有 `mention`）不加；`to=all` 的老广播仍不补。
+- `群.md` 整本重写后 2038 条老表头带标记；`rebuild-group-md.mjs` 的分界说明加 r414 一行，差异分类能认出“只差这个后缀”。
+- 面板 build 标记 `v60 · legacy-derived`。
+- 验收：`scripts\test-mention-wake.mjs` 66 格；`release-check` 58 项。
 
 ### r413 · 2026-11-22 · `@` 改成“点名叫醒”，群消息不再有收件人（用户可见：是）
 
@@ -98,19 +108,21 @@
 - 新：统一到 `advanced notes on third-party plugins/<插件名>/`——同名说明 `.md` + 可选的 `scripts\`（bili-eyes：`bili-section.mjs`、`patch-bili-eyes-note.mjs`、`test-thirdparty-patch.mjs` 已迁入）；引用路径同步到 doctor、fish.ps1、release-check、render-env、test-safe-write、upgrade.json、README、升级文档；旧 `docs/Advanced notes …` 删除。
 - 用户可见：否。
 
-### r403 · 2026-11-22 · 共享账不再复制正文：watchman 只留 code=，正文只进 intent.log（内部）
-
-- 修 fi-0008（lee 提、小鱼丸补了三处边界）：`watchman.log` 的 `skip` 行原来把原因整句写进共享账，同一句又进她的 `intent.log`；被 5 分钟去重压制时还先 `slice(0,120)`，两本都是残句。现在共享账只写 `to=<key> code=<码> see=intent.log`（压制时 `code=note-suppressed count=N`），整句只写进 `<家>\logs\intent.log`（只压空白、不截断）。拼行逻辑抽到 `plugin/dsh-lil-whale-group/lib/note-core.js`，`scripts\test-note-lines.mjs` 16 格行为测试，`release-check` 加 4ar。
 ### r405 · 2026-11-22 · PS1 编码：含中文的脚本要有 BOM 或 #requires（内部，fi-0009）
 
 - 现象：`scripts\fish.ps1` 第 2 行注释写着"UTF-8 BOM"，文件其实没有 BOM；全仓 10 个 `.ps1` 里 5 个无 BOM（都带 `#requires -Version 7.0`，5.1 会给清楚的"要 7.0"，但注释在说谎）。
 - 修法：给 `fish.ps1`、`pack.ps1`、`render-svg.ps1`、`setup-svg-render.ps1`、`verify-pending.ps1` 补 BOM（`scripts\add-ps1-bom.mjs`，只补 BOM、不动内容）；新增 `scripts\audit-ps1-encoding.mjs` 体检（判定在 `scripts\lib\ps1-encoding-core.mjs`）与 `scripts\test-ps1-encoding.mjs` 12 格；`doctor` 新增「脚本编码（PS1）」格；`release-check` 加 4at（57 项）。
 - 判据：Windows PowerShell 5.1 读无 BOM 的 UTF-8 时按 ANSI 解码，中文行坏了却报"缺少 }"；含中文的脚本要么带 BOM，要么带 `#requires -Version 7`（后者能让 5.1 说得清楚）。
+
 ### r404 · 2026-11-22 · 名册值补 key：skip 行不再写 to=undefined（内部，fi-0010）
 
 - 根因：`buildMembers()` 造出的名册值没有 `key`，`selfPlanTick` 走 `planDue → noteOnce` 拼 `to=${member.key}` 时写成 `to=undefined`（watchman.log 900 行）。`watchedMembers()` 手工补了 key，所以只有这一路坏。
 - 修法：新增 `plugin\dsh-lil-whale-group\lib\members-core.js` 的 `membersWithKeys()`，`buildMembers()` 两个返回点都过它——每个值带自己的 key，兜底名册与真名册同一道加工。
 - 测试：`scripts\test-member-key.mjs` 12 格（行为 7 + 源码层 5）；`release-check` 加 4as（56 项）。历史 900 行 append-only 不改，日志页登记为"旧账缺口"。
+
+### r403 · 2026-11-22 · 共享账不再复制正文：watchman 只留 code=，正文只进 intent.log（内部）
+
+- 修 fi-0008（lee 提、小鱼丸补了三处边界）：`watchman.log` 的 `skip` 行原来把原因整句写进共享账，同一句又进她的 `intent.log`；被 5 分钟去重压制时还先 `slice(0,120)`，两本都是残句。现在共享账只写 `to=<key> code=<码> see=intent.log`（压制时 `code=note-suppressed count=N`），整句只写进 `<家>\logs\intent.log`（只压空白、不截断）。拼行逻辑抽到 `plugin/dsh-lil-whale-group/lib/note-core.js`，`scripts\test-note-lines.mjs` 16 格行为测试，`release-check` 加 4ar。
 
 ### r402 · 2026-11-22 · runs 账的交代判据进基座（内部）
 

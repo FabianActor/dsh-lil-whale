@@ -145,7 +145,7 @@ const memberRows = Object.keys(members)
   .map((key) => `| \`${key}\` | ${members[key]?.name ?? key} | ${relationOf(key, members[key])} |`)
   .join('\n')
 const membersTable = [
-  '| id（`to` 里写这个） | 称呼 | 对你来说 |',
+  '| id（叫醒时写这个） | 称呼 | 对你来说 |',
   '|---|---|---|',
   memberRows,
 ].join('\n')

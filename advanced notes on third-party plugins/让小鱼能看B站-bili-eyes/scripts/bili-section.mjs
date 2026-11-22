@@ -103,6 +103,16 @@ function eyesSection(dshHome, profile) {
     }
   } catch {}
 
+  // 2026-11-22：工具下线了，账本还在盘上——纸上看不到去处，下一个人会以为丢了。
+  try {
+    if (existsSync(join(home, '..', 'bili-duty'))) {
+      lines.push('');
+      lines.push(
+        '**旧探索本已下线**：' + BT + 'duty_*' + BT + ' 五个工具在 2026-11-17 随旧自研 MCP 一起下线；账本身还在你自己的 ' + BT + 'bili-duty' + BT + ' 下（纯文本，不依赖解释器）。',
+      );
+    }
+  } catch {}
+
   lines.push('');
   lines.push(
     '**别人家不能盯**：另一条鱼的家默认不许监听。想知道她那边的事，合法办法是让她发消息告诉你——她的产出、她的发现，都算她的话。',
