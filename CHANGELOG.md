@@ -20,7 +20,10 @@
 
 ## [未发布]
 
-暂无。2026-11-20 的 1.12.3 发布之后还没有新改动。
+### r402 · 2026-11-22 · runs 账的交代判据进基座（内部）
+
+- 新增 `scripts\check-run-ledger.mjs`（fi-0007，小鱼丸提）：每本 `pool\state\runs\<鱼>.log` 里，第一条可以是 `started`；之后每条 `started` 前紧挨着必须有 `stopped` 或 `resumed`——`resumed` 只解释（上一轮没留账），不开关轮次；`stopped` 只能出现在开着的轮次之后。退出码 `0` 全成立 / `1` 有违规（点名行号）/ `2` 前提错（目录或账本不在，空目录不算成立）。
+- 新增 `scripts\test-run-ledger.mjs` 23 格行为测试；`doctor` 加「启动账（runs）」一格；`release-check` 加 4aq（54 项）。
 
 ## [1.12.3] - 2026-11-20
 

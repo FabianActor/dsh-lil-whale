@@ -1347,6 +1347,29 @@ try {
   }
 } catch { Add-Row '日志 kind 声明' 'WARN' ('核不了：{0}' -f $_.Exception.Message) }
 
+# 9a2. 启动账（runs）：每一轮启动都要有"怎么结束的"交代（fi-0007，r402）。
+#     缺了 stopped/resumed 的 started，平时看不见；等要复盘时才发现"上一轮怎么没的"查不到。
+try {
+  $runsChecker = Join-Path $Cfg.Root 'scripts\check-run-ledger.mjs'
+  if (-not (Test-Path -LiteralPath $runsChecker)) {
+    Add-Row '启动账（runs）' 'INFO' '检查器不在这一版仓库里——跳过'
+  } else {
+    $runsLines = @(& node $runsChecker 2>&1)
+    $runsCode = $LASTEXITCODE
+    if ($runsCode -eq 0) {
+      $runsOk = @($runsLines | Where-Object { $_ -match '^✓ ' }).Count
+      Add-Row '启动账（runs）' 'OK' ('每本账的 started 都有交代：' + $runsOk + ' 本')
+    } elseif ($runsCode -eq 1) {
+      $runsBad = @($runsLines | Where-Object { $_ -match '^✗ ' })
+      $runsOne = @($runsLines | Where-Object { $_ -match '^\s+行' } | Select-Object -First 1)
+      Add-Row '启动账（runs）' 'WARN' ('{0} 本账有没交代的轮次：{1} {2}' -f $runsBad.Count, ($runsBad -join ' '), ($runsOne -join ' ')) 'NEXT: node scripts\check-run-ledger.mjs 看逐条；账本 append-only，别改历史，下一轮把 stopped/resumed 写对'
+    } else {
+      $runsLast = @($runsLines | Where-Object { $_ -match '^(xx |\[判据)' } | Select-Object -Last 1)
+      Add-Row '启动账（runs）' 'INFO' ('验不了（exit={0}）：{1}' -f $runsCode, ($runsLast -join ' ')) 'NEXT: 上面那句是前提问题（没启动过鱼 / 没账本 / 配置读不到），先修它'
+    }
+  }
+} catch { Add-Row '启动账（runs）' 'WARN' ('核不了：{0}' -f $_.Exception.Message) }
+
 # 9b. 工具数（每条鱼）：账本里只有数字，但"变少"本身就是一条该报的事。
 #     第三条鱼 2026-11-15 19:05：工具消失是静默的，能加一行检查就加一行。
 try {

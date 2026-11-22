@@ -408,6 +408,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '发图按钮' (($pickOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '发图按钮' '两处 file input 都先摘文件再清 value（test-client-image-picker.mjs）' }
   } else { Fail '发图按钮' 'scripts\test-client-image-picker.mjs 不在包里' }
+  # ── 4aq. 启动账（2026-11-22：每条 started 都要有 stopped/resumed 交代；fi-0007）──
+  $runsTest = Join-Path $pkg 'scripts\test-run-ledger.mjs'
+  if (Test-Path $runsTest) {
+    $runsOut = & node $runsTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '启动账' (($runsOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '启动账' '每条 started 前应有 stopped/resumed 交代；空目录不算成立（test-run-ledger.mjs）' }
+  } else { Fail '启动账' 'scripts\test-run-ledger.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {
