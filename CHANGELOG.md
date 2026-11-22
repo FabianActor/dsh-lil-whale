@@ -29,7 +29,8 @@
 - 唤醒词跟着改：点了名才叫醒的群消息说“群里现在有 N 条**点了你名字的**”，模板 id 升到 `group-*@2`；老记录仍说“新的”。
 - 正文里的 `@名字` 永远不解析；`group_say` 去掉 `to`，只留可选 `mention`，回执说“会叫醒 X / 不叫醒任何人”。
 - 没叫醒的消息仍不漏：`pool\state\held\<成员>.json` 记条数与首尾行号，下次被叫醒时开场补一句，醒来清掉。
-- 验收：`scripts\test-mention-wake.mjs` 54 格（含写端不写 `to`、投影不写箭头）；`test-wake-preview` 37 格；`release-check` 58 项。
+- 验收：`scripts\test-mention-wake.mjs` 63 格（含写端不写 `to`、投影不写箭头、output schema 声明 `from`/`mention`）；`test-wake-preview` 37 格；`release-check` 58 项。
+- 实机验收（2026-11-22 重启后）：①人不 @ 发一句 ⇒ 四个 `held` 各 +1、无人醒；②人 @ 两位 ⇒ 只这两位收到投递（`mention=whale+lee2`）、其余 +1；③鱼发空 `mention` ⇒ 无人醒，记录字段只剩 `ts/from/text/kind/channel/s/mention`；另测 `mention=all` 通告 ⇒ 四人全醒。群.md 已 `--migrate` 整本重写（备份 `群.md.bak-20261122-2013`）。
 
 ### r412 · 2026-11-22 · 叫醒谁与说给谁分开：`to` 说给谁、`mention` 叫醒谁（用户可见：是）
 
