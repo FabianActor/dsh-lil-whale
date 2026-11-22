@@ -7,6 +7,7 @@
 // 只在内存里摆题，不碰真鱼塘（真状态在 handleChannel 那一侧；这里只验规则本身）。
 
 import { readFileSync } from 'node:fs'
+import { mentionLabelOf } from '../plugin/dsh-lil-whale-group-ui/lib/messages-core.js'
 import {
   MENTION_ALL,
   normalizeMention,
@@ -123,7 +124,7 @@ ok(coreSrc.includes('mentionLabelOf'), 'messages-core 暴露了投影文案函�
 ok(coreSrc.includes('mention'), 'projectMessage 透传 mention')
 
 const clientSrc = read('../plugin/dsh-lil-whale-group-ui/lib/client.js')
-ok(clientSrc.includes('client build v59 · mention-only'), '面板 build 标记 v59')
+ok(clientSrc.includes('client build v60 · legacy-derived'), '面板 build 标记 v60')
 ok(!clientSrc.includes('const target = message.to && message.to !== \'all\''), '气泡不再用 to 拼收件人箭头')
 ok(!clientSrc.includes('toSeat: seat'), '面板不再写 toSeat')
 
@@ -132,5 +133,9 @@ const uiSrc = read('../plugin/dsh-lil-whale-group-ui/lib/index.js')
 ok(uiSrc.includes("kind: 'say', channel: 'group'"), '面板写的群记录也带 channel=group')
 ok(!/toSeat\s*[:,]/.test(uiSrc), '面板不再把 toSeat 写进记录')
 
+// 老记录按 to 推出来的那节必须自标门牌（r414，小肥鱼 2026-11-22 20:14 提议）。
+eq(mentionLabelOf({ to: 'whale' }, (k) => `名-${k}`), '名-whale（按当年 to 推）', '投影/气泡：老记录给出推算标记')
+eq(mentionLabelOf({ mention: ['whale'] }, (k) => `名-${k}`), '名-whale', '新记录不加推算标记')
+eq(mentionLabelOf({ to: 'all' }, (k) => `名-${k}`), '', '老广播不补提到了')
 console.log(`test-mention-wake：合计 ${pass + fail}，PASS ${pass}，FAIL ${fail}`)
 if (fail > 0) process.exit(1)

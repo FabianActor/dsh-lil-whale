@@ -149,6 +149,7 @@ const blocks = records.map(blockOf).filter(Boolean)
 const HEADER_NOTE = [
   '> 2026-11-12 19:46 起：指名消息的表头写成 `时间 · 谁 → 收信人`（不写箭头 = 公开）。更早的消息也按同一规则重排过，原始备份 `群.md.bak-20261112-194734`。',
   '> 2026-11-22 r413 起：表头改成 `时间 · 谁 · 提到了：X`——叫醒谁只看 mention，箭头不再表示收件人。老记录只在当年指了名时按 `to` 推成同一字样；`to=all` 的广播保持原样（它当年没有点名）。最近一次整本重写前有备份 `群.md.bak-<时间>`。',
+  '> 2026-11-22 r414 起：老记录按当年 `to` 推出来的那节，带 `（按当年 to 推）`——推出来的必须自标门牌，新记录不加。',
 ].join('\n') + '\n'
 const rebuilt = `# 群\n\n${HEADER_NOTE}\n` + blocks.join('\n')
 
@@ -225,6 +226,17 @@ function classify(hunk, a, b) {
     }
   }
 
+  // r414：老记录推出来的「提到了：X」补了 `（按当年 to 推）` 门牌——只差这一个后缀。
+  if (removed.length > 0 && hunk.ins.length === removed.length) {
+    const stripDerived = (line) => line.split('（按当年 to 推）').join('')
+    const same = removed.every((line, i) => stripDerived(line) === stripDerived(hunk.ins.map((x) => b[x])[i]))
+    if (same) {
+      return {
+        known: true,
+        why: 'r414 推算标记：老记录按当年 to 推出来的那一节补了「（按当年 to 推）」——推出来的必须自标门牌。',
+      }
+    }
+  }
   // 改名漂移：投影是"当时的纸"，但写它的人用的是进程启动时缓存的旧显示名。
   // 只差标题里的名字（时间、来源标注、署件都一致）时，这一处是可解释的。
   // 2026-11-22 r413：表头从 `→ 收件人` 改成 `· 提到了：X`；先把旧写法归一，改名漂移这一条
