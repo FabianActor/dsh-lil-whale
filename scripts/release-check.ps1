@@ -443,6 +443,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '账本分工' (($noteOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '账本分工' 'watchman 的 skip 行只留 code= 与 see=intent.log；正文完整进 intent.log（test-note-lines.mjs）' }
   } else { Fail '账本分工' 'scripts\test-note-lines.mjs 不在包里' }
+  # ── 4av. 共享账裸行（2026-11-22：fmt=3 之后的行必须带 =，否则读端只能进 blind；fi-0012）──
+  $notesTest = Join-Path $pkg 'scripts\test-watchman-notes.mjs'
+  if (Test-Path $notesTest) {
+    $notesOut = & node $notesTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '共享账裸行' (($notesOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '共享账裸行' 'fmt=3 之后不许裸行；老缺口只数不红（test-watchman-notes.mjs）' }
+  } else { Fail '共享账裸行' 'scripts\test-watchman-notes.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {

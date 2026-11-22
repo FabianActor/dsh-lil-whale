@@ -282,8 +282,10 @@ window.__ModuleLoader__.load({
         return mention.length === 0 ? '' : mention.map((key) => targetName(config, key)).join('、')
       }
       const to = message?.to
+      // 私聊没有"提到了谁"：dm 里的 to 是收件人（这间屋开给谁），不是叫醒名单。
+      const isDm = message?.channel === 'dm' || message?.kind === 'dm'
       // r414：老记录按当年 to 推出来的，自标"（按当年 to 推）"——推出来的得说明是推的。
-      if (typeof to === 'string' && to !== '' && to !== 'all') return `${targetName(config, to)}（按当年 to 推）`
+      if (!isDm && typeof to === 'string' && to !== '' && to !== 'all') return `${targetName(config, to)}（按当年 to 推）`
       return ''
     }
 
@@ -2302,6 +2304,12 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
             setHasText((inputRef.current?.value ?? '').trim() !== '')
           }
           setPendingImages([])
+          // 2026-11-22（宿主报）：发出去之后 @ 还留在输入框上，下一条会带着上次的叫醒名单。
+          // 只在群里清；私聊没有 mention 状态（tab 复用同一个 submit）。
+          if (tab === 'group') {
+            setMention([])
+            setPickerOpen(false)
+          }
           await refresh()
         } catch (e) {
           // 发失败别把人刚打的字吞掉：输入框空着时把原文放回去（草稿已经按输入存过了）。
@@ -3873,7 +3881,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v60 · legacy-derived:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v61 · dm-no-mention:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')

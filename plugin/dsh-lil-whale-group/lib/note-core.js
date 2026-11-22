@@ -26,8 +26,12 @@ export function intentNoteTextOf(msg, { suppressed = 0 } = {}) {
   return suppressed > 0 ? `note-suppressed count=${suppressed} msg=${s}` : s
 }
 
-/** watchman 的 skip 行：只有 to=、code=（被压制时是 note-suppressed + count）与指路，不含正文。 */
-export function watchmanSkipLineOf(memberKey, { code = '', suppressed = 0 } = {}) {
+/** watchman 的 skip 行：只有 to=、by=、code=（被压制时是 note-suppressed + count）与指路，不含正文。
+ *  fi-0011（r416）：同一件事可能被两个进程（鱼自己 / 巡守）各记一行，两行的去重状态是各自的；
+ *  行上必须能看出是谁写的，否则读的人会把"两个写者各一行"读成"坏了两回"。
+ *  by 缺省时不写这一格（老调用点/测试可以只验 to 与 code）。 */
+export function watchmanSkipLineOf(memberKey, { code = '', suppressed = 0, by = '' } = {}) {
   const tail = suppressed > 0 ? `code=note-suppressed count=${suppressed}` : `code=${code || 'unknown'}`
-  return `to=${memberKey} ${tail} see=intent.log`
+  const writer = by ? ` by=${by}` : ''
+  return `to=${memberKey}${writer} ${tail} see=intent.log`
 }

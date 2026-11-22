@@ -39,11 +39,14 @@ export function mentionLabelOf(record, labelOf) {
   if (mention === 'all') return '所有人'
   if (Array.isArray(mention)) return mention.map(say).join('、')
   const to = record?.to
+  // 私聊没有"提到了谁"这回事：dm 记录里的 to 是"这间屋开给谁"（收件人），不是叫醒名单。
+  // 2026-11-22 修：私聊气泡全部冒出「（按当年 to 推）」就是这个回退没分屋造成的。
+  const isDm = record?.channel === 'dm' || record?.kind === 'dm'
   // 老记录：只有当年指了名（to 是某个成员）才显示；to=all 的广播保持原样，
   // 补一句"提到了：所有人"等于替它改历史（2026-11-22 r413 的取舍）。
   // r414：当年 to 的含义是"这话给谁"，不是"谁被叫醒"——推出来的必须自标门牌，
   // 否则下一个人会拿它当读数（小肥鱼 2026-11-22 20:14 的提议）。
-  if (typeof to === 'string' && to !== '' && to !== 'all') return `${say(to)}（按当年 to 推）`
+  if (!isDm && typeof to === 'string' && to !== '' && to !== 'all') return `${say(to)}（按当年 to 推）`
   return ''
 }
 

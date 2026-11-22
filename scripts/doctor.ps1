@@ -1391,6 +1391,29 @@ try {
     }
   }
 } catch { Add-Row '脚本编码（PS1）' 'WARN' ('核不了：{0}' -f $_.Exception.Message) }
+# 9a4. 共享账裸行（fi-0012，r417）：watchman.log 是字段账，fmt=3 之后的行必须带 =。
+#     没有 = 的纯散文行，读端的检查器只能记进 blind——"数不进去的行"别当成"没问题"。
+try {
+  $notesChecker = Join-Path $Cfg.Root 'scripts\check-watchman-notes.mjs'
+  $watchmanLog = Join-Path $Cfg.PoolState 'watchman.log'
+  if (-not (Test-Path -LiteralPath $notesChecker)) {
+    Add-Row '共享账裸行' 'INFO' '检查器不在这一版仓库里——跳过'
+  } elseif (-not (Test-Path -LiteralPath $watchmanLog)) {
+    Add-Row '共享账裸行' 'INFO' '还没有 pool\state\watchman.log（没启动过巡守？）'
+  } else {
+    $notesLines = @(& node $notesChecker --file $watchmanLog 2>&1)
+    $notesCode = $LASTEXITCODE
+    if ($notesCode -eq 0) {
+      $notesGap = (@($notesLines | Where-Object { $_ -match '老缺口' } | Select-Object -First 1) -join ' ').Trim()
+      Add-Row '共享账裸行' 'OK' ('fmt=3 之后没有裸行。' + $notesGap)
+    } elseif ($notesCode -eq 1) {
+      $notesBad = @($notesLines | Where-Object { $_ -match '^✗ ' })
+      Add-Row '共享账裸行' 'WARN' ('{0} 行没有 =（fmt=3 之后）：{1}' -f $notesBad.Count, (($notesBad | Select-Object -First 2) -join ' / ')) 'NEXT: 写端把自由文本写进 key=（如 note=xxx detail=…）；老行 append-only，不改历史'
+    } else {
+      Add-Row '共享账裸行' 'INFO' '验不了：' + (($notesLines | Select-Object -Last 2) -join ' / ')
+    }
+  }
+} catch { Add-Row '共享账裸行' 'WARN' ('核不了：{0}' -f $_.Exception.Message) }
 # 9b. 工具数（每条鱼）：账本里只有数字，但"变少"本身就是一条该报的事。
 #     第三条鱼 2026-11-15 19:05：工具消失是静默的，能加一行检查就加一行。
 try {

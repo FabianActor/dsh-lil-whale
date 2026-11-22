@@ -1009,6 +1009,11 @@ function watchmanLog(result, why) {
     const pad = (n) => String(n).padStart(2, '0')
     const ts = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
     const streakSuffix = result === 'error' ? ` streak=${++errorStreak}` : ''
+    if ((result === 'note' || result === 'hint') && !String(why).includes('=')) {
+      // fi-0012（r417）：共享账里不允许裸散文行——读端没有 key= 可抓，只能进 blind。
+      // 不改调用点，先在写端兜住：没带 key= 的自由文本，自动降格成 note=unkeyed detail=…。
+      why = 'note=unkeyed detail=' + String(why).replace(/\s+/g, ' ').trim()
+    }
     if (result === 'error') bumpOwnError()
     if (result !== 'error' && result !== 'started') errorStreak = 0
     appendFileSync(WATCHMAN_LOG, `${ts} | ${result} | ${why}${streakSuffix}\n`, 'utf8')
@@ -3082,8 +3087,11 @@ const planNotes = new Map()
 // 整句只写进她自己的 <家>\logs\intent.log——共享账不做第二本正文的副本。
 const NOTE_DEDUPE_MS = 5 * 60_000
 
-function noteOnce(member, msg) {
-  const key = `${todayKey(new Date())}|${member.key}|${msg}`
+function noteOnce(member, msg, by = '') {
+  // fi-0011（r416）：一行要能看出是哪个写者写的。默认取本进程自己的成员键——
+  // 鱼的进程写 by=鱼键，巡守进程写 by=lee；两个写者各有各的 5 分钟窗口，别让读者把两行读成两次。
+  const writer = by || ownMember()?.key || ''
+  const key = `${todayKey(new Date())}|${writer}|${member.key}|${msg}`
   const now = Date.now()
   const prev = planNotes.get(key)
   const body = String(msg ?? '').replace(/\s+/g, ' ').trim()
@@ -3095,13 +3103,13 @@ function noteOnce(member, msg) {
       prev.lastSuppressedAt = now
       // 2026-11-20 09:06 分工（fi-0008，r403）：共享账只留机器码与指路，正文只进她自己的账。
       // 另一条边界（小鱼丸 09:11）：截断必须发生在拼串处，所以正文在这里保持完整、不 slice。
-      watchmanLog('skip', watchmanSkipLineOf(member.key, { suppressed: prev.suppressed }))
+      watchmanLog('skip', watchmanSkipLineOf(member.key, { suppressed: prev.suppressed, by: writer }))
       memberNote(member, intentNoteTextOf(body, { suppressed: prev.suppressed }))
     }
     return
   }
   planNotes.set(key, { at: now, suppressed: 0, lastSuppressedAt: 0 })
-  watchmanLog('skip', watchmanSkipLineOf(member.key, { code: noteCodeOf(body) }))
+  watchmanLog('skip', watchmanSkipLineOf(member.key, { code: noteCodeOf(body), by: writer }))
   memberNote(member, body)
 }
 
@@ -3118,7 +3126,7 @@ function memberNote(member, msg) {
   }
 }
 
-function planDue(member, st, now, graceMin = 1) {
+function planDue(member, st, now, graceMin = 1, by = '') {
   return planDueCore({
     member,
     st,
@@ -3126,7 +3134,7 @@ function planDue(member, st, now, graceMin = 1) {
     graceMin,
     homeRoot: SELF_HOME,
     maxItems: PLAN_MAX,
-    onNote: (msg) => noteOnce(member, msg),
+    onNote: (msg) => noteOnce(member, msg, by),
   })
 }
 /** 闹钟递的那句话。开着的窗直接用；刚被推开的窗也递进去，等她起来自己读到。
@@ -3206,7 +3214,7 @@ function selfPlanTick(ctx) {
   }
   let due = []
   try {
-    due = planDue(member, { planFired: {} }, now, SELF_PLAN_GRACE_MIN)
+    due = planDue(member, { planFired: {} }, now, SELF_PLAN_GRACE_MIN, self)
   } catch (error) {
     watchmanLog('error', `note=self-plan-read-failed to=${self} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)}`)
     return
@@ -3541,7 +3549,7 @@ async function watchOne(member, st) {
   for (const t of dueTasks(member, now)) {
     jobs.push({ key: t.id, tag: `task=${t.id} scheduled=${new Date(t.at).toISOString()}`, why: 'due-and-closed', from: 'schedule' })
   }
-  for (const p of planDue(member, st, new Date())) {
+  for (const p of planDue(member, st, new Date(), 1, watcherKey())) {
     jobs.push({ key: p.id, tag: `plan=${p.id} at=${p.at}`, why: 'plan', from: 'plan', itemWhy: p.why, at: p.at })
   }
   // 第三种触发源：她自己写下的条件（只由巡守探测）。放在 jobs 判空之前 ——

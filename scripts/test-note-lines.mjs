@@ -28,17 +28,21 @@ check('中文括注截断', noteCodeOf('plan-bad-shape（要一个数组，或 {
 check('空正文 → empty', noteCodeOf('   ') === 'empty')
 
 // 2) watchman 行不含正文
-const normal = watchmanSkipLineOf('whale', { code: noteCodeOf(long) })
+const normal = watchmanSkipLineOf('whale', { code: noteCodeOf(long), by: 'lee' })
 check('正常行有 to=', normal.startsWith('to=whale '), normal)
 check('正常行有 code=', normal.includes('code=plan-expired'), normal)
 check('正常行有 see=intent.log', normal.includes('see=intent.log'), normal)
+check('正常行有 by=（写者可见，fi-0011/r416）', normal.includes(' by=lee '), normal)
 check('正常行不含正文关键字', !normal.includes('这一句后面还有很长'), normal)
 check('正常行不含 id= 正文', !normal.includes('id=morning-read'), normal)
 
 // 3) 压制行
-const suppressed = watchmanSkipLineOf('whale', { suppressed: 3 })
+const suppressed = watchmanSkipLineOf('whale', { suppressed: 3, by: 'whale' })
 check('压制行有 count', suppressed.includes('code=note-suppressed count=3'), suppressed)
 check('压制行不含正文', !suppressed.includes('这一句后面还有很长'), suppressed)
+check('压制行也带 by= 与 count', suppressed.includes('by=whale') && suppressed.includes('count=3'), suppressed)
+const noBy = watchmanSkipLineOf('whale', { code: 'x' })
+check('没给 by 时不硬编写者', !noBy.includes('by='), noBy)
 
 // 4) intent.log 完整一句
 const intent = intentNoteTextOf(long)
