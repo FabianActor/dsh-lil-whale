@@ -20,6 +20,11 @@
 
 ## [未发布]
 
+### r410 · 2026-11-22 · 日志页分清两本账的形状：watchman 带 `code=`，intent.log 是正文（内部）
+
+- 旧（r407–r409）：那句把首行写成 `code=plan-bad-shape`，读起来像两本账同一个形状。
+- 新：写明 `watchman.log` 的 skip 行是 `code=plan-bad-shape`（带 `to=`/`see=`），`intent.log` 的对应行是正文 `plan-bad-shape（要一个数组，或 {items:[...]}）`（被压时前缀 `note-suppressed count=N msg=…`）——两本形状不同，别读成同一行（小鱼丸 2026-11-22 核纸时指出）。
+
 ### r409 · 2026-11-22 · 实测确认两个写者：坏表持续时每分钟约两行，首报与计数交替（内部）
 
 - 旧（r408）：只写到"同一件事最多两行、间隔由相位决定"。
