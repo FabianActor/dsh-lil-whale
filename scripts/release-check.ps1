@@ -415,6 +415,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '启动账' (($runsOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '启动账' '每条 started 前应有 stopped/resumed 交代；空目录不算成立（test-run-ledger.mjs）' }
   } else { Fail '启动账' 'scripts\test-run-ledger.mjs 不在包里' }
+  # ── 4ar. 账本分工（2026-11-22：共享账不带正文，正文只进 intent.log；fi-0008）──
+  $noteTest = Join-Path $pkg 'scripts\test-note-lines.mjs'
+  if (Test-Path $noteTest) {
+    $noteOut = & node $noteTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '账本分工' (($noteOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '账本分工' 'watchman 的 skip 行只留 code= 与 see=intent.log；正文完整进 intent.log（test-note-lines.mjs）' }
+  } else { Fail '账本分工' 'scripts\test-note-lines.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {

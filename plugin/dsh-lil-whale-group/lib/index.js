@@ -11,6 +11,7 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { printableText } from './text-clean.js'
 import { sayProblemOf, channelProblemOf } from './say-core.js'
+import { noteCodeOf, intentNoteTextOf, watchmanSkipLineOf } from './note-core.js'
 import { codeFingerprint } from './code-fp.js'
 import { codeFpChangeOf, codeFpHistoryLine, codeFpLedgerOf, CODE_FP_LEDGER } from './code-fp-history-core.js'
 import { join, dirname, basename } from 'node:path'
@@ -3022,31 +3023,36 @@ const planNotes = new Map()
 // 原去重键是「日期 + 成员 + 文案」⇒ 一整天里同一个错只记一次，第二次静默。
 // 改成 5 分钟窗口：窗口内重复只留一行 note-suppressed（count=1，之后同窗口不重复记），
 // 窗口过去后再犯就正常记一行。这样“反复出同一个问题”至少会留两次痕迹。
+// r403（fi-0008）起：watchman.log 只留 `to=` / `code=` / `see=intent.log`，
+// 整句只写进她自己的 <家>\logs\intent.log——共享账不做第二本正文的副本。
 const NOTE_DEDUPE_MS = 5 * 60_000
 
 function noteOnce(member, msg) {
   const key = `${todayKey(new Date())}|${member.key}|${msg}`
   const now = Date.now()
   const prev = planNotes.get(key)
+  const body = String(msg ?? '').replace(/\s+/g, ' ').trim()
   if (prev && now - prev.at < NOTE_DEDUPE_MS) {
     prev.suppressed += 1
     // 2026-11-16 小鱼丸：「去重的记录不能再被去重。」
     // 被压次数要能一直涨，但同一条 key 最多一分钟记一行（免得每拍都刷）。
     if (now - (prev.lastSuppressedAt ?? 0) >= 60_000) {
       prev.lastSuppressedAt = now
-      const line = `note-suppressed count=${prev.suppressed} msg=${msg.replace(/\s+/g, ' ').slice(0, 120)}`
-      watchmanLog('skip', `to=${member.key} ${line}`)
-      memberNote(member, line)
+      // 2026-11-20 09:06 分工（fi-0008，r403）：共享账只留机器码与指路，正文只进她自己的账。
+      // 另一条边界（小鱼丸 09:11）：截断必须发生在拼串处，所以正文在这里保持完整、不 slice。
+      watchmanLog('skip', watchmanSkipLineOf(member.key, { suppressed: prev.suppressed }))
+      memberNote(member, intentNoteTextOf(body, { suppressed: prev.suppressed }))
     }
     return
   }
   planNotes.set(key, { at: now, suppressed: 0, lastSuppressedAt: 0 })
-  watchmanLog('skip', `to=${member.key} ${/^[a-z0-9-]+=/.test(msg) ? msg : 'note=' + msg}`)
-  memberNote(member, msg)
+  watchmanLog('skip', watchmanSkipLineOf(member.key, { code: noteCodeOf(body) }))
+  memberNote(member, body)
 }
 
-/** 条件表的问题也要写进**她自己的**日志：巡守的账她不一定知道去哪翻。
- *  2026-11-16 小鱼丸："to=fishball 写在别人看不见的账里"等于静默。 */
+/** 条件表的问题写进**她自己的**日志：巡守的账她不一定知道去哪翻，正文也放这里。
+ *  2026-11-16 小鱼丸："to=fishball 写在别人看不见的账里"等于静默。
+ *  r403 起（fi-0008）：这一本是**唯一**收正文的地方；共享账只有 code= 与 see=intent.log。 */
 function memberNote(member, msg) {
   try {
     const dir = join(member.home, 'logs')
