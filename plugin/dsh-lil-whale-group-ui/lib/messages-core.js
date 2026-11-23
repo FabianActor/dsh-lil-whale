@@ -41,7 +41,9 @@ export function mentionLabelOf(record, labelOf) {
   const to = record?.to
   // 私聊没有"提到了谁"这回事：dm 记录里的 to 是"这间屋开给谁"（收件人），不是叫醒名单。
   // 2026-11-22 修：私聊气泡全部冒出「（按当年 to 推）」就是这个回退没分屋造成的。
-  const isDm = record?.channel === 'dm' || record?.kind === 'dm'
+  // 2026-11-23 修（r419）：老群消息里 channel='dm' 是"当年 @ 定向"，它仍在群账本里、
+  // 也该显示；分屋只认 kind='dm'（私聊），不认 channel='dm'。
+  const isDm = record?.kind === 'dm'
   // 老记录：只有当年指了名（to 是某个成员）才显示；to=all 的广播保持原样，
   // 补一句"提到了：所有人"等于替它改历史（2026-11-22 r413 的取舍）。
   // r414：当年 to 的含义是"这话给谁"，不是"谁被叫醒"——推出来的必须自标门牌，

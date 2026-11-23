@@ -124,7 +124,7 @@ ok(coreSrc.includes('mentionLabelOf'), 'messages-core 暴露了投影文案函�
 ok(coreSrc.includes('mention'), 'projectMessage 透传 mention')
 
 const clientSrc = read('../plugin/dsh-lil-whale-group-ui/lib/client.js')
-ok(clientSrc.includes('client build v61 · dm-no-mention'), '面板 build 标记 v60')
+ok(clientSrc.includes('client build v62 · dm-kind-only'), '面板 build 标记 v60')
 ok(!clientSrc.includes('const target = message.to && message.to !== \'all\''), '气泡不再用 to 拼收件人箭头')
 ok(!clientSrc.includes('toSeat: seat'), '面板不再写 toSeat')
 
@@ -141,8 +141,9 @@ eq(mentionLabelOf({ to: 'all' }, (k) => `名-${k}`), '', '老广播不补提到�
 // dm 里的 to 是"这间屋开给谁"（收件人），不是叫醒名单，回退前必须先分屋。
 eq(mentionLabelOf({ kind: 'dm', channel: 'dm', to: 'lee2' }, (k) => `名-${k}`), '', '私聊不显示「提到了」')
 eq(mentionLabelOf({ kind: 'say', to: 'whale' }, (k) => `名-${k}`), '名-whale（按当年 to 推）', '老群记录（无 channel）仍按 to 推并标记')
-ok(coreSrc.includes("record?.channel === 'dm' || record?.kind === 'dm'"), '投影：私聊记录不回退 to 成 mention')
-ok(clientSrc.includes("message?.channel === 'dm' || message?.kind === 'dm'"), '气泡：私聊记录不回退 to 成 mention')
+eq(mentionLabelOf({ kind: 'say', channel: 'dm', to: 'whale' }, (k) => `名-${k}`), '名-whale（按当年 to 推）', '老群消息里的 @ 定向（channel=dm、kind=say）仍按 to 推')
+ok(coreSrc.includes("const isDm = record?.kind === 'dm'"), '投影：私聊记录（kind=dm）不回退 to 成 mention')
+ok(clientSrc.includes("const isDm = message?.kind === 'dm'"), '气泡：私聊记录（kind=dm）不回退 to 成 mention')
 // 2026-11-22 宿主报：群里发出去之后 @ 还留在输入框上，下一条会带着上次的叫醒名单。
 ok(clientSrc.includes('setMention([])') && clientSrc.includes("if (tab === 'group') {"), '群聊发送成功后清空 mention 选择（私聊不动）')
 // 2026-11-22 鱼群复核（LeeaCP 第 3166 行、小满第 3167 行）：纸里教 mention，别的段落还留着 to，
