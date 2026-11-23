@@ -13,7 +13,7 @@ import { printableText } from './text-clean.js'
 import { sayProblemOf, channelProblemOf } from './say-core.js'
 import { noteCodeOf, intentNoteTextOf, watchmanSkipLineOf } from './note-core.js'
 import { classifyStall, stallSentenceOf } from './stall-core.js'
-import { classifyCursorRead, countsKnownOf } from './cursor-core.js'
+import { classifyCursorRead, countsKnownOf, heldTrustedOf } from './cursor-core.js'
 import { membersWithKeys } from './members-core.js'
 import { MENTION_ALL, normalizeMention, wantsWake, mentionTextOf, mentionDisplayOf, bumpHeld, heldOf, clearHeld, heldSentenceOf } from './mention-core.js'
 import { codeFingerprint } from './code-fp.js'
@@ -3017,6 +3017,8 @@ function handleChannel({ agent, member, seat, channel, cursorState, wakes }) {
     lines: lines.length,
     present: keyPresent,
   })
+  // 2026-11-24（fi-0019）：起点不可信时，held 不数、不报、顺手清掉旧值。
+  const heldTrusted = heldTrustedOf(read)
   const sharedSeen = Math.min(read.start, lines.length)
   // 读不到进度 / 回退时，座位游标也不可信：跟同一条起点走；正常时各算各的。
   let seatSeen = read.unknown || read.regressed ? sharedSeen : Math.min(seatSeenStored, lines.length)
@@ -3082,9 +3084,12 @@ function handleChannel({ agent, member, seat, channel, cursorState, wakes }) {
       // 2026-11-22：叫不叫醒看 mention，不看 to。to 只回答"这话对谁说"。
       // 老记录没有 mention 字段，wantsWake 按老规则读（to=all 叫醒所有人、to=某人叫他）。
       if (!wantsWake(record, member)) {
-        heldDelta += 1
-        heldLastLine = index
-        heldLastTs = record.ts ?? null
+        // 2026-11-24（fi-0019）：起点可信才数。游标丢了/回退时这一段里混着早已读过的消息。
+        if (heldTrusted) {
+          heldDelta += 1
+          heldLastLine = index
+          heldLastTs = record.ts ?? null
+        }
         continue
       }
     } else if (record.to !== member) {
@@ -3097,7 +3102,7 @@ function handleChannel({ agent, member, seat, channel, cursorState, wakes }) {
   }
 
   // 读不到进度时，扫到的这一小段里大部分是旧的；当成"没叫醒的"去数，等于换个地方编数。
-  if (heldDelta > 0 && !read.unknown) noteHeld(member, channel.key, heldDelta, heldLastLine + 1, heldLastTs)
+  if (heldDelta > 0 && heldTrusted) noteHeld(member, channel.key, heldDelta, heldLastLine + 1, heldLastTs)
 
   // 没有写给我的，也把游标推过去，免得下次重复扫
   if (incoming.length === 0) {
@@ -3185,7 +3190,16 @@ function handleChannel({ agent, member, seat, channel, cursorState, wakes }) {
   })
   const target = channel.kind === 'dm' ? channel.file : READABLE
   // 没叫醒你的那些话，也要在预览里露一次头（2026-11-22）。
-  const heldCount = channel.kind === 'group' && !read.unknown ? heldCountOf(member, channel.key) : 0
+  // 2026-11-24（fi-0019）：起点不可信时不报数（那是旧账重算），顺手清掉攒下来的旧值。
+  let heldCount = channel.kind === 'group' && heldTrusted ? heldCountOf(member, channel.key) : 0
+  if (channel.kind === 'group' && !heldTrusted) {
+    const stale = heldCountOf(member, channel.key)
+    if (stale > 0) {
+      logLine({ note: 'held-untrusted', member, channel: channel.key, stored: stale, src: read.src })
+      clearHeldOf(member, channel.key)
+    }
+    heldCount = 0
+  }
   const heldSentence = heldSentenceOf(heldCount)
 
   // 护栏：宿主构造器没解析到、或造出来的东西没有 id，就别往会话里塞。
@@ -3217,7 +3231,7 @@ function handleChannel({ agent, member, seat, channel, cursorState, wakes }) {
     : Array.isArray(lastRecord?.mention)
       ? (lastRecord.mention.length === 0 ? 'none' : lastRecord.mention.join('+'))
       : 'legacy'
-  const deliveryNote = `id=${built.id} member=${member} mention=${mentionTag} held-since-wake=${heldCount} channel=${channel.key} seat=${seat === '' ? '-' : seat} pending=${incoming.length} last-line=${lastIncomingIndex + 1} last-from=${incoming[incoming.length - 1]?.from ?? '-'} last-ts=${lastTs || 0} cursor=${lines.length} prior-cursor=${sharedSeenStored} cursor-state=${read.unknown ? "unknown" : cursorLost ? "lost" : firstRead ? "first" : "resumed"} src=${read.src} start=${cursorLost || read.unknown ? "unknown" : read.start} counts=${cursorLost || read.unknown ? "unknown" : "known"} tpl=${tpl} n=${incoming.length} tail=${tailTpl} wtext8=${wtext8} human=${humanIncoming ? 'yes' : 'no'} pkg=${PKG_VERSION}`
+  const deliveryNote = `id=${built.id} member=${member} mention=${mentionTag} held-since-wake=${heldTrusted ? heldCount : "unknown"} channel=${channel.key} seat=${seat === '' ? '-' : seat} pending=${incoming.length} last-line=${lastIncomingIndex + 1} last-from=${incoming[incoming.length - 1]?.from ?? '-'} last-ts=${lastTs || 0} cursor=${lines.length} prior-cursor=${sharedSeenStored} cursor-state=${read.unknown ? "unknown" : cursorLost ? "lost" : firstRead ? "first" : "resumed"} src=${read.src} start=${cursorLost || read.unknown ? "unknown" : read.start} counts=${cursorLost || read.unknown ? "unknown" : "known"} tpl=${tpl} n=${incoming.length} tail=${tailTpl} wtext8=${wtext8} human=${humanIncoming ? 'yes' : 'no'} pkg=${PKG_VERSION}`
   try {
     agent.followup(built)
   } catch (error) {
@@ -3234,7 +3248,7 @@ function handleChannel({ agent, member, seat, channel, cursorState, wakes }) {
   // 小肥鱼 #1627（2026-11-18）：通道交付也是一次"被叫醒"，但过去的 `woke` 行只记推门那几类，
   // 于是"最频繁的群交付"在 watchman.log 里一次都看不见。不改旧行的意思，只把这一类也记进来：
   // trigger=channel。此前的行没有它，只代表当时不记，不代表当时没有通道唤醒（append-only，补不回去）。
-  watchmanLog('woke', `trigger=channel to=${member} channel=${channel.key} pending=${incoming.length} last-line=${lastIncomingIndex + 1} human=${humanIncoming ? 'yes' : 'no'} src=${read.src} start=${cursorLost || read.unknown ? 'unknown' : read.start} counts=${cursorLost || read.unknown ? 'unknown' : 'known'} held-since-wake=${heldCount}`)
+  watchmanLog('woke', `trigger=channel to=${member} channel=${channel.key} pending=${incoming.length} last-line=${lastIncomingIndex + 1} human=${humanIncoming ? 'yes' : 'no'} src=${read.src} start=${cursorLost || read.unknown ? 'unknown' : read.start} counts=${cursorLost || read.unknown ? 'unknown' : 'known'} held-since-wake=${heldTrusted ? heldCount : 'unknown'}`)
   markWakeMarker(member, channel.kind)
   markWake(member, channel.kind)
 

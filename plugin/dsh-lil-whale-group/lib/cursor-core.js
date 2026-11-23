@@ -73,6 +73,13 @@ export function cursorSourceLine({ member, channel, read, lines }) {
 }
 
 /** 唤醒词里要不要报具体条数：只有读得到进度时才报。 */
+// 2026-11-24（fi-0019）：held 只在"起点可信"时数。
+// 起点丢了/回退/被夹/补建时，扫描段里混着早已读过的消息；数它会把旧账翻出来重算
+// （LeeaCP 看到的那 1782 就是一次 rc.5 重放之后攒下的）。
+export function heldTrustedOf(read) {
+  return read?.src === 'file' || read?.src === 'legacy'
+}
+
 export function countsKnownOf(read) {
   return !(read && read.unknown)
 }

@@ -14,6 +14,7 @@ import {
   classifyCursorRead,
   cursorSourceLine,
   countsKnownOf,
+  heldTrustedOf,
 } from '../plugin/dsh-lil-whale-group/lib/cursor-core.js'
 
 let pass = 0
@@ -154,6 +155,19 @@ function eq(name, got, want) {
   const idx = readFileSync(new URL('../plugin/dsh-lil-whale-group/lib/index.js', import.meta.url), 'utf8')
   ok(idx.includes("'cursor-shape-mismatch'"), '座位键与主键不同形时记一行')
   ok(idx.includes('held-since-wake='), '投递行与 woke 行用 held-since-wake')
+}
+
+// ---------- held 只在起点可信时数（fi-0019） ----------
+{
+  const trusted = ['file', 'legacy'].map((src) => heldTrustedOf({ src }))
+  const untrusted = ['missing', 'unknown', 'absent', 'regressed', 'capped', 'recovered'].map((src) => heldTrustedOf({ src }))
+  eq('起点可信：file/legacy 才数', trusted, [true, true])
+  eq('起点不可信：其余六种都不数', untrusted, [false, false, false, false, false, false])
+  const idx = readFileSync(new URL('../plugin/dsh-lil-whale-group/lib/index.js', import.meta.url), 'utf8')
+  ok(idx.includes('if (heldTrusted) {'), 'heldDelta 只在可信时累加')
+  ok(idx.includes("note: 'held-untrusted'"), '不可信时清旧值并留痕')
+  ok(idx.includes("held-since-wake=${heldTrusted ? heldCount : 'unknown'}"), '投递行在不可信时写 unknown')
+  ok(idx.includes("held-since-wake=${heldTrusted ? heldCount : 'unknown'}`)"), 'woke 行同样写 unknown')
 }
 
 // ---------- 结果 ----------
