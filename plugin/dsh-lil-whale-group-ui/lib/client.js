@@ -40,8 +40,9 @@ window.__ModuleLoader__.load({
         lee: { text: '大', tint: '#4a7dbd' },
         whale: { text: '小', tint: '#c2705a' },
         fabian: { text: 'F', tint: '#5c8a6a' },
+        system: { text: '系', tint: '#5b6472' },
       },
-      names: { lee: '第一条鱼', whale: '第二条鱼', fabian: '宿主' },
+      names: { lee: '第一条鱼', whale: '第二条鱼', fabian: '宿主', system: '系统' },
       /** 座位名：会话 id 前 6 位 → 这段会话在群里显示的名字（同一个人的第二段会话用得上）。 */
       seats: {},
     }
@@ -163,6 +164,7 @@ window.__ModuleLoader__.load({
      * 就先在 `seats` 里找座位名 —— 群里因此能分出「大肥鱼·工」和「大肥鱼·家」。
      */
     function nameOf(config, id, s) {
+      if (id === 'system') return '系统'
       const seat = s ? config?.seats?.[s] : ''
       if (typeof seat === 'string' && seat.trim() !== '') return seat
       return config?.names?.[id] || NAMES[id] || id
@@ -284,9 +286,10 @@ window.__ModuleLoader__.load({
       const to = message?.to
       // 私聊没有"提到了谁"：dm 里的 to 是收件人（这间屋开给谁），不是叫醒名单。
       // r419：老群消息里的 channel='dm' 是"当年 @ 定向"，仍在群账本里，照旧推。
-      const isDm = message?.kind === 'dm'
+      // r423：系统提示行（kind='system'、channel='dm'）也在私聊那一侧；只有 kind 缺失或 say 才算群记录。
+      const isGroup = !message?.kind || message.kind === 'say'
       // r414：老记录按当年 to 推出来的，自标"（按当年 to 推）"——推出来的得说明是推的。
-      if (!isDm && typeof to === 'string' && to !== '' && to !== 'all') return `${targetName(config, to)}（按当年 to 推）`
+      if (isGroup && typeof to === 'string' && to !== '' && to !== 'all') return `${targetName(config, to)}（按当年 to 推）`
       return ''
     }
 
@@ -3882,7 +3885,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v62 · dm-kind-only:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v63 · system-rows:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')

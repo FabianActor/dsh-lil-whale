@@ -43,12 +43,14 @@ export function mentionLabelOf(record, labelOf) {
   // 2026-11-22 修：私聊气泡全部冒出「（按当年 to 推）」就是这个回退没分屋造成的。
   // 2026-11-23 修（r419）：老群消息里 channel='dm' 是"当年 @ 定向"，它仍在群账本里、
   // 也该显示；分屋只认 kind='dm'（私聊），不认 channel='dm'。
-  const isDm = record?.kind === 'dm'
+  // 2026-11-23 修（r423）：系统提示行是 kind='system'、channel='dm'，也在私聊那一侧。
+  // 判"这是群消息吗"比列举"哪些是私聊"更稳：只有 kind 缺失或 kind='say' 才按群记录回退。
+  const isGroup = !record?.kind || record.kind === 'say'
   // 老记录：只有当年指了名（to 是某个成员）才显示；to=all 的广播保持原样，
   // 补一句"提到了：所有人"等于替它改历史（2026-11-22 r413 的取舍）。
   // r414：当年 to 的含义是"这话给谁"，不是"谁被叫醒"——推出来的必须自标门牌，
   // 否则下一个人会拿它当读数（小肥鱼 2026-11-22 20:14 的提议）。
-  if (!isDm && typeof to === 'string' && to !== '' && to !== 'all') return `${say(to)}（按当年 to 推）`
+  if (isGroup && typeof to === 'string' && to !== '' && to !== 'all') return `${say(to)}（按当年 to 推）`
   return ''
 }
 
