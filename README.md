@@ -237,7 +237,7 @@ lil-whale/                      鱼塘根（不在 git 里）
 
 ## 谱系
 
-`node scripts\gen-family.mjs` 会从 `pool\family.json` + `pool\members.json` 生成 [鱼塘谱系](./docs/detail/鱼塘谱系.md)（图 + 树 + 名册 + 改名史）。手画的图会漂，生成的不会。
+`node scripts\gen-family.mjs` 会从 `pool\family.json` + `pool\members.json` 生成 `docs\detail\鱼塘谱系.md`（图 + 树 + 名册 + 改名史；装机或跑 `gen-family` 时生成，仓库里不存）。手画的图会漂，生成的不会。
 
 ## 端口
 
@@ -410,7 +410,7 @@ pwsh -File scripts\fish.ps1 upgrade-check -Mark 1.7.2   # 做完以后记账
 | 打包、编码、发布注意事项                   | [怎么打包给别人](./docs/detail/怎么打包给别人.md)                              |
 | 她「能做什么」的目录                       | [她能做什么](./docs/detail/她能做什么.md)                                      |
 | 她的自主分级与判据                         | [怎么判断与起名](./docs/detail/怎么判断与起名.md)                              |
-| 谁是谁的家长                               | [鱼塘谱系](./docs/detail/鱼塘谱系.md)（生成的）                                |
+| 谁是谁的家长                               | `docs\detail\鱼塘谱系.md`（生成的，装机或跑 `gen-family` 时出现）                                |
 | 每一版改了什么、为什么                     | [`CHANGELOG.md`](CHANGELOG.md)                                                 |
 | 账本有哪些、每一版 `fmt` 是什么意思        | [日志都记在哪](./docs/detail/日志都记在哪.md)                                  |
 | 自主触发做到哪了（给外部读者的一页现状）   | [她自己怎么醒来](./docs/detail/她自己怎么醒来.md)                              |

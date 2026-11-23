@@ -495,6 +495,11 @@ if ($root) {
     if ($badCmds.Count) { Fail '脚本换行' ('cmd.exe 会把多行块拆碎：' + ($badCmds -join '；') + '。.gitattributes 没生效，或文件被改回 LF 了') }
     else { Ok '脚本换行' ('{0} 个 .cmd 全 CRLF' -f $cmdFiles.Count) }
   }
+  # ── 4bb. 生成物不进包（2026-11-23：测试机 U5）──
+  $lineage = Join-Path $pkg 'docs\detail\鱼塘谱系.md'
+  if (Test-Path -LiteralPath $lineage) { Fail '生成物不进包' '包里有 docs\detail\鱼塘谱系.md——它是按某台机器生成的谱系图，不该随包分发' }
+  else { Ok '生成物不进包' '谱系图不在包里（装机时 gen-family.mjs 现生成）' }
+
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {
