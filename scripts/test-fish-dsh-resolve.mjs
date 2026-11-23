@@ -29,5 +29,13 @@ need(/\$fpBad = @\(\$liveBoot/.test(doctor), 'doctor 没按进程比 codeFp');
 need(/"dshExe":/.test(cfg), '示例配置没有 dshExe');
 need(/"tool-office"/.test(cat), '工具目录缺 tool-office');
 need(/v57.*或更高/.test(up), '升级单验收还写死 v57');
-console.log(fail.length ? `FAIL test-fish-dsh-resolve（${fail.length}）：\n  - ${fail.join('\n  - ')}` : 'PASS test-fish-dsh-resolve（20 条）');
+
+// 测试机第三份（D1/D3/D4/D5）
+need(doctor.includes("'plugin/dsh-lil-whale-group/lib/code-fp.js'"), 'doctor 的 code-fp 路径不对（应为正斜杠写法）');
+need(!doctor.includes('plugindsh-lil-whale-grouplibcode-fp.js'), 'doctor 还留着被吃掉反斜杠的旧路径');
+need(/只在最近 3 份|只保留最近 3 份|Skip 3/.test(install), 'install.ps1 没有轮转 环境.md.bak（D5）');
+need(/另加手写的 group_say/.test(install), 'install.ps1 的工具数口径没说明 group_say（D3）');
+need(/'自启动开关' 'INFO'/.test(read('../scripts/verify-pending.ps1')), 'verify-pending 的自启动开关仍是 WARN（D4）');
+
+console.log(fail.length ? `FAIL test-fish-dsh-resolve（${fail.length}）：\n  - ${fail.join('\n  - ')}` : 'PASS test-fish-dsh-resolve（25 条）');
 process.exit(fail.length ? 1 : 0);

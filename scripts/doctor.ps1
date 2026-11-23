@@ -927,7 +927,7 @@ if ($lastBoot) {
       }
       # 2026-11-23 P3：版本号相同不代表代码相同（dev 工作区反复更新时必现）。
       $diskFp = ''
-      $fpJs = Join-Path $Cfg.Root 'plugindsh-lil-whale-grouplibcode-fp.js'
+      $fpJs = Join-Path $Cfg.Root 'plugin/dsh-lil-whale-group/lib/code-fp.js'
       if (Test-Path -LiteralPath $fpJs) {
         try {
           $fpOut = (& node $fpJs 2>$null)

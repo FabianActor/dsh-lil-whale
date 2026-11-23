@@ -115,7 +115,7 @@ if (Test-Path -LiteralPath $settings) {
   $s = Get-Content -LiteralPath $settings -Raw -Encoding utf8 | ConvertFrom-Json
   Add-Row '自启动开关' 'PASS' ("autoStartFish=" + $s.autoStartFish)
 } else {
-  Add-Row '自启动开关' 'WARN' "没有 $settings（默认关）"
+  Add-Row '自启动开关' 'INFO' "没有 $settings（默认关；想开机自动起鱼塘再建它）"
 }
 
 # 6) 鱼塘接口（在他那条鱼的端口上）

@@ -602,7 +602,7 @@ if (Test-Path $toolsScript) {
     # 群发言不是 profile 里的工具，是插件给的；它的存在与否由同一次安装决定，所以写死在生成结果里。
     $linesOfTools += '- 在群里说话（`group_say`）'
     $values.TOOLS = ($linesOfTools -join "`r`n")
-    Ok ("你能做什么：按实际组合算出 {0} 条（preset={1}）" -f @($parsed.tools).Count, $parsed.preset)
+    Ok ("你能做什么：按实际组合算出 {0} 条（preset={1}；纸上另加手写的 group_say，共 {2} 条）" -f @($parsed.tools).Count, $parsed.preset, (@($parsed.tools).Count + 1))
     if (@($parsed.skipped).Count -gt 0) {
       Note ("跳过 {0} 个：{1}" -f @($parsed.skipped).Count, (($parsed.skipped | ForEach-Object { $_.id + '(' + $_.why + ')' }) -join '; '))
     }
@@ -626,6 +626,10 @@ $envPath = Join-Path $Workspace '环境.md'
 if ($Upgrade -and (Test-Path $envPath)) {
   $envBak = Join-Path $Workspace ('环境.md.bak-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
   Copy-Item -LiteralPath $envPath -Destination $envBak -Force
+# 2026-11-24 D5：每次 -Upgrade 都会留一份；只保留最近 3 份，别让家目录堆备份。
+Get-ChildItem -LiteralPath $Workspace -Filter '环境.md.bak-*' -ErrorAction SilentlyContinue |
+  Sort-Object LastWriteTime -Descending | Select-Object -Skip 3 |
+  ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue }
   Note ("环境.md 已备份：{0}" -f (Split-Path -Leaf $envBak))
 }
 if (-not (Test-Path $envPath) -or $Force -or $Upgrade) {
