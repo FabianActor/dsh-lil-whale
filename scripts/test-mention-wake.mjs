@@ -124,7 +124,7 @@ ok(coreSrc.includes('mentionLabelOf'), 'messages-core 暴露了投影文案函�
 ok(coreSrc.includes('mention'), 'projectMessage 透传 mention')
 
 const clientSrc = read('../plugin/dsh-lil-whale-group-ui/lib/client.js')
-ok(clientSrc.includes('client build v64 · session-binding'), '面板 build 标记 v60')
+ok(clientSrc.includes('client build v65 · pond-bind'), '面板 build 标记 v60')
 ok(!clientSrc.includes('const target = message.to && message.to !== \'all\''), '气泡不再用 to 拼收件人箭头')
 ok(!clientSrc.includes('toSeat: seat'), '面板不再写 toSeat')
 

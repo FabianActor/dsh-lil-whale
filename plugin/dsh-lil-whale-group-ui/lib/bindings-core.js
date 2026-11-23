@@ -12,7 +12,7 @@
  *   - 菜单里"绑"= 替换（pins[成员] = [这段会话]）；一个成员多段会话这门语言还不支持。
  *   - 解绑 = pins[成员] = []，members.json 的 sessionId 一起清空；两处必须一起改。
  */
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 /** 会话 id 的形状：`session-` + uuid。和 scripts/bind-member.mjs 用同一条。 */
@@ -207,6 +207,80 @@ export function bindingsView({ roster, pins, liveKeys = [], exists = () => true 
     }
   }
   return { members: fish, pins: { ...(pins ?? {}) }, bound }
+}
+
+/** 面板上写短一点：`session-ab12cd34`。完整 id 太长，卡片一行放不下。 */
+export function shortSessionId(id) {
+  const text = sessionIdOf(id)
+  if (!text) return ''
+  return text.length <= 17 ? text : `${text.slice(0, 17)}…`
+}
+
+/**
+ * 这条鱼家里有哪些会话（只认目录名，不读内容）。
+ * 返回 [{ id, project, mtimeMs }]，按 mtime 倒序；同一 id 出现在多个项目目录时只留一条。
+ */
+export function sessionsInHome(home) {
+  if (!home || !existsSync(home)) return []
+  const root = join(home, 'sessions')
+  if (!existsSync(root)) return []
+  const seen = new Map()
+  let projects = []
+  try {
+    projects = readdirSync(root, { withFileTypes: true })
+  } catch {
+    return []
+  }
+  for (const project of projects) {
+    if (!project.isDirectory()) continue
+    let entries = []
+    try {
+      entries = readdirSync(join(root, project.name), { withFileTypes: true })
+    } catch {
+      continue
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+      const id = sessionIdOf(entry.name)
+      if (!id || seen.has(id)) continue
+      let mtimeMs = 0
+      try {
+        mtimeMs = statSync(join(root, project.name, entry.name)).mtimeMs
+      } catch {
+        mtimeMs = 0
+      }
+      seen.set(id, { id, project: project.name, mtimeMs })
+    }
+  }
+  return [...seen.values()].sort((a, b) => b.mtimeMs - a.mtimeMs)
+}
+
+/**
+ * 换绑弹窗要的一份候选表：这条鱼家里的会话 + 每一条"能不能绑、现在归谁、是不是正被挂着"。
+ * 判定全落在 bindingProblem 上，别在界面里另写一套。
+ */
+export function sessionCandidatesOf({ roster, memberKey, pondRoot, pins = {}, liveSessionIds = [] }) {
+  const member = (roster?.members ?? roster ?? {})[memberKey]
+  const home = homeOfMember(member)
+  if (!member || !home) return { member: memberKey, home, sessions: [] }
+  const live = new Set(liveSessionIds)
+  const sessions = sessionsInHome(home).map((entry) => {
+    const problem = bindingProblem({ roster, memberKey, sessionId: entry.id, pondRoot })
+    const boundTo = findBinding(pins, entry.id)?.member ?? null
+    return {
+      id: entry.id,
+      short: shortSessionId(entry.id),
+      project: entry.project,
+      mtimeMs: entry.mtimeMs,
+      workspace: workspacePathOf(home, entry.id),
+      registered: workspacePathOf(home, entry.id) !== null,
+      eligible: problem === null,
+      reason: problem ? problem.message : null,
+      inUse: live.has(entry.id),
+      boundTo,
+    }
+  })
+  return { member: memberKey, home, sessions }
 }
 
 /** 账单里的一行。和 scripts/bind-member.mjs 的 bind/unbind 行同形，`by=` 说清是谁干的。 */

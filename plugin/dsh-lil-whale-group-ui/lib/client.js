@@ -3337,6 +3337,25 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       autoStartLabel: '起主 dsh 时把鱼也带起来',
       autoStartHint: '下次启动主 dsh 生效：巡守起来 8 秒后按名册逐条唤醒，不开浏览器窗。关掉＝只起巡守（空鱼塘，调试用）——鱼活不过主进程，没有「鱼自己单独活着」这个选项。',
       autoStartFailed: '开关没保存：',
+      sessionLabel: '会话',
+      sessionUnbound: '未绑定',
+      bind: '换绑',
+      bindTitle: (name) => ('换绑 ' + name + ' 的会话'),
+      bindHint: '换绑后下次醒来是这段会话，原来的上下文不再续。只改 pins，重启对应进程后生效。',
+      bindInputPlaceholder: '粘贴 session-…（从她的 WebUI 复制）',
+      bindCandidates: '她家里的会话：',
+      bindEmpty: '她家里还没有会话；先去她的 WebUI 说一句话，再回来换绑。',
+      bindLoadFailed: '候选没读出来：',
+      bindFailed: '换绑失败：',
+      bindDone: '换绑成功',
+      bindSuccessHint: '重启对应进程后才生效。',
+      bindCancel: '取消',
+      bindConfirm: '确认换绑',
+      bindCurrent: '当前',
+      bindInUseTag: '正在使用',
+      bindInUseConfirm: '这段会话正在被使用；换绑后旧窗口不会自动停，可能出现两个 writer。确认要换吗？',
+      bindUnregistered: '未登记工作区',
+      bindBlocked: '不能绑',
       generation: (n) => (n <= 0 ? '根' : `第 ${n} 代`),
       modeText: (mode) => {
         const value = mode?.mode ?? null
@@ -3448,6 +3467,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       const [result, setResult] = useState(null)
       const [demo, setDemo] = useState(false)
       const [autoStart, setAutoStart] = useState(false)
+      const [bindFor, setBindFor] = useState(null)
 
       const load = useCallback(async () => {
         try {
@@ -3737,6 +3757,14 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
               `${POND.lastRun}：${item.lastRun.ts} ${item.lastRun.event}`,
             )
             : null,
+          demo
+            ? null
+            : h(
+              'div',
+              { style: { fontSize: 11, lineHeight: '16px', color: 'var(--dsw-alias-label-tertiary, #8a8f98)', display: 'flex', alignItems: 'center', gap: 6 } },
+              h('span', null, POND.sessionLabel + ' ' + (item.sessionShort || POND.sessionUnbound)),
+              h('button', { onClick: () => setBindFor(item), style: pondButtonStyle(false), title: POND.bindHint }, POND.bind),
+            ),
           self
             ? h('div', { style: { fontSize: 11, lineHeight: '16px', color: 'var(--dsw-alias-label-tertiary, #8a8f98)' } }, POND.selfHint)
             : (() => {
@@ -3921,14 +3949,134 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
             ),
           )
           : null,
+        bindFor
+          ? h(BindDialog, {
+            fish: bindFor,
+            onClose: () => setBindFor(null),
+            onDone: (message) => {
+              setBindFor(null)
+              setResult({ action: 'bind', key: bindFor.key, ok: true, output: message, at: Date.now() })
+              void load()
+            },
+          })
+          : null,
+      )
+    }
+
+    // 鱼塘卡片上的「换绑」：输入框 + 候选菜单；能不能绑仍由服务端 bindingProblem 判。
+    // 2026-11-23（Fabian 定）：只留「换绑」一个按钮；解绑没有应用场景，不进面板。
+    function BindDialog(props) {
+      const fish = props.fish
+      const [candidates, setCandidates] = useState(null)
+      const [error, setError] = useState(null)
+      const [value, setValue] = useState(typeof fish?.sessionId === 'string' ? fish.sessionId : '')
+      const [busy, setBusy] = useState(false)
+
+      useEffect(() => {
+        let alive = true
+        fetch('/group/api/bind-candidates?member=' + encodeURIComponent(fish.key), { headers: { accept: 'application/json' } })
+          .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
+          .then(({ ok, data }) => {
+            if (!alive) return
+            if (!ok || data?.ok === false) throw new Error(data?.message || data?.error || '读候选失败')
+            setCandidates(data)
+          })
+          .catch((e) => { if (alive) setError(POND.bindLoadFailed + String(e?.message ?? e)) })
+        return () => { alive = false }
+      }, [fish.key])
+
+      const list = candidates?.sessions ?? []
+      const typed = value.trim()
+      const picked = list.find((s) => s.id === typed) ?? null
+      const inUse = picked?.inUse === true
+
+      const submit = async () => {
+        setBusy(true)
+        setError(null)
+        try {
+          const response = await fetch('/group/api/bind', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'x-llw-panel': '1' },
+            body: JSON.stringify({ member: fish.key, sessionId: typed }),
+          })
+          const data = await response.json()
+          if (!response.ok || data?.ok === false) throw new Error(data?.message || data?.error || ('HTTP ' + response.status))
+          props.onDone(POND.bindDone + '：' + fish.name + ' → ' + typed.slice(0, 17) + '…。' + POND.bindSuccessHint)
+        } catch (e) {
+          setError(POND.bindFailed + String(e?.message ?? e))
+        } finally {
+          setBusy(false)
+        }
+      }
+
+      const tagsOf = (s) => {
+        const tags = []
+        if (s.boundTo === fish.key) tags.push(POND.bindCurrent)
+        else if (s.boundTo) tags.push(s.boundTo)
+        if (s.inUse) tags.push(POND.bindInUseTag)
+        if (!s.registered) tags.push(POND.bindUnregistered)
+        if (!s.eligible) tags.push(POND.bindBlocked)
+        return tags
+      }
+
+      return h(
+        'div',
+        { style: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.32)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 } },
+        h(
+          'div',
+          { style: { width: 'min(560px, 92vw)', maxHeight: '82vh', overflow: 'auto', background: 'var(--dsw-alias-bg-layer-1, #fff)', borderRadius: 'var(--dsw-radius-lg, 12px)', border: '0.5px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.1))', padding: 16, display: 'flex', flexDirection: 'column', gap: 10 } },
+          h('div', { style: { fontSize: 14, fontWeight: 600 } }, POND.bindTitle(fish.name)),
+          h('div', { style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-secondary, #6b7076)' } }, POND.bindHint),
+          h('input', {
+            value,
+            placeholder: POND.bindInputPlaceholder,
+            onChange: (event) => setValue(event.target.value),
+            style: { padding: '8px 10px', fontSize: 13, borderRadius: 'var(--dsw-radius-md, 8px)', border: '0.5px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.15))', background: 'transparent', color: 'inherit' },
+          }),
+          error ? h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-error, #c93c40)' } }, error) : null,
+          inUse ? h('div', { style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-error, #c93c40)' } }, POND.bindInUseConfirm) : null,
+          h('div', { style: { fontSize: 12, fontWeight: 600 } }, POND.bindCandidates),
+          candidates === null
+            ? h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary, #8a8f98)' } }, '…')
+            : list.length === 0
+              ? h('div', { style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary, #8a8f98)' } }, POND.bindEmpty)
+              : h(
+                'div',
+                { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+                list.map((s) => h(
+                  'button',
+                  {
+                    key: s.id,
+                    onClick: () => setValue(s.id),
+                    disabled: !s.eligible,
+                    style: {
+                      textAlign: 'left', padding: '6px 8px', borderRadius: 'var(--dsw-radius-md, 8px)',
+                      border: '0.5px solid ' + (s.id === typed ? 'var(--dsw-alias-brand-primary, #4c8dff)' : 'var(--dsw-alias-border-l2, rgba(0,0,0,0.12))'),
+                      background: 'transparent', color: 'inherit', fontSize: 12, lineHeight: '18px',
+                      cursor: s.eligible ? 'pointer' : 'not-allowed', opacity: s.eligible ? 1 : 0.6,
+                    },
+                  },
+                  h('span', { style: { fontWeight: 600 } }, s.short),
+                  s.workspace ? h('span', { style: { marginLeft: 6, color: 'var(--dsw-alias-label-tertiary, #8a8f98)' } }, s.workspace) : null,
+                  tagsOf(s).length ? h('span', { style: { marginLeft: 6, color: 'var(--dsw-alias-label-tertiary, #8a8f98)' } }, '（' + tagsOf(s).join('、') + '）') : null,
+                  s.eligible ? null : h('div', { style: { marginTop: 2, color: 'var(--dsw-alias-label-tertiary, #8a8f98)' } }, s.reason || POND.bindBlocked),
+                )),
+              ),
+          h(
+            'div',
+            { style: { display: 'flex', gap: 8, justifyContent: 'flex-end' } },
+            h('button', { onClick: props.onClose, style: pondButtonStyle(false) }, POND.bindCancel),
+            h('button', { onClick: () => { void submit() }, disabled: busy || !typed, style: pondButtonStyle(true) }, busy ? POND.pending : POND.bindConfirm),
+          ),
+        ),
       )
     }
 
     return {
-      inject: ['slots', 'contextMenus'],
+      inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v64 · session-binding:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v65 · pond-bind:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')
@@ -3939,66 +4087,6 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
 
         void loadConfig()
         void loadBindings(true)
-
-        // 会话行「⋯」里的绑定项（fi-0017）。菜单是主路径，行尾图标先不做：
-        // 一段会话只有"绑给谁"这一个事实，菜单里说清楚就够，行尾再挂一个图标要两处同步。
-        ctx.effect(() => ctx.contextMenus.register({
-          id: 'lil-whale.binding',
-          target: 'session',
-          order: 400,
-          observe: () => [bindingStore],
-          resolve: (target) => {
-            const state = bindingStore.getSnapshot()
-            if (!state.loaded) {
-              if (Date.now() - bindingsFetchedAt > 3000) void loadBindings(true)
-              return []
-            }
-            const fish = state.members ?? []
-            if (fish.length === 0) return []
-            const pinned = (state.bound ?? []).find((b) => b.sessionId === target.sessionId) ?? null
-            const pinnedFish = pinned ? fish.find((f) => f.key === pinned.member) : null
-            const pinnedName = pinnedFish?.name ?? pinned?.member ?? ''
-            const items = []
-            if (pinned) {
-              items.push({
-                id: 'lw-bound',
-                label: pinned.exists === false ? `已绑给 ${pinnedName}（会话已不存在）` : `已绑给 ${pinnedName}`,
-                disabled: true,
-              })
-            }
-            items.push({
-              id: 'lw-bind',
-              label: pinned ? '改绑到…' : '绑定该会话至…',
-              icon: { key: 'workspace.pin' },
-              separatorBefore: !pinned,
-              children: [
-                {
-                  id: 'lw-bind-note',
-                  label: '换绑后下次醒来是这段会话，原来的上下文不再续',
-                  disabled: true,
-                },
-                ...fish.map((f) => ({
-                id: `lw-bind-${f.key}`,
-                label: pinned?.member === f.key ? `${f.name}（当前）` : (f.live ? f.name : `${f.name}（未启动）`),
-                run: () => postBinding('bind', { member: f.key, sessionId: target.sessionId })
-                  .then(() => ctx.contextMenus.notify(`已绑给 ${f.name}；下次醒来是这段会话，原来的上下文不再续`, true))
-                  .catch((error) => ctx.contextMenus.notify(`绑定失败：${error?.message ?? error}`, false)),
-                })),
-              ],
-            })
-            if (pinned) {
-              items.push({
-                id: 'lw-unbind',
-                label: '解绑该会话',
-                icon: { key: 'workspace.unpin' },
-                run: () => postBinding('unbind', { member: pinned.member, sessionId: target.sessionId })
-                  .then(() => ctx.contextMenus.notify(`已解绑 ${pinnedName}；下次启动没有会话，需要重新绑定`, true))
-                  .catch((error) => ctx.contextMenus.notify(`解绑失败：${error?.message ?? error}`, false)),
-              })
-            }
-            return items
-          },
-        }))
 
         ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
           name: 'sidebar.panellist',

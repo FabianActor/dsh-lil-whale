@@ -16,7 +16,7 @@ import { config } from './config.js'
 import { parseMessageLines, mentionLabelOf } from './messages-core.js'
 import { presenceReasonOf } from './presence-core.js'
 import { newerThan, latestReleaseOf, LATEST_RELEASE_API } from './version-core.js'
-import { bindingProblem, unbindProblem, applyBind, applyUnbind, bindingsView, sessionExistsInHome, fishOf, stateLogLine } from './bindings-core.js'
+import { bindingProblem, unbindProblem, applyBind, applyUnbind, bindingsView, sessionExistsInHome, fishOf, stateLogLine, sessionCandidatesOf, shortSessionId } from './bindings-core.js'
 
 export const name = '@fabianactor/dsh-lil-whale-group-ui'
 export const inject = ['webServer', 'agents']
@@ -773,6 +773,8 @@ function writePondSettings(payload) {
 
 async function pondStatus() {
   const members = pondMembers()
+  // 卡片上要显示"这段会话绑给谁了"：pins 只读一次，六条鱼共用它。
+  const pins = readPinsFile()
   const fish = []
   for (const [key, member] of Object.entries(members)) {
     if (member?.kind !== 'fish') continue
@@ -780,6 +782,7 @@ async function pondStatus() {
     const [portOpen] = await Promise.all([tcpOpen(port)])
     const run = lastRunOf(key)
     const presence = presenceOf(key)
+    const boundList = Array.isArray(pins?.[key]) ? pins[key] : pins?.[key] ? [pins[key]] : []
     fish.push({
       key,
       name: typeof member?.name === 'string' ? member.name : key,
@@ -798,6 +801,8 @@ async function pondStatus() {
       mode: modeOf(key),
       sleep: sleepOf(key),
       canManage: member?.role !== 'watcher',
+      sessionId: boundList[0] ?? null,
+      sessionShort: boundList[0] ? shortSessionId(boundList[0]) : null,
       url: portOpen ? pondUrlOf(member) : null,
     })
   }
@@ -1202,6 +1207,30 @@ export function apply(ctx) {
     handler(req, res) {
       if (req.method !== 'GET') return sendJson(res, 405, { error: 'method-not-allowed' })
       sendJson(res, 200, bindingsPayload())
+    },
+  }))
+
+  // 换绑弹窗的候选：某条鱼家里的会话，逐条说清能不能绑、现在归谁、是不是正被挂着。
+  // 判定仍走 bindingProblem（和菜单/命令行同一套），界面不再自己写规则。
+  disposers.push(ctx.webServer.register({
+    kind: 'exact',
+    path: '/group/api/bind-candidates',
+    handler(req, res) {
+      if (req.method !== 'GET') return sendJson(res, 405, { error: 'method-not-allowed' })
+      const url = new URL(req.url ?? '/', 'http://127.0.0.1')
+      const member = (url.searchParams.get('member') ?? '').trim()
+      const roster = readRosterFile()
+      const pins = readPinsFile()
+      const pondRoot = join(config().poolDir || join(GROUP_DIR, '..'), '..')
+      const live = []
+      try {
+        for (const agent of ctx.agents.list()) {
+          const id = agent?.session?.header?.id
+          if (typeof id === 'string' && id) live.push(id)
+        }
+      } catch { /* 拿不到就只报"在不在盘上"，不猜 */ }
+      const out = sessionCandidatesOf({ roster, memberKey: member, pondRoot, pins, liveSessionIds: live })
+      sendJson(res, 200, { ok: true, ...out })
     },
   }))
 

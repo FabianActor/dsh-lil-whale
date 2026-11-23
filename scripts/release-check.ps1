@@ -463,7 +463,15 @@ if ($root) {
     $bindOut = & node $bindTest 2>&1
     if ($LASTEXITCODE -ne 0) { Fail '会话绑定' (($bindOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '会话绑定' '绑=替换、解绑清两处、会话必须在自己的家里（test-bindings-core.mjs）' }
-  } else { Fail '会话绑定' 'scripts\test-bindings-core.mjs 不在包里' }  # ── 5. 模板残留 ─────────────────────────────────────────────────────
+  } else { Fail '会话绑定' 'scripts\test-bindings-core.mjs 不在包里' }
+  # ── 4ay. 鱼塘换绑（2026-11-23：种子卡片的「换绑」；候选只列她家里的会话，会话行菜单那条路撤掉）──
+  $pondBindTest = Join-Path $pkg 'scripts\test-pond-bind.mjs'
+  if (Test-Path $pondBindTest) {
+    $pondBindOut = & node $pondBindTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '鱼塘换绑' (($pondBindOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '鱼塘换绑' '候选只列她家里的会话；菜单不在了；build v65（test-pond-bind.mjs）' }
+  } else { Fail '鱼塘换绑' 'scripts\test-pond-bind.mjs 不在包里' }
+  # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {
     if (Select-String -Path $tpl -Pattern '\{\{[A-Z_]+\}\}' -Quiet) { Ok '模板占位符' '模板里是占位符（正常），装的时候会填' }
