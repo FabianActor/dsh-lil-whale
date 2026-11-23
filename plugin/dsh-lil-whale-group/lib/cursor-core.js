@@ -23,7 +23,7 @@ export const CURSOR_LOST_WINDOW = 20
  * @param {number} input.stored 文件里那格的值（没有就是 0）
  * @param {number|null} input.lastDelivered 上一次真的递到第几行（有 meta 才有）
  * @param {number} input.lines 通道文件现在有多少行
- * @returns {{start:number, src:'file'|'legacy'|'missing'|'unknown'|'capped'|'regressed', stored:number, lastDelivered:number|null, capped:boolean, regressed:boolean, unknown:boolean}}
+ * @returns {{start:number, src:'file'|'legacy'|'recovered'|'missing'|'unknown'|'capped'|'regressed'|'absent', stored:number, lastDelivered:number|null, capped:boolean, regressed:boolean, unknown:boolean}}
  */
 export function classifyCursorRead({ source, stored, lastDelivered = null, lines, present = true }) {
   const total = Number.isFinite(lines) && lines > 0 ? Math.trunc(lines) : 0
@@ -33,21 +33,24 @@ export function classifyCursorRead({ source, stored, lastDelivered = null, lines
 
   // 1) 超过文件长度：旧行为，夹到文件尾。留 `capped` 让人能追。
   if (raw > total) return { ...base, start: total, src: 'capped', capped: true }
-  // 2) 比上一次递到的位置还小：不重放，从 meta 接着走。
+  // 2) 文件在、但这一格没有（不是 0，是缺席）：来源叫 absent，别写成 file。
+  //    LeeaCP 2026-11-23 验收：`src=file start=0` 与 `cursor-state=lost` 放一起会读成“本来就该从 0 起”。
+  //    放在 regressed 之前：key 缺席时 raw=0 必然小于 meta，否则永远走 regressed、absent 不可达。
+  //    有 meta 就从 meta 接着走（不重放）；没 meta 才退到最近一小段，并且不声称知道条数。
+  if (source !== 'missing' && source !== 'unknown' && present === false) {
+    if (meta !== null) return { ...base, start: Math.min(meta, total), src: 'absent' }
+    return { ...base, start: Math.max(0, total - CURSOR_LOST_WINDOW), src: 'absent', unknown: true }
+  }
+  // 3) 比上一次递到的位置还小：不重放，从 meta 接着走。
   //    这是 rc.5 那次的正面防线——128 < 3186，于是不会再把 1300 条重投一遍。
   if (meta !== null && raw < meta) {
     return { ...base, start: Math.min(meta, total), src: 'regressed', regressed: true }
   }
-  // 3) 读不到（文件缺失 / 损坏）：只给最近一小段，且不声称知道条数。
+  // 4) 读不到（文件缺失 / 损坏）：只给最近一小段，且不声称知道条数。
   if (source === 'missing' || source === 'unknown') {
     return { ...base, start: Math.max(0, total - CURSOR_LOST_WINDOW), src: source, unknown: true }
   }
-  // 3.5) 文件在、但这一格没有（不是 0，是缺席）：来源叫 absent，别写成 file。
-  //      LeeaCP 2026-11-23 验收：`src=file start=0` 与 `cursor-state=lost` 放一起会读成“本来就该从 0 起”。
-  if (source !== 'missing' && source !== 'unknown' && present === false) {
-    return { ...base, start: 0, src: 'absent' }
-  }
-  // 4) 正常：legacy 是迁移来的真值、recovered 是从 meta 重建的，都照常使用，只在记账里标来源。
+  // 5) 正常：legacy 是迁移来的真值、recovered 是从 meta 重建的，都照常使用，只在记账里标来源。
   const tag = source === 'legacy' || source === 'recovered' ? source : 'file'
   return { ...base, start: Math.max(0, Math.min(raw, total)), src: tag }
 }

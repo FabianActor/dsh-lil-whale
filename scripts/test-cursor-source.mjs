@@ -132,14 +132,14 @@ function eq(name, got, want) {
   ok(wokeLine.includes('held='), 'woke 行带 held')
 }
 
-// ---------- 文件在、这一格不在：来源叫 absent（r432） ----------
+// ---------- 文件在、这一格不在：来源叫 absent（r432/r433） ----------
 {
   const r = classifyCursorRead({ source: 'file', stored: 0, lastDelivered: null, lines: 59, present: false })
-  eq('缺席不是 file', [r.src, r.start, r.unknown], ['absent', 0, false])
+  eq('缺席不是 file；没有 meta 时只给最近一小段', [r.src, r.start, r.unknown], ['absent', 39, true])
 }
 {
   const r = classifyCursorRead({ source: 'file', stored: 0, lastDelivered: 59, lines: 59, present: false })
-  eq('缺席但有 meta：走回退，不重放', [r.src, r.start], ['regressed', 59])
+  eq('缺席但有 meta：从 meta 接着走，不重放', [r.src, r.start], ['absent', 59])
 }
 
 // ---------- 结果 ----------

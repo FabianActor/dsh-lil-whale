@@ -22,6 +22,11 @@
 
 ## [未发布]
 
+### r433 缺席的游标格子不再被 regressed 吞掉
+
+- 旧：文件在、这一格不在时，`raw=0 < meta` 先命中 `regressed`，`src=absent` 实际不可达；absent 分支又写成 `start=0`，等于把“缺席”读成“本来就该从 0 起”。
+- 新：absent 判定提到 regressed 之前；有 meta 就从 meta 接着走（`start=meta`，不重放），没 meta 才退到最近 20 行并标 `counts=unknown`。用户可见：否。
+
 ### r432 缺席不许写成 file；lost 时 start 写 unknown（LeeaCP 验收）
 
 - 游标文件在、但这一格没有时，来源改叫 `absent`（以前写成 `file` + `start=0`，与 `cursor-state=lost` 并排像“本来就该从 0 起”）。
