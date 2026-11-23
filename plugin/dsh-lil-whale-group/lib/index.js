@@ -1929,14 +1929,15 @@ function checkOwnStall(ctx) {
   if (verdict.kind !== 'stalled') return
   if (stallNotified.get(me) === delivery.at) return
   stallNotified.set(me, delivery.at)
-  const text = stallSentenceOf({ label: labelOf(me), port: MEMBERS[me]?.port ?? '', since: delivery.at })
+  const text = stallSentenceOf({ label: labelOf(me), port: MEMBERS[me]?.port ?? '', since: verdict.lastAt ?? delivery.at })
   try {
     saySystemToDm(me, text)
     mkdirSync(STALL_DIR, { recursive: true })
     writeJson(stallFileOf(me), {
       fmt: 1,
       member: me,
-      since: new Date(delivery.at).toISOString(),
+      since: new Date(verdict.lastAt ?? delivery.at).toISOString(),
+      deliveredAt: new Date(delivery.at).toISOString(),
       ageSec: verdict.ageSec,
       url: `http://127.0.0.1:${MEMBERS[me]?.port ?? ''}/`,
       at: new Date().toISOString(),

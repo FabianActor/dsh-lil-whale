@@ -6,8 +6,10 @@
 // 从通道看，「她卡住了」和「她不理你」长得一模一样。
 //
 // 这一版只做能给的那一档，不碰审批本身：
-//   - 判据是启发式：投递之后过了 N 分钟，这一轮还忙，而她的会话文件没有新写入
+//   - 判据是启发式：这一轮还忙，而她的会话文件已经 N 分钟没有新写入
 //     ⇒ 说「可能在等审批或等回答」，措辞必须带「可能」。
+//     （不能只看「投递后有没有长过」：她先写了一句、再去点审批，文件就不再动了；
+//      所以看的是最后一次写入离现在多久，投递只提供「她在回你」这个上下文。）
 //   - 不在通道里替她说话，也不叫醒任何人：只由通道侧写一条系统行给人看。
 //   - 只在投递之后判；没有投递就没有「她在回你」这个上下文，宁可不报。
 //
@@ -26,20 +28,22 @@ export const STALL_MAX_MS = 60 * 60 * 1000; // 超过一小时不再报：那已
  * @param {number|null} input.deliveredAt 这次投递的毫秒时间戳（没有投递就传 null）
  * @param {number|null} input.sessionMtime 会话日志文件的 mtime（读不到传 null）
  * @param {string|null} input.agentStatus 宿主给的 agent 状态（'idle' / 'busy' / 其它）
- * @returns {{kind: 'none'|'idle'|'working'|'stalled'|'too-old', ageSec: number}}
+ * @returns {{kind: 'none'|'idle'|'working'|'stalled'|'too-old', ageSec: number, lastAt: number|null}}
  */
 export function classifyStall(input = {}) {
   const { now, deliveredAt, sessionMtime, agentStatus } = input;
-  if (!Number.isFinite(deliveredAt)) return { kind: 'none', ageSec: 0 };
-  const ageMs = Math.max(0, (Number.isFinite(now) ? now : Date.now()) - deliveredAt);
+  if (!Number.isFinite(deliveredAt)) return { kind: 'none', ageSec: 0, lastAt: null };
+  const at = Number.isFinite(now) ? now : Date.now();
+  const ageMs = Math.max(0, at - deliveredAt);
   const ageSec = Math.round(ageMs / 1000);
-  if (ageMs > STALL_MAX_MS) return { kind: 'too-old', ageSec };
-  if (agentStatus === 'idle') return { kind: 'idle', ageSec };
-  // 会话文件在投递之后长过，说明这一轮还在动（哪怕很慢）。
-  if (Number.isFinite(sessionMtime) && sessionMtime > deliveredAt) return { kind: 'working', ageSec };
-  // 还在阈值内：不动只是「还没到时候」。
-  if (ageMs < STALL_AFTER_MS) return { kind: 'working', ageSec };
-  return { kind: 'stalled', ageSec };
+  // 最后一次动静：投递时刻与会话文件 mtime 里更晚的那个。
+  const lastAt = Number.isFinite(sessionMtime) ? Math.max(deliveredAt, sessionMtime) : deliveredAt;
+  const quietMs = Math.max(0, at - lastAt);
+  if (ageMs > STALL_MAX_MS) return { kind: 'too-old', ageSec, lastAt };
+  if (agentStatus === 'idle') return { kind: 'idle', ageSec, lastAt };
+  // 最近 N 分钟内还写过：哪怕很慢，也算在动。
+  if (quietMs < STALL_AFTER_MS) return { kind: 'working', ageSec, lastAt };
+  return { kind: 'stalled', ageSec, lastAt };
 }
 
 /** 本地 HH:MM（不引时区，只给人看）。 */
