@@ -22,6 +22,11 @@
 
 ## [未发布]
 
+### r438 `install.ps1 -Upgrade`：原地升级不再等于重铺
+
+- 旧：升级文档让重跑 `install.ps1`，但安装器一看家已存在就 Die、NEXT 让加 `-Force`；`-Force` 会重写 `START.md` / `环境.md` / `pins.json`（把升级变成重铺）。
+- 新：`-Upgrade` 只重挂 profile / 写配置；`环境.md` 备份成 `环境.md.bak-<时间>` 后按新模板重生成；`AGENTS.md`、`START.md`、`notes\`、`plan\`、`run\` 一律不动。对着不像家的目录加 `-Upgrade` 会 Die。用户可见：是。
+
 ### r436 日志页补一句：`code-fp.json` 是状态，不是账
 
 - 旧页只写了“跟它比、变了才写一行”，没点明它只有一个当前值、下次启动覆盖 ⇒ 容易被当成“昨天那一行是谁写的”的依据。

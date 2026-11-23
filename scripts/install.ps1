@@ -30,6 +30,7 @@ param(
   [Alias('SkipParentPlugins')][switch]$SkipParent,
   [switch]$Force,
   [switch]$RepairAgents,  # 只重写身份纸 AGENTS.md，其余一概不碰（2026-11-16 r190）
+  [switch]$Upgrade,        # 原地升级（2026-11-23 r438）：家已存在时不 Die；只重挂 profile / 写配置，环境.md 备份后重生成；START.md / AGENTS.md / notes 一律不动
   [string]$PondRoot = '',  # 鱼塘根；空 = 按仓库位置推（仓库必须在 <鱼塘根>\app 里）（2026-11-16 r195）
   [switch]$RepoPrepared,   # 内部用：从复制过去的仓库继续装，别再复制一次
   [string]$ConfigPath = '',  # 配置写到哪；空 = <仓库根>\lil-whale.config.json。试装必须指到临时目录
@@ -311,7 +312,14 @@ Step '1. 目录'
 if (Test-Path -LiteralPath $Workspace) {
   $looksLikeHer = (Test-Path (Join-Path $Workspace 'START.md')) -or (Test-Path (Join-Path $Workspace 'dsh-home'))
   if ($looksLikeHer -and -not $Force) {
-    Die "「$Workspace」已经像一条鱼的家了（有 START.md 或 dsh-home）。" "换 -Workspace 指向一个新目录；如果你确定要在这里重铺（会覆盖 START.md / 环境.md），加 -Force"
+    if ($Upgrade) {
+    Note '原地升级（-Upgrade）：保留 START.md / AGENTS.md / notes / plan；环境.md 备份后按新模板重生成（2026-11-23 r438）'
+  } else {
+    Die "「$Workspace」已经像一条鱼的家了（有 START.md 或 dsh-home）。" "换 -Workspace 指向一个新目录；如果你确定要在这里重铺（会覆盖 START.md / 环境.md），加 -Force；只是升级代码加 -Upgrade"
+  }
+  }
+  if (-not $looksLikeHer -and $Upgrade) {
+    Die "「$Workspace」不像一条鱼的家（既没有 START.md 也没有 dsh-home）—— -Upgrade 只能对着已有的家用。" "核对 -Workspace；如果这是新家，去掉 -Upgrade 做完整安装"
   }
 }
 foreach ($d in @($Workspace, (Join-Path $Workspace 'logs'), (Join-Path $Workspace 'plan'),
@@ -613,7 +621,12 @@ if (-not (Test-Path $startPath) -or $Force) {
 }
 
 $envPath = Join-Path $Workspace '环境.md'
-if (-not (Test-Path $envPath) -or $Force) {
+if ($Upgrade -and (Test-Path $envPath)) {
+  $envBak = Join-Path $Workspace ('环境.md.bak-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+  Copy-Item -LiteralPath $envPath -Destination $envBak -Force
+  Note ("环境.md 已备份：{0}" -f (Split-Path -Leaf $envBak))
+}
+if (-not (Test-Path $envPath) -or $Force -or $Upgrade) {
   # 环境.md 由 scripts/render-env.mjs 生成：模板 + 现场数据（名册 / 真实工具清单 / 叫醒参数）。
   # 为什么不在 PowerShell 里拼：同一份文件必须有"重新生成"的入口，否则代码一改，纸就旧了
   # （2026-11-12 20:10 Fabian 提："有些描述放在小鱼的目录内"）。
