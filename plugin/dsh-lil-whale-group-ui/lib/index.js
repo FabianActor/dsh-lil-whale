@@ -16,6 +16,7 @@ import { config } from './config.js'
 import { parseMessageLines, mentionLabelOf } from './messages-core.js'
 import { presenceReasonOf } from './presence-core.js'
 import { newerThan, latestReleaseOf, LATEST_RELEASE_API } from './version-core.js'
+import { bindingProblem, unbindProblem, applyBind, applyUnbind, bindingsView, sessionExistsInHome, fishOf, stateLogLine } from './bindings-core.js'
 
 export const name = '@fabianactor/dsh-lil-whale-group-ui'
 export const inject = ['webServer', 'agents']
@@ -42,6 +43,44 @@ const UI_CONFIG = join(GROUP_DIR, 'ui-config.json')
 // 「看到哪儿了」的游标：只在面板里看，不影响她那边读群的游标
 const UI_READ = join(GROUP_DIR, 'ui-read.json')
 const PINS = join(GROUP_DIR, 'pins.json')
+// 名册原文：绑定要判 home / dshHome，面板那份 MEMBERS 只留了名字与角色（够显示、不够判定）。
+const MEMBERS_FILE = config().membersFile || join(config().poolDir || join(GROUP_DIR, '..'), 'members.json')
+
+function readPinsFile() {
+  try { return JSON.parse(readFileSync(PINS, 'utf8')) } catch { return {} }
+}
+function readRosterFile() {
+  try { return JSON.parse(readFileSync(MEMBERS_FILE, 'utf8')) } catch { return { members: {} } }
+}
+function writeJsonAtomic(file, value) {
+  const tmp = `${file}.tmp-${process.pid}-${Date.now()}`
+  writeFileSync(tmp, JSON.stringify(value, null, 2) + '\n', 'utf8')
+  renameSync(tmp, file)
+}
+function nowStamp() {
+  const d = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+function liveFishKeys() {
+  const out = []
+  for (const key of Object.keys(MEMBERS)) {
+    try {
+      const beat = JSON.parse(readFileSync(join(PRESENCE_DIR, `${key}.json`), 'utf8'))
+      if (Date.now() - (Number(beat?.at) || 0) <= PRESENCE_FRESH_MS) out.push(key)
+    } catch { /* 没心跳 = 没启动 */ }
+  }
+  return out
+}
+/** 面板要的一份绑定视图（鱼 + pins + 每段会话还在不在盘上）。 */
+function bindingsPayload() {
+  const roster = readRosterFile()
+  const pins = readPinsFile()
+  const homes = new Map(fishOf(roster).map((f) => [f.key, f.dshHome]))
+  const view = bindingsView({ roster, pins, liveKeys: liveFishKeys() })
+  view.bound = view.bound.map((b) => ({ ...b, exists: sessionExistsInHome(homes.get(b.member), b.sessionId) }))
+  return view
+}
 // 跨进程心跳：dsh-lil-whale-group 插件在各自那个进程里每 5 秒写一份 `state\presence\<成员>.json`。
 // 面板要显示"小肥鱼 正在回复"，只能读这个 —— 这个进程里的 ctx.agents 只有大肥鱼自己的会话。
 const POOL_STATE = config().poolStateDir || join(GROUP_DIR, '..', 'state')
@@ -1152,6 +1191,84 @@ export function apply(ctx) {
       sendJson(res, 200, { seats })
     },
   }))
+  // ---------- 绑定（fi-0017，2026-11-23） ----------
+  // GET  /group/api/bindings            → 鱼列表 + pins + 每段被绑会话还在不在盘上
+  // POST /group/api/bind   {member,sessionId} → 换绑（同一段会话只归一个人）
+  // POST /group/api/unbind {member,sessionId} → 解绑（pins=[]，members.sessionId=''）
+  // 菜单只是最后一个入口；判断与写入形状在 bindings-core.js，命令行/路由共用同一套规则。
+  disposers.push(ctx.webServer.register({
+    kind: 'exact',
+    path: '/group/api/bindings',
+    handler(req, res) {
+      if (req.method !== 'GET') return sendJson(res, 405, { error: 'method-not-allowed' })
+      sendJson(res, 200, bindingsPayload())
+    },
+  }))
+
+  const bindingAction = async (req, res, kind, path) => {
+    if (!guardWrite(req, res, path)) return
+    if (req.method !== 'POST') return sendJson(res, 405, { error: 'method-not-allowed' })
+    let payload
+    try {
+      payload = JSON.parse(await readBody(req))
+    } catch {
+      return sendJson(res, 400, { error: 'bad-json' })
+    }
+    const member = typeof payload?.member === 'string' ? payload.member.trim() : ''
+    const sessionId = typeof payload?.sessionId === 'string' ? payload.sessionId.trim() : ''
+    const roster = readRosterFile()
+    const pins = readPinsFile()
+    const problem = kind === 'bind'
+      ? bindingProblem({ roster, memberKey: member, sessionId })
+      : unbindProblem({ pins, memberKey: member, sessionId })
+    if (problem) {
+      return sendJson(res, problem.status, {
+        error: problem.error,
+        message: problem.message,
+        hint: kind === 'bind' ? '要绑别的会话：先在 fish.ps1 sessions <鱼> 里看候选' : '这段会话现在没绑着，不用解',
+      })
+    }
+    const nextPins = kind === 'bind' ? applyBind(pins, member, sessionId) : applyUnbind(pins, member)
+    try {
+      writeJsonAtomic(PINS, nextPins)
+      let touched = false
+      const members = roster?.members ?? {}
+      if (kind === 'bind') {
+        for (const [key, m] of Object.entries(members)) {
+          if (!m) continue
+          if (key === member) {
+            if (m.sessionId !== sessionId) { m.sessionId = sessionId; touched = true }
+          } else if (m.sessionId === sessionId) {
+            m.sessionId = ''
+            touched = true
+          }
+        }
+      } else if (members[member] && members[member].sessionId === sessionId) {
+        members[member].sessionId = ''
+        touched = true
+      }
+      if (touched) writeJsonAtomic(MEMBERS_FILE, roster)
+    } catch (error) {
+      return sendJson(res, 500, { error: 'write-failed', detail: String(error?.message ?? error) })
+    }
+    try {
+      appendFileSync(join(POOL_STATE, 'fish.log'), stateLogLine({ ts: nowStamp(), action: kind, memberKey: member, sessionId, by: 'panel' }) + '\n', 'utf8')
+    } catch { /* 记账失败不拦正确动作 */ }
+    sendJson(res, 200, { ok: true, action: kind, ...bindingsPayload() })
+  }
+
+  disposers.push(ctx.webServer.register({
+    kind: 'exact',
+    path: '/group/api/bind',
+    handler(req, res) { return bindingAction(req, res, 'bind', '/group/api/bind') },
+  }))
+
+  disposers.push(ctx.webServer.register({
+    kind: 'exact',
+    path: '/group/api/unbind',
+    handler(req, res) { return bindingAction(req, res, 'unbind', '/group/api/unbind') },
+  }))
+
   // ---------- 群图片 ----------
   // GET  ?id=<16hex>&ext=png  → 图片字节（内容哈希当 id，所以可以永久缓存）
   // POST { dataUrl }          → { id, ext, bytes, month }，前端拿到后再调 /group/api/send 带 image

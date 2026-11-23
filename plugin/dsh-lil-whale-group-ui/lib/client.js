@@ -25,6 +25,49 @@ window.__ModuleLoader__.load({
     const PANEL_ID = 'group'
     const SETTINGS_ID = 'lil-whale'
 
+    // 会话绑定（fi-0017）：菜单要回答"这段会话现在绑给谁"，数据是异步取的。
+    // contextMenus 的 observe 只要求 getSnapshot/subscribe，给一个可订阅的小格子就够，
+    // 不必把整份名册塞进组件状态里。
+    const bindingStore = (() => {
+      let value = { members: [], pins: {}, bound: [], loaded: false }
+      const listeners = new Set()
+      return {
+        getSnapshot: () => value,
+        subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener) },
+        set(next) { value = next; for (const listener of [...listeners]) listener() },
+      }
+    })()
+    let bindingsFetchedAt = 0
+    async function loadBindings(force = false) {
+      if (!force && Date.now() - bindingsFetchedAt < 3000) return
+      try {
+        const res = await fetch('/group/api/bindings', { cache: 'no-store' })
+        if (!res.ok) return
+        const data = await res.json()
+        bindingsFetchedAt = Date.now()
+        bindingStore.set({
+          members: Array.isArray(data?.members) ? data.members : [],
+          pins: data?.pins && typeof data.pins === 'object' ? data.pins : {},
+          bound: Array.isArray(data?.bound) ? data.bound : [],
+          loaded: true,
+        })
+      } catch {
+        // 网抽风就维持上一份；loaded 还是 false 时菜单会显示"读不到名册"
+      }
+    }
+    async function postBinding(kind, body) {
+      const res = await fetch(`/group/api/${kind}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-llw-panel': '1' },
+        body: JSON.stringify(body),
+      })
+      let data = null
+      try { data = await res.json() } catch { /* 非 JSON 也要报状态码 */ }
+      if (!res.ok) throw new Error(data?.message || data?.error || `HTTP ${res.status}`)
+      await loadBindings(true)
+      return data
+    }
+
     // 宽度：两侧各留 4% 页边距，再宽就压到边框上了
     const WIDTH_MIN = 30
     const WIDTH_MAX = 92
@@ -3882,10 +3925,10 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
     }
 
     return {
-      inject: ['slots'],
+      inject: ['slots', 'contextMenus'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v63 · system-rows:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v64 · session-binding:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')
@@ -3895,6 +3938,60 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
         }
 
         void loadConfig()
+        void loadBindings(true)
+
+        // 会话行「⋯」里的绑定项（fi-0017）。菜单是主路径，行尾图标先不做：
+        // 一段会话只有"绑给谁"这一个事实，菜单里说清楚就够，行尾再挂一个图标要两处同步。
+        ctx.effect(() => ctx.contextMenus.register({
+          id: 'lil-whale.binding',
+          target: 'session',
+          order: 400,
+          observe: () => [bindingStore],
+          resolve: (target) => {
+            const state = bindingStore.getSnapshot()
+            if (!state.loaded) {
+              if (Date.now() - bindingsFetchedAt > 3000) void loadBindings(true)
+              return []
+            }
+            const fish = state.members ?? []
+            if (fish.length === 0) return []
+            const pinned = (state.bound ?? []).find((b) => b.sessionId === target.sessionId) ?? null
+            const pinnedFish = pinned ? fish.find((f) => f.key === pinned.member) : null
+            const pinnedName = pinnedFish?.name ?? pinned?.member ?? ''
+            const items = []
+            if (pinned) {
+              items.push({
+                id: 'lw-bound',
+                label: pinned.exists === false ? `已绑给 ${pinnedName}（会话已不存在）` : `已绑给 ${pinnedName}`,
+                disabled: true,
+              })
+            }
+            items.push({
+              id: 'lw-bind',
+              label: pinned ? '改绑到…' : '绑定该会话至…',
+              icon: { key: 'workspace.pin' },
+              separatorBefore: !pinned,
+              children: fish.map((f) => ({
+                id: `lw-bind-${f.key}`,
+                label: pinned?.member === f.key ? `${f.name}（当前）` : (f.live ? f.name : `${f.name}（未启动）`),
+                run: () => postBinding('bind', { member: f.key, sessionId: target.sessionId })
+                  .then(() => ctx.contextMenus.notify(`已绑给 ${f.name}`, true))
+                  .catch((error) => ctx.contextMenus.notify(`绑定失败：${error?.message ?? error}`, false)),
+              })),
+            })
+            if (pinned) {
+              items.push({
+                id: 'lw-unbind',
+                label: '解绑该会话',
+                icon: { key: 'workspace.unpin' },
+                run: () => postBinding('unbind', { member: pinned.member, sessionId: target.sessionId })
+                  .then(() => ctx.contextMenus.notify(`已解绑 ${pinnedName}`, true))
+                  .catch((error) => ctx.contextMenus.notify(`解绑失败：${error?.message ?? error}`, false)),
+              })
+            }
+            return items
+          },
+        }))
 
         ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
           name: 'sidebar.panellist',

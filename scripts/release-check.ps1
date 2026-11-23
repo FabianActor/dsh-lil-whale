@@ -1,4 +1,4 @@
-#requires -Version 7.0
+﻿#requires -Version 7.0
 # scripts\release-check.ps1 —— 拟发版检查
 #
 # 为什么要有它：平时所有验证都在**工作目录**里做，而工作目录里混着本机配置、临时脚本、
@@ -457,7 +457,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '卡住要说出来' (($stallOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '卡住要说出来' '投递后 4 分钟没动静 ⇒ 私聊系统提示；不叫醒谁、不替她说话（test-stall-core.mjs）' }
   } else { Fail '卡住要说出来' 'scripts\test-stall-core.mjs 不在包里' }
-  # ── 5. 模板残留 ─────────────────────────────────────────────────────
+  # ── 4ax. 会话绑定（2026-11-23：菜单绑/解绑，pins 与 members 一起改；fi-0017）──
+  $bindTest = Join-Path $pkg 'scripts\test-bindings-core.mjs'
+  if (Test-Path $bindTest) {
+    $bindOut = & node $bindTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '会话绑定' (($bindOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '会话绑定' '绑=替换、解绑清两处、会话必须在自己的家里（test-bindings-core.mjs）' }
+  } else { Fail '会话绑定' 'scripts\test-bindings-core.mjs 不在包里' }  # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {
     if (Select-String -Path $tpl -Pattern '\{\{[A-Z_]+\}\}' -Quiet) { Ok '模板占位符' '模板里是占位符（正常），装的时候会填' }

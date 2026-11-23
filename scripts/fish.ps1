@@ -1086,6 +1086,18 @@ function Invoke-Bind([string]$key, [string]$sessionId) {
   return $true
 }
 
+# 解绑：把这个成员现在绑的那一段放掉（pins=[]，members.sessionId=''）。
+# 菜单里点"解绑"走的是同一条规则（bindings-core.js）；命令行这边也要有，否则换台机器就只剩一只手。
+function Invoke-Unbind([string]$key) {
+  if ($key -eq '') { Write-Host 'xx 要指名哪条鱼：unbind <键>（例：unbind xiaoman）'; return $false }
+  $m = Get-Fish $key
+  if (-not $m) { Write-Host ("xx 名册里没有这条鱼：{0}" -f $key); return $false }
+  & node (Join-Path $Cfg.Root 'scripts/bind-member.mjs') --member $key --unbind
+  if ($LASTEXITCODE -ne 0) { Write-Host 'xx 解绑失败（看上面的 NEXT）'; return $false }
+  Write-Host ("✓ {0} 现在没有绑定的会话了" -f $m.Label)
+  Write-Host 'NEXT: 要换一段会话，用 fish.ps1 bind <键> -Session <会话id>；doctor 的「会话绑定」这一格现在会报"还没绑定"。'
+  return $true
+}
 # ---------- 列出候选会话：让用户自己选哪段算谁（2026-11-16 宿主提） ----------
 # 为什么要有这一条：安装脚本不该替用户选会话——尤其不能拿"安装这次开的那段"顶替。
 # 会话 id 是身份绑定（pins.json）：选错 = 叫错人，比叫不动难查。所以这里只列候选，由人选，再用 bind 落定。
@@ -1396,6 +1408,7 @@ try {
     'wake'       { if (-not (Invoke-Wake $Name $By $Why)) { $ok = $false } }
     'sessions'   { if (-not (Invoke-Sessions $Name)) { $ok = $false } }
     'bind'       { $bindKey = if ($Name) { $Name } else { $Key }; if (-not (Invoke-Bind $bindKey $Session)) { $ok = $false } }
+    'unbind'     { $unbindKey = if ($Name) { $Name } else { $Key }; if (-not (Invoke-Unbind $unbindKey)) { $ok = $false } }
     'promote'    { if (-not (Invoke-Promote $Name $Why)) { $ok = $false } }
     'upgrade-check' { if (-not (Invoke-UpgradeCheck $Mark)) { $ok = $false } }
     'upgrade'       { if (-not (Invoke-UpgradeCheck $Mark)) { $ok = $false } }

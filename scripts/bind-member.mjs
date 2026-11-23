@@ -36,10 +36,14 @@ for (let i = 0; i < argv.length; i++) {
   args[key] = next !== undefined && !next.startsWith('--') ? argv[++i] : 'true';
 }
 const memberKey = args.member;
+// 解绑：只要成员，不要会话 id —— 解的是"这个成员现在绑的那一段"。
+const unbind = args.unbind !== undefined;
 const sessionId = args.id;
-if (!memberKey) die('用法：node scripts/bind-member.mjs --member <键> --id <会话id>');
-if (!sessionId) die('缺少 --id（会话 id，形如 session-xxxxxxxx-…）');
-if (!/^session-[0-9a-f-]{20,}$/.test(sessionId)) die(`会话 id 形状不对：${sessionId}`);
+if (!memberKey) die('用法：node scripts/bind-member.mjs --member <键> --id <会话id>（解绑：--member <键> --unbind）');
+if (!unbind) {
+  if (!sessionId) die('缺少 --id（会话 id，形如 session-xxxxxxxx-…）；要解绑请加 --unbind');
+  if (!/^session-[0-9a-f-]{20,}$/.test(sessionId)) die(`会话 id 形状不对：${sessionId}`);
+}
 
 const cfg = readConfig();
 if (!cfg) die('读不到配置（lil-whale.config.json 或 LIL_WHALE_CONFIG）');
@@ -62,6 +66,35 @@ if (!member) die(`members.json 里没有成员：${memberKey}`);
 // 2026-11-16 r216：巡守也能绑（它的会话在自己的 HOME 里；成员是否存在上面已核对）。
 if (member.kind !== 'fish') die(`${memberKey} 不是鱼（kind=${member.kind}）`);
 
+// 记账：bind / unbind 都落一行，别让"解绑"在账上消失（fi-0017）。
+function appendStateLine(action, id) {
+  const logDir = path.join(cfg.poolStateDir || (cfg.poolDir ? path.join(cfg.poolDir, 'state') : ''), '');
+  const logFile = path.join(logDir, 'fish.log');
+  try {
+    fs.mkdirSync(logDir, { recursive: true });
+    const pad = (n) => String(n).padStart(2, '0');
+    const d = new Date();
+    const ts = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    fs.appendFileSync(logFile, `${ts} | ${action} | fmt=1 member=${memberKey} session=${id} by=cli\n`, 'utf8');
+  } catch { /* 记账失败不拦正确的动作 */ }
+}
+
+if (unbind) {
+  const before = JSON.stringify(pins[memberKey] ?? null);
+  pins[memberKey] = [];
+  atomicWriteJson(pinsFile, pins);
+  const was = typeof member.sessionId === 'string' ? member.sessionId : '';
+  if (was !== '') {
+    member.sessionId = '';
+    atomicWriteJson(membersFile, roster);
+  }
+  appendStateLine('unbind', was);
+  console.log(`pins.json: ${memberKey} ${before} -> []`);
+  console.log('members.json: sessionId=""');
+  console.log('NEXT: 这段会话现在只是「一段会话」；要换绑另跑一次 --id。');
+  process.exit(0);
+}
+
 const before = JSON.stringify(pins[memberKey] ?? null);
 pins[memberKey] = [sessionId];
 atomicWriteJson(pinsFile, pins);
@@ -71,15 +104,7 @@ if (member.sessionId !== sessionId) {
   atomicWriteJson(membersFile, roster);
 }
 
-const logDir = path.join(cfg.poolStateDir || (cfg.poolDir ? path.join(cfg.poolDir, 'state') : ''), '');
-const logFile = path.join(logDir, 'fish.log');
-try {
-  fs.mkdirSync(logDir, { recursive: true });
-  const pad = (n) => String(n).padStart(2, '0');
-  const d = new Date();
-  const ts = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-  fs.appendFileSync(logFile, `${ts} | bind | fmt=1 member=${memberKey} session=${sessionId} by=fish.ps1\n`, 'utf8');
-} catch { /* 记账失败不拦正确的动作 */ }
+appendStateLine('bind', sessionId);
 
 console.log(`pins.json: ${memberKey} ${before} -> ${JSON.stringify([sessionId])}`);
 console.log(`members.json: sessionId=${sessionId}`);
