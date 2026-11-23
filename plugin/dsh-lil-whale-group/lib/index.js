@@ -13,6 +13,7 @@ import { printableText } from './text-clean.js'
 import { sayProblemOf, channelProblemOf } from './say-core.js'
 import { noteCodeOf, intentNoteTextOf, watchmanSkipLineOf } from './note-core.js'
 import { classifyStall, stallSentenceOf } from './stall-core.js'
+import { classifyCursorRead, countsKnownOf } from './cursor-core.js'
 import { membersWithKeys } from './members-core.js'
 import { MENTION_ALL, normalizeMention, wantsWake, mentionTextOf, mentionDisplayOf, bumpHeld, heldOf, clearHeld, heldSentenceOf } from './mention-core.js'
 import { codeFingerprint } from './code-fp.js'
@@ -1478,15 +1479,78 @@ function ensureParent(file) {
   }
 }
 
-/** 读这个成员的游标；第一次读不到就从整体 cursor.json 里摘出属于他的键。 */
-function readCursors(member) {
-  const own = readJson(cursorFileOf(member), null)
-  if (own !== null && typeof own === 'object' && !Array.isArray(own)) return own
+/** 第一次读不到自己的游标文件时，从整体 cursor.json 里摘出属于他的键（迁移期用）。 */
+function seededCursorsOf(member) {
   const seeded = {}
   for (const [key, value] of Object.entries(readJson(LEGACY_CURSOR, {}) ?? {})) {
     if (key === member || key.startsWith(`${member}@`)) seeded[key] = value
   }
   return seeded
+}
+
+/** 读这个成员的游标（旧调用口；新代码用 readCursorState 拿来源）。 */
+function readCursors(member) {
+  const own = readJson(cursorFileOf(member), null)
+  if (own !== null && typeof own === 'object' && !Array.isArray(own)) return own
+  return seededCursorsOf(member)
+}
+
+// 2026-11-23（fi-0013）：读游标也要能回答"从哪儿读到的"。
+// 旧代码里三件事全变成 0：文件里没有这一格 / 文件不见了 / 文件坏了 ——
+// 于是"第一次读"和"进度丢了"长得一样，唤醒词还替人编条数（fi-0015）。
+// 这里只区分来源，起点怎么算交给 cursor-core.classifyCursorRead。
+function readCursorState(member) {
+  const file = cursorFileOf(member)
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    let text
+    try {
+      text = readFileSync(file, 'utf8')
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
+        const seeded = seededCursorsOf(member)
+        return { cursors: seeded, source: Object.keys(seeded).length === 0 ? 'missing' : 'legacy' }
+      }
+      continue
+    }
+    try {
+      const json = JSON.parse(text)
+      if (json !== null && typeof json === 'object' && !Array.isArray(json)) {
+        return { cursors: json, source: 'file' }
+      }
+    } catch {
+      // 读坏了：可能是半截写入，再试一次；三次都不行就当 unknown。
+    }
+  }
+  return { cursors: {}, source: 'unknown' }
+}
+
+// 2026-11-23（fi-0013/0014）：上一次**真的递到**第几行。
+// 游标文件被写过、删过、退回 0 时，拿它当底线：stored < last-delivered ⇒ 不重放。
+// 按成员存一盒（钥匙是通道），不再多一个文件/成员。
+const CURSOR_META_DIR = join(POOL_STATE, 'cursor-meta')
+function cursorMetaFileOf(member) {
+  return join(CURSOR_META_DIR, `${member}.json`)
+}
+function readCursorMeta(member) {
+  const raw = readJson(cursorMetaFileOf(member), null)
+  const channels = raw !== null && typeof raw === 'object' && raw.channels !== null && typeof raw.channels === 'object'
+    ? raw.channels
+    : {}
+  return { fmt: 1, channels }
+}
+function lastDeliveredOf(member, channelKey) {
+  const n = readCursorMeta(member).channels?.[channelKey]?.delivered
+  return typeof n === 'number' && Number.isFinite(n) ? n : null
+}
+function noteDelivered(member, channelKey, delivered) {
+  try {
+    const meta = readCursorMeta(member)
+    meta.channels[channelKey] = { delivered, at: new Date().toISOString() }
+    mkdirSync(CURSOR_META_DIR, { recursive: true })
+    writeJson(cursorMetaFileOf(member), meta)
+  } catch (error) {
+    logLine({ note: 'cursor-meta-write-failed', member, channel: channelKey, error: String(error?.message ?? error).slice(0, 80) })
+  }
 }
 
 /**
@@ -2829,7 +2893,7 @@ async function tick(ctx) {
     if (agent.status !== 'idle') continue // 正在跑就先别插嘴，下个 tick 再说
 
     // 记账按成员分开读：这段进程只管它自己那几个成员，别再攥着别人的旧快照
-    const cursors = readCursors(member)
+    const cursorState = readCursorState(member)
     const wakes = readWakes(member)
 
     // 两条通道分别记账：群一条，私聊每一段对话一条。
@@ -2843,7 +2907,7 @@ async function tick(ctx) {
 
     // 一次只唤醒一件事：这条通道叫醒了，别的下个 tick 再说。
     for (const channel of channels) {
-      const woke = handleChannel({ agent, member, seat: seatOfSession(sessionIdOf(agent)), channel, cursors, wakes })
+      const woke = handleChannel({ agent, member, seat: seatOfSession(sessionIdOf(agent)), channel, cursorState, wakes })
       if (woke) {
         try {
           const v = ctx.get('tools')?.view?.(agent)
@@ -2867,8 +2931,11 @@ const clampLogged = new Set()
 // 不是"永远一次"** —— Set 不落盘，巡守重启后游标若还丢着，同一通道会再记一条；
 // 连续证据看 wake-deliver.log 每行的 cursor-state=lost。
 const cursorLostLogged = new Set()
+// 来源不明/回退/夹边界：同一成员同一通道每进程只记一行。
+const cursorSourceLogged = new Set()
 
-function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
+function handleChannel({ agent, member, seat, channel, cursorState, wakes }) {
+  const cursors = cursorState?.cursors ?? {}
   const lines = readLinesOf(channel.file)
   if (lines.length === 0) return false
 
@@ -2882,8 +2949,32 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
   // 判据：读的时候把游标夹到 lines.length 以内；真夹了要留痕 —— 错的时候跟对的时候不能长得一样。
   const sharedSeenStored = cursorOf(cursors, member, channel.key)
   const seatSeenStored = cursorOf(cursors, seatKey, channel.key)
-  const sharedSeen = Math.min(sharedSeenStored, lines.length)
-  const seatSeen = Math.min(seatSeenStored, lines.length)
+  // 2026-11-23（fi-0013/0014/0015）：起点不再由"0 或文件里那个数"直接决定。
+  //   file/legacy  = 读到了，照常走；
+  //   missing/unknown = 没读到（不是 0），只看最近一小段，且不声称知道条数；
+  //   capped       = 游标比文件还长，夹到文件尾（旧行为，留痕）；
+  //   regressed    = 比"上一次真递到的地方"还小 ⇒ 不重放，从那里接着走。
+  const read = classifyCursorRead({
+    source: cursorState?.source ?? 'file',
+    stored: sharedSeenStored,
+    lastDelivered: lastDeliveredOf(member, channel.key),
+    lines: lines.length,
+  })
+  const sharedSeen = Math.min(read.start, lines.length)
+  // 读不到进度 / 回退时，座位游标也不可信：跟同一条起点走；正常时各算各的。
+  const seatSeen = read.unknown || read.regressed ? sharedSeen : Math.min(seatSeenStored, lines.length)
+  if (read.src !== 'file' && !cursorSourceLogged.has(`${member}:${channel.key}`)) {
+    cursorSourceLogged.add(`${member}:${channel.key}`)
+    logLine({
+      note: 'cursor-source', member, channel: channel.key, src: read.src,
+      stored: read.stored, start: read.start, lastDelivered: read.lastDelivered,
+      capped: read.capped ? 'yes' : 'no', regressed: read.regressed ? 'yes' : 'no',
+      counts: countsKnownOf(read) ? 'known' : 'unknown', lines: lines.length,
+    })
+    if (read.regressed) {
+      logLine({ note: 'cursor-regress', member, channel: channel.key, stored: read.stored, lastDelivered: read.lastDelivered, start: read.start })
+    }
+  }
   // 2026-11-15 20:3x：游标这一格是 0、但工程账上有过投递 —— 那不是新生，是丢了。
   // 去重用的 Set 在模块层（上面），同一通道只记一次。
   const clampKey = `${member}:${channel.key}`
@@ -2945,13 +3036,15 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
     lastIncomingIndex = index
   }
 
-  if (heldDelta > 0) noteHeld(member, channel.key, heldDelta, heldLastLine + 1, heldLastTs)
+  // 读不到进度时，扫到的这一小段里大部分是旧的；当成"没叫醒的"去数，等于换个地方编数。
+  if (heldDelta > 0 && !read.unknown) noteHeld(member, channel.key, heldDelta, heldLastLine + 1, heldLastTs)
 
   // 没有写给我的，也把游标推过去，免得下次重复扫
   if (incoming.length === 0) {
     setCursor(cursors, member, channel.key, lines.length)
     setCursor(cursors, seatKey, channel.key, lines.length)
     writeCursors(member, cursors)
+    noteDelivered(member, channel.key, lines.length)
     return false
   }
 
@@ -3010,7 +3103,7 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
   // 判据用"递之前游标是不是 0"：0 = 头一回读这个通道；否则 = 离开过一段时间再回来。
   // 用词也别替她断言原因：窗关着、睡着、刚出生，在投递层看来是同一件事。
   const firstRead = sharedSeenStored === 0
-  const cursorLost = firstRead && hadPriorDelivery(member, channel.key)
+  const cursorLost = !read.unknown && firstRead && hadPriorDelivery(member, channel.key)
   if (cursorLost && !cursorLostLogged.has(`${member}:${channel.key}`)) {
     cursorLostLogged.add(`${member}:${channel.key}`)
     logLine({ note: 'cursor-lost', member, channel: channel.key, lines: lines.length })
@@ -3027,10 +3120,12 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
     backlog,
     // 2026-11-22 r413：这一批是不是"点了你名字"才来的。老记录（无 mention）按老话说"新的"。
     woken: incoming.every((record) => record.mention !== undefined) ? 'mention' : 'legacy',
+    // 2026-11-23（fi-0015）：读不到进度时，文案不许报具体条数。
+    src: read.src,
   })
   const target = channel.kind === 'dm' ? channel.file : READABLE
   // 没叫醒你的那些话，也要在预览里露一次头（2026-11-22）。
-  const heldCount = channel.kind === 'group' ? heldCountOf(member, channel.key) : 0
+  const heldCount = channel.kind === 'group' && !read.unknown ? heldCountOf(member, channel.key) : 0
   const heldSentence = heldSentenceOf(heldCount)
 
   // 护栏：宿主构造器没解析到、或造出来的东西没有 id，就别往会话里塞。
@@ -3062,7 +3157,7 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
     : Array.isArray(lastRecord?.mention)
       ? (lastRecord.mention.length === 0 ? 'none' : lastRecord.mention.join('+'))
       : 'legacy'
-  const deliveryNote = `id=${built.id} member=${member} mention=${mentionTag} held=${heldCount} channel=${channel.key} seat=${seat === '' ? '-' : seat} pending=${incoming.length} last-line=${lastIncomingIndex + 1} last-from=${incoming[incoming.length - 1]?.from ?? '-'} last-ts=${lastTs || 0} cursor=${lines.length} prior-cursor=${sharedSeenStored} cursor-state=${cursorLost ? "lost" : firstRead ? "first" : "resumed"} tpl=${tpl} n=${incoming.length} tail=${tailTpl} wtext8=${wtext8} human=${humanIncoming ? 'yes' : 'no'} pkg=${PKG_VERSION}`
+  const deliveryNote = `id=${built.id} member=${member} mention=${mentionTag} held=${heldCount} channel=${channel.key} seat=${seat === '' ? '-' : seat} pending=${incoming.length} last-line=${lastIncomingIndex + 1} last-from=${incoming[incoming.length - 1]?.from ?? '-'} last-ts=${lastTs || 0} cursor=${lines.length} prior-cursor=${sharedSeenStored} cursor-state=${read.unknown ? "unknown" : cursorLost ? "lost" : firstRead ? "first" : "resumed"} src=${read.src} start=${read.start} counts=${countsKnownOf(read) ? "known" : "unknown"} tpl=${tpl} n=${incoming.length} tail=${tailTpl} wtext8=${wtext8} human=${humanIncoming ? 'yes' : 'no'} pkg=${PKG_VERSION}`
   try {
     agent.followup(built)
   } catch (error) {
@@ -3086,6 +3181,7 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
   setCursor(cursors, member, channel.key, lines.length)
   setCursor(cursors, seatKey, channel.key, lines.length)
   writeCursors(member, cursors)
+  noteDelivered(member, channel.key, lines.length)
   recordWake(wakes, member)
   pending.delete(pendingKey)
   console.log(`[${name}] 唤醒 ${labelOf(member)}（${seat}）：${channel.key} ${incoming.length} 条`)

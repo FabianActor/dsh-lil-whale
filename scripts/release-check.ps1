@@ -1,4 +1,4 @@
-﻿#requires -Version 7.0
+#requires -Version 7.0
 # scripts\release-check.ps1 —— 拟发版检查
 #
 # 为什么要有它：平时所有验证都在**工作目录**里做，而工作目录里混着本机配置、临时脚本、
@@ -471,6 +471,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '鱼塘换绑' (($pondBindOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '鱼塘换绑' '候选只列她家里的会话；菜单不在了；build v65（test-pond-bind.mjs）' }
   } else { Fail '鱼塘换绑' 'scripts\test-pond-bind.mjs 不在包里' }
+  # ── 4az. 游标读到了什么（2026-11-23：来源/回退/读不到三件分开；fi-0013/14/15）──
+  $cursorTest = Join-Path $pkg 'scripts\test-cursor-source.mjs'
+  if (Test-Path $cursorTest) {
+    $cursorOut = & node $cursorTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '游标来源' (($cursorOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '游标来源' 'file/legacy/missing/unknown 分开；回退不重放；读不到不报条数（test-cursor-source.mjs）' }
+  } else { Fail '游标来源' 'scripts\test-cursor-source.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {

@@ -113,6 +113,27 @@ function eq(name, got, want) {
   eq('默认是群文件（调用方没传通道时）', previewTextOf('一'.repeat(121)).endsWith('全文在群文件里）'), true)
 }
 
+// ---------- 读不到进度：不报条数（fi-0015，2026-11-23） ----------
+// 旧实现把"文件有 1354 行、游标读不到"写成"积了 1354 条"——
+// 那 1300 多条早就读过。这里锁的是：缺失/损坏两档，一个数字都不出现。
+for (const src of ['missing', 'unknown']) {
+  const r = wakeWordingOf({ kind: 'group', who: '小满', count: 1354, firstRead: true, cursorLost: false, backlog: true, src })
+  eq(`${src} 群：正文不出现条数`, /\d/.test(r.where), false)
+  eq(`${src} 群：正文说"读进度找不到了"`, r.where.includes('读进度找不到了'), true)
+  eq(`${src} 群：模板 id`, r.tpl, 'group-unknown@1')
+  eq(`${src} 群：尾巴说"不重放"`, r.tailHint.includes('不重放'), true)
+  const d = wakeWordingOf({ kind: 'dm', dmWho: 'Fabian', count: 1107, firstRead: true, cursorLost: true, backlog: true, src })
+  eq(`${src} 私聊：正文不出现条数`, /\d/.test(d.where), false)
+  eq(`${src} 私聊：模板 id`, d.tpl, 'dm-unknown@1')
+  eq(`${src} 私聊：尾巴 id`, d.tailTpl, 'tail-unknown@1')
+}
+// 正常读到时，条数仍然要有——别把"读不到"的补丁用到"读得到"上。
+{
+  const r = wakeWordingOf({ kind: 'group', who: '小满', count: 76, firstRead: false, cursorLost: false, backlog: true, src: 'file' })
+  eq('file 源仍报条数', r.where.includes('76'), true)
+  eq('file 源模板不变', r.tpl, 'group-backlog@2')
+}
+
 console.log(`test-wake-preview：合计 ${pass + fail}，PASS ${pass}，FAIL ${fail}`)
 if (fail > 0) {
   console.log(failures.join('\n'))

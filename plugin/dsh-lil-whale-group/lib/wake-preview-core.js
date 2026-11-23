@@ -18,9 +18,16 @@ import { createHash } from 'node:crypto'
 // 2026-11-22 r413：群消息不再写 to，叫醒只看 mention。预览措辞也跟着改——
 // 旧话"群里有 N 条新的"在新机制下是对的，但不够；点了名才叫醒的，要说"点了你名字的"。
 // 老记录（没有 mention 字段）仍按老话说"新的"，因为它确实可能是 to=all 广播。
-export function wakeWordingOf({ kind, who, dmWho = '', count, firstRead, cursorLost, backlog, woken = 'mention' }) {
+export function wakeWordingOf({ kind, who, dmWho = '', count, firstRead, cursorLost, backlog, woken = 'mention', src = 'file' }) {
   const pointed = woken === 'mention' ? '点了你名字的' : '新的'
-  const where = kind === 'dm'
+  // 2026-11-23（fi-0015）：读进度读不到时，不许把"文件有多少行"当成"积了多少条"。
+  // 这条分支里一个数字都不出现——"最近几条"是摆出来的事实，"1107 条"才是编的。
+  const unknown = src === 'missing' || src === 'unknown'
+  const where = unknown
+    ? kind === 'dm'
+      ? `${dmWho} 私下说了几句话；你在这条私聊里的读进度找不到了，只把最近几条摆给你看`
+      : `群里有些话；你在这个群的读进度找不到了（游标这一格读不出来），只把最近几条摆给你看`
+    : kind === 'dm'
     ? `${dmWho} 私下跟你说了 ${count} 句`
     : backlog
       ? firstRead
@@ -29,7 +36,9 @@ export function wakeWordingOf({ kind, who, dmWho = '', count, firstRead, cursorL
           : `群里现在有 ${count} 条${pointed}（${who}）——你还没读过这个群（还没有游标）`
         : `你不在的这段时间，群里积了 ${count} 条${pointed}（${who}）`
       : `群里有 ${count} 条${pointed}（${who}）`
-  const tailHint = backlog
+  const tailHint = unknown
+    ? '更早的这次不重放；想看就去翻文件。'
+    : backlog
     ? firstRead
       ? '先看最后三条；前面的不用补，想看再翻。'
       : '先看最后三条，再看看有没有指名你的。'
@@ -41,14 +50,16 @@ export function wakeWordingOf({ kind, who, dmWho = '', count, firstRead, cursorL
   // 2026-11-15 21:3x，第三条鱼：tpl 记的是"哪一句"，不记"哪一版"——明天文案改了，
   // tpl 还是同一个 id，旧行对应的句子在代码里已经不存在，而且没有任何地方会报。
   // 所以 id 带版本：任何一句文案的改动都必须把 @N 加一（改句子 = 改 id，diff 里看得见）。
-  const tpl = kind === 'dm'
+  const tpl = unknown
+    ? kind === 'dm' ? 'dm-unknown@1' : 'group-unknown@1'
+    : kind === 'dm'
     ? 'dm@1'
     : backlog
       ? firstRead
         ? cursorLost ? 'group-lost@2' : 'group-first@2'
         : 'group-backlog@2'
       : 'group-plain@2'
-  const tailTpl = backlog ? (firstRead ? 'tail-no-backfill@1' : 'tail-named@1') : 'tail-go@1'
+  const tailTpl = unknown ? 'tail-unknown@1' : backlog ? (firstRead ? 'tail-no-backfill@1' : 'tail-named@1') : 'tail-go@1'
   // 2026-11-15 21:3x，第二条鱼：tpl 锁的是"选了哪一句"，锁不住"句子里那个数对不对"。
   // 渲染后整句的短指纹跟 tpl 一起记，才能事后重算出同一句话；
   // 变量（n / 谁）本来就在同一行里，所以可复核 = 这一行 + 这个版本的代码。
