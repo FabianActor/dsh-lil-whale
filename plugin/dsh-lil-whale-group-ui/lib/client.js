@@ -3971,13 +3971,20 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
               label: pinned ? '改绑到…' : '绑定该会话至…',
               icon: { key: 'workspace.pin' },
               separatorBefore: !pinned,
-              children: fish.map((f) => ({
+              children: [
+                {
+                  id: 'lw-bind-note',
+                  label: '换绑后下次醒来是这段会话，原来的上下文不再续',
+                  disabled: true,
+                },
+                ...fish.map((f) => ({
                 id: `lw-bind-${f.key}`,
                 label: pinned?.member === f.key ? `${f.name}（当前）` : (f.live ? f.name : `${f.name}（未启动）`),
                 run: () => postBinding('bind', { member: f.key, sessionId: target.sessionId })
-                  .then(() => ctx.contextMenus.notify(`已绑给 ${f.name}`, true))
+                  .then(() => ctx.contextMenus.notify(`已绑给 ${f.name}；下次醒来是这段会话，原来的上下文不再续`, true))
                   .catch((error) => ctx.contextMenus.notify(`绑定失败：${error?.message ?? error}`, false)),
-              })),
+                })),
+              ],
             })
             if (pinned) {
               items.push({
@@ -3985,7 +3992,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
                 label: '解绑该会话',
                 icon: { key: 'workspace.unpin' },
                 run: () => postBinding('unbind', { member: pinned.member, sessionId: target.sessionId })
-                  .then(() => ctx.contextMenus.notify(`已解绑 ${pinnedName}`, true))
+                  .then(() => ctx.contextMenus.notify(`已解绑 ${pinnedName}；下次启动没有会话，需要重新绑定`, true))
                   .catch((error) => ctx.contextMenus.notify(`解绑失败：${error?.message ?? error}`, false)),
               })
             }

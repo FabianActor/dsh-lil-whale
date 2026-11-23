@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig } from './lib/config-path.mjs';
+import { bindingProblem } from '../plugin/dsh-lil-whale-group-ui/lib/bindings-core.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -65,6 +66,14 @@ const member = roster?.members?.[memberKey];
 if (!member) die(`members.json 里没有成员：${memberKey}`);
 // 2026-11-16 r216：巡守也能绑（它的会话在自己的 HOME 里；成员是否存在上面已核对）。
 if (member.kind !== 'fish') die(`${memberKey} 不是鱼（kind=${member.kind}）`);
+
+// 绑之前过一遍和面板、菜单同一个判定（bindings-core）：会话在家、工作区对得上。
+// 三个入口共用一层，才不会各认一个答案（fi-0017）。
+if (!unbind) {
+  const pondRoot = cfg.poolDir ? path.resolve(cfg.poolDir, '..') : null;
+  const problem = bindingProblem({ roster, memberKey, sessionId, pondRoot });
+  if (problem) die(problem.message);
+}
 
 // 记账：bind / unbind 都落一行，别让"解绑"在账上消失（fi-0017）。
 function appendStateLine(action, id) {

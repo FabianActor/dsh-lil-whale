@@ -1219,7 +1219,7 @@ export function apply(ctx) {
     const roster = readRosterFile()
     const pins = readPinsFile()
     const problem = kind === 'bind'
-      ? bindingProblem({ roster, memberKey: member, sessionId })
+      ? bindingProblem({ roster, memberKey: member, sessionId, pondRoot: join(config().poolDir || join(GROUP_DIR, '..'), '..') })
       : unbindProblem({ pins, memberKey: member, sessionId })
     if (problem) {
       return sendJson(res, problem.status, {

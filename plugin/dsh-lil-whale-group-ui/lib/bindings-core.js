@@ -12,7 +12,7 @@
  *   - 菜单里"绑"= 替换（pins[成员] = [这段会话]）；一个成员多段会话这门语言还不支持。
  *   - 解绑 = pins[成员] = []，members.json 的 sessionId 一起清空；两处必须一起改。
  */
-import { existsSync, readdirSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 /** 会话 id 的形状：`session-` + uuid。和 scripts/bind-member.mjs 用同一条。 */
@@ -82,20 +82,82 @@ export function findBinding(pins, sessionId) {
 }
 
 /**
+ * 这段会话登记在哪个工作区（读 `<dshHome>\storages\workspace.json` 的 tables.workspaces）。
+ *
+ * 为什么要这一格：会话自带创建时的工作区，醒来时的 cwd 就是它。绑一段"在 default-workspace
+ * 或别人家里建的"会话，她醒来会站在错的地方——文件工具与沙箱按错的根走，写不进或写错处。
+ * 返回 null = 没有登记（未分组），由调用方决定放不放行。
+ */
+export function workspacePathOf(home, sessionId) {
+  const id = sessionIdOf(sessionId)
+  if (!home || !id) return null
+  const file = join(home, 'storages', 'workspace.json')
+  if (!existsSync(file)) return null
+  let data
+  try {
+    data = JSON.parse(readFileSync(file, 'utf8'))
+  } catch {
+    return null
+  }
+  const tables = data?.tables?.workspaces
+  if (!tables || typeof tables !== 'object') return null
+  for (const ws of Object.values(tables)) {
+    const ids = Array.isArray(ws?.sessionIds) ? ws.sessionIds : []
+    if (ids.includes(id)) return typeof ws.path === 'string' ? ws.path : null
+  }
+  return null
+}
+
+/** 路径比较用：斜杠归一、去尾斜杠、大小写不敏感（Windows 上这两条路是同一个地方）。 */
+export function normalizePath(value) {
+  return String(value ?? '')
+    .trim()
+    .replace(/[\\/]+/g, '\\')
+    .replace(/\\$/, '')
+    .toLowerCase()
+}
+
+function underRoot(value, root) {
+  const a = normalizePath(value)
+  const b = normalizePath(root)
+  if (!a || !b) return false
+  return a === b || a.startsWith(b + '\\')
+}
+
+/**
  * 能不能绑。返回 null 表示可以；否则给出给人看的理由（HTTP 状态 + 机器码 + 人话）。
  * 人话里带上"这段会话不在谁家里"，别只说 400。
+ *
+ * 工作区那一格（Fi-0017 的补充）：
+ *   - 普通鱼：会话登记的工作区必须就是她的家（`member.home`）；不在自己家的拒绝。
+ *   - 巡守（宿主自己）：他的工作区是鱼塘根（`D:\…\lil-whale`），不是 `~\.dsh`，所以只要求
+ *     在鱼塘里面（`pondRoot`）；会话文件仍在 `dshHome\sessions` 下这条不变。
+ *   - 没登记工作区的会话：放行（r261 那种"未分组"），否则第一段会话反而绑不上。
  */
-export function bindingProblem({ roster, memberKey, sessionId }) {
+export function bindingProblem({ roster, memberKey, sessionId, pondRoot }) {
   const id = sessionIdOf(sessionId)
   if (!id) return { status: 400, error: 'bad-session-id', message: '会话 id 形如 session-xxxxxxxx-…' }
   const member = (roster?.members ?? roster ?? {})[memberKey]
   if (!member) return { status: 400, error: 'no-member', message: `名册里没有成员：${memberKey}` }
   if (member.kind !== 'fish') return { status: 400, error: 'not-fish', message: `${memberKey} 不是鱼（kind=${member.kind}），不能绑会话` }
   const home = homeOfMember(member)
+  const name = typeof member.name === 'string' && member.name.trim() ? member.name.trim() : memberKey
   if (!home) return { status: 400, error: 'no-home', message: `名册里没有 ${memberKey} 的 dshHome` }
   if (!sessionExistsInHome(home, id)) {
-    const name = typeof member.name === 'string' && member.name.trim() ? member.name.trim() : memberKey
     return { status: 400, error: 'session-not-in-home', message: `这段会话不在 ${name} 的家里（${home}），不绑` }
+  }
+  const wsPath = workspacePathOf(home, id)
+  if (wsPath) {
+    if (member.role === 'watcher') {
+      if (pondRoot && !underRoot(wsPath, pondRoot)) {
+        return { status: 409, error: 'session-workspace-outside-pond', message: `这段会话的工作区在鱼塘外面（${wsPath}），不绑给 ${name}` }
+      }
+    } else {
+      const own = typeof member.home === 'string' && member.home.trim() ? member.home.trim() : home
+      if (normalizePath(wsPath) !== normalizePath(own)) {
+        return { status: 409, error: 'session-workspace-mismatch', message: `这段会话登记在别的工作区（${wsPath}），醒来 cwd 不是 ${name} 的家（${own}）；换一段在她家里建的会话` }
+      }
+    }
   }
   return null
 }

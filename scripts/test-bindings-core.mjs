@@ -16,6 +16,8 @@ import {
   sessionIdOf,
   homeOfMember,
   sessionExistsInHome,
+  workspacePathOf,
+  normalizePath,
   fishOf,
   findBinding,
   bindingProblem,
@@ -85,6 +87,63 @@ check('拒的理由里带她的家', String(notInHome?.message ?? '').includes(h
 check('绑人类：拒', bindingProblem({ roster, memberKey: 'fabian', sessionId: SID })?.error === 'not-fish')
 check('绑不存在的成员：拒', bindingProblem({ roster, memberKey: 'nobody', sessionId: SID })?.error === 'no-member')
 check('坏 id：拒', bindingProblem({ roster, memberKey: 'lee', sessionId: 'zzz' })?.error === 'bad-session-id')
+
+// ---------- 3b) 工作区那一格（fi-0017 补充） ----------
+// 普通鱼：会话登记的工作区必须是她自己的家；巡守：只要在鱼塘里。
+const homeC = join(tmp, 'homeC')
+mkdirSync(join(homeC, 'dsh-home', 'sessions', '--proj-c--', SID2), { recursive: true })
+writeFileSync(join(homeC, 'dsh-home', 'sessions', '--proj-c--', SID2, 'session.v4.jsonl.zstd'), 'x')
+mkdirSync(join(homeC, 'dsh-home', 'storages'), { recursive: true })
+writeFileSync(join(homeC, 'dsh-home', 'storages', 'workspace.json'), JSON.stringify({
+  unit: { name: 'workspace', version: 2 },
+  tables: { workspaces: { w1: { path: homeC, sessionIds: [SID2] } } },
+}))
+const rosterWithHome = {
+  members: {
+    ...roster.members,
+    whale: { name: '小肥鱼', kind: 'fish', role: 'member', home: homeC, dshHome: join(homeC, 'dsh-home') },
+  },
+}
+check('工作区 = 自己的家：放行', bindingProblem({ roster: rosterWithHome, memberKey: 'whale', sessionId: SID2 }) === null)
+
+// 同一段会话，登记在别的工作区
+writeFileSync(join(homeC, 'dsh-home', 'storages', 'workspace.json'), JSON.stringify({
+  unit: { name: 'workspace', version: 2 },
+  tables: { workspaces: { w1: { path: homeA, sessionIds: [SID2] } } },
+}))
+const mismatch = bindingProblem({ roster: rosterWithHome, memberKey: 'whale', sessionId: SID2 })
+check('工作区在别人家：拒', mismatch?.error === 'session-workspace-mismatch')
+check('拒的话里有登记路径与自己的家', Boolean(mismatch?.message?.includes(homeA) && mismatch?.message?.includes(homeC)))
+
+// 巡守的会话（SID）登记在鱼塘根 tmp
+mkdirSync(join(homeA, 'storages'), { recursive: true })
+writeFileSync(join(homeA, 'storages', 'workspace.json'), JSON.stringify({
+  unit: { name: 'workspace', version: 2 },
+  tables: { workspaces: { w1: { path: tmp, sessionIds: [SID] } } },
+}))
+
+// 巡守：工作区在鱼塘里 → 放行；在鱼塘外 → 拒
+writeFileSync(join(homeC, 'dsh-home', 'storages', 'workspace.json'), JSON.stringify({
+  unit: { name: 'workspace', version: 2 },
+  tables: { workspaces: { w1: { path: tmp, sessionIds: [SID2] } } },
+}))
+check('巡守：工作区在鱼塘里：放行', bindingProblem({ roster, memberKey: 'lee', sessionId: SID, pondRoot: tmp }) === null)
+check('巡守：工作区在鱼塘外 → 拒', bindingProblem({ roster, memberKey: 'lee', sessionId: SID, pondRoot: join(tmp, 'outside') })?.error === 'session-workspace-outside-pond')
+
+// 没登记工作区的会话：放行（r261 那种未分组）
+check('未登记工作区：放行', bindingProblem({ roster, memberKey: 'lee', sessionId: SID_EMPTY, pondRoot: tmp }) === null)
+
+// 没有 workspace.json 的家：放行
+const homeD = join(tmp, 'homeD')
+mkdirSync(join(homeD, 'sessions', '--proj-d--', SID), { recursive: true })
+writeFileSync(join(homeD, 'sessions', '--proj-d--', SID, 'session.v4.jsonl.zstd'), 'x')
+const rosterD = { members: { ...roster.members, xiaoman: { name: '小满', kind: 'fish', role: 'member', dshHome: homeD } } }
+check('家里没有 workspace.json：放行', bindingProblem({ roster: rosterD, memberKey: 'xiaoman', sessionId: SID }) === null)
+
+// 路径比较：斜杠、尾斜杠、大小写都归一
+check('normalizePath 归一斜杠与大小写', normalizePath('D:\\A\\B\\') === normalizePath('d:/a/b'))
+check('workspacePathOf 读得出登记路径', workspacePathOf(homeA, SID) === tmp)
+check('workspacePathOf 未登记 → null', workspacePathOf(homeA, SID_EMPTY) === null)
 
 const pins0 = { lee: [SID], whale: [] }
 check('解绑没绑着的：409', unbindProblem({ pins: pins0, memberKey: 'whale', sessionId: SID })?.status === 409)
