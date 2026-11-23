@@ -276,16 +276,24 @@ if (Test-Path -LiteralPath $membersProbe) {
     }
   } catch { Warn "members.json 读不了（$membersProbe）：这次不查端口登记" }
 }
-$port = Find-FreePort $portWanted
-for ($i = 0; $i -lt 50 -and $port -gt 0; $i++) {
-  if (-not $registeredPorts.ContainsKey($port)) { break }
-  $owner = $registeredPorts[$port]
-  # 自己登记的口不挡自己（2026-11-23，测试机 U2：原地升级/重装时不该被自己的号挤走）。
-  # 2026-11-23 P2：有效成员键可能是 ChildProfile（没传 -ChildMemberId 时）——先算有效键再比。
-  $effectiveChild = if ($ChildMemberId) { $ChildMemberId } else { $ChildProfile }
-  if ($owner -eq $effectiveChild) { break }
-  Warn ("端口 {0} 已被 {1} 登记，跳过" -f $port, $owner)
-  $port = Find-FreePort ($port + 1)
+# 2026-11-23 P2：有效成员键可能是 ChildProfile（没传 -ChildMemberId 时）——先算有效键再比。
+$effectiveChild = if ($ChildMemberId) { $ChildMemberId } else { $ChildProfile }
+# 2026-11-24 D6：-Upgrade 时这条鱼可能正监听自己登记的口——那不算"被占"，直接沿用。
+# （Find-FreePort 会把正在监听的 3082 跳过、给出 3083；后面"owner 是不是自己"根本没机会看到它。）
+$port = 0
+if ($Upgrade -and $registeredPorts.ContainsKey($portWanted) -and $registeredPorts[$portWanted] -eq $effectiveChild) {
+  $port = $portWanted
+  Note ("原地升级：沿用 {0} 自己登记的端口 {1}（它可能正在监听）" -f $effectiveChild, $port)
+} else {
+  $port = Find-FreePort $portWanted
+  for ($i = 0; $i -lt 50 -and $port -gt 0; $i++) {
+    if (-not $registeredPorts.ContainsKey($port)) { break }
+    $owner = $registeredPorts[$port]
+    # 自己登记的口不挡自己（2026-11-23，测试机 U2：原地升级/重装时不该被自己的号挤走）。
+    if ($owner -eq $effectiveChild) { break }
+    Warn ("端口 {0} 已被 {1} 登记，跳过" -f $port, $owner)
+    $port = Find-FreePort ($port + 1)
+  }
 }
 if ($port -eq 0) { Die "从 $portWanted 往上 50 个口都被占了。" "换 -ChildPort 指定一个空口，然后重跑 install.ps1" }
 

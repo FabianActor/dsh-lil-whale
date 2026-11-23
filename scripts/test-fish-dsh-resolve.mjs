@@ -37,5 +37,10 @@ need(/只在最近 3 份|只保留最近 3 份|Skip 3/.test(install), 'install.p
 need(/另加手写的 group_say/.test(install), 'install.ps1 的工具数口径没说明 group_say（D3）');
 need(/'自启动开关' 'INFO'/.test(read('../scripts/verify-pending.ps1')), 'verify-pending 的自启动开关仍是 WARN（D4）');
 
-console.log(fail.length ? `FAIL test-fish-dsh-resolve（${fail.length}）：\n  - ${fail.join('\n  - ')}` : 'PASS test-fish-dsh-resolve（25 条）');
+
+// 测试机第四份（D6）：-Upgrade 时沿用自己登记的端口
+need(/原地升级：沿用/.test(install), '-Upgrade 没有"沿用自己登记的端口"的分支（D6）');
+need(/if \(\$Upgrade -and \$registeredPorts\.ContainsKey\(\$portWanted\)/.test(install), 'D6 分支条件不在（没检查 -Upgrade 与登记）');
+
+console.log(fail.length ? `FAIL test-fish-dsh-resolve（${fail.length}）：\n  - ${fail.join('\n  - ')}` : 'PASS test-fish-dsh-resolve（27 条）');
 process.exit(fail.length ? 1 : 0);
