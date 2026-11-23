@@ -450,6 +450,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '共享账裸行' (($notesOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '共享账裸行' 'fmt=3 之后不许裸行；老缺口只数不红（test-watchman-notes.mjs）' }
   } else { Fail '共享账裸行' 'scripts\test-watchman-notes.mjs 不在包里' }
+  # ── 4aw. 卡住要说出来（2026-11-23：投递后 4 分钟还忙、会话没新写入 ⇒ 私聊里一条系统提示；fi-0016）──
+  $stallTest = Join-Path $pkg 'scripts\test-stall-core.mjs'
+  if (Test-Path $stallTest) {
+    $stallOut = & node $stallTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '卡住要说出来' (($stallOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '卡住要说出来' '投递后 4 分钟没动静 ⇒ 私聊系统提示；不叫醒谁、不替她说话（test-stall-core.mjs）' }
+  } else { Fail '卡住要说出来' 'scripts\test-stall-core.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {

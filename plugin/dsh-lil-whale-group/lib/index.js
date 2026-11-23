@@ -12,6 +12,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renam
 import { printableText } from './text-clean.js'
 import { sayProblemOf, channelProblemOf } from './say-core.js'
 import { noteCodeOf, intentNoteTextOf, watchmanSkipLineOf } from './note-core.js'
+import { classifyStall, stallSentenceOf } from './stall-core.js'
 import { membersWithKeys } from './members-core.js'
 import { MENTION_ALL, normalizeMention, wantsWake, mentionTextOf, mentionDisplayOf, bumpHeld, heldOf, clearHeld, heldSentenceOf } from './mention-core.js'
 import { codeFingerprint } from './code-fp.js'
@@ -1607,6 +1608,8 @@ function stamp() {
 }
 
 function labelOf(who) {
+  // 系统行不是人，也不是鱼：它自己署名（2026-11-23，fi-0016）。
+  if (who === 'system') return '系统'
   return MEMBERS[who]?.label ?? who
 }
 
@@ -1861,6 +1864,86 @@ function clearHeldOf(member, channelKey) {
     writeJson(heldFileOf(member), clearHeld(prev, channelKey))
   } catch (error) {
     logLine({ note: 'held-clear-failed', member, channel: channelKey, error: String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120) })
+  }
+}
+// ---------- 卡住要说话（2026-11-23，fi-0016 / GitHub #1） ----------
+// 只做「通道里看得见」这一档：投递之后 N 分钟还没有新写入、且这一轮还忙，
+// 就在私聊里落一条系统行。判据是启发式，措辞必须带「可能」；不碰审批本身。
+const STALL_DIR = join(POOL_STATE, 'stalls')
+const lastDeliveries = new Map() // member -> { at, ts }
+const stallNotified = new Map() // member -> deliveredAt（同一次投递只报一次）
+function stallFileOf(member) {
+  return join(STALL_DIR, `${member}.json`)
+}
+function clearStallFile(member) {
+  try { rmSync(stallFileOf(member), { force: true }) } catch {}
+}
+function sessionLogMtimeOf(member) {
+  const info = MEMBERS[member]
+  const sid = pinnedSession(member)
+  if (!info?.dshHome || !sid) return null
+  const root = join(info.dshHome, 'sessions')
+  try {
+    for (const project of readdirSync(root)) {
+      const file = join(root, project, sid, 'session.v4.jsonl.zstd')
+      if (existsSync(file)) return statSync(file).mtimeMs
+    }
+  } catch {}
+  return null
+}
+function ownAgentStatusOf(ctx) {
+  const agents = ctx.get('agents')
+  const me = ownMember()
+  const sid = pinnedSession(me)
+  if (!agents || !sid) return null
+  for (const agent of agents.list()) {
+    if (sessionIdOf(agent) === sid) return agent.status ?? null
+  }
+  return null
+}
+/** 往「她 ↔ 人」这条私聊里追加一条系统行（不是她说的，也不叫醒谁）。 */
+function saySystemToDm(member, text) {
+  mkdirSync(DM_DIR, { recursive: true })
+  const human = humanKey()
+  const record = { ts: new Date().toISOString(), from: 'system', to: member, text, kind: 'system', channel: 'dm' }
+  appendFileSync(dmFileOf(member, human), JSON.stringify(record) + '\n', 'utf8')
+  const readable = dmReadableOf(member, human)
+  if (!existsSync(readable)) {
+    writeFileSync(readable, `# 私聊 · ${labelOf(member)} / ${labelOf(human)}\n\n`, 'utf8')
+  }
+  appendFileSync(readable, `**${stamp()} · ${labelOf('system')}**\n\n${text}\n\n`, 'utf8')
+  return record
+}
+function checkOwnStall(ctx) {
+  const me = ownMember()
+  if (me === null) return
+  const delivery = lastDeliveries.get(me)
+  if (!delivery) return
+  const verdict = classifyStall({
+    now: Date.now(),
+    deliveredAt: delivery.at,
+    sessionMtime: sessionLogMtimeOf(me),
+    agentStatus: ownAgentStatusOf(ctx),
+  })
+  if (verdict.kind === 'working') { clearStallFile(me); return }
+  if (verdict.kind !== 'stalled') return
+  if (stallNotified.get(me) === delivery.at) return
+  stallNotified.set(me, delivery.at)
+  const text = stallSentenceOf({ label: labelOf(me), port: MEMBERS[me]?.port ?? '', since: delivery.at })
+  try {
+    saySystemToDm(me, text)
+    mkdirSync(STALL_DIR, { recursive: true })
+    writeJson(stallFileOf(me), {
+      fmt: 1,
+      member: me,
+      since: new Date(delivery.at).toISOString(),
+      ageSec: verdict.ageSec,
+      url: `http://127.0.0.1:${MEMBERS[me]?.port ?? ''}/`,
+      at: new Date().toISOString(),
+    })
+    logLine({ note: 'stall-notified', member: me, ageSec: verdict.ageSec })
+  } catch (error) {
+    logLine({ note: 'stall-notify-failed', member: me, error: String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120) })
   }
 }
 /** 往 plugin.log 追一行（自检用，别让它影响主流程）。 */
@@ -2484,6 +2567,20 @@ function apply(ctx) {
     instanceGuard.unregister()
   })
 
+  // 2.4 卡住要说话（fi-0016）：投递后仍忙、会话文件却不再长，
+  //     就在私聊里落一条「可能在等审批或等回答」的系统行。启发式，带「可能」。
+  const stallTimer = setInterval(() => {
+    if (!stillPrimary()) return
+    try {
+      checkOwnStall(ctx)
+    } catch (error) {
+      logLine({ note: 'stall-check-failed', error: String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120) })
+    }
+  }, 60_000)
+  stallTimer.unref?.()
+  instanceGuard.addTimer(stallTimer)
+  ctx.on('dispose', () => { clearInterval(stallTimer) })
+
   // 2.5 自己的闹钟：读自己家的 plan，自己递自己（2026-11-13 review 的建议 B）。
   //     巡守不在也照样响；claim 文件保证和巡守那边不会各递一次。
   if (!isMainProcess()) {
@@ -2973,6 +3070,9 @@ function handleChannel({ agent, member, seat, channel, cursors, wakes }) {
     return false
   }
   wakeDeliverLog('delivered', deliveryNote)
+  // 投递之后开始数「有没有新动静」（fi-0016）：同一次投递只报一次。
+  lastDeliveries.set(member, { at: Date.now(), ts: lastRecord?.ts ?? null })
+  clearStallFile(member)
   // 这些没叫醒的话已经在预览里说过一次了；清掉，别让下一轮的"还有 N 条"重复计数。
   if (channel.kind === 'group') clearHeldOf(member, channel.key)
   // 小肥鱼 #1627（2026-11-18）：通道交付也是一次"被叫醒"，但过去的 `woke` 行只记推门那几类，
