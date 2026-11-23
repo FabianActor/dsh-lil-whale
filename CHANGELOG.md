@@ -22,6 +22,11 @@
 
 ## [未发布]
 
+### r440 升级单漏了 refresh-env 也不怕：按本机纸的指纹再判一次
+
+- 旧：`refresh-env` 写没写全靠作者记得；测试机从 1.8.11 更到 1.12.3 时升级单没列，`doctor` 一直报旧纸，`upgrade-check` 却说“没有待做”。
+- 新：`fish.ps1 upgrade-check` 末尾按本机 `homes\*\环境.md` 的 `env: template=` 指纹与当前 `templates\环境.md.tpl` 比，旧纸直接点名并给命令；同时给 1.12.3 的升级单补上 `refresh-env`（漏项更正）。用户可见：是。
+
 ### r439 巡守换绑：允许鱼塘根的父目录当工作区
 
 - 旧：r427 只认“会话工作区在 `pondRoot` 里”，而巡守的会话常建在鱼塘根的父目录（测试机：鱼塘在 `default-workspace\lil-whale`，主 dsh 会话建在 `default-workspace`）⇒ 主 dsh 的每一段会话都被拒，换绑按钮对巡守不可用。

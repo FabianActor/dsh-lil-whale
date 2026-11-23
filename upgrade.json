@@ -13,20 +13,22 @@
     "note": "给人看的补充（为什么、做漏了会怎样）"
   },
   "entries": [
-{
+    {
       "version": "1.12.3",
       "at": "2026-11-20",
       "summary": "修「发图」选完图不进输入框；安装与更新收归 GitHub 仓库（检查更新改查 GitHub Releases，npm 降为镜像）。",
       "requires": [
         "package",
-        "restart"
+        "restart",
+        "refresh-env"
       ],
       "restart": [
         "all"
       ],
       "commands": [
         "pwsh -File app\\scripts\\fish.ps1 upgrade-check",
-        "pwsh -File app\\scripts\\doctor.ps1"
+        "pwsh -File app\\scripts\\doctor.ps1",
+        "pwsh -File app\\scripts\\fish.ps1 refresh all"
       ],
       "verify": [
         "刷新 3080 面板，浏览器控制台里 `client build v57 · image-picker-files`；点「发图」选一张图，输入框上方出现缩略图（以前什么都不出现）",
@@ -35,7 +37,7 @@
         "`pwsh -File app\\scripts\\doctor.ps1` 全过"
       ],
       "breaking": [],
-      "note": "两个包要一起升。只换代码、不动 pool\\ 与 homes\\。如果某个 profile 当初是 npm 装的（list 里看到版本号而不是 link: 路径），按 docs/detail/怎么升级.md 第 2 步改回 link: 安装。"
+      "note": "两个包要一起升。只换代码、不动 pool\\ 与 homes\\。如果某个 profile 当初是 npm 装的（list 里看到版本号而不是 link: 路径），按 docs/detail/怎么升级.md 第 2 步改回 link: 安装。 说明书的模板这一版也变了：要用 refresh-env 重新生成，否则 doctor 会一直报旧纸。"
     },
     {
       "version": "1.12.2",

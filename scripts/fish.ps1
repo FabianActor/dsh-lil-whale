@@ -1269,6 +1269,33 @@ function Invoke-Wake([string]$name, [string]$by = 'fish.ps1', [string]$why = '')
 # 所以每个【发布出去以后需要用户动手】的版本，在 app\upgrade.json 里写一条；
 # 这个命令把"要不要做、做什么、做完看什么"打成清单，交给宿主（或宿主的代理）执行。
 # 不自动重启、不自动改用户的机器：重启归宿主，改权限要人点头。
+function Show-EnvTemplateEvidence {
+  # 2026-11-23 r440（测试机 U4）：升级单漏写 refresh-env 时，不能再靠作者记得。
+  # 这里按本机 环境.md 末尾的 `env: template=` 指纹跟当前模板比——有证据就点名。
+  $appRoot = Split-Path $PSScriptRoot -Parent
+  $tpl = Join-Path $appRoot 'templates\环境.md.tpl'
+  if (-not (Test-Path -LiteralPath $tpl)) { return }
+  $tplFp = (Get-FileHash -LiteralPath $tpl -Algorithm SHA256).Hash.Substring(0, 8).ToLowerInvariant()
+  $homes = Join-Path (Split-Path $appRoot -Parent) 'homes'
+  if (-not (Test-Path -LiteralPath $homes)) { return }
+  $stale = @()
+  foreach ($d in Get-ChildItem -LiteralPath $homes -Directory) {
+    $paper = Join-Path $d.FullName '环境.md'
+    if (-not (Test-Path -LiteralPath $paper)) { continue }
+    $m = Select-String -LiteralPath $paper -Pattern 'env: template=([0-9a-f]{8})' | Select-Object -First 1
+    $fp = if ($m) { $m.Matches[0].Groups[1].Value } else { '' }
+    if ($fp -ne $tplFp) { $stale += ('{0}({1})' -f $d.Name, $(if ($fp) { $fp } else { '无指纹' })) }
+  }
+  Write-Host ''
+  Write-Host ('== 说明书模板   template={0}' -f $tplFp)
+  if ($stale.Count -eq 0) { Write-Host '   ok   所有 环境.md 都是当前模板' }
+  else {
+    Write-Host ('   旧纸：{0}' -f ($stale -join '、'))
+    Write-Host '   证据：这些纸的 `env: template=` 和当前 templates\环境.md.tpl 不一样。'
+    Write-Host '   做：pwsh -File app\scripts\fish.ps1 refresh all（或 install.ps1 -Upgrade）。升级单没列 refresh-env 也一样要刷——这条按本机纸的指纹判，不靠作者记得写。'
+  }
+}
+
 function Invoke-UpgradeCheck([string]$MarkVersion) {
   Show-BiliEyesPatchStatus
   $specFile = Join-Path $Cfg.Root 'upgrade.json'
@@ -1321,6 +1348,8 @@ function Invoke-UpgradeCheck([string]$MarkVersion) {
   Write-Host ('当前包版本：{0}' -f ($(if ($current) { $current } else { '（读不到）' })))
   if ($applied) { Write-Host ('上次应用到的版本：{0}（{1}）' -f $applied, $appliedAt) }
   else { Write-Host '上次应用到的版本：（没有记录）' }
+
+  Show-EnvTemplateEvidence
 
   if ($entries.Count -eq 0) {
     Write-Host '升级单是空的：目前没有"发布后需要用户动手"的版本。'
