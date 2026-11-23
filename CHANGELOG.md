@@ -22,6 +22,11 @@
 
 ## [未发布]
 
+### r434 重建游标时连座位影子一起补；座位格为 0 不再把扫描起点拉回 0
+
+- 旧：`recoveredCursorsOf` 只补主键，座位键要等下一次投递才出现、而且只带当前那条通道 ⇒ 看起来"重建只补了一半"；座位那一格是 0 时 `min(sharedSeen, seatSeen)` 回到 0，把已读的群消息又数了一遍（held 胀到 1782）。
+- 新：重建时按 `pinnedSessions(member)` 把每个座位键补成同一份通道表；`seatSeen === 0 && sharedSeen > 0` 时跟主游标走。用户可见：否（fi-0019 的计数口径同批收窄）。
+
 ### r433 缺席的游标格子不再被 regressed 吞掉
 
 - 旧：文件在、这一格不在时，`raw=0 < meta` 先命中 `regressed`，`src=absent` 实际不可达；absent 分支又写成 `start=0`，等于把“缺席”读成“本来就该从 0 起”。

@@ -1553,7 +1553,16 @@ function recoveredCursorsOf(member) {
     const delivered = value?.delivered
     if (typeof delivered === 'number' && Number.isFinite(delivered) && delivered >= 0) own[key] = delivered
   }
-  return Object.keys(own).length === 0 ? null : { [member]: own }
+  if (Object.keys(own).length === 0) return null
+  // 2026-11-23（r434，LeeaCP 验收）：重建要连座位影子一起补，否则座位那份只记住"这次走到的通道"，
+  // 另外几格空着 —— 看起来像重建了一半，下次活动还会从 0 扫（held 把已读也算进去）。
+  const out = { [member]: { ...own } }
+  for (const sid of pinnedSessions(member)) {
+    const seat = sid.replace(/^session-/, '').slice(0, 6)
+    if (seat === '') continue
+    out[`${member}@${seat}`] = { ...own }
+  }
+  return out
 }
 
 // 2026-11-23（fi-0013/0014）：上一次**真的递到**第几行。
@@ -2996,7 +3005,10 @@ function handleChannel({ agent, member, seat, channel, cursorState, wakes }) {
   })
   const sharedSeen = Math.min(read.start, lines.length)
   // 读不到进度 / 回退时，座位游标也不可信：跟同一条起点走；正常时各算各的。
-  const seatSeen = read.unknown || read.regressed ? sharedSeen : Math.min(seatSeenStored, lines.length)
+  let seatSeen = read.unknown || read.regressed ? sharedSeen : Math.min(seatSeenStored, lines.length)
+  // 2026-11-23（r434，LeeaCP 验收）：主游标读过、座位那一格却是 0，不该让扫描起点回到 0。
+  // 座位是"老记录的影子"：主游标都走过去了，从 0 扫只会把已读消息再数一遍（held 胀成 1782 的来源）。
+  if (seatSeen === 0 && sharedSeen > 0) seatSeen = sharedSeen
   if (read.src !== 'file' && !cursorSourceLogged.has(`${member}:${channel.key}`)) {
     cursorSourceLogged.add(`${member}:${channel.key}`)
     logLine({

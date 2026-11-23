@@ -142,6 +142,13 @@ function eq(name, got, want) {
   eq('缺席但有 meta：从 meta 接着走，不重放', [r.src, r.start], ['absent', 59])
 }
 
+// ---------- 重建要连座位影子一起补；座位格是 0 时扫描起点不回到 0（r434） ----------
+{
+  const idx = readFileSync(new URL('../plugin/dsh-lil-whale-group/lib/index.js', import.meta.url), 'utf8')
+  ok(idx.includes('out[`${member}@${seat}`] = { ...own }'), '重建时连座位键一起补全')
+  ok(idx.includes('if (seatSeen === 0 && sharedSeen > 0) seatSeen = sharedSeen'), '座位格为 0 时跟主游标走，不重扫')
+}
+
 // ---------- 结果 ----------
 console.log(`合计 ${pass + fail}，PASS ${pass}，FAIL ${fail}`)
 for (const line of failures) console.log(line)
