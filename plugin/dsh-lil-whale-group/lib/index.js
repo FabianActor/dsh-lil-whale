@@ -1934,7 +1934,7 @@ function checkOwnStall(ctx) {
     saySystemToDm(me, text)
     mkdirSync(STALL_DIR, { recursive: true })
     writeJson(stallFileOf(me), {
-      fmt: 1,
+      fmt: 2,
       member: me,
       since: new Date(verdict.lastAt ?? delivery.at).toISOString(),
       deliveredAt: new Date(delivery.at).toISOString(),
