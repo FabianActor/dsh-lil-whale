@@ -660,6 +660,27 @@ try {
 } catch {
   Add-Row '谱系（全鱼）' 'WARN' ("读不了名册或谱系：{0}" -f $_.Exception.Message) 'NEXT: 看 pool\members.json 与 pool\family.json 是不是合法 JSON'
 }
+# 4c1c. 谱系图（2026-11-23 r443）：生成物要和真源同岁
+#   测试机 U5 的尾巴：图移出了包，但老装机上那份会变旧；真源改过就该重生成。
+try {
+  $familyFile = Join-Path $Cfg.PoolDir 'family.json'
+  $lineageFile = Join-Path $Cfg.Root 'docs\detail\鱼塘谱系.md'
+  if (-not (Test-Path -LiteralPath $familyFile)) {
+    Add-Row '谱系图' 'INFO' '还没有 family.json（干净安装后会在）'
+  } elseif (-not (Test-Path -LiteralPath $lineageFile)) {
+    Add-Row '谱系图' 'INFO' '还没生成（装机或 install.ps1 -Upgrade 时生成）' 'NEXT: node scripts\gen-family.mjs'
+  } else {
+    $famTime = (Get-Item -LiteralPath $familyFile).LastWriteTimeUtc
+    $linTime = (Get-Item -LiteralPath $lineageFile).LastWriteTimeUtc
+    if ($linTime -lt $famTime) {
+      Add-Row '谱系图' 'WARN' ('谱系图比真源旧（图 {0:yyyy-MM-dd HH:mm} / family.json {1:yyyy-MM-dd HH:mm}）：真源改过，图没跟着重生成' -f $linTime.ToLocalTime(), $famTime.ToLocalTime()) 'NEXT: node scripts\gen-family.mjs 重生成'
+    } else {
+      Add-Row '谱系图' 'OK' '谱系图不比 family.json 旧'
+    }
+  }
+} catch {
+  Add-Row '谱系图' 'WARN' ("检查谱系图时出错：{0}" -f $_.Exception.Message) 'NEXT: 手动看 docs\detail\鱼塘谱系.md 与 pool\family.json'
+}
 # 4c1b. 归档完整性（2026-11-19 r354）：归档目录有没有身份证、记录和磁盘对不对得上
 #   旧版（r354 之前）只有 manifest.json、没有事件流——那不是坏，是"它不知道自己做到哪一步"。
 #   判据：记录不许被现实修正 ⇒ 对不上的先报，不替人修（那是证据，不是待办）。

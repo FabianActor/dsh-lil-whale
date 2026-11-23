@@ -22,6 +22,11 @@
 
 ## [未发布]
 
+### r443 谱系图变旧会 WARN：生成物也要有人跟它比岁数
+
+- 旧：`docs/detail/鱼塘谱系.md` 移出包之后，老装机上那份只会变旧；`doctor` 不检查它，看起来一切正常。
+- 新：`doctor` 加一格「谱系图」——图的 mtime 比 `pool\family.json` 旧就 WARN 并给 `node scripts\gen-family.mjs`；没生成是 INFO；真源不在是 INFO。用户可见：是。
+
 ### r442 生成物不进包：谱系图从仓库移除，装机时现生成
 
 - 旧：`docs/detail/鱼塘谱系.md` 被收进仓库，每台机器的 `gen-family` 都会改写它；用 `robocopy /MIR` 从开发机升级时，会把开发机的谱系图盖到用户机器上（测试机 U5）。

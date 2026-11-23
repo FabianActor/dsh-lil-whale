@@ -23,6 +23,7 @@ const FAMILIES = [
   { name: '名册', static: ['名册', '名册（全鱼）', '名册（lee）'], why: 'pins 存在性、每条鱼有没有钉、watcher 不在视野的声明' },
   { name: '名册自检', static: ['名册自检'], why: '巡守的 roster-audit 最近一次结果' },
   { name: '谱系（全鱼）', static: ['谱系（全鱼）'], why: '名册里的每个人都在 family.json 里有节点（单向包含）' },
+  { name: '谱系图', static: ['谱系图'], why: '生成的谱系图不比 family.json 旧（测试机 U5 的尾巴，r443）' },
   { name: '生命周期字段', static: ['生命周期字段'], why: '旧 status 字段是否还在' },
   { name: '归档完整性', static: ['归档完整性'], why: '归档目录的清单/事件流/磁盘是否对得上（r354）' },
   { name: 'fissue 账', static: ['fissue 账'], why: '鱼群 issue 收件台的账是否自洽、正在做哪条（r372）' },
