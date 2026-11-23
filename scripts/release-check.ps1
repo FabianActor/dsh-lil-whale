@@ -478,6 +478,23 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '游标来源' (($cursorOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '游标来源' 'file/legacy/missing/unknown 分开；回退不重放；读不到不报条数（test-cursor-source.mjs）' }
   } else { Fail '游标来源' 'scripts\test-cursor-source.mjs 不在包里' }
+  # ── 4ba. 启动脚本换行（2026-11-23：测试机 S1，cmd.exe 不认 LF-only）──
+  $cmdDir = Join-Path $pkg 'scripts\bin'
+  $cmdFiles = @(Get-ChildItem $cmdDir -Filter *.cmd -File -ErrorAction SilentlyContinue)
+  if ($cmdFiles.Count -eq 0) { Fail '脚本换行' '包里没有 scripts\bin\*.cmd' }
+  else {
+    $badCmds = @()
+    foreach ($cf in $cmdFiles) {
+      $bytes = [IO.File]::ReadAllBytes($cf.FullName)
+      $lf = 0; $crlfCount = 0
+      for ($i = 0; $i -lt $bytes.Length; $i++) {
+        if ($bytes[$i] -eq 10) { if ($i -gt 0 -and $bytes[$i-1] -eq 13) { $crlfCount++ } else { $lf++ } }
+      }
+      if ($lf -gt 0 -or $crlfCount -eq 0) { $badCmds += ('{0}(LF={1} CRLF={2})' -f $cf.Name, $lf, $crlfCount) }
+    }
+    if ($badCmds.Count) { Fail '脚本换行' ('cmd.exe 会把多行块拆碎：' + ($badCmds -join '；') + '。.gitattributes 没生效，或文件被改回 LF 了') }
+    else { Ok '脚本换行' ('{0} 个 .cmd 全 CRLF' -f $cmdFiles.Count) }
+  }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {

@@ -276,8 +276,12 @@ if (Test-Path -LiteralPath $membersProbe) {
   } catch { Warn "members.json 读不了（$membersProbe）：这次不查端口登记" }
 }
 $port = Find-FreePort $portWanted
-for ($i = 0; $i -lt 50 -and $port -gt 0 -and $registeredPorts.ContainsKey($port); $i++) {
-  Warn ("端口 {0} 已被 {1} 登记，跳过" -f $port, $registeredPorts[$port])
+for ($i = 0; $i -lt 50 -and $port -gt 0; $i++) {
+  if (-not $registeredPorts.ContainsKey($port)) { break }
+  $owner = $registeredPorts[$port]
+  # 自己登记的口不挡自己（2026-11-23，测试机 U2：原地升级/重装时不该被自己的号挤走）。
+  if ($owner -eq $ChildMemberId) { break }
+  Warn ("端口 {0} 已被 {1} 登记，跳过" -f $port, $owner)
   $port = Find-FreePort ($port + 1)
 }
 if ($port -eq 0) { Die "从 $portWanted 往上 50 个口都被占了。" "换 -ChildPort 指定一个空口，然后重跑 install.ps1" }

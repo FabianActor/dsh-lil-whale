@@ -453,7 +453,7 @@ function Start-Fish($member) {
     }
   }
   if (-not (Test-Port $fishPort)) {
-    $others = @(Get-ProfileProcesses $member)
+    $others = @(if ($member.Role -eq 'watcher') { Get-FishProcesses $member } else { Get-ProfileProcesses $member })
     if ($others.Count -gt 0) {
       $ids = ($others | ForEach-Object { $_.ProcessId }) -join ', '
       Write-Host ("{0}：已经有一个进程在跑（pid={1}，端口可能不是 {2}）—— 同一段会话只能一个 writer，先 down 再 up。" -f $member.Label, $ids, $fishPort)
@@ -462,7 +462,7 @@ function Start-Fish($member) {
   }
   if (Test-Port $fishPort) {
     # 端口通不等于她在跑：陌生人也能占着同一个端口。
-    $herProcs = @(Get-ProfileProcesses $member)
+    $herProcs = @(if ($member.Role -eq 'watcher') { Get-FishProcesses $member } else { Get-ProfileProcesses $member })
     if ($herProcs.Count -eq 0) {
       $owner = Describe-PortOwner $fishPort
       Write-Host ("{0}：端口 {1} 被别的程序占了 —— {2}。她的进程根本没起，这次 up 什么都没做。" -f $member.Label, $fishPort, $owner)
