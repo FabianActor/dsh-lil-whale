@@ -149,7 +149,10 @@ export function bindingProblem({ roster, memberKey, sessionId, pondRoot }) {
   const wsPath = workspacePathOf(home, id)
   if (wsPath) {
     if (member.role === 'watcher') {
-      if (pondRoot && !underRoot(wsPath, pondRoot)) {
+      // 巡守的会话常建在鱼塘根的父目录里（例：default-workspace\lil-whale 的会话建在 default-workspace）。
+      // 2026-11-23 r439：允许"鱼塘根的祖先"，但至少要有两级目录，免得把 C:\ 这种当成合法工作区。
+      const ancestorOk = underRoot(pondRoot, wsPath) && normalizePath(wsPath).split('\\').filter(Boolean).length >= 2
+      if (pondRoot && !underRoot(wsPath, pondRoot) && !ancestorOk) {
         return { status: 409, error: 'session-workspace-outside-pond', message: `这段会话的工作区在鱼塘外面（${wsPath}），不绑给 ${name}` }
       }
     } else {

@@ -22,6 +22,11 @@
 
 ## [未发布]
 
+### r439 巡守换绑：允许鱼塘根的父目录当工作区
+
+- 旧：r427 只认“会话工作区在 `pondRoot` 里”，而巡守的会话常建在鱼塘根的父目录（测试机：鱼塘在 `default-workspace\lil-whale`，主 dsh 会话建在 `default-workspace`）⇒ 主 dsh 的每一段会话都被拒，换绑按钮对巡守不可用。
+- 新：巡守还接受“鱼塘根的祖先目录”（至少两级，`C:\` 这种不算）；普通鱼规则不变。`test-bindings-core` 51 格。用户可见：是。
+
 ### r438 `install.ps1 -Upgrade`：原地升级不再等于重铺
 
 - 旧：升级文档让重跑 `install.ps1`，但安装器一看家已存在就 Die、NEXT 让加 `-Force`；`-Force` 会重写 `START.md` / `环境.md` / `pins.json`（把升级变成重铺）。

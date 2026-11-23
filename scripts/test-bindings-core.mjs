@@ -128,7 +128,16 @@ writeFileSync(join(homeC, 'dsh-home', 'storages', 'workspace.json'), JSON.string
   tables: { workspaces: { w1: { path: tmp, sessionIds: [SID2] } } },
 }))
 check('巡守：工作区在鱼塘里：放行', bindingProblem({ roster, memberKey: 'lee', sessionId: SID, pondRoot: tmp }) === null)
-check('巡守：工作区在鱼塘外 → 拒', bindingProblem({ roster, memberKey: 'lee', sessionId: SID, pondRoot: join(tmp, 'outside') })?.error === 'session-workspace-outside-pond')
+check('巡守：工作区是鱼塘根的父目录：放行（r439）', bindingProblem({ roster, memberKey: 'lee', sessionId: SID, pondRoot: join(tmp, 'pond') }) === null)
+writeFileSync(join(homeA, 'storages', 'workspace.json'), JSON.stringify({
+  unit: { name: 'workspace', version: 2 },
+  tables: { workspaces: { w1: { path: join(tmp, 'elsewhere'), sessionIds: [SID] } } },
+}))
+check('巡守：工作区与鱼塘无关 → 拒', bindingProblem({ roster, memberKey: 'lee', sessionId: SID, pondRoot: join(tmp, 'pond') })?.error === 'session-workspace-outside-pond')
+writeFileSync(join(homeA, 'storages', 'workspace.json'), JSON.stringify({
+  unit: { name: 'workspace', version: 2 },
+  tables: { workspaces: { w1: { path: tmp, sessionIds: [SID] } } },
+}))
 
 // 没登记工作区的会话：放行（r261 那种未分组）
 check('未登记工作区：放行', bindingProblem({ roster, memberKey: 'lee', sessionId: SID_EMPTY, pondRoot: tmp }) === null)
