@@ -469,7 +469,7 @@ if ($root) {
   if (Test-Path $pondBindTest) {
     $pondBindOut = & node $pondBindTest 2>&1
     if ($LASTEXITCODE -ne 0) { Fail '鱼塘换绑' (($pondBindOut | Select-Object -Last 3) -join ' / ') }
-    else { Ok '鱼塘换绑' '候选只列她家里的会话；菜单不在了；build v65（test-pond-bind.mjs）' }
+    else { Ok '鱼塘换绑' '候选只列她家里的会话；菜单不在了；build v66（test-pond-bind.mjs）' }
   } else { Fail '鱼塘换绑' 'scripts\test-pond-bind.mjs 不在包里' }
   # ── 4az. 游标读到了什么（2026-11-23：来源/回退/读不到三件分开；fi-0013/14/15）──
   $cursorTest = Join-Path $pkg 'scripts\test-cursor-source.mjs'
@@ -499,6 +499,14 @@ if ($root) {
   $lineage = Join-Path $pkg 'docs\detail\鱼塘谱系.md'
   if (Test-Path -LiteralPath $lineage) { Fail '生成物不进包' '包里有 docs\detail\鱼塘谱系.md——它是按某台机器生成的谱系图，不该随包分发' }
   else { Ok '生成物不进包' '谱系图不在包里（装机时 gen-family.mjs 现生成）' }
+
+  # ── 4bc. 历史未读提示（2026-11-23：积压时不等用户先滚一下才出现）──
+  $histTest = Join-Path $pkg 'scripts\test-client-history-hint.mjs'
+  if (Test-Path $histTest) {
+    $histOut = & node $histTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '历史未读提示' (($histOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '历史未读提示' '线不在窗口里也能判「上面还有没看过的」；build v66（test-client-history-hint.mjs）' }
+  } else { Fail '历史未读提示' 'scripts\test-client-history-hint.mjs 不在包里' }
 
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'

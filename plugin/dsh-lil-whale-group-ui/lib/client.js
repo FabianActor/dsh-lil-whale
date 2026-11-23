@@ -2041,6 +2041,10 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       const pendingScrollRef = useRef(null)
       const pendingHistoryRef = useRef(null)
       const messagesSigRef = useRef('')
+      // 2026-11-23 r444：线不在渲染窗口里时量不到它，但「上面还有没看过的」仍然为真。
+      const messagesRef = useRef(messages)
+      const visibleStartRef = useRef(0)
+      messagesRef.current = messages
       const presenceSigRef = useRef('')
       const seatsSigRef = useRef('')
       // 发送后按内容重算高度（同 DmPage）。
@@ -2066,7 +2070,22 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
         const el = scrollRef.current
         const line = dividerRef.current
         // 线在视口上方 = 上面还有没看过的。
-        const lineAbove = Boolean(el && line && line.getBoundingClientRect().top < el.getBoundingClientRect().top + 4)
+        let lineAbove = Boolean(el && line && line.getBoundingClientRect().top < el.getBoundingClientRect().top + 4)
+        // 2026-11-23 r444（测试机）：积压很多消息时，线根本不在渲染窗口里（只挂最近 120 条），
+        // ref 是空的 ⇒ 只靠几何量永远 false，于是「要向上滚一次才出现」。
+        // 线在窗口之前（未读段从更早的位置开始）本身就说明它在视口上方。
+        if (!lineAbove && !line && el) {
+          const seen = String(seenGroupRef.current ?? '')
+          const list = messagesRef.current ?? []
+          const start = visibleStartRef.current ?? 0
+          if (seen && start > 0) {
+            let boundary = -1
+            for (let i = 0; i < list.length; i += 1) {
+              if (String(list[i]?.ts ?? '') > seen) { boundary = i; break }
+            }
+            if (boundary >= 0 && boundary < start) lineAbove = true
+          }
+        }
         // 点过一次就不再催：往下读时线会滑出视口上沿，以前会反复把提示亮出来（第 4 条）。
         // 贴底时也不催：人已经看见最新的了；2026-11-17 第 2 条就是新消息比视口高、
         // 分割线被顶出上沿，于是"回到历史未读"又亮起来。
@@ -2394,6 +2413,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       // 列表只跟消息、分割线、宽度、配置有关；输入框里的文字不是它的输入。
       // 只渲染最近 N 条：500+ 条时，600 个气泡每 3 秒重排一次就是卡顿的来源。
       const visibleStart = Math.max(0, messages.length - renderLimit)
+      visibleStartRef.current = visibleStart
       // 打字时不能重新切片：slice 每次都是新数组，会让下面的 useMemo 依赖每帧都变，
       // 等于每敲一个字就重建一遍气泡元素树（2026-11-15 第二轮：他报快速输入仍卡）。
       const visibleMessages = useMemo(
@@ -4076,7 +4096,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v65 · pond-bind:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v66 · history-hint-backlog:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')
