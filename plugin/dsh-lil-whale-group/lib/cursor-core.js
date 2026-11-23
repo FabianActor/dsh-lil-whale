@@ -25,7 +25,7 @@ export const CURSOR_LOST_WINDOW = 20
  * @param {number} input.lines 通道文件现在有多少行
  * @returns {{start:number, src:'file'|'legacy'|'missing'|'unknown'|'capped'|'regressed', stored:number, lastDelivered:number|null, capped:boolean, regressed:boolean, unknown:boolean}}
  */
-export function classifyCursorRead({ source, stored, lastDelivered = null, lines }) {
+export function classifyCursorRead({ source, stored, lastDelivered = null, lines, present = true }) {
   const total = Number.isFinite(lines) && lines > 0 ? Math.trunc(lines) : 0
   const raw = Number.isFinite(stored) ? Math.trunc(stored) : 0
   const meta = Number.isFinite(lastDelivered) ? Math.trunc(lastDelivered) : null
@@ -41,6 +41,11 @@ export function classifyCursorRead({ source, stored, lastDelivered = null, lines
   // 3) 读不到（文件缺失 / 损坏）：只给最近一小段，且不声称知道条数。
   if (source === 'missing' || source === 'unknown') {
     return { ...base, start: Math.max(0, total - CURSOR_LOST_WINDOW), src: source, unknown: true }
+  }
+  // 3.5) 文件在、但这一格没有（不是 0，是缺席）：来源叫 absent，别写成 file。
+  //      LeeaCP 2026-11-23 验收：`src=file start=0` 与 `cursor-state=lost` 放一起会读成“本来就该从 0 起”。
+  if (source !== 'missing' && source !== 'unknown' && present === false) {
+    return { ...base, start: 0, src: 'absent' }
   }
   // 4) 正常：legacy 是迁移来的真值、recovered 是从 meta 重建的，都照常使用，只在记账里标来源。
   const tag = source === 'legacy' || source === 'recovered' ? source : 'file'

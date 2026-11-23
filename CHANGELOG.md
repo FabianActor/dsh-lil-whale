@@ -22,6 +22,12 @@
 
 ## [未发布]
 
+### r432 缺席不许写成 file；lost 时 start 写 unknown（LeeaCP 验收）
+
+- 游标文件在、但这一格没有时，来源改叫 `absent`（以前写成 `file` + `start=0`，与 `cursor-state=lost` 并排像“本来就该从 0 起”）。
+- `cursor-state=lost` 或来源不明时，投递行与 `woke` 行的 `start=` 写 `unknown`、`counts=` 写 `unknown`：0 是个能算的数，不该拿来冒充“知道”。
+- 测试：`test-cursor-source` 27 格；用户可见：否。
+
 ### r431 游标坏掉时留证并从 meta 重建；`woke` 行补来源（LeeaCP 验收）
 
 - `woke` 行（她读到的那本 `watchman.log`）补 `src=` / `start=` / `counts=` / `held=`——以前只有投递账 `wake-deliver.log` 有这些字段，她验收时"验不到"。

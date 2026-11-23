@@ -132,6 +132,16 @@ function eq(name, got, want) {
   ok(wokeLine.includes('held='), 'woke 行带 held')
 }
 
+// ---------- 文件在、这一格不在：来源叫 absent（r432） ----------
+{
+  const r = classifyCursorRead({ source: 'file', stored: 0, lastDelivered: null, lines: 59, present: false })
+  eq('缺席不是 file', [r.src, r.start, r.unknown], ['absent', 0, false])
+}
+{
+  const r = classifyCursorRead({ source: 'file', stored: 0, lastDelivered: 59, lines: 59, present: false })
+  eq('缺席但有 meta：走回退，不重放', [r.src, r.start], ['regressed', 59])
+}
+
 // ---------- 结果 ----------
 console.log(`合计 ${pass + fail}，PASS ${pass}，FAIL ${fail}`)
 for (const line of failures) console.log(line)
