@@ -230,13 +230,39 @@ function Start-Visible([string]$Command, [string]$WorkingDirectory, [string]$Out
     -WorkingDirectory $WorkingDirectory | Out-Null
 }
 
-function Wait-Port([int]$p, [int]$Seconds = 120) {
+function Wait-Port([int]$p, [int]$Seconds = 120, [string]$ErrLog = '') {
   $deadline = (Get-Date).AddSeconds($Seconds)
+  $tick = 0
   while ((Get-Date) -lt $deadline) {
     if (Test-Port $p) { return $true }
+    $tick++
+    # 2026-11-23 P1：起不来时别静默等满两分钟——stderr 里的硬错误说明它已经死了。
+    if ($ErrLog -and ($tick % 5 -eq 0) -and (Test-Path -LiteralPath $ErrLog)) {
+      try {
+        $tail = (Get-Content -LiteralPath $ErrLog -Tail 20 -ErrorAction Stop) -join "`n"
+        if ($tail -match '不是内部或外部命令|is not recognized|EADDRINUSE|Cannot find module|ENOENT') { return $false }
+      } catch { }
+    }
     Start-Sleep -Milliseconds 400
   }
   return $false
+}
+
+# 2026-11-23 P1：dsh 不一定是全局命令——npx 起的机器上，隐藏进程的 PATH 里没有它。
+# 解析顺序：PATH → 配置 dshExe → npx。别写死 dsh（写死时 up 要静默等满 120 秒）。
+function Resolve-DshCommand {
+  $exe = $null
+  $cmd = Get-Command dsh -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($cmd) { $exe = $cmd.Source }
+  if (-not $exe -and $Cfg -and $Cfg.dshExe) {
+    $candidate = [string]$Cfg.dshExe
+    if ($candidate -and (Test-Path -LiteralPath $candidate)) { $exe = $candidate }
+  }
+  if ($exe) {
+    if ($exe -match '\s') { return ('"' + $exe + '"') }
+    return $exe
+  }
+  return 'npx -y @deepseek-ai/dsh'
 }
 
 # 带 token 的网址只出现在启动日志里；没有 token 的就用裸地址。
@@ -470,23 +496,24 @@ function Start-Fish($member) {
       return $false
     }
     $hbAge = Get-HeartbeatAgeSec $member
-    if ($null -ne $hbAge -and $hbAge -le 90) {
-      # 已经在跑就不再开一次浏览器：重复 `up` 会开出第二个一模一样的窗口，
-      # 看着像"一条鱼开了两个 webui"，其实是一条鱼、两扇窗（2026-11-12 他报的）。
-      Write-Host ("{0}：已经在跑（{1}）：{2}" -f $member.Label, $fishPort, (Get-Url $member))
+    $url = Get-Url $member
+    # 2026-11-23 P4：心跳不是"活着"的探针——空转一阵就停在某个时刻，用它判"会话没挂上"
+    # 会让每条空闲鱼都被当成没醒（up all 还会去开窗）。判据改成"端口通 + 进程是自己的"。
+    if (-not $openWindow) {
+      Write-Host ("{0}：已经在跑（{1}）：{2}" -f $member.Label, $fishPort, $url)
       if (-not (Get-Mode $member)) { Set-Mode $member 'unknown' $fishPort }
       return $true
     }
-    # 端口通但心跳 stale = 服务活着、会话没挂（08:40 那天的样子）。
-    # 这时候"已经在跑"是假的：要开窗，会话才会挂上。
+    # 显式要窗（maintain / -Window）才开；没有 token 就只提示，不去开一个 401 的标签。
     $hbText = if ($null -eq $hbAge) { '没有心跳' } else { "$hbAge 秒前" }
-    Write-Host ("{0}：进程在跑但会话没挂上（心跳：{1}）—— 开窗叫醒。" -f $member.Label, $hbText)
-    if ($openWindow) {
-      Start-Process (Get-Url $member) | Out-Null
+    if ($url -match 'token=') {
+      Start-Process $url | Out-Null
       Write-FishWindowLog $member 'open'
       Set-Mode $member 'window' $fishPort
+      Write-Host ("{0}：进程在跑（心跳：{1}）—— 已开窗。" -f $member.Label, $hbText)
     } else {
-      Write-Host '（无人值守：会话没挂上 —— 用 restore 重起一份，或 maintain 开窗看）'
+      Write-Host ("{0}：进程在跑（心跳：{1}），但日志里没有 token —— 不开窗（会 401）。" -f $member.Label, $hbText)
+      Write-Host '（它可能不是 fish.ps1 起的；要用窗就 down 再 up，或手动看它的启动日志）'
     }
     return $true
   }
@@ -499,10 +526,11 @@ function Start-Fish($member) {
   $err = Join-Path $member.DshHome 'logs\web-latest.err.log'
   $cwd = if ($member.Cwd) { $member.Cwd } else { $member.Home }
   Write-Host ("{0}：开机中（{1}）……" -f $member.Label, $fishPort)
-  # 巡守那条（role=watcher）保持老命令 `dsh web`；其余鱼按 profile + 端口起。
-  # 巡守那条（role=watcher）保持老命令 `dsh web`；其余鱼按 profile + 端口起，并指到它自己的配置。
+  $DshCmd = Resolve-DshCommand
+  # 巡守那条（role=watcher）用 `$DshCmd web`；其余鱼按 profile + 端口起，并指到它自己的配置。
+  # 2026-11-23 P1：不写死 dsh——npx 起的机器上 PATH 里没有它。
   $command = if ($member.Role -eq 'watcher') {
-    "dsh web --no-open"
+    "$DshCmd web --no-open"
   } else {
     $cfgLine = ''
     if ($member.ConfigFile) {
@@ -518,14 +546,14 @@ function Start-Fish($member) {
     }
     # 2026-11-18 r305：fishtalk 默认存 ~/.fishtalk，多条鱼会和宿主共用一份语料；给每条鱼指到自己家里。
     $ftLine = if ($member.Home) { "`$env:FISHTALK_HOME='$(Join-Path $member.Home '.fishtalk')'; " } else { '' }
-    "${cfgLine}${xdgLine}${ftLine}`$env:DSH_HOME='$($member.DshHome)'; `$env:DSH_PROFILE='$($member.Profile)'; dsh --profile $($member.Profile) --port $fishPort --no-open"
+    "${cfgLine}${xdgLine}${ftLine}`$env:DSH_HOME='$($member.DshHome)'; `$env:DSH_PROFILE='$($member.Profile)'; $DshCmd --profile $($member.Profile) --port $fishPort --no-open"
   }
   if ($openWindow -and $Console) {
     Start-Visible -Command $command -WorkingDirectory $cwd -OutLog $out
   } else {
     $startScripts = Start-Hidden -Command $command -WorkingDirectory $cwd -OutLog $out -ErrLog $err
   }
-  $portOk = Wait-Port $fishPort
+  $portOk = Wait-Port $fishPort -ErrLog $err
   foreach ($s in @($startScripts)) { if ($s -and (Test-Path -LiteralPath $s)) { Remove-Item -LiteralPath $s -Force -ErrorAction SilentlyContinue } }
   if (-not $portOk) {
     Write-Host ("{0}：没起来。" -f $member.Label)

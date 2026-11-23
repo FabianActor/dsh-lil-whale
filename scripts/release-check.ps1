@@ -508,6 +508,13 @@ if ($root) {
     else { Ok '历史未读提示' '线不在窗口里也能判「上面还有没看过的」；build v66（test-client-history-hint.mjs）' }
   } else { Fail '历史未读提示' 'scripts\test-client-history-hint.mjs 不在包里' }
 
+  # ── 4bd. 测试机第二份（2026-11-23 P1–P5：dsh 解析、端口有效键、doctor 比 codeFp、心跳误报、tool-office）──
+  $resolveTest = Join-Path $pkg 'scripts\test-fish-dsh-resolve.mjs'
+  if (Test-Path $resolveTest) {
+    $resolveOut = & node $resolveTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '测试机第二份' (($resolveOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '测试机第二份' 'dsh 解析有三级兜底；端口自查用有效键；doctor 比 codeFp；心跳不再判挂载（test-fish-dsh-resolve.mjs）' }
+  } else { Fail '测试机第二份' 'scripts\test-fish-dsh-resolve.mjs 不在包里' }
   # ── 5. 模板残留 ─────────────────────────────────────────────────────
   $tpl = Join-Path $pkg 'templates\环境.md.tpl'
   if (Test-Path $tpl) {

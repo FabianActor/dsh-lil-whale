@@ -281,7 +281,9 @@ for ($i = 0; $i -lt 50 -and $port -gt 0; $i++) {
   if (-not $registeredPorts.ContainsKey($port)) { break }
   $owner = $registeredPorts[$port]
   # 自己登记的口不挡自己（2026-11-23，测试机 U2：原地升级/重装时不该被自己的号挤走）。
-  if ($owner -eq $ChildMemberId) { break }
+  # 2026-11-23 P2：有效成员键可能是 ChildProfile（没传 -ChildMemberId 时）——先算有效键再比。
+  $effectiveChild = if ($ChildMemberId) { $ChildMemberId } else { $ChildProfile }
+  if ($owner -eq $effectiveChild) { break }
   Warn ("端口 {0} 已被 {1} 登记，跳过" -f $port, $owner)
   $port = Find-FreePort ($port + 1)
 }

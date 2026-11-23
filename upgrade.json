@@ -32,7 +32,7 @@
         "pwsh -File app\\scripts\\fish.ps1 refresh all"
       ],
       "verify": [
-        "刷新 3080 面板，浏览器控制台里 `client build v57 · image-picker-files`；点「发图」选一张图，输入框上方出现缩略图（以前什么都不出现）",
+        "刷新 3080 面板，浏览器控制台里 `client build v57` 或更高（dev 构建会更新，按实际标记看）；点「发图」选一张图，输入框上方出现缩略图（以前什么都不出现）",
         "设置页「版本」段：当前版本 1.12.3，「检查更新」查的是 GitHub Releases（说明文字在）",
         "`app\\logs\\plugin-boot.log` 里五条启动行 `pkg=@fabianactor/dsh-lil-whale-group@1.12.3`",
         "`pwsh -File app\\scripts\\doctor.ps1` 全过"

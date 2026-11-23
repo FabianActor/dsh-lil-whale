@@ -22,6 +22,11 @@
 
 ## [未发布]
 
+### r445 测试机第二份：dsh 解析、端口有效键、doctor 比代码指纹、心跳误报
+
+- 旧：`fish.ps1` 写死 `dsh`，没有全局 dsh 的机器上隐藏进程立刻失败、`up` 要静默等满 120 秒；`-Upgrade` 不带 `-ChildMemberId` 时端口自查把"自己登记的 3082"当占用，静默改成 3083；`doctor` 只比版本号，同版本号的 dev 更新看不出还有旧进程；空闲鱼心跳 stale 被当成"会话没挂上"，`up all` 还去开 401 的标签；`tool-office` 在工具目录里缺一行。
+- 新：`Resolve-DshCommand`（PATH → 配置 `dshExe` → `npx -y @deepseek-ai/dsh`）；`Wait-Port` 见 stderr 硬错误 6 秒内收工并打日志；端口自查用有效成员键（`ChildMemberId ?? ChildProfile`）；`doctor` 的「版本一致」加代码指纹（同版本号不同指纹 ⇒ WARN）；心跳只做展示，判据改成"端口通 + 进程是自己的"，开窗前要求 URL 带 token；`templates/工具目录.json` 补 `tool-office`；1.12.3 升级单的 build 验收改成"v57 或更高"。用户可见：是。
+
 ### r444 积压时「回到历史未读」不再等用户先滚一下
 
 - 旧：消息多时只渲染最近 120 条，历史分割线不在窗口里 ⇒ 量不到它的位置，「上面还有没看过的」永远判 false，提示和按钮要等用户向上滚一次才冒出来（测试机）。

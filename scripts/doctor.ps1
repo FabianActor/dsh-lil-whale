@@ -925,10 +925,26 @@ if ($lastBoot) {
       } else {
         $scopeText = '进程'
       }
+      # 2026-11-23 P3：版本号相同不代表代码相同（dev 工作区反复更新时必现）。
+      $diskFp = ''
+      $fpJs = Join-Path $Cfg.Root 'plugindsh-lil-whale-grouplibcode-fp.js'
+      if (Test-Path -LiteralPath $fpJs) {
+        try {
+          $fpOut = (& node $fpJs 2>$null)
+          if ($fpOut -match 'codeFp=([0-9a-f]+)') { $diskFp = $Matches[1] }
+        } catch { $diskFp = '' }
+      }
       $staleRunners = @($liveBoot | Where-Object { ([string]$_.pkg -replace '^.*@', '') -ne $diskVer })
       if ($staleRunners.Count -eq 0) {
         $runnerText = (@($liveBoot | ForEach-Object { [string]$_.pkg -replace '^.*@', '' }) | Sort-Object -Unique) -join '/'
-        Add-Row '版本一致' 'OK' ("所有{0}都跑 {1}（磁盘 {2}；{3} 个）" -f $scopeText, $runnerText, $diskVer, $liveBoot.Count)
+        $fpBad = @($liveBoot | Where-Object { $diskFp -and $_.codeFp -and ([string]$_.codeFp) -ne $diskFp })
+        if ($fpBad.Count -gt 0) {
+          $fpText = ($fpBad | ForEach-Object { 'pid={0} 跑 {1}' -f $_.pid, ([string]$_.codeFp) }) -join '；'
+          Add-Row '版本一致' 'WARN' ("版本号都是 {0}，但{1}不是磁盘这份代码（磁盘 {2}）：{3}" -f $diskVer, $scopeText, $diskFp, $fpText) 'NEXT: 重启这些进程——版本号相同不代表代码相同'
+        } else {
+          $fpShown = if ($diskFp) { $diskFp } else { '未取到' }
+          Add-Row '版本一致' 'OK' ("所有{0}都跑 {1}（磁盘 {2}；{3} 个；代码指纹 {4}）" -f $scopeText, $runnerText, $diskVer, $liveBoot.Count, $fpShown)
+        }
       } else {
         $staleText = ($staleRunners | ForEach-Object { 'pid={0} 启动 {1}' -f $_.pid, ([string]$_.pkg -replace '^.*@', '') }) -join '；'
         Add-Row '版本一致' 'WARN' ("还有{0}跑着旧代码（磁盘 {1}）：{2}" -f $scopeText, $diskVer, $staleText) 'NEXT: 重启这些进程（主 dsh 与各条鱼），让它们加载新版本'

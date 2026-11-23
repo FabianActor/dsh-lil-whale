@@ -48,6 +48,9 @@
   "present": {
     "line": "把做好的文件交给宿主看（交付物：图片、文档等，他那边能直接打开）"
   },
+  "tool-office": {
+    "line": "读写与渲染 Office 文件（Word / Excel / PowerPoint），以及读 PDF"
+  },
   "tool-plugin-manager": {
     "line": "装卸插件（要定了才能用）"
   },

@@ -10,6 +10,7 @@
   "dmDir": "D:\\path\\to\\lil-whale\\pool\\dm",
   "membersFile": "D:\\path\\to\\lil-whale\\pool\\members.json",
   "selfWaker": "D:\\path\\to\\lil-whale\\app\\scripts\\wake-fish.ps1",
+  "dshExe": "",
   "pwshExe": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
   "wakeMetrics": "D:\\path\\to\\lil-whale\\pool\\state\\wake-metrics.log",
   "chatCwd": "D:\\path\\to",
