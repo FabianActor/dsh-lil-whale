@@ -10,7 +10,8 @@
     "commands": "可选，逐条要用户执行的命令（放进代码块，别写散文）",
     "verify": "验收判据，逐条写『看哪个文件/哪一行/应是什么』；最后一条默认是 doctor 全过",
     "breaking": "不兼容项；空数组 = 旧数据照旧可读",
-    "note": "给人看的补充（为什么、做漏了会怎样）"
+    "note": "给人看的补充（为什么、做漏了会怎样）",
+    "evidence": "可选：通用证据 id 的数组（env-template / profile-link / roster / config）。upgrade-check 每次都跑通用证据，这里只是给条目点题。"
   },
   "entries": [
     {
@@ -37,7 +38,11 @@
         "`pwsh -File app\\scripts\\doctor.ps1` 全过"
       ],
       "breaking": [],
-      "note": "两个包要一起升。只换代码、不动 pool\\ 与 homes\\。如果某个 profile 当初是 npm 装的（list 里看到版本号而不是 link: 路径），按 docs/detail/怎么升级.md 第 2 步改回 link: 安装。 说明书的模板这一版也变了：要用 refresh-env 重新生成，否则 doctor 会一直报旧纸。"
+      "note": "两个包要一起升。只换代码、不动 pool\\ 与 homes\\。如果某个 profile 当初是 npm 装的（list 里看到版本号而不是 link: 路径），按 docs/detail/怎么升级.md 第 2 步改回 link: 安装。 说明书的模板这一版也变了：要用 refresh-env 重新生成，否则 doctor 会一直报旧纸。",
+      "evidence": [
+        "env-template",
+        "profile-link"
+      ]
     },
     {
       "version": "1.12.2",
@@ -109,7 +114,10 @@
         "boot 行 pkg=@fabianactor/dsh-lil-whale-group@1.12.0；doctor 全过（含「归档完整性」一格）"
       ],
       "breaking": [],
-      "note": "账本迁移在插件加载时自动做一次，不要手动搬运行中的旧文件；已有归档保持原样（doctor 会标 legacy），下次归档才走事件流。"
+      "note": "账本迁移在插件加载时自动做一次，不要手动搬运行中的旧文件；已有归档保持原样（doctor 会标 legacy），下次归档才走事件流。",
+      "evidence": [
+        "profile-link"
+      ]
     },
     {
       "version": "1.11.0",

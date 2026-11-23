@@ -24,6 +24,8 @@ try { pkg = JSON.parse(readFileSync(pkgFile, 'utf8')); }
 catch (e) { console.log(`FAIL test-upgrade-json：包 package.json 读不了（${e.message}）`); process.exit(1); }
 
 const ALLOWED = new Set(['package', 'restart', 'refresh-env', 'acl-repair', 'seed-profile', 'custom']);
+// r441：evidence 只能是 upgrade-check 真会跑的那几条，写错等于没写。
+const EVIDENCE = new Set(['env-template', 'profile-link', 'roster', 'config']);
 const SEMVER = /^\d+\.\d+\.\d+$/;
 const vnum = (v) => v.split('.').map((n) => Number(n));
 // 版本比较必须按数字逐段比：1.10.0 比 1.9.0 新，拼成字符串比会得到相反的答案（r326）。
@@ -58,6 +60,12 @@ if (Array.isArray(spec.entries)) {
     if (entry.commands !== undefined) need(isStrArray(entry.commands), `${at}.commands 必须是字符串数组`);
     need(isStrArray(entry.verify) && entry.verify.length > 0, `${at}.verify 必须至少一条判据（做完看什么）`);
     need(entry.breaking === undefined || isStrArray(entry.breaking), `${at}.breaking 必须是字符串数组或省略`);
+    if (entry.evidence !== undefined) {
+      need(isStrArray(entry.evidence), `${at}.evidence 必须是字符串数组或省略`);
+      if (Array.isArray(entry.evidence)) {
+        for (const id of entry.evidence) need(EVIDENCE.has(id), `${at}.evidence 里有不认识的 id "${id}"（只认 ${[...EVIDENCE].join(' / ')}）`);
+      }
+    }
     if (isStr(entry.version)) {
       need(!seen.has(entry.version), `${at}.version 重复：${entry.version}`);
       seen.add(entry.version);

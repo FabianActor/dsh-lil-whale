@@ -1269,30 +1269,93 @@ function Invoke-Wake([string]$name, [string]$by = 'fish.ps1', [string]$why = '')
 # 所以每个【发布出去以后需要用户动手】的版本，在 app\upgrade.json 里写一条；
 # 这个命令把"要不要做、做什么、做完看什么"打成清单，交给宿主（或宿主的代理）执行。
 # 不自动重启、不自动改用户的机器：重启归宿主，改权限要人点头。
-function Show-EnvTemplateEvidence {
-  # 2026-11-23 r440（测试机 U4）：升级单漏写 refresh-env 时，不能再靠作者记得。
-  # 这里按本机 环境.md 末尾的 `env: template=` 指纹跟当前模板比——有证据就点名。
+$script:EvidenceIds = @('env-template', 'profile-link', 'roster', 'config')
+
+function Get-PondEvidence([string]$id) {
+  # 2026-11-23 r441：升级单是“作者的回忆”，证据是“这台机器的事实”。
   $appRoot = Split-Path $PSScriptRoot -Parent
-  $tpl = Join-Path $appRoot 'templates\环境.md.tpl'
-  if (-not (Test-Path -LiteralPath $tpl)) { return }
-  $tplFp = (Get-FileHash -LiteralPath $tpl -Algorithm SHA256).Hash.Substring(0, 8).ToLowerInvariant()
-  $homes = Join-Path (Split-Path $appRoot -Parent) 'homes'
-  if (-not (Test-Path -LiteralPath $homes)) { return }
-  $stale = @()
-  foreach ($d in Get-ChildItem -LiteralPath $homes -Directory) {
-    $paper = Join-Path $d.FullName '环境.md'
-    if (-not (Test-Path -LiteralPath $paper)) { continue }
-    $m = Select-String -LiteralPath $paper -Pattern 'env: template=([0-9a-f]{8})' | Select-Object -First 1
-    $fp = if ($m) { $m.Matches[0].Groups[1].Value } else { '' }
-    if ($fp -ne $tplFp) { $stale += ('{0}({1})' -f $d.Name, $(if ($fp) { $fp } else { '无指纹' })) }
+  $pondRoot = Split-Path $appRoot -Parent
+  switch ($id) {
+    'env-template' {
+      $tpl = Join-Path $appRoot 'templates\环境.md.tpl'
+      if (-not (Test-Path -LiteralPath $tpl)) { return @{ id = $id; ok = $false; detail = '模板不在：templates\环境.md.tpl' } }
+      $tplFp = (Get-FileHash -LiteralPath $tpl -Algorithm SHA256).Hash.Substring(0, 8).ToLowerInvariant()
+      $homes = Join-Path $pondRoot 'homes'
+      if (-not (Test-Path -LiteralPath $homes)) { return @{ id = $id; ok = $true; detail = '这台上没有 homes\，跳过' } }
+      $stale = @()
+      foreach ($d in Get-ChildItem -LiteralPath $homes -Directory) {
+        $paper = Join-Path $d.FullName '环境.md'
+        if (-not (Test-Path -LiteralPath $paper)) { continue }
+        $m = Select-String -LiteralPath $paper -Pattern 'env: template=([0-9a-f]{8})' | Select-Object -First 1
+        $fp = if ($m) { $m.Matches[0].Groups[1].Value } else { '' }
+        if ($fp -ne $tplFp) { $stale += ('{0}({1})' -f $d.Name, $(if ($fp) { $fp } else { '无指纹' })) }
+      }
+      if ($stale.Count -eq 0) { return @{ id = $id; ok = $true; detail = ('所有 环境.md 都是当前模板（{0}）' -f $tplFp) } }
+      return @{ id = $id; ok = $false; detail = ('旧纸：{0}；做：pwsh -File app\scripts\fish.ps1 refresh all（或 install.ps1 -Upgrade）' -f ($stale -join '、')) }
+    }
+    'profile-link' {
+      $bad = @()
+      $seen = 0
+      $roots = @()
+      $hostHome = if ($env:DSH_HOME) { $env:DSH_HOME } else { Join-Path $HOME '.dsh' }
+      $roots += $hostHome
+      $homes = Join-Path $pondRoot 'homes'
+      if (Test-Path -LiteralPath $homes) {
+        foreach ($d in Get-ChildItem -LiteralPath $homes -Directory) {
+          $dh = Join-Path $d.FullName 'dsh-home'
+          if (Test-Path -LiteralPath $dh) { $roots += $dh }
+        }
+      }
+      foreach ($root in $roots) {
+        $profiles = Join-Path $root 'profiles'
+        if (-not (Test-Path -LiteralPath $profiles)) { continue }
+        foreach ($p in Get-ChildItem -LiteralPath $profiles -Directory) {
+          $pkg = Join-Path $p.FullName 'package.json'
+          if (-not (Test-Path -LiteralPath $pkg)) { continue }
+          try { $j = Get-Content -LiteralPath $pkg -Raw -Encoding utf8 | ConvertFrom-Json } catch { continue }
+          $deps = $j.dependencies
+          if (-not $deps) { continue }
+          foreach ($name in @('@fabianactor/dsh-lil-whale-group', '@fabianactor/dsh-lil-whale-group-ui')) {
+            $val = [string]$deps.$name
+            if (-not $val) { continue }
+            $seen++
+            if (-not $val.StartsWith('link:')) { $bad += ('{0}/{1}: {2}={3}' -f (Split-Path -Leaf $root), $p.Name, $name, $val) }
+          }
+        }
+      }
+      if ($bad.Count -gt 0) { return @{ id = $id; ok = $false; detail = ('这些 profile 不是 link: 装的（拿到的不是这棵仓库的代码）：{0}；做：重挂 link: 或按升级单装包' -f ($bad -join '；')) } }
+      return @{ id = $id; ok = $true; detail = ('{0} 个插件引用都是 link:' -f $seen) }
+    }
+    'roster' {
+      $roster = Get-Members
+      $members = @($roster.Values)
+      $fish = @($members | Where-Object { $_.Kind -eq 'fish' })
+      if ($fish.Count -eq 0) { return @{ id = $id; ok = $false; detail = '名册里没有鱼（pool\members.json 或 membersFile）' } }
+      $bad = @()
+      foreach ($m in $fish) {
+        if ($m.Home -and -not (Test-Path -LiteralPath $m.Home)) { $bad += $m.Key }
+      }
+      if ($bad.Count -gt 0) { return @{ id = $id; ok = $false; detail = ('名册里有 {0} 条鱼的家不在：{1}；做：检查 pool\members.json 或把家放回原位' -f $bad.Count, ($bad -join '、')) } }
+      return @{ id = $id; ok = $true; detail = ('{0} 条鱼、{1} 个名册键，家都在' -f $fish.Count, $members.Count) }
+    }
+    'config' {
+      if (-not (Test-Path -LiteralPath $Cfg.Root)) { return @{ id = $id; ok = $false; detail = ('配置里的鱼塘根不在：{0}' -f $Cfg.Root) } }
+      if (-not (Test-Path -LiteralPath $Cfg.PoolDir)) { return @{ id = $id; ok = $false; detail = ('配置里的 pool 不在：{0}' -f $Cfg.PoolDir) } }
+      $cf = Join-Path $Cfg.Root 'lil-whale.config.json'
+      $src = if (Test-Path -LiteralPath $cf) { 'lil-whale.config.json' } elseif ($env:LIL_WHALE_CONFIG) { 'LIL_WHALE_CONFIG' } else { '默认（没配置文件）' }
+      return @{ id = $id; ok = $true; detail = ('配置来源：{0}；鱼塘根 {1}' -f $src, (Split-Path $Cfg.Root -Parent)) }
+    }
+    default { return @{ id = $id; ok = $true; detail = '没有这条证据（跳过）' } }
   }
+}
+
+function Show-UpgradeEvidence([string[]]$Ids) {
   Write-Host ''
-  Write-Host ('== 说明书模板   template={0}' -f $tplFp)
-  if ($stale.Count -eq 0) { Write-Host '   ok   所有 环境.md 都是当前模板' }
-  else {
-    Write-Host ('   旧纸：{0}' -f ($stale -join '、'))
-    Write-Host '   证据：这些纸的 `env: template=` 和当前 templates\环境.md.tpl 不一样。'
-    Write-Host '   做：pwsh -File app\scripts\fish.ps1 refresh all（或 install.ps1 -Upgrade）。升级单没列 refresh-env 也一样要刷——这条按本机纸的指纹判，不靠作者记得写。'
+  Write-Host '== 证据（按这台机器的事实，不靠升级单记得写）'
+  foreach ($id in $Ids) {
+    $r = Get-PondEvidence $id
+    if ($r.ok) { Write-Host ('   ok    {0}   {1}' -f $r.id, $r.detail) }
+    else { Write-Host ('   待办  {0}   {1}' -f $r.id, $r.detail) }
   }
 }
 
@@ -1349,7 +1412,7 @@ function Invoke-UpgradeCheck([string]$MarkVersion) {
   if ($applied) { Write-Host ('上次应用到的版本：{0}（{1}）' -f $applied, $appliedAt) }
   else { Write-Host '上次应用到的版本：（没有记录）' }
 
-  Show-EnvTemplateEvidence
+  Show-UpgradeEvidence $script:EvidenceIds
 
   if ($entries.Count -eq 0) {
     Write-Host '升级单是空的：目前没有"发布后需要用户动手"的版本。'
@@ -1393,6 +1456,10 @@ function Invoke-UpgradeCheck([string]$MarkVersion) {
     if ($e.restart) { Write-Host ('     要重启：{0}' -f (@($e.restart) -join '、')) }
     if ($e.commands) { foreach ($c in @($e.commands)) { Write-Host ('     > {0}' -f $c) } }
     if ($e.breaking -and @($e.breaking).Count -gt 0) { Write-Host ('     !! 不兼容：{0}' -f (@($e.breaking) -join '；')) }
+    if ($e.evidence) {
+      $parts = foreach ($id in @($e.evidence)) { $r = Get-PondEvidence ([string]$id); '{0}={1}' -f $id, $(if ($r.ok) { 'ok' } else { '待办' }) }
+      Write-Host ('     证据：{0}' -f ($parts -join ' '))
+    }
     Write-Host '  验收：'
     foreach ($v in @($e.verify)) { Write-Host ('     - {0}' -f $v) }
     Write-Host '     - pwsh -File app\scripts\fish.ps1 doctor（应全过）'

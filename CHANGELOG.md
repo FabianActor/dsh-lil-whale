@@ -22,6 +22,11 @@
 
 ## [未发布]
 
+### r441 升级单加证据：升级检查按机器事实判，不靠作者记得写
+
+- 旧：`upgrade-check` 只念升级单条目；作者漏写一步（比如 `refresh-env`），用户机器上就是"检查说没事、doctor 说有事"。
+- 新：`upgrade-check` 每次都跑一组**通用证据**——`env-template`（每条鱼的 `环境.md` 指纹对模板）、`profile-link`（各 profile 的两个包是不是 `link:`）、`roster`（名册里的鱼家都在）、`config`（配置里的鱼塘根与 pool 在）；没过直接印「待办」并给命令。升级单条目可加可选 `evidence` 字段点名其中几条。用户可见：是。
+
 ### r440 升级单漏了 refresh-env 也不怕：按本机纸的指纹再判一次
 
 - 旧：`refresh-env` 写没写全靠作者记得；测试机从 1.8.11 更到 1.12.3 时升级单没列，`doctor` 一直报旧纸，`upgrade-check` 却说“没有待做”。
