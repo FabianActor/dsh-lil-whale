@@ -129,7 +129,7 @@ function eq(name, got, want) {
   const wokeLine = idx.split('\n').find((line) => line.includes("watchmanLog('woke',")) || ''
   ok(wokeLine.includes(' src='), 'woke 行带 src')
   ok(wokeLine.includes('counts='), 'woke 行带 counts')
-  ok(wokeLine.includes('held='), 'woke 行带 held')
+  ok(wokeLine.includes('held-since-wake='), 'woke 行带 held-since-wake（窗口写在名字里）')
 }
 
 // ---------- 文件在、这一格不在：来源叫 absent（r432/r433） ----------
@@ -147,6 +147,13 @@ function eq(name, got, want) {
   const idx = readFileSync(new URL('../plugin/dsh-lil-whale-group/lib/index.js', import.meta.url), 'utf8')
   ok(idx.includes('out[`${member}@${seat}`] = { ...own }'), '重建时连座位键一起补全')
   ok(idx.includes('if (seatSeen === 0 && sharedSeen > 0) seatSeen = sharedSeen'), '座位格为 0 时跟主游标走，不重扫')
+}
+
+// ---------- 两支必须同形：写游标时自检（r435） ----------
+{
+  const idx = readFileSync(new URL('../plugin/dsh-lil-whale-group/lib/index.js', import.meta.url), 'utf8')
+  ok(idx.includes("'cursor-shape-mismatch'"), '座位键与主键不同形时记一行')
+  ok(idx.includes('held-since-wake='), '投递行与 woke 行用 held-since-wake')
 }
 
 // ---------- 结果 ----------

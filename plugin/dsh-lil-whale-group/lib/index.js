@@ -1639,6 +1639,17 @@ function writeCursors(member, cursors) {
     }
   }
   ensureParent(cursorFileOf(member))
+  // 写前自检：座位影子的通道键集合应与主键一致（缺键 = 半份）。
+  const mainKeys = Object.keys(kept[member] ?? {}).sort().join(',')
+  for (const key of Object.keys(kept)) {
+    if (key === member) continue
+    const seatKeys = Object.keys(kept[key] ?? {}).sort().join(',')
+    if (seatKeys === mainKeys) continue
+    if (!cursorShapeLogged.has(key)) {
+      cursorShapeLogged.add(key)
+      logLine({ note: 'cursor-shape-mismatch', member, key, main: mainKeys, seat: seatKeys })
+    }
+  }
   writeJson(cursorFileOf(member), kept)
 }
 
@@ -2974,6 +2985,9 @@ const clampLogged = new Set()
 const cursorLostLogged = new Set()
 // 来源不明/回退/夹边界：同一成员同一通道每进程只记一行。
 const cursorSourceLogged = new Set()
+// 2026-11-23（r435，LeeaCP）：主键与座位键"两支必须同形"——半份比空着更糟，看着像全的。
+// 同一条座位键只报一次，免得写游标这条热路径刷账。
+const cursorShapeLogged = new Set()
 
 function handleChannel({ agent, member, seat, channel, cursorState, wakes }) {
   const cursors = cursorState?.cursors ?? {}
@@ -3203,7 +3217,7 @@ function handleChannel({ agent, member, seat, channel, cursorState, wakes }) {
     : Array.isArray(lastRecord?.mention)
       ? (lastRecord.mention.length === 0 ? 'none' : lastRecord.mention.join('+'))
       : 'legacy'
-  const deliveryNote = `id=${built.id} member=${member} mention=${mentionTag} held=${heldCount} channel=${channel.key} seat=${seat === '' ? '-' : seat} pending=${incoming.length} last-line=${lastIncomingIndex + 1} last-from=${incoming[incoming.length - 1]?.from ?? '-'} last-ts=${lastTs || 0} cursor=${lines.length} prior-cursor=${sharedSeenStored} cursor-state=${read.unknown ? "unknown" : cursorLost ? "lost" : firstRead ? "first" : "resumed"} src=${read.src} start=${cursorLost || read.unknown ? "unknown" : read.start} counts=${cursorLost || read.unknown ? "unknown" : "known"} tpl=${tpl} n=${incoming.length} tail=${tailTpl} wtext8=${wtext8} human=${humanIncoming ? 'yes' : 'no'} pkg=${PKG_VERSION}`
+  const deliveryNote = `id=${built.id} member=${member} mention=${mentionTag} held-since-wake=${heldCount} channel=${channel.key} seat=${seat === '' ? '-' : seat} pending=${incoming.length} last-line=${lastIncomingIndex + 1} last-from=${incoming[incoming.length - 1]?.from ?? '-'} last-ts=${lastTs || 0} cursor=${lines.length} prior-cursor=${sharedSeenStored} cursor-state=${read.unknown ? "unknown" : cursorLost ? "lost" : firstRead ? "first" : "resumed"} src=${read.src} start=${cursorLost || read.unknown ? "unknown" : read.start} counts=${cursorLost || read.unknown ? "unknown" : "known"} tpl=${tpl} n=${incoming.length} tail=${tailTpl} wtext8=${wtext8} human=${humanIncoming ? 'yes' : 'no'} pkg=${PKG_VERSION}`
   try {
     agent.followup(built)
   } catch (error) {
@@ -3220,7 +3234,7 @@ function handleChannel({ agent, member, seat, channel, cursorState, wakes }) {
   // 小肥鱼 #1627（2026-11-18）：通道交付也是一次"被叫醒"，但过去的 `woke` 行只记推门那几类，
   // 于是"最频繁的群交付"在 watchman.log 里一次都看不见。不改旧行的意思，只把这一类也记进来：
   // trigger=channel。此前的行没有它，只代表当时不记，不代表当时没有通道唤醒（append-only，补不回去）。
-  watchmanLog('woke', `trigger=channel to=${member} channel=${channel.key} pending=${incoming.length} last-line=${lastIncomingIndex + 1} human=${humanIncoming ? 'yes' : 'no'} src=${read.src} start=${cursorLost || read.unknown ? 'unknown' : read.start} counts=${cursorLost || read.unknown ? 'unknown' : 'known'} held=${heldCount}`)
+  watchmanLog('woke', `trigger=channel to=${member} channel=${channel.key} pending=${incoming.length} last-line=${lastIncomingIndex + 1} human=${humanIncoming ? 'yes' : 'no'} src=${read.src} start=${cursorLost || read.unknown ? 'unknown' : read.start} counts=${cursorLost || read.unknown ? 'unknown' : 'known'} held-since-wake=${heldCount}`)
   markWakeMarker(member, channel.kind)
   markWake(member, channel.kind)
 
