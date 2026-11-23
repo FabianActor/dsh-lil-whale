@@ -8,7 +8,7 @@
 // 身份优先按**钉住的 sessionId** 认（2026-11-09 起）：同一目录下可能有两段会话，
 // 按 cwd 会叫错人。cwd 只作退路，并在 plugin.log 留一行痕迹。
 
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { printableText } from './text-clean.js'
 import { sayProblemOf, channelProblemOf } from './say-core.js'
 import { noteCodeOf, intentNoteTextOf, watchmanSkipLineOf } from './note-core.js'
@@ -1507,6 +1507,10 @@ function readCursorState(member) {
       text = readFileSync(file, 'utf8')
     } catch (error) {
       if (error?.code === 'ENOENT') {
+        // 2026-11-23（LeeaCP 验收 B）：文件不在时，先看 meta 能不能把各通道补回来；
+        // 补不回来才退回"读到哪儿算哪儿"。重建一个复合文件不许顺手丢掉没坏的键。
+        const recovered = recoveredCursorsOf(member)
+        if (recovered !== null) return { cursors: recovered, source: 'recovered' }
         const seeded = seededCursorsOf(member)
         return { cursors: seeded, source: Object.keys(seeded).length === 0 ? 'missing' : 'legacy' }
       }
@@ -1521,7 +1525,35 @@ function readCursorState(member) {
       // 读坏了：可能是半截写入，再试一次；三次都不行就当 unknown。
     }
   }
+  // 2026-11-23（LeeaCP 验收 C）：坏过一次要留下痕迹——自愈过的和从没坏过的不能同形。
+  quarantineCursorFile(member)
+  const recovered = recoveredCursorsOf(member)
+  if (recovered !== null) return { cursors: recovered, source: 'recovered' }
   return { cursors: {}, source: 'unknown' }
+}
+
+/** 坏文件先复制一份带时刻的副本，再记一行账。副本只留证，不参与读。 */
+function quarantineCursorFile(member) {
+  const file = cursorFileOf(member)
+  try {
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '-').replace('Z', '')
+    const dest = `${file}.corrupt-${stamp}`
+    copyFileSync(file, dest)
+    logLine({ note: 'cursor-corrupt', member, backup: basename(dest) })
+  } catch (error) {
+    logLine({ note: 'cursor-corrupt', member, backup: 'save-failed', error: String(error?.message ?? error).slice(0, 80) })
+  }
+}
+
+/** 从 meta（上一次真递到的行号）重建各通道的游标；没有 meta 就返回 null。 */
+function recoveredCursorsOf(member) {
+  const channels = readCursorMeta(member).channels ?? {}
+  const own = {}
+  for (const [key, value] of Object.entries(channels)) {
+    const delivered = value?.delivered
+    if (typeof delivered === 'number' && Number.isFinite(delivered) && delivered >= 0) own[key] = delivered
+  }
+  return Object.keys(own).length === 0 ? null : { [member]: own }
 }
 
 // 2026-11-23（fi-0013/0014）：上一次**真的递到**第几行。
@@ -3174,7 +3206,7 @@ function handleChannel({ agent, member, seat, channel, cursorState, wakes }) {
   // 小肥鱼 #1627（2026-11-18）：通道交付也是一次"被叫醒"，但过去的 `woke` 行只记推门那几类，
   // 于是"最频繁的群交付"在 watchman.log 里一次都看不见。不改旧行的意思，只把这一类也记进来：
   // trigger=channel。此前的行没有它，只代表当时不记，不代表当时没有通道唤醒（append-only，补不回去）。
-  watchmanLog('woke', `trigger=channel to=${member} channel=${channel.key} pending=${incoming.length} last-line=${lastIncomingIndex + 1} human=${humanIncoming ? 'yes' : 'no'}`)
+  watchmanLog('woke', `trigger=channel to=${member} channel=${channel.key} pending=${incoming.length} last-line=${lastIncomingIndex + 1} human=${humanIncoming ? 'yes' : 'no'} src=${read.src} start=${read.start} counts=${countsKnownOf(read) ? 'known' : 'unknown'} held=${heldCount}`)
   markWakeMarker(member, channel.kind)
   markWake(member, channel.kind)
 

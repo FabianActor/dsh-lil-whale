@@ -133,5 +133,5 @@ export function clearHeld(state, channelKey, now = new Date().toISOString()) {
 /** 唤醒预览里的那句：有没被叫醒的话才算数，0 就返回空串（不留一行"0 条"的噪声）。 */
 export function heldSentenceOf(count) {
   if (!Number.isFinite(count) || count <= 0) return ''
-  return `（另外，群里还有 ${count} 条没点你的话；它们没叫醒你，但都在群文件里。）`
+  return `（自上轮醒来以后，群里还有 ${count} 条没点你的话；它们没叫醒你，但都在群文件里。）`
 }

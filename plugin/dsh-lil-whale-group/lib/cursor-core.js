@@ -42,8 +42,9 @@ export function classifyCursorRead({ source, stored, lastDelivered = null, lines
   if (source === 'missing' || source === 'unknown') {
     return { ...base, start: Math.max(0, total - CURSOR_LOST_WINDOW), src: source, unknown: true }
   }
-  // 4) 正常：legacy 是迁移来的真值，照常使用，只在记账里标一下。
-  return { ...base, start: Math.max(0, Math.min(raw, total)), src: source === 'legacy' ? 'legacy' : 'file' }
+  // 4) 正常：legacy 是迁移来的真值、recovered 是从 meta 重建的，都照常使用，只在记账里标来源。
+  const tag = source === 'legacy' || source === 'recovered' ? source : 'file'
+  return { ...base, start: Math.max(0, Math.min(raw, total)), src: tag }
 }
 
 /** 一句话说清这次读游标发生了什么（写进 watchman.log 的 cursor-source 行）。 */

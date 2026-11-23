@@ -7,6 +7,8 @@
 // 这个文件只验纯函数：怎么从"来源 + 存的数 + 上次递到哪儿 + 文件行数"算起点。
 // 不碰真状态，不读她的家。
 
+import { readFileSync } from 'node:fs'
+
 import {
   CURSOR_LOST_WINDOW,
   classifyCursorRead,
@@ -17,6 +19,12 @@ import {
 let pass = 0
 let fail = 0
 const failures = []
+
+function ok(value, name) {
+  if (value) { pass += 1; return }
+  fail += 1
+  failures.push("  ✗ " + name)
+}
 
 function eq(name, got, want) {
   if (JSON.stringify(got) === JSON.stringify(want)) {
@@ -103,6 +111,25 @@ function eq(name, got, want) {
     cursorSourceLine({ member: 'lee', channel: 'group', read, lines: 100 }),
     'member=lee channel=group src=capped stored=120 start=100 capped=yes lines=100',
   )
+}
+
+// ---------- 坏文件自愈：从 meta 重建（r431） ----------
+{
+  const r = classifyCursorRead({ source: 'recovered', stored: 3220, lastDelivered: 3219, lines: 3220 })
+  eq('recovered 当正常来源读', [r.start, r.src, r.unknown], [3220, 'recovered', false])
+  eq('recovered 不报回退', r.regressed, false)
+}
+
+// ---------- 源码接线：坏文件留证、按 meta 重建、woke 行带来源 ----------
+{
+  const idx = readFileSync(new URL('../plugin/dsh-lil-whale-group/lib/index.js', import.meta.url), 'utf8')
+  ok(idx.includes('cursor-corrupt'), '坏文件记一行 cursor-corrupt')
+  ok(idx.includes('.corrupt-'), '坏文件留带时刻的副本')
+  ok(idx.includes('recoveredCursorsOf'), '有 meta 时按 meta 重建各通道')
+  const wokeLine = idx.split('\n').find((line) => line.includes("watchmanLog('woke',")) || ''
+  ok(wokeLine.includes(' src='), 'woke 行带 src')
+  ok(wokeLine.includes('counts='), 'woke 行带 counts')
+  ok(wokeLine.includes('held='), 'woke 行带 held')
 }
 
 // ---------- 结果 ----------
