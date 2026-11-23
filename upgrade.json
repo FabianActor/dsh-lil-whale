@@ -15,6 +15,37 @@
   },
   "entries": [
     {
+      "version": "1.13.0",
+      "at": "2026-11-24",
+      "summary": "群消息「@」改成点名叫醒；游标读不到不再重放、不编条数；卡住四分钟会私聊里说一声；会话换绑搬进鱼塘；安装器支持 -Upgrade 原地升级。",
+      "requires": [
+        "package",
+        "restart",
+        "refresh-env"
+      ],
+      "restart": [
+        "all"
+      ],
+      "commands": [
+        "pwsh -File app\\scripts\\fish.ps1 upgrade-check",
+        "pwsh -File app\\scripts\\install.ps1 -Upgrade",
+        "pwsh -File app\\scripts\\fish.ps1 refresh all",
+        "pwsh -File app\\scripts\\doctor.ps1"
+      ],
+      "verify": [
+        "五条启动行 `pkg=@fabianactor/dsh-lil-whale-group@1.13.0`；3080 面板控制台 `client build v66` 或更高",
+        "群聊发一条不带 @ 的消息：没有人被叫醒；@ 一个人：只有那个人醒（消息仍全群可见）",
+        "`homes\\<键>\\环境.md` 的渲染指纹是 `2b40a6da`（`upgrade-check` 会点名旧纸）",
+        "`pwsh -File app\\scripts\\doctor.ps1` 全过"
+      ],
+      "breaking": [],
+      "note": "`link:` 安装的用户更新 `app\\` 后重启即可；`install.ps1 -Upgrade` 只用于需要重挂 profile 的场景，它会保留 START/AGENTS/notes/plan，只备份并重生成 环境.md。",
+      "evidence": [
+        "env-template",
+        "profile-link"
+      ]
+    },
+    {
       "version": "1.12.3",
       "at": "2026-11-20",
       "summary": "修「发图」选完图不进输入框；安装与更新收归 GitHub 仓库（检查更新改查 GitHub Releases，npm 降为镜像）。",
