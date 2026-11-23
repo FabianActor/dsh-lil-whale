@@ -33,6 +33,11 @@ check('忙且没新写入、过阈值 → stalled', classifyStall({ now: T0 + ST
 check('读不到会话文件也报 stalled（已知的盲区）', classifyStall({ now: T0 + 10 * 60_000, deliveredAt: T0, sessionMtime: null, agentStatus: 'busy' }).kind === 'stalled')
 check('超过一小时 → too-old', classifyStall({ now: T0 + STALL_MAX_MS + 1, deliveredAt: T0, sessionMtime: T0, agentStatus: 'busy' }).kind === 'too-old')
 check('时间倒流不出现负数 ageSec', classifyStall({ now: T0 - 5_000, deliveredAt: T0, sessionMtime: T0, agentStatus: 'busy' }).ageSec === 0)
+// 2026-11-23 小满报：状态文件里 since=04:08:04、ageSec=298（按 deliveredAt=04:07:55 算）——两个数不同锚点。
+const mixed = classifyStall({ now: T0 + 297_000, deliveredAt: T0, sessionMtime: T0 + 9_000, agentStatus: 'busy' })
+check('quietSec 与 since 同一个锚点', mixed.quietSec === 288, `quietSec=${mixed.quietSec}`)
+check('ageSec 仍是距投递（只判 too-old）', mixed.ageSec === 297, `ageSec=${mixed.ageSec}`)
+check('lastAt 取最后一次动静', mixed.lastAt === T0 + 9_000)
 
 // 2) 系统行
 check('hhmm 补零', /^\d{2}:\d{2}$/.test(hhmmOf(T0)))
@@ -49,6 +54,7 @@ const here = dirname(fileURLToPath(import.meta.url))
 const src = fs.readFileSync(join(here, '..', 'plugin', 'dsh-lil-whale-group', 'lib', 'index.js'), 'utf8')
 check('imports classifyStall', src.includes("from './stall-core.js'") && src.includes('classifyStall'))
 check('投递成功后开始计时', src.includes("lastDeliveries.set(member, { at: Date.now()"))
+check('状态文件写 quietSec（不是 ageSec）', src.includes('quietSec: verdict.quietSec') && !src.includes('ageSec: verdict.ageSec'))
 check('每 60 秒检查一次', /const stallTimer = setInterval\(\(\) => \{[\s\S]{0,400}?\}, 60_000\)/.test(src))
 check('状态目录是 pool\\state\\stalls', src.includes("join(POOL_STATE, 'stalls')"))
 check('系统行写进 DM 文件', src.includes('saySystemToDm') && src.includes('dmFileOf(member, human)'))

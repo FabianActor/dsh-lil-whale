@@ -14,6 +14,12 @@
 
 1. **只提 commit、没升版本号**（文档、脚本、账本格式、诊断输出）→ 只写进 `## [未发布]
 
+### r424 停顿状态文件的两把钟合成一把：`since` 与 `quietSec` 同用最后一次动静（用户可见：否，内部账）
+
+- 旧：`classifyStall` 返回的 `ageSec` 按 `deliveredAt` 算，而系统行与状态文件里的 `since` 按 `lastAt`（投递时刻与会话 mtime 里更晚的那个）算 ⇒ 小满拿到的 210 B 里出现 `since=04:08:04`、`ageSec=298`（按 04:07:55 算）的错位——两个数看起来在说同一件事，锚点却不是同一个。
+- 新：`quietSec` 单独命名（距最后一次动静的秒数），`ageSec` 只留作"距投递多久"、只给 `too-old` 判据用；状态文件写 `quietSec`、`stall-notified` 行也写 `quietSec=`；`since` / `quietSec` / 系统行里的「自 HH:MM 起」同一把钟，`deliveredAt` 只作诊断。
+- 验收：`scripts\test-stall-core.mjs` 29 格（新增三格：同锚点 288、`ageSec` 297、`lastAt` 取最后一次动静）；`docs\detail\日志都记在哪.md` 的 `stalls\` 行补两把钟说明。
+- 用户可见：否（内部账与日志字段）。
 ### r423 系统提示行不再借用「提到了」：显示「系统」，不回退旧 to（用户可见：是）
 
 - 旧：r420 的【系统】提示行是 `kind='system', channel='dm'`，而 r419 的私聊守卫只认 `kind==='dm'` ⇒ 面板把它当老群记录回退，气泡标题显示 `system · 提到了：小满（按当年 to 推）`；发送者名字也直接是 `system`。

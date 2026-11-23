@@ -1938,11 +1938,11 @@ function checkOwnStall(ctx) {
       member: me,
       since: new Date(verdict.lastAt ?? delivery.at).toISOString(),
       deliveredAt: new Date(delivery.at).toISOString(),
-      ageSec: verdict.ageSec,
+      quietSec: verdict.quietSec,
       url: `http://127.0.0.1:${MEMBERS[me]?.port ?? ''}/`,
       at: new Date().toISOString(),
     })
-    logLine({ note: 'stall-notified', member: me, ageSec: verdict.ageSec })
+    logLine({ note: 'stall-notified', member: me, quietSec: verdict.quietSec })
   } catch (error) {
     logLine({ note: 'stall-notify-failed', member: me, error: String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120) })
   }

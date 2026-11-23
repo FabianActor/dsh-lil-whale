@@ -28,22 +28,25 @@ export const STALL_MAX_MS = 60 * 60 * 1000; // 超过一小时不再报：那已
  * @param {number|null} input.deliveredAt 这次投递的毫秒时间戳（没有投递就传 null）
  * @param {number|null} input.sessionMtime 会话日志文件的 mtime（读不到传 null）
  * @param {string|null} input.agentStatus 宿主给的 agent 状态（'idle' / 'busy' / 其它）
- * @returns {{kind: 'none'|'idle'|'working'|'stalled'|'too-old', ageSec: number, lastAt: number|null}}
+ * @returns {{kind: 'none'|'idle'|'working'|'stalled'|'too-old', ageSec: number, quietSec: number, lastAt: number|null}}
+ *   ageSec = 距投递多久（判 too-old 用）；quietSec = 距最后一次动静多久（判停顿、写进系统行与状态文件用）。
+ *   两个数共用 deliveredAt 之外的那个 lastAt 会错位，所以分开命名（r424）。
  */
 export function classifyStall(input = {}) {
   const { now, deliveredAt, sessionMtime, agentStatus } = input;
-  if (!Number.isFinite(deliveredAt)) return { kind: 'none', ageSec: 0, lastAt: null };
+  if (!Number.isFinite(deliveredAt)) return { kind: 'none', ageSec: 0, quietSec: 0, lastAt: null };
   const at = Number.isFinite(now) ? now : Date.now();
   const ageMs = Math.max(0, at - deliveredAt);
   const ageSec = Math.round(ageMs / 1000);
   // 最后一次动静：投递时刻与会话文件 mtime 里更晚的那个。
   const lastAt = Number.isFinite(sessionMtime) ? Math.max(deliveredAt, sessionMtime) : deliveredAt;
   const quietMs = Math.max(0, at - lastAt);
-  if (ageMs > STALL_MAX_MS) return { kind: 'too-old', ageSec, lastAt };
-  if (agentStatus === 'idle') return { kind: 'idle', ageSec, lastAt };
+  const quietSec = Math.round(quietMs / 1000);
+  if (ageMs > STALL_MAX_MS) return { kind: 'too-old', ageSec, quietSec, lastAt };
+  if (agentStatus === 'idle') return { kind: 'idle', ageSec, quietSec, lastAt };
   // 最近 N 分钟内还写过：哪怕很慢，也算在动。
-  if (quietMs < STALL_AFTER_MS) return { kind: 'working', ageSec, lastAt };
-  return { kind: 'stalled', ageSec, lastAt };
+  if (quietMs < STALL_AFTER_MS) return { kind: 'working', ageSec, quietSec, lastAt };
+  return { kind: 'stalled', ageSec, quietSec, lastAt };
 }
 
 /** 本地 HH:MM（不引时区，只给人看）。 */
