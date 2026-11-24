@@ -1456,7 +1456,9 @@ try {
 try {
   $plugLog = Join-Path $Cfg.GroupDir 'plugin.log'
   if ((Test-Path -LiteralPath $plugLog) -and $Cfg.MembersFile -and (Test-Path -LiteralPath $Cfg.MembersFile)) {
-    $toolRows = @(Get-Content -LiteralPath $plugLog -Encoding utf8 -Tail 4000 | ForEach-Object {
+    $plugAll = @(Get-Content -LiteralPath $plugLog -Encoding utf8)
+    $win9b = if ($plugAll.Count -gt 4000) { '（window=last4000 of=' + $plugAll.Count + '）' } else { '' }
+    $toolRows = @($plugAll | Select-Object -Last 4000 | ForEach-Object {
       try { $_ | ConvertFrom-Json } catch { $null }
     } | Where-Object { $_ -and $_.note -eq 'wake-agent-tools' -and $_.member })
     $tm = (Get-Content -LiteralPath $Cfg.MembersFile -Raw -Encoding utf8 | ConvertFrom-Json).members
@@ -1465,14 +1467,14 @@ try {
       $k = $p.Name
       $mine = @($toolRows | Where-Object { $_.member -eq $k })
       if ($mine.Count -lt 2) {
-        Add-Row '工具数（全鱼）' 'INFO' ('{0}（{1}）：记录不足两次，看不出增减' -f $p.Value.name, $k)
+        Add-Row '工具数（全鱼）' 'INFO' ('{0}（{1}）：记录不足两次，看不出增减{2}' -f $p.Value.name, $k, $win9b)
         continue
       }
       $prevN = [int]$mine[-2].toolCount; $curN = [int]$mine[-1].toolCount
       if ($curN -lt $prevN) {
-        Add-Row '工具数（全鱼）' 'WARN' ('{0}（{1}）：{2} → {3}，少了 {4} 件（{5}）' -f $p.Value.name, $k, $prevN, $curN, ($prevN - $curN), ([string]$mine[-1].at)) 'NEXT: dsh --profile <键> --dump-config | Select-String dsh-lil-whale-group（看她插件掉没掉）'
+        Add-Row '工具数（全鱼）' 'WARN' ('{0}（{1}）：{2} → {3}，少了 {4} 件（{5}）{6}' -f $p.Value.name, $k, $prevN, $curN, ($prevN - $curN), ([string]$mine[-1].at), $win9b) 'NEXT: dsh --profile <键> --dump-config | Select-String dsh-lil-whale-group（看她插件掉没掉）'
       } else {
-        Add-Row '工具数（全鱼）' 'OK' ('{0}（{1}）：{2} 件（上次 {3}）' -f $p.Value.name, $k, $curN, $prevN)
+        Add-Row '工具数（全鱼）' 'OK' ('{0}（{1}）：{2} 件（上次 {3}）{4}' -f $p.Value.name, $k, $curN, $prevN, $win9b)
       }
     }
   }

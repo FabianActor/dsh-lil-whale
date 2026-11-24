@@ -53,13 +53,13 @@ Add-Row 'runs 账按鱼写' $(if ($runsOk) { 'PASS' } else { 'FAIL' }) ($runsDet
 $wm = Join-Path $Cfg.PoolState 'watchman.log'
 $selfRows = @()
 if (Test-Path -LiteralPath $wm) { $selfRows = @(Get-Content -LiteralPath $wm -Encoding utf8 -Tail 400 | Where-Object { $_ -match 'trigger=self' }) }
-Add-Row '自己的闹钟（B）' 'INFO' $(if ($selfRows.Count -gt 0) { "最近 400 行里有 $($selfRows.Count) 条 trigger=self：$($selfRows[-1])" } else { '还没有 trigger=self（下次闹钟到点前属正常）' })
+Add-Row '自己的闹钟（B）' 'INFO' $(if ($selfRows.Count -gt 0) { "最近 400 行里有 $($selfRows.Count) 条 trigger=self：$($selfRows[-1])（window=last400）" } else { '还没有 trigger=self（下次闹钟到点前属正常；window=last400）' })
 
 # 3) gate 里的 hour 是真数（wakeCountsOf 读法修过）
 $gateRows = @()
 if (Test-Path -LiteralPath $wm) { $gateRows = @(Get-Content -LiteralPath $wm -Encoding utf8 -Tail 400 | Where-Object { $_ -match 'gate=pass\(hour=' }) }
 if ($gateRows.Count -eq 0) {
-  Add-Row 'gate 的 hour 读数' 'INFO' '最近 400 行没有 wake-try（没有鱼被叫醒过）'
+  Add-Row 'gate 的 hour 读数' 'INFO' '最近 400 行没有 wake-try（没有鱼被叫醒过；window=last400）'
 } else {
   $last = $gateRows[-1]
   $hourVal = if ($last -match 'gate=pass\(hour=(\d+)/') { [int]$Matches[1] } else { -1 }
