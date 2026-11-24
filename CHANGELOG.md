@@ -22,6 +22,10 @@
 
 ## [未发布]
 
+### r454 plan 的 skip 行补主语 to=（内部）
+
+- 旧：`08:41:35 | skip | deny=already-delivered plan=morning-read at=08:40` 整行没有 `to=`——被跳过的是谁，只能按上下文猜（小满昨天先报过这个形状，今天轮到小肥鱼的 plan）。
+- 新：plan 的 `skip` 行与 `deny=already-delivered` 的 `wake-skip` 行都带 `to=<成员>`；§96 补一条：起点（`start=`）也要跟数写在同一行，否则 `pending = last-line − start` 验不了。
 ### r453 文本指纹先归一化换行再 hash（内部）
 
 - 旧：`.gitattributes` 的 `* text=auto` 让同一份模板在 Windows 检出是 CRLF、在包里是 LF；raw sha256 从 `2b40a6da` 变成 `eeff217b`，doctor 把四条鱼刚生成好的 `环境.md` 全判成旧模板。

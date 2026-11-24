@@ -181,7 +181,17 @@ function eq(name, got, want) {
   const idx = readFileSync(new URL('../plugin/dsh-lil-whale-group/lib/index.js', import.meta.url), 'utf8')
   ok(idx.includes("note: 'held-overflow'"), '超过上界时记一行 held-overflow')
   ok(idx.includes('heldTrusted = false'), '超过上界时按不可信处理（写 unknown）')
-}// ---------- 结果 ----------
+}// ---------- skip 行要有主语（r454：小肥鱼 2026-11-24 群第 3263 行） ----------
+{
+  const idx = readFileSync(new URL('../plugin/dsh-lil-whale-group/lib/index.js', import.meta.url), 'utf8')
+  const skipNeedle = "watchmanLog('skip', `to=${member.key} ${why} ${job.tag}`)"
+  ok(idx.includes(skipNeedle), 'plan 的 skip 行带 to=')
+  const deliveredNeedle = "watchmanLog('wake-skip', `wid=${wid} to=${member.key} deny=already-delivered`)"
+  ok(idx.includes(deliveredNeedle), 'already-delivered 的 wake-skip 行带 to=')
+  ok(!/watchmanLog\('skip', `(?!to=)/.test(idx), 'skip 行不许没有主语')
+}
+
+// ---------- 结果 ----------
 console.log(`合计 ${pass + fail}，PASS ${pass}，FAIL ${fail}`)
 for (const line of failures) console.log(line)
 process.exit(fail === 0 ? 0 : 1)

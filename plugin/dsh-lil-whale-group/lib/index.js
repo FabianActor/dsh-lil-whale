@@ -3850,7 +3850,7 @@ async function watchOne(member, st) {
       if (st.skipped[skipKey]) return
       st.skipped[skipKey] = true
       saveWatchState()
-      watchmanLog('skip', `${why} ${job.tag}`)
+      watchmanLog('skip', `to=${member.key} ${why} ${job.tag}`)
     }
     // 睡着的时候不推门、不递话：计划到点了也不叫醒（醒来后不补发，账里记 deny=sleep）。
     if (isSleeping(member.key)) {
@@ -3892,7 +3892,7 @@ async function watchOne(member, st) {
         // "只递一次"走原子声明（见 claimPlanDelivery）。这里不再读 planFired ——
         // 那份内存快照谁都看不见谁，正是三条 deliver 的来源。
         if (!claimPlanDelivery(member, job.key)) {
-          watchmanLog('wake-skip', `wid=${wid} deny=already-delivered`)
+          watchmanLog('wake-skip', `wid=${wid} to=${member.key} deny=already-delivered`)
           noteSkip('deny=already-delivered')
           continue
         }
