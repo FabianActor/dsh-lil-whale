@@ -27,15 +27,17 @@ ok('高度增长时补到底（内容变高 + 人没动）', src.includes('const
 ok('stickToBottom 记下高度，供下一次比较', /lastHeightRef\.current = el\.scrollHeight/.test(src))
 ok('deps 变化后仍补三次（0 / 200ms / 800ms）', src.includes('setTimeout(stickToBottom, 200)') && src.includes('setTimeout(stickToBottom, 800)'))
 
-// 2. 「回到历史未读」不能在贴底时亮
-ok('measureHistory 受 atBottom 约束', src.includes('lineAbove && !historyVisitedRef.current && !atBottomRef.current'))
-ok('回到贴底时收起提示并记成「来过」', /if \(!atBottom\) return\s*\n\s*historyVisitedRef\.current = true\s*\n\s*if \(historyAboveRef\.current\) \{ historyAboveRef\.current = false; setHistoryAbove\(false\) \}/.test(src))
-ok('markRead 后重量分割线', /historyVisitedRef\.current = false[\s\S]{0,240}measureHistory\(\)/.test(src))
+// 2. 「回到历史未读」只看有没有未读历史：有就亮，没有就灭
+//    2026-11-24 Fabian 定论：11-17/11-19 的"贴底收起、点过不再亮"是 bug 描述，不是要的行为。
+ok('measureHistory 只按几何判（有未读历史就亮）', src.includes('const next = lineAbove'))
+ok('不再用「来过」压掉提示', !src.includes('historyVisitedRef'))
+ok('没有「贴底即收起」的特例', !/if \(!atBottom\) return\s*\n\s*if \(historyAboveRef\.current\)/.test(src))
+ok('读完一批立刻重量分割线', /measureHistory\(\)/.test(src) && src.includes('读完一批后分割线会挪到新位置'))
 
 // 3. 构建标记（人刷新后靠它确认拿到的是这一版）
 // 期望跟着实现走：r328 把标记从 v51/follow-tail-long 换成 v52/line-cite（气泡行号），
 // 行为没变，变的只是这个字符串——所以这里同步改，不算回归（§27 期望变）。
-ok('client build v64', src.includes('client build v66 · history-hint-backlog'))
+ok('client build v67', src.includes('client build v67 · history-always'))
 
 console.log(`test-client-follow-tail：合计 ${total}，PASS ${pass}，FAIL ${total - pass}`)
 process.exit(pass === total ? 0 : 1)

@@ -77,7 +77,7 @@ try {
   ok('客户端的候选来自新路由', clientSrc.includes('/group/api/bind-candidates?member='))
   ok('客户端只留一个「换绑」按钮', clientSrc.includes("bind: '换绑'") && !clientSrc.includes('解绑该会话'))
   ok('会话行菜单已撤掉', !clientSrc.includes('lil-whale.binding') && !clientSrc.includes("inject: ['slots', 'contextMenus']"))
-  ok('build 标记 v65', clientSrc.includes('client build v66 · history-hint-backlog'))
+  ok('build 标记 v65', clientSrc.includes('client build v67 · history-always'))
   ok('服务端有候选路由', uiSrc.includes("path: '/group/api/bind-candidates'"))
   ok('服务端用同一个判定层', uiSrc.includes('sessionCandidatesOf({ roster'))
   ok('卡片状态里带会话', uiSrc.includes('sessionShort: boundList[0]'))

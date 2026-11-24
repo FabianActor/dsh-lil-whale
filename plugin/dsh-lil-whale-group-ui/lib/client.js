@@ -2052,7 +2052,6 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       // "回到上次看到的位置"：群页刚打开时视角在底部，历史线在头顶上面。
       const dividerRef = useRef(null)
       const historyAboveRef = useRef(false)
-      const historyVisitedRef = useRef(false)
       const [historyAbove, setHistoryAbove] = useState(false)
       // 线是不是在视口上方 —— 只回答这一件事，不回答"该不该显示"。
       const smoothTo = useCallback((el, top) => {
@@ -2086,10 +2085,10 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
             if (boundary >= 0 && boundary < start) lineAbove = true
           }
         }
-        // 点过一次就不再催：往下读时线会滑出视口上沿，以前会反复把提示亮出来（第 4 条）。
-        // 贴底时也不催：人已经看见最新的了；2026-11-17 第 2 条就是新消息比视口高、
-        // 分割线被顶出上沿，于是"回到历史未读"又亮起来。
-        const next = lineAbove && !historyVisitedRef.current && !atBottomRef.current
+        // 2026-11-24（Fabian 定论）：判据只留一条——有未读历史就亮，没有就灭。
+        // 以前"点过一次/贴底/稍一上滑"都把提示压掉，结果是"要滚一下才出现"；
+        // 那几条是他当时的 bug 描述，不是要的行为。几何本身已经表达"上面还有没看过的"。
+        const next = lineAbove
         if (next !== historyAboveRef.current) {
           historyAboveRef.current = next
           setHistoryAbove(next)
@@ -2098,8 +2097,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       const jumpToHistory = useCallback(() => {
         const el = scrollRef.current
         if (!el) return
-        // 点过一次就当去过：这次往下读不该再被同一根线提醒。
-        historyVisitedRef.current = true
+        // 提示只描述"上面还有没看过的"；跳过去以后那根线在视口里，几何自然把提示收掉。
         if (historyAboveRef.current) { historyAboveRef.current = false; setHistoryAbove(false) }
         const line = dividerRef.current
         if (line) {
@@ -2209,16 +2207,6 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       // 贴底 / 翻历史 / 回到底部：跟私聊页共用一套（见 useFollowTail）。
       const { atBottom, atBottomRef, measureBottom, jumpToBottom } = useFollowTail(scrollRef, [messages.length, tab, splash])
 
-      // 贴底了就把"回到历史未读"收掉：人已经看见最新的了，留着只剩误导。
-      // 2026-11-17 第 2 条：清完红点后来新消息，长消息把分割线顶出视口上沿，提示又亮。
-      // 2026-11-19 第 3 条：贴底时提示消失、稍一上滑又出现——"到底"本身就是"已经见过这截"的证据，
-      // 记进 historyVisitedRef；之后同一根线不再亮，等读完一批（markRead）才放行。
-      useEffect(() => {
-        if (!atBottom) return
-        historyVisitedRef.current = true
-        if (historyAboveRef.current) { historyAboveRef.current = false; setHistoryAbove(false) }
-      }, [atBottom])
-
       // 「加载更早」之后保持眼睛原来的位置：上面新增了多少高度，就把滚动条往下推多少。
       useEffect(() => {
         const anchor = pendingScrollRef.current
@@ -2265,7 +2253,6 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
             groupReadTimerRef.current = setTimeout(finishGroupRead, 5000)
             return
           }
-          historyVisitedRef.current = false
           // 读完一批后分割线会挪到新位置：立刻重量，别等下一次滚动。
           measureHistory()
           refresh()
@@ -4096,7 +4083,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v66 · history-hint-backlog:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v67 · history-always:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')

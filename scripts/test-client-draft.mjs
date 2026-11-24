@@ -39,7 +39,7 @@ ok('定时器到点后归零', /draftTimerRef\.current = setTimeout\(\(\) => \{\
 ok('切回群聊时重放草稿', /if \(tab !== 'group'\) return\s[\s\S]{0,200}readDraft\(GROUP_DRAFT_KEY\)/.test(SRC), '没找到重放逻辑')
 ok('重放写进输入框', /const stored = readDraft\(GROUP_DRAFT_KEY\)\s[\s\S]{0,120}el\.value = stored\s/.test(SRC), '没写 el.value')
 ok('重放后同步 hasText', /el\.value = stored\s[\s\S]{0,120}setHasText\(stored\.trim\(\) !== ''\)/.test(SRC), '没同步 hasText')
-ok('build 标记 v55 read-truth', SRC.includes('client build v66 · history-hint-backlog'), 'build 标记没更新')
+ok('build 标记 v55 read-truth', SRC.includes('client build v67 · history-always'), 'build 标记没更新')
 
 console.log(`test-client-draft：合计 ${total}，PASS ${total - failed}，FAIL ${failed}`)
 process.exit(failed === 0 ? 0 : 1)
