@@ -15,6 +15,30 @@
   },
   "entries": [
     {
+      "version": "1.13.1",
+      "at": "2026-11-24",
+      "summary": "held-since-wake 只数游标之后并带上界；崩溃重启后不再整批重投、不编条数；模板指纹不随换行变；plan 的 skip 行补主语；面板「回到历史未读」改成有未读就亮。",
+      "requires": [
+        "package",
+        "restart"
+      ],
+      "restart": [
+        "all"
+      ],
+      "commands": [
+        "pwsh -File app\\scripts\\fish.ps1 upgrade-check",
+        "pwsh -File app\\scripts\\doctor.ps1"
+      ],
+      "verify": [
+        "重启后 `logs/plugin-boot.log` 五条 `pkg=@fabianactor/dsh-lil-whale-group@1.13.1`（或更新）",
+        "面板控制台出现 `client build v67 · history-always`；群里停在底部、上面有未读时，「回到历史未读」直接亮",
+        "下一次真跳过时 `pool\\state\\watchman.log` 的 `skip` 行带 `to=<鱼键>`；`to=undefined` 不再新增",
+        "`doctor` 0 条 WARN（含「格式分界」与「脚本编码」两格）"
+      ],
+      "breaking": [],
+      "note": "只换代码；`pool\\` 与 `homes\\` 的数据不动。面板是纯前端改动，刷新即生效，不必因为这一条重启。"
+    },
+    {
       "version": "1.13.0",
       "at": "2026-11-24",
       "summary": "群消息「@」改成点名叫醒；游标读不到不再重放、不编条数；卡住四分钟会私聊里说一声；会话换绑搬进鱼塘；安装器支持 -Upgrade 原地升级。",
