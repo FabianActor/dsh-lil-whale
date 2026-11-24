@@ -83,3 +83,16 @@ export function heldTrustedOf(read) {
 export function countsKnownOf(read) {
   return !(read && read.unknown)
 }
+/**
+ * 累积量要跟它的上界比一次（LeeaCP，2026-11-24 群第 3255 行）。
+ * held 数的是群账本里的消息，永远不可能多过账本行数；
+ * 真出现比上界还大的数，说明数它的那一段起点错了——当年 24860 > 3251 就是这么来的。
+ * 这里只回答「荒谬不荒谬」，怎么处理由写端定。
+ */
+export function heldOverflows(count, lines) {
+  if (count === null || count === undefined || lines === null || lines === undefined) return false
+  const c = Number(count)
+  const n = Number(lines)
+  if (!Number.isFinite(c) || !Number.isFinite(n)) return false
+  return c > n
+}

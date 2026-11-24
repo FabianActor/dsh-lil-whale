@@ -13,7 +13,7 @@ import { printableText } from './text-clean.js'
 import { sayProblemOf, channelProblemOf } from './say-core.js'
 import { noteCodeOf, intentNoteTextOf, watchmanSkipLineOf } from './note-core.js'
 import { classifyStall, stallSentenceOf } from './stall-core.js'
-import { classifyCursorRead, countsKnownOf, heldTrustedOf } from './cursor-core.js'
+import { classifyCursorRead, countsKnownOf, heldTrustedOf, heldOverflows } from './cursor-core.js'
 import { membersWithKeys } from './members-core.js'
 import { MENTION_ALL, normalizeMention, wantsWake, mentionTextOf, mentionDisplayOf, bumpHeld, heldOf, clearHeld, heldSentenceOf } from './mention-core.js'
 import { codeFingerprint } from './code-fp.js'
@@ -3018,7 +3018,7 @@ function handleChannel({ agent, member, seat, channel, cursorState, wakes }) {
     present: keyPresent,
   })
   // 2026-11-24（fi-0019）：起点不可信时，held 不数、不报、顺手清掉旧值。
-  const heldTrusted = heldTrustedOf(read)
+  let heldTrusted = heldTrustedOf(read)
   const sharedSeen = Math.min(read.start, lines.length)
   // 读不到进度 / 回退时，座位游标也不可信：跟同一条起点走；正常时各算各的。
   let seatSeen = read.unknown || read.regressed ? sharedSeen : Math.min(seatSeenStored, lines.length)
@@ -3194,6 +3194,13 @@ function handleChannel({ agent, member, seat, channel, cursorState, wakes }) {
   // 没叫醒你的那些话，也要在预览里露一次头（2026-11-22）。
   // 2026-11-24（fi-0019）：起点不可信时不报数（那是旧账重算），顺手清掉攒下来的旧值。
   let heldCount = channel.kind === 'group' && heldTrusted ? heldCountOf(member, channel.key) : 0
+  // 累积量跟它的上界比一次（LeeaCP，2026-11-24）：held 数不出比账本行数还多的消息。
+  if (channel.kind === 'group' && heldTrusted && heldOverflows(heldCount, lines.length)) {
+    logLine({ note: 'held-overflow', member, channel: channel.key, count: heldCount, lines: lines.length })
+    clearHeldOf(member, channel.key)
+    heldCount = 0
+    heldTrusted = false
+  }
   if (channel.kind === 'group' && !heldTrusted) {
     const stale = heldCountOf(member, channel.key)
     if (stale > 0) {

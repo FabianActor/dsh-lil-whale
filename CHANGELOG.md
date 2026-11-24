@@ -22,6 +22,10 @@
 
 ## [未发布]
 
+### r450 held 超过账本行数时写 unknown（内部）
+
+- 旧：来源可信的 held 原样写，`held-since-wake=24860`（账本才 3251 行）这种荒谬数照落账。
+- 新：`heldOverflows(count, lines)` 上界检查；超过行数记一行 `held-overflow`、清掉旧值、按不可信写 `unknown`（LeeaCP：任何累积量都要跟它的上界比一次）。
 ### r449 已读消息不再被算进 held-since-wake 的数（内部）
 
 - 旧：座位游标比主游标旧时，扫描从较小的那支起步，游标之前早已读过的消息每一拍都被当成「没点你的话」再数一遍；LeeaCP 看到 `held-since-wake=24860`（群总共才 3251 行）。

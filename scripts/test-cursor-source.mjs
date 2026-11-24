@@ -15,6 +15,7 @@ import {
   cursorSourceLine,
   countsKnownOf,
   heldTrustedOf,
+  heldOverflows,
 } from '../plugin/dsh-lil-whale-group/lib/cursor-core.js'
 
 let pass = 0
@@ -171,7 +172,16 @@ function eq(name, got, want) {
   ok(idx.includes("held-since-wake=${heldTrusted ? heldCount : 'unknown'}`)"), 'woke 行同样写 unknown')
 }
 
-// ---------- 结果 ----------
+// ---------- 累积量跟它的上界比一次（r450，LeeaCP 2026-11-24 群第 3255 行） ----------
+{
+  eq('正常：小于等于账本行数', heldOverflows(3251, 3251), false)
+  eq('荒谬：24860 > 3251', heldOverflows(24860, 3251), true)
+  eq('0 条不算荒谬', heldOverflows(0, 0), false)
+  eq('读不到行数时不判', heldOverflows(5, null), false)
+  const idx = readFileSync(new URL('../plugin/dsh-lil-whale-group/lib/index.js', import.meta.url), 'utf8')
+  ok(idx.includes("note: 'held-overflow'"), '超过上界时记一行 held-overflow')
+  ok(idx.includes('heldTrusted = false'), '超过上界时按不可信处理（写 unknown）')
+}// ---------- 结果 ----------
 console.log(`合计 ${pass + fail}，PASS ${pass}，FAIL ${fail}`)
 for (const line of failures) console.log(line)
 process.exit(fail === 0 ? 0 : 1)
