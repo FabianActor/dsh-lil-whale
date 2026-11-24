@@ -15,6 +15,30 @@
   },
   "entries": [
     {
+      "version": "1.13.2",
+      "at": "2026-11-24",
+      "summary": "巡守的会话换绑不再要求工作区在鱼塘里（只挡整盘），绑的时候把 cwd 记进账并显示在对话框；doctor 新增「名册（巡守）」。",
+      "requires": [
+        "package",
+        "restart"
+      ],
+      "restart": [
+        "all"
+      ],
+      "commands": [
+        "pwsh -File app\\scripts\\fish.ps1 upgrade-check",
+        "pwsh -File app\\scripts\\doctor.ps1"
+      ],
+      "verify": [
+        "重启后 `logs/plugin-boot.log` 五条 `pkg=@fabianactor/dsh-lil-whale-group@1.13.2`",
+        "面板控制台出现 `client build v68 · bind-cwd`；鱼塘卡片点「换绑」，输入框下面有「醒来 cwd：…」",
+        "`pool\\state\\fish.log` 的 `bind` 行尾有 `cwd=`",
+        "`pwsh -File app\\scripts\\doctor.ps1` 有一格「名册（巡守）」且 0 条 WARN"
+      ],
+      "breaking": [],
+      "note": "只换代码；`pool\\` 与 `homes\\` 的数据不动。换绑对话框是纯前端改动，刷新即生效；绑定的判定在宿主进程里，要重启才换。"
+    },
+    {
       "version": "1.13.1",
       "at": "2026-11-24",
       "summary": "held-since-wake 只数游标之后并带上界；崩溃重启后不再整批重投、不编条数；模板指纹不随换行变；plan 的 skip 行补主语；面板「回到历史未读」改成有未读就亮。",
