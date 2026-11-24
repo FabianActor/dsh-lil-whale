@@ -168,8 +168,8 @@ function eq(name, got, want) {
   ok(idx.includes('if (heldTrusted && index >= sharedSeen) {'), 'heldDelta 只在可信且位于游标之后时累加')
   ok(idx.includes('index >= sharedSeen'), '座位游标小于主游标时不重数旧消息（r449）')
   ok(idx.includes("note: 'held-untrusted'"), '不可信时清旧值并留痕')
-  ok(idx.includes("held-since-wake=${heldTrusted ? heldCount : 'unknown'}"), '投递行在不可信时写 unknown')
-  ok(idx.includes("held-since-wake=${heldTrusted ? heldCount : 'unknown'}`)"), 'woke 行同样写 unknown')
+  ok(idx.includes("held-since-wake=${heldTrusted ? heldCount : 'unknown'} of=${lines.length}"), '投递行在不可信时写 unknown，并带上界 of=')
+  ok(idx.includes("held-since-wake=${heldTrusted ? heldCount : 'unknown'} of=${lines.length}`)"), 'woke 行同样写 unknown，并带上界 of=')
 }
 
 // ---------- 累积量跟它的上界比一次（r450，LeeaCP 2026-11-24 群第 3255 行） ----------

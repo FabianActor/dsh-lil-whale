@@ -22,6 +22,10 @@
 
 ## [未发布]
 
+### r451 held-since-wake 带上界 of=（内部）
+
+- 旧：`held-since-wake=24860` 要验，得再去别处查群账本行数。
+- 新：`held-since-wake=… of=<账本行数>`——上界跟数写在同一行（LeeaCP：验的时候不该再算一遍）。
 ### r450 held 超过账本行数时写 unknown（内部）
 
 - 旧：来源可信的 held 原样写，`held-since-wake=24860`（账本才 3251 行）这种荒谬数照落账。

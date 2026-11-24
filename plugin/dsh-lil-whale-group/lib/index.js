@@ -3240,7 +3240,7 @@ function handleChannel({ agent, member, seat, channel, cursorState, wakes }) {
     : Array.isArray(lastRecord?.mention)
       ? (lastRecord.mention.length === 0 ? 'none' : lastRecord.mention.join('+'))
       : 'legacy'
-  const deliveryNote = `id=${built.id} member=${member} mention=${mentionTag} held-since-wake=${heldTrusted ? heldCount : "unknown"} channel=${channel.key} seat=${seat === '' ? '-' : seat} pending=${incoming.length} last-line=${lastIncomingIndex + 1} last-from=${incoming[incoming.length - 1]?.from ?? '-'} last-ts=${lastTs || 0} cursor=${lines.length} prior-cursor=${sharedSeenStored} cursor-state=${read.unknown ? "unknown" : cursorLost ? "lost" : firstRead ? "first" : "resumed"} src=${read.src} start=${cursorLost || read.unknown ? "unknown" : read.start} counts=${cursorLost || read.unknown ? "unknown" : "known"} tpl=${tpl} n=${incoming.length} tail=${tailTpl} wtext8=${wtext8} human=${humanIncoming ? 'yes' : 'no'} pkg=${PKG_VERSION}`
+  const deliveryNote = `id=${built.id} member=${member} mention=${mentionTag} held-since-wake=${heldTrusted ? heldCount : "unknown"} of=${lines.length} channel=${channel.key} seat=${seat === '' ? '-' : seat} pending=${incoming.length} last-line=${lastIncomingIndex + 1} last-from=${incoming[incoming.length - 1]?.from ?? '-'} last-ts=${lastTs || 0} cursor=${lines.length} prior-cursor=${sharedSeenStored} cursor-state=${read.unknown ? "unknown" : cursorLost ? "lost" : firstRead ? "first" : "resumed"} src=${read.src} start=${cursorLost || read.unknown ? "unknown" : read.start} counts=${cursorLost || read.unknown ? "unknown" : "known"} tpl=${tpl} n=${incoming.length} tail=${tailTpl} wtext8=${wtext8} human=${humanIncoming ? 'yes' : 'no'} pkg=${PKG_VERSION}`
   try {
     agent.followup(built)
   } catch (error) {
@@ -3257,7 +3257,7 @@ function handleChannel({ agent, member, seat, channel, cursorState, wakes }) {
   // 小肥鱼 #1627（2026-11-18）：通道交付也是一次"被叫醒"，但过去的 `woke` 行只记推门那几类，
   // 于是"最频繁的群交付"在 watchman.log 里一次都看不见。不改旧行的意思，只把这一类也记进来：
   // trigger=channel。此前的行没有它，只代表当时不记，不代表当时没有通道唤醒（append-only，补不回去）。
-  watchmanLog('woke', `trigger=channel to=${member} channel=${channel.key} pending=${incoming.length} last-line=${lastIncomingIndex + 1} human=${humanIncoming ? 'yes' : 'no'} src=${read.src} start=${cursorLost || read.unknown ? 'unknown' : read.start} counts=${cursorLost || read.unknown ? 'unknown' : 'known'} held-since-wake=${heldTrusted ? heldCount : 'unknown'}`)
+  watchmanLog('woke', `trigger=channel to=${member} channel=${channel.key} pending=${incoming.length} last-line=${lastIncomingIndex + 1} human=${humanIncoming ? 'yes' : 'no'} src=${read.src} start=${cursorLost || read.unknown ? 'unknown' : read.start} counts=${cursorLost || read.unknown ? 'unknown' : 'known'} held-since-wake=${heldTrusted ? heldCount : 'unknown'} of=${lines.length}`)
   markWakeMarker(member, channel.kind)
   markWake(member, channel.kind)
 
