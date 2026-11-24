@@ -462,14 +462,14 @@ if ($root) {
   if (Test-Path $bindTest) {
     $bindOut = & node $bindTest 2>&1
     if ($LASTEXITCODE -ne 0) { Fail '会话绑定' (($bindOut | Select-Object -Last 3) -join ' / ') }
-    else { Ok '会话绑定' '绑=替换、解绑清两处、会话必须在自己的家里（test-bindings-core.mjs）' }
+    else { Ok '会话绑定' '绑=替换、解绑清两处、会话文件必须在这个人的 dshHome\sessions 下（test-bindings-core.mjs）' }
   } else { Fail '会话绑定' 'scripts\test-bindings-core.mjs 不在包里' }
   # ── 4ay. 鱼塘换绑（2026-11-23：种子卡片的「换绑」；候选只列她家里的会话，会话行菜单那条路撤掉）──
   $pondBindTest = Join-Path $pkg 'scripts\test-pond-bind.mjs'
   if (Test-Path $pondBindTest) {
     $pondBindOut = & node $pondBindTest 2>&1
     if ($LASTEXITCODE -ne 0) { Fail '鱼塘换绑' (($pondBindOut | Select-Object -Last 3) -join ' / ') }
-    else { Ok '鱼塘换绑' '候选只列她家里的会话；菜单不在了；build v66（test-pond-bind.mjs）' }
+    else { Ok '鱼塘换绑' '候选只列她家里的会话；巡守只挡整盘；build v68（test-pond-bind.mjs）' }
   } else { Fail '鱼塘换绑' 'scripts\test-pond-bind.mjs 不在包里' }
   # ── 4az. 游标读到了什么（2026-11-23：来源/回退/读不到三件分开；fi-0013/14/15）──
   $cursorTest = Join-Path $pkg 'scripts\test-cursor-source.mjs'
