@@ -508,7 +508,14 @@ if ($root) {
     else { Ok '历史未读提示' '线不在窗口里也能判「上面还有没看过的」；build v66（test-client-history-hint.mjs）' }
   } else { Fail '历史未读提示' 'scripts\test-client-history-hint.mjs 不在包里' }
 
-  # ── 4bd. 测试机第二份（2026-11-23 P1–P5：dsh 解析、端口有效键、doctor 比 codeFp、心跳误报、tool-office）──
+  # ── 4be. 文本指纹（2026-11-24 r453：换行归一化）──
+  $textHash = Join-Path $pkg 'scripts\test-text-hash.mjs'
+  if (Test-Path -LiteralPath $textHash) {
+    $hashOut = & node $textHash 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '文本指纹' (($hashOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '文本指纹' 'CRLF 与 LF 算同一份内容（test-text-hash.mjs）' }
+  } else { Fail '文本指纹' 'scripts\test-text-hash.mjs 不在包里' }
+# ── 4bd. 测试机第二份（2026-11-23 P1–P5：dsh 解析、端口有效键、doctor 比 codeFp、心跳误报、tool-office）──
   $resolveTest = Join-Path $pkg 'scripts\test-fish-dsh-resolve.mjs'
   if (Test-Path $resolveTest) {
     $resolveOut = & node $resolveTest 2>&1
