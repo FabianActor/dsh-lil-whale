@@ -407,6 +407,16 @@ if (existsSync(DM_DIR)) {
         console.log('  归类: 已知 —— 新增记录还没投影（纯插入）')
         continue
       }
+      // 2026-11-24：两处写标题的顺序不一致时，投影只差一行；同一对人换个顺序不是"说不清"。
+      if (hunk.del.length === 1 && hunk.ins.length === 1) {
+        const dmHeader = (line) => /^# 私聊 · (.+?) \/ (.+)$/.exec(String(line ?? ''))
+        const m = dmHeader(a[hunk.del[0]])
+        const n = dmHeader(b[hunk.ins[0]])
+        if (m && n && m[1] === n[2] && m[2] === n[1]) {
+          console.log('  归类: 已知 —— 只是标题里两个人的顺序不同（同一对人，--write 统一成按名字排序）')
+          continue
+        }
+      }
       dmUnexplained += 1
     }
   }

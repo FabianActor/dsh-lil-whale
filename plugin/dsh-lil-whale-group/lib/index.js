@@ -2025,7 +2025,9 @@ function saySystemToDm(member, text) {
   appendFileSync(dmFileOf(member, human), JSON.stringify(record) + '\n', 'utf8')
   const readable = dmReadableOf(member, human)
   if (!existsSync(readable)) {
-    writeFileSync(readable, `# 私聊 · ${labelOf(member)} / ${labelOf(human)}\n\n`, 'utf8')
+    // 标题顺序和 sayPrivate 一样按键排序：两处写不同顺序，投影会来回翻（2026-11-24）
+    const [hx, hy] = [member, human].sort()
+    writeFileSync(readable, `# 私聊 · ${labelOf(hx)} / ${labelOf(hy)}\n\n`, 'utf8')
   }
   appendFileSync(readable, `**${stamp()} · ${labelOf('system')}**\n\n${text}\n\n`, 'utf8')
   return record

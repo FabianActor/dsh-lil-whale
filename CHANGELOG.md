@@ -20,6 +20,14 @@
 
 4. **第三方插件的本地补丁改动不进正文**：补丁脚本对 bili-eyes 做的改动（文案、缓存代次等）属于工具行为，正文只留一行索引；每代改了什么、为什么，写进 `advanced notes on third-party plugins/让小鱼能看B站-bili-eyes/让小鱼能看B站-bili-eyes.md` 的「补丁代次索引」。
 
+## [未发布]
+
+### r460 私聊可读投影的标题顺序统一（内部）
+
+- 旧：`sayPrivate` 写标题时按 key 排序，`saySystemToDm` 按传入顺序写；同一对人会出现两种顺序。`scripts\rebuild-group-md.mjs` 每比一次差一行，又不认这是「说不清的差异」，于是 `--write` 永远卡住，`pool\dm\私聊-*.md` 停在旧一版（`私聊-fabian__xiaoman.md` 还写着「小满 / Fabian」）。
+- 新：两处都先排序再写标题；重建脚本把「同一对人换了顺序」单独归成已知差异，`--write` 会统一成按名字排序。本机已按 `--migrate` 重写一遍（先把 10 份 `.md` 备份到 `backup\dm-md-20261124-2316`），重跑 0 差异。
+- 测试：`scripts\test-dm-projection.mjs`（6 格；把归类删掉会红）；`release-check` 4bf ⇒ 69 项。
+
 ## [1.13.2] - 2026-11-24
 
 这一版修一个把巡守锁在门外的绑不上：鱼塘放在盘根、他的会话建在鱼塘外时，换绑一律 409；顺带把「验的是包还是你的工作目录」这条漏洞补上。

@@ -415,6 +415,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '启动账' (($runsOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '启动账' '每条 started 前应有 stopped/resumed 交代；空目录不算成立（test-run-ledger.mjs）' }
   } else { Fail '启动账' 'scripts\test-run-ledger.mjs 不在包里' }
+  # ── 4bf. 私聊投影标题顺序（2026-11-24：两处写标题顺序不一致 ⇒ 投影永远差一行／r460）──
+  $dmProjTest = Join-Path $pkg 'scripts\test-dm-projection.mjs'
+  if (Test-Path $dmProjTest) {
+    $dmProjOut = & node $dmProjTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '私聊投影' (($dmProjOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '私聊投影' '写标题的两处都按键排序；重建脚本认得「只是换了顺序」（test-dm-projection.mjs）' }
+  } else { Fail '私聊投影' 'scripts\test-dm-projection.mjs 不在包里' }
   # ── 4as. 名册值带 key（2026-11-22：to=undefined 900 行，fi-0010／r404）──
   $keyTest = Join-Path $pkg 'scripts\test-member-key.mjs'
   if (Test-Path $keyTest) {
