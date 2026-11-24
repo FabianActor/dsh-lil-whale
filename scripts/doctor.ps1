@@ -1322,20 +1322,20 @@ try {
   if (-not (Test-Path -LiteralPath $wmPath9c)) {
     Add-Row '格式分界' 'INFO' ($label9c + '：还没有这本账（巡守还没启动过，或刚换位置要等一次启动）')
   } else {
-    $tail9c = @(Get-Content -LiteralPath $wmPath9c -Encoding utf8 -Tail 3000)
-    $hasFmt9c = @($tail9c | Where-Object { $_ -match '\| log-format \| fmt=3' }).Count -gt 0
+    $all9c = @(Get-Content -LiteralPath $wmPath9c -Encoding utf8)
+    $hasFmt9c = @($all9c | Where-Object { $_ -match '\| log-format \| fmt=3' }).Count -gt 0
     if ($hasFmt9c) {
-      Add-Row '格式分界' 'OK' ($label9c + '：有 log-format 分界行')
+      Add-Row '格式分界' 'OK' ($label9c + '：有 log-format 分界行（整本扫，含更早处的）')
     } else {
-      $late9c = @($tail9c | Where-Object { $_ -match '^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})' -and [string]$matches[1] -gt $boundary }).Count -gt 0
+      $late9c = @($all9c | Where-Object { $_ -match '^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})' -and [string]$matches[1] -gt $boundary }).Count -gt 0
       $rotatedWithFmt9c = $false
       if ($late9c) {
         try {
           $rot9c = @(Get-ChildItem -LiteralPath (Split-Path -Parent $wmPath9c) -Filter 'watchman.*.log' -File -ErrorAction SilentlyContinue |
             Sort-Object LastWriteTime -Descending | Select-Object -First 3)
           foreach ($r9c in $rot9c) {
-            $rTail9c = @(Get-Content -LiteralPath $r9c.FullName -Encoding utf8 -Tail 400)
-            if (@($rTail9c | Where-Object { $_ -match '\| log-format \| fmt=3' }).Count -gt 0) { $rotatedWithFmt9c = $true; break }
+            $rAll9c = @(Get-Content -LiteralPath $r9c.FullName -Encoding utf8)
+            if (@($rAll9c | Where-Object { $_ -match '\| log-format \| fmt=3' }).Count -gt 0) { $rotatedWithFmt9c = $true; break }
           }
         } catch { }
       }
