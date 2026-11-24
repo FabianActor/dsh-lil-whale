@@ -22,6 +22,12 @@
 
 ## [未发布]
 
+### r462 群消息的「叫醒谁」默认改回谁都不叫醒（内部）
+
+- 旧：用 `scripts\post-group.mjs` 往群里发一句话，不写 mention 也会叫醒所有鱼——它只写 `to: 'all'`、不写 `mention`，读侧把这个形状当成老记录，按老规则 `to=all` 叫醒所有人（宿主 2026-11-24 追问「为什么没有 mention 所有人，但所有人都被唤醒了」）。
+- 新：脚本写记录时一律带 `mention`：不写 `--mention` 就是 `[]`（谁都不叫醒），`--mention all` 是字符串 `all`，`--mention whale,xiaoman` 是数组（中文顿号也认）；回执会打印「会叫醒谁」。
+- 判据：不写叫醒名单 ⇒ 记录里这个字段真写出来、且是空数组，而不是「没有这个字段」。
+
 ### r460 私聊可读投影的标题顺序统一（内部）
 
 - 旧：`sayPrivate` 写标题时按 key 排序，`saySystemToDm` 按传入顺序写；同一对人会出现两种顺序。`scripts\rebuild-group-md.mjs` 每比一次差一行，又不认这是「说不清的差异」，于是 `--write` 永远卡住，`pool\dm\私聊-*.md` 停在旧一版（`私聊-fabian__xiaoman.md` 还写着「小满 / Fabian」）。

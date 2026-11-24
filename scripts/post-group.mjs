@@ -7,7 +7,7 @@
  * printableText，并且只写 jsonl、再重建 群.md，避免两处不一致。
  *
  * 用法：
- *   node scripts/post-group.mjs --from lee --to all --text-file tmp/msg.txt [--s ae4daa] [--channel group|dm]
+ *   node scripts/post-group.mjs --from lee --to all --text-file tmp/msg.txt [--mention all|a,b] [--s ae4daa]
  *   node scripts/post-group.mjs ... --dry-run
  */
 import { appendFileSync, readFileSync } from 'node:fs';
@@ -36,6 +36,16 @@ if (channel !== 'group') {
   console.error('NEXT: 在会话里调 group_say（channel="dm"），别用这个脚本。');
   process.exit(2);
 }
+// 叫醒谁（2026-11-24 r462）：不写就是 []，谁都不叫醒。
+// 起因：这里以前只写 `to: 'all'`、不写 mention ⇒ 读侧把「没有 mention 字段」当老记录，
+// 按老规则 `to=all` 叫醒所有人。于是「顺手在群里说一句」把五条鱼全叫起来了。
+const MENTION_ALL = 'all';
+const rawMention = arg('mention', '');
+const mention = rawMention.trim() === ''
+  ? []
+  : (rawMention.trim() === MENTION_ALL
+    ? MENTION_ALL
+    : rawMention.split(/[,，、]/).map((x) => x.trim()).filter(Boolean));
 const s = arg('s', '');
 const file = arg('text-file');
 const dry = process.argv.includes('--dry-run');
@@ -58,6 +68,7 @@ const record = {
   text,
   kind: 'say',
   channel,
+  mention,
   ...(s ? { s } : {}),
 };
 if (dry) {
@@ -69,5 +80,6 @@ const lines = readFileSync(MESSAGES, 'utf8').split('\n').filter(Boolean).length;
 const r = spawnSync(process.execPath, [join(APP, 'scripts', 'rebuild-group-md.mjs'), '--write'], {
   encoding: 'utf8',
 });
-console.log(`appended line=${lines} replaced=${bad} rebuild=${r.status === 0 ? 'ok' : 'failed'}`);
+const wakes = mention === MENTION_ALL ? '所有人' : (mention.length === 0 ? '不叫醒任何人' : mention.join('、'));
+console.log(`appended line=${lines} replaced=${bad} mention=${wakes} rebuild=${r.status === 0 ? 'ok' : 'failed'}`);
 if (r.status !== 0) console.error((r.stderr || '').slice(0, 400));

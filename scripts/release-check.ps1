@@ -422,6 +422,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '私聊投影' (($dmProjOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '私聊投影' '写标题的两处都按键排序；重建脚本认得「只是换了顺序」（test-dm-projection.mjs）' }
   } else { Fail '私聊投影' 'scripts\test-dm-projection.mjs 不在包里' }
+  # ── 4bg. 群消息叫醒口径（2026-11-24 r462：post-group 只写 to、不写 mention ⇒ 读侧当老记录叫醒所有人）──
+  $pgTest = Join-Path $pkg 'scripts\test-post-group.mjs'
+  if (Test-Path $pgTest) {
+    $pgOut = & node $pgTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '群消息叫醒' (($pgOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '群消息叫醒' '不写 --mention 就是 []（谁都不叫醒）、all 写字符串、名单写数组（test-post-group.mjs）' }
+  } else { Fail '群消息叫醒' 'scripts\test-post-group.mjs 不在包里' }
   # ── 4as. 名册值带 key（2026-11-22：to=undefined 900 行，fi-0010／r404）──
   $keyTest = Join-Path $pkg 'scripts\test-member-key.mjs'
   if (Test-Path $keyTest) {
