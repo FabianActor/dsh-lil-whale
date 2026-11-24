@@ -1,4 +1,4 @@
-# common.ps1 -- 这台机器的假设，脚本侧的统一入口。
+﻿# common.ps1 -- 这台机器的假设，脚本侧的统一入口。
 #
 # 真源是仓库根目录的 `lil-whale.config.json`（`LIL_WHALE_CONFIG` 环境变量可以指到别处）。
 # 每个脚本开头 dot-source 一次：

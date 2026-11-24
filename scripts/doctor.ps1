@@ -1,4 +1,4 @@
-#requires -Version 7.0
+﻿#requires -Version 7.0
 # doctor.ps1 -- 一条鱼还活着吗？
 #
 # 用法：
