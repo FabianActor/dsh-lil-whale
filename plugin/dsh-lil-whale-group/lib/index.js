@@ -3085,7 +3085,9 @@ function handleChannel({ agent, member, seat, channel, cursorState, wakes }) {
       // 老记录没有 mention 字段，wantsWake 按老规则读（to=all 叫醒所有人、to=某人叫他）。
       if (!wantsWake(record, member)) {
         // 2026-11-24（fi-0019）：起点可信才数。游标丢了/回退时这一段里混着早已读过的消息。
-        if (heldTrusted) {
+        // 2026-11-24（r449）：只数游标之后的。座位游标可能比主游标小（重建/换绑后），
+        // 扫描从 min(shared, seat) 开始时，shared 之前那些记录会每拍重数一次。
+        if (heldTrusted && index >= sharedSeen) {
           heldDelta += 1
           heldLastLine = index
           heldLastTs = record.ts ?? null
