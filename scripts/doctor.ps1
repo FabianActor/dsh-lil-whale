@@ -548,8 +548,39 @@ $pinsFile = Join-Path $Cfg.GroupDir 'pins.json'
 if (-not (Test-Path -LiteralPath $pinsFile)) {
   Add-Row '名册' 'FAIL' 'group\pins.json 不存在' 'NEXT: 群不认人：她说的每句话都会被守门拒掉'
 } else {
-  # 空白也要是声明：watcher 的家不在鱼塘里（%USERPROFILE%\.dsh），「会话绑定」按设计只盖三条鱼。
-  Add-Row '名册（lee）' 'INFO' 'watcher 的家不在鱼塘里，pins.lee 不在这套体检的视野里（空白是声明，不是通过）'
+  # 空白也要是声明：watcher 的家不在鱼塘里（%USERPROFILE%\.dsh），「会话绑定」按设计只盖普通鱼。
+  # 2026-11-24 r459（issue #4）：掉座位是静默的——群里 @ 巡守没人应，而没有任何一格会说话。
+  # 这里补一句：pins 里巡守是空的就点名，非空就报他绑了几段（不 FAIL：没座位不等于坏了）。
+  $watcherRow = $null
+  try {
+    $pinsForRow = Get-Content -LiteralPath $pinsFile -Raw -Encoding utf8 | ConvertFrom-Json
+    $watchers = @()
+    if ($Cfg.MembersFile -and (Test-Path -LiteralPath $Cfg.MembersFile)) {
+      $rosterForRow = (Get-Content -LiteralPath $Cfg.MembersFile -Raw -Encoding utf8 | ConvertFrom-Json).members
+      foreach ($p in $rosterForRow.PSObject.Properties) {
+        if ($p.Value -and $p.Value.kind -eq 'fish' -and $p.Value.role -eq 'watcher') { $watchers += $p.Name }
+      }
+    }
+    if ($watchers.Count -eq 0) {
+      Add-Row '名册（巡守）' 'INFO' '名册里没有 role=watcher 的鱼，这一格不适用'
+    } else {
+      $seatParts = @()
+      $emptyOnes = @()
+      foreach ($w in $watchers) {
+        $raw = $pinsForRow.$w
+        $list = @()
+        if ($null -ne $raw) { $list = @($raw) }
+        if ($list.Count -eq 0) { $emptyOnes += $w } else { $seatParts += ('{0}: {1} 段（{2}）' -f $w, $list.Count, ($list -join '、')) }
+      }
+      if ($emptyOnes.Count -gt 0) {
+        Add-Row '名册（巡守）' 'INFO' ('巡守没有座位（{0}）：群里 @ 他没人应，叫不醒' -f ($emptyOnes -join '、')) 'NEXT: 在鱼塘卡片上给他换绑一段会话（fish.ps1 sessions 里看候选）'
+      } else {
+        Add-Row '名册（巡守）' 'OK' ('巡守有座位 —— ' + ($seatParts -join '；'))
+      }
+    }
+  } catch {
+    Add-Row '名册（巡守）' 'INFO' ('没读出巡守的座位：' + $_.Exception.Message)
+  }
 }
 
 # 她有没有过会话：sessionId 写过，或者家里的 sessions\ 目录里有文件。

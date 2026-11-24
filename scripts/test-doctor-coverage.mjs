@@ -20,7 +20,7 @@ const FAMILIES = [
   { name: '第三方补丁', static: ['第三方补丁（bili-eyes）', '第三方补丁'], why: '第三方插件（bili-eyes）的本地补丁是否还在——升级或重装会把它冲掉' },
   { name: '会话分身', static: ['会话分身（全鱼）', '会话分身'], why: '同一会话 id 是否同时出现在两个家里（split-brain：两个进程各写一份，历史会分叉）' },
   { name: '名册与家', static: ['名册与家'], why: '名册 / 家目录 / pins 三个键集合是否对得上' },
-  { name: '名册', static: ['名册', '名册（全鱼）', '名册（lee）'], why: 'pins 存在性、每条鱼有没有钉、watcher 不在视野的声明' },
+  { name: '名册', static: ['名册', '名册（全鱼）', '名册（巡守）'], why: 'pins 存在性、每条鱼有没有钉、watcher 不在视野的声明' },
   { name: '名册自检', static: ['名册自检'], why: '巡守的 roster-audit 最近一次结果' },
   { name: '谱系（全鱼）', static: ['谱系（全鱼）'], why: '名册里的每个人都在 family.json 里有节点（单向包含）' },
   { name: '谱系图', static: ['谱系图'], why: '生成的谱系图不比 family.json 旧（测试机 U5 的尾巴，r443）' },

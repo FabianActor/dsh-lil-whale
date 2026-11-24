@@ -3350,8 +3350,8 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       bindTitle: (name) => ('换绑 ' + name + ' 的会话'),
       bindHint: '换绑后下次醒来是这段会话，原来的上下文不再续。只改 pins，重启对应进程后生效。',
       bindInputPlaceholder: '粘贴 session-…（从她的 WebUI 复制）',
-      bindCandidates: '她家里的会话：',
-      bindEmpty: '她家里还没有会话；先去她的 WebUI 说一句话，再回来换绑。',
+      bindCandidates: '这个家里的会话：',
+      bindEmpty: '这个家里还没有会话；先去对应的 WebUI 说一句话，再回来换绑。',
       bindLoadFailed: '候选没读出来：',
       bindFailed: '换绑失败：',
       bindDone: '换绑成功',
@@ -3363,6 +3363,9 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       bindInUseConfirm: '这段会话正在被使用；换绑后旧窗口不会自动停，可能出现两个 writer。确认要换吗？',
       bindUnregistered: '未登记工作区',
       bindBlocked: '不能绑',
+      bindCwd: (ws) => ('醒来 cwd：' + ws),
+      bindCwdUnknown: '这段会话没登记工作区，醒来用默认工作区。',
+      bindNotListed: '这段 id 不在候选里（可能不是这个家里的会话）。',
       generation: (n) => (n <= 0 ? '根' : `第 ${n} 代`),
       modeText: (mode) => {
         const value = mode?.mode ?? null
@@ -4026,31 +4029,39 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
         return tags
       }
 
+      // 布局（issue #4 附带那条）：卡片本身不滚，只有候选列表滚——标题、输入框、cwd、按钮都固定，
+      // 人不用滚过整张候选表才够得着「确认换绑」，滚候选表时也知道自己在给谁换绑。
+      const cwdLine = typed
+        ? (picked
+          ? (picked.workspace ? POND.bindCwd(picked.workspace) : POND.bindCwdUnknown)
+          : POND.bindNotListed)
+        : ''
       return h(
         'div',
         { style: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.32)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 } },
         h(
           'div',
-          { style: { width: 'min(560px, 92vw)', maxHeight: '82vh', overflow: 'auto', background: 'var(--dsw-alias-bg-layer-1, #fff)', borderRadius: 'var(--dsw-radius-lg, 12px)', border: '0.5px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.1))', padding: 16, display: 'flex', flexDirection: 'column', gap: 10 } },
-          h('div', { style: { fontSize: 14, fontWeight: 600 } }, POND.bindTitle(fish.name)),
-          h('div', { style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-secondary, #6b7076)' } }, POND.bindHint),
+          { style: { width: 'min(560px, 92vw)', maxHeight: '82vh', minHeight: 0, overflow: 'hidden', background: 'var(--dsw-alias-bg-layer-1, #fff)', borderRadius: 'var(--dsw-radius-lg, 12px)', border: '0.5px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.1))', padding: 16, display: 'flex', flexDirection: 'column', gap: 10 } },
+          h('div', { style: { flexShrink: 0, fontSize: 14, fontWeight: 600 } }, POND.bindTitle(fish.name)),
+          h('div', { style: { flexShrink: 0, fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-secondary, #6b7076)' } }, POND.bindHint),
           h('input', {
             value,
             placeholder: POND.bindInputPlaceholder,
             onChange: (event) => setValue(event.target.value),
-            style: { padding: '8px 10px', fontSize: 13, borderRadius: 'var(--dsw-radius-md, 8px)', border: '0.5px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.15))', background: 'transparent', color: 'inherit' },
+            style: { flexShrink: 0, width: '100%', boxSizing: 'border-box', padding: '8px 10px', fontSize: 13, borderRadius: 'var(--dsw-radius-md, 8px)', border: '0.5px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.15))', background: 'transparent', color: 'inherit' },
           }),
-          error ? h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-error, #c93c40)' } }, error) : null,
-          inUse ? h('div', { style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-error, #c93c40)' } }, POND.bindInUseConfirm) : null,
-          h('div', { style: { fontSize: 12, fontWeight: 600 } }, POND.bindCandidates),
-          candidates === null
-            ? h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary, #8a8f98)' } }, '…')
-            : list.length === 0
-              ? h('div', { style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary, #8a8f98)' } }, POND.bindEmpty)
-              : h(
-                'div',
-                { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
-                list.map((s) => h(
+          cwdLine ? h('div', { style: { flexShrink: 0, fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary, #8a8f98)', wordBreak: 'break-all' } }, cwdLine) : null,
+          error ? h('div', { style: { flexShrink: 0, fontSize: 12, color: 'var(--dsw-alias-label-error, #c93c40)' } }, error) : null,
+          inUse ? h('div', { style: { flexShrink: 0, fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-error, #c93c40)' } }, POND.bindInUseConfirm) : null,
+          h('div', { style: { flexShrink: 0, fontSize: 12, fontWeight: 600 } }, POND.bindCandidates),
+          h(
+            'div',
+            { style: { flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 6 } },
+            candidates === null
+              ? h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary, #8a8f98)' } }, '…')
+              : list.length === 0
+                ? h('div', { style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary, #8a8f98)' } }, POND.bindEmpty)
+                : list.map((s) => h(
                   'button',
                   {
                     key: s.id,
@@ -4068,10 +4079,10 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
                   tagsOf(s).length ? h('span', { style: { marginLeft: 6, color: 'var(--dsw-alias-label-tertiary, #8a8f98)' } }, '（' + tagsOf(s).join('、') + '）') : null,
                   s.eligible ? null : h('div', { style: { marginTop: 2, color: 'var(--dsw-alias-label-tertiary, #8a8f98)' } }, s.reason || POND.bindBlocked),
                 )),
-              ),
+          ),
           h(
             'div',
-            { style: { display: 'flex', gap: 8, justifyContent: 'flex-end' } },
+            { style: { flexShrink: 0, display: 'flex', gap: 8, justifyContent: 'flex-end' } },
             h('button', { onClick: props.onClose, style: pondButtonStyle(false) }, POND.bindCancel),
             h('button', { onClick: () => { void submit() }, disabled: busy || !typed, style: pondButtonStyle(true) }, busy ? POND.pending : POND.bindConfirm),
           ),
@@ -4083,7 +4094,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v67 · history-always:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v68 · bind-cwd:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')

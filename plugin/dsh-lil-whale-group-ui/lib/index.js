@@ -16,7 +16,7 @@ import { config } from './config.js'
 import { parseMessageLines, mentionLabelOf } from './messages-core.js'
 import { presenceReasonOf } from './presence-core.js'
 import { newerThan, latestReleaseOf, LATEST_RELEASE_API } from './version-core.js'
-import { bindingProblem, unbindProblem, applyBind, applyUnbind, bindingsView, sessionExistsInHome, fishOf, stateLogLine, sessionCandidatesOf, shortSessionId } from './bindings-core.js'
+import { bindingProblem, unbindProblem, applyBind, applyUnbind, bindingsView, sessionExistsInHome, fishOf, stateLogLine, sessionCandidatesOf, shortSessionId, homeOfMember, workspacePathOf } from './bindings-core.js'
 
 export const name = '@fabianactor/dsh-lil-whale-group-ui'
 export const inject = ['webServer', 'agents']
@@ -1281,7 +1281,10 @@ export function apply(ctx) {
       return sendJson(res, 500, { error: 'write-failed', detail: String(error?.message ?? error) })
     }
     try {
-      appendFileSync(join(POOL_STATE, 'fish.log'), stateLogLine({ ts: nowStamp(), action: kind, memberKey: member, sessionId, by: 'panel' }) + '\n', 'utf8')
+      // 绑完之后把"他会醒在哪儿"记进账（r459）：放行了鱼塘外的工作区，就得让人事后能查到绑的是哪一段、cwd 是什么。
+      const boundHome = kind === 'bind' ? homeOfMember((roster?.members ?? {})[member]) : null
+      const boundCwd = boundHome ? workspacePathOf(boundHome, sessionId) : null
+      appendFileSync(join(POOL_STATE, 'fish.log'), stateLogLine({ ts: nowStamp(), action: kind, memberKey: member, sessionId, by: 'panel', cwd: boundCwd }) + '\n', 'utf8')
     } catch { /* 记账失败不拦正确动作 */ }
     sendJson(res, 200, { ok: true, action: kind, ...bindingsPayload() })
   }

@@ -43,7 +43,7 @@ ok('先复制 → 再清空 → 再交给 attachImages', ordered)
 ok('注释写明 FileList 是活的', src.includes('FileList 是活的'))
 
 // 5. 构建标记：人刷新后靠它确认拿到的是这一版
-ok('client build v67 · history-always', src.includes('client build v67 · history-always'))
+ok('client build v68 · bind-cwd', src.includes('client build v68 · bind-cwd'))
 
 console.log(`test-client-image-picker：合计 ${total}，PASS ${pass}，FAIL ${total - pass}`)
 process.exit(pass === total ? 0 : 1)

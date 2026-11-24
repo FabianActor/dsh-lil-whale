@@ -7,8 +7,9 @@
  */
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { shortSessionId, sessionCandidatesOf } from '../plugin/dsh-lil-whale-group-ui/lib/bindings-core.js'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { bindingProblem, shortSessionId, sessionCandidatesOf, stateLogLine } from '../plugin/dsh-lil-whale-group-ui/lib/bindings-core.js'
 
 let pass = 0
 let fail = 0
@@ -71,16 +72,67 @@ try {
   const badA = bad.sessions.find((s) => s.id === sA)
   ok('工作区不对时不可绑且给出理由', badA?.eligible === false && /工作区/.test(String(badA?.reason)))
 
+  // 巡守那一支（issue #4，2026-11-24 r459）：他没有沙箱根，会话建在他当天干活的地方。
+  // 四格照报告里那台机器的真实布局写：鱼塘在盘根、巡守的日常目录是鱼塘的兄弟、以及别的盘。
+  const wHome = join(root, 'lee-home')
+  mkdirSync(join(wHome, 'storages'), { recursive: true })
+  const wInside = 'session-eeeeeeee-1111-2222-3333-444444444444'
+  const wSibling = 'session-ffffffff-1111-2222-3333-444444444444'
+  const wDeep = 'session-9a9a9a9a-1111-2222-3333-444444444444'
+  const wRoot = 'session-8b8b8b8b-1111-2222-3333-444444444444'
+  for (const id of [wInside, wSibling, wDeep, wRoot]) mkSession(wHome, '--G--', id)
+  const watcherWs = {}
+  watcherWs.wIn = { path: join(root, 'homes', 'lee'), sessionIds: [wInside] }
+  watcherWs.wSib = { path: 'G:\\1', sessionIds: [wSibling] }
+  watcherWs.wDeep = { path: 'G:\\大肥鱼\\dsh-fish\\home', sessionIds: [wDeep] }
+  watcherWs.wRoot = { path: 'G:\\', sessionIds: [wRoot] }
+  writeFileSync(join(wHome, 'storages', 'workspace.json'), JSON.stringify({ tables: { workspaces: watcherWs } }))
+  const wRoster = {
+    members: {
+      lee: { kind: 'fish', role: 'watcher', name: 'Leea', home: join(root, 'lee'), dshHome: wHome },
+      whale: roster.members.whale,
+    },
+  }
+  const wBind = (id) => bindingProblem({ roster: wRoster, memberKey: 'lee', sessionId: id, pondRoot: root })
+  ok('巡守：鱼塘里的会话照旧可绑', wBind(wInside) === null)
+  ok('巡守：鱼塘的兄弟目录（G:\\1）可绑', wBind(wSibling) === null, JSON.stringify(wBind(wSibling)))
+  ok('巡守：别的盘深处的目录可绑', wBind(wDeep) === null, JSON.stringify(wBind(wDeep)))
+  const wRootProblem = wBind(wRoot)
+  ok('巡守：整盘（G:\\）仍然拒，但换成了"太宽"', wRootProblem?.error === 'session-workspace-too-broad' && /整盘/.test(String(wRootProblem?.message)))
+  ok('普通鱼没被放宽：G:\\1 的会话仍拒', (() => {
+    // 把小肥鱼的会话登记到 G:\1，再按普通鱼那条严格分支算一遍
+    const before = readFileSync(join(home, 'storages', 'workspace.json'), 'utf8')
+    writeFileSync(join(home, 'storages', 'workspace.json'), JSON.stringify({ tables: { workspaces: { w1: { path: 'G:\\1', sessionIds: [sA] } } } }))
+    const r = bindingProblem({ roster, memberKey: 'whale', sessionId: sA, pondRoot: root })
+    writeFileSync(join(home, 'storages', 'workspace.json'), before)
+    return r?.error === 'session-workspace-mismatch'
+  })())
+
+  // 绑定账：放行了鱼塘外的工作区，就得把"他会醒在哪儿"记下来（r459）
+  const bindLine = stateLogLine({ ts: '2026-11-24 21:40:00', action: 'bind', memberKey: 'lee', sessionId: wSibling, cwd: 'G:\\1' })
+  ok('绑定账带 cwd', bindLine.endsWith(' cwd=G:\\1'), bindLine)
+  ok('绑定账仍是单行 fmt=1', bindLine.split('\n').length === 1 && bindLine.includes('| fmt=1 '))
+  const unbindLine = stateLogLine({ ts: '2026-11-24 21:40:00', action: 'unbind', memberKey: 'lee', sessionId: wSibling })
+  ok('解绑账不带 cwd（那段会话已经不算数）', !unbindLine.includes('cwd='), unbindLine)
+  ok('没给 cwd 时不写空字段', !stateLogLine({ ts: 'x', action: 'bind', memberKey: 'lee', sessionId: wSibling, cwd: null }).includes('cwd='))
+
   // 静态接线
-  const clientSrc = readFileSync('plugin/dsh-lil-whale-group-ui/lib/client.js', 'utf8')
-  const uiSrc = readFileSync('plugin/dsh-lil-whale-group-ui/lib/index.js', 'utf8')
+  // 读源码一律按本文件的位置算，不按 CWD：release-check 会从仓库根跑包里那份副本，
+// 用相对路径就会读到工作区的新文件，把「包里的样子」验成「我这台机器上的样子」。
+const SELF = fileURLToPath(import.meta.url)
+const REPO_ROOT = resolve(dirname(SELF), '..')
+const readSrc = (rel) => readFileSync(join(REPO_ROOT, rel), 'utf8')
+const clientSrc = readSrc('plugin/dsh-lil-whale-group-ui/lib/client.js')
+  const uiSrc = readSrc('plugin/dsh-lil-whale-group-ui/lib/index.js')
   ok('客户端的候选来自新路由', clientSrc.includes('/group/api/bind-candidates?member='))
   ok('客户端只留一个「换绑」按钮', clientSrc.includes("bind: '换绑'") && !clientSrc.includes('解绑该会话'))
   ok('会话行菜单已撤掉', !clientSrc.includes('lil-whale.binding') && !clientSrc.includes("inject: ['slots', 'contextMenus']"))
-  ok('build 标记 v65', clientSrc.includes('client build v67 · history-always'))
+  ok('build 标记 v68', clientSrc.includes('client build v68 · bind-cwd'))
   ok('服务端有候选路由', uiSrc.includes("path: '/group/api/bind-candidates'"))
   ok('服务端用同一个判定层', uiSrc.includes('sessionCandidatesOf({ roster'))
   ok('卡片状态里带会话', uiSrc.includes('sessionShort: boundList[0]'))
+  ok('读源码按文件位置算，不按 CWD', !/readFileSync\('plugin\//.test(readFileSync(SELF, 'utf8')))
+ok('旧的「鱼塘外面」代理规则已撤', !readSrc('plugin/dsh-lil-whale-group-ui/lib/bindings-core.js').includes('session-workspace-outside-pond'))
 } finally {
   rmSync(root, { recursive: true, force: true })
 }

@@ -130,8 +130,8 @@ function underRoot(value, root) {
  *
  * 工作区那一格（Fi-0017 的补充）：
  *   - 普通鱼：会话登记的工作区必须就是她的家（`member.home`）；不在自己家的拒绝。
- *   - 巡守（宿主自己）：他的工作区是鱼塘根（`D:\…\lil-whale`），不是 `~\.dsh`，所以只要求
- *     在鱼塘里面（`pondRoot`）；会话文件仍在 `dshHome\sessions` 下这条不变。
+ *   - 巡守（宿主自己）：他没有沙箱根，会话建在他当天干活的地方（鱼塘里、鱼塘的父目录、兄弟目录、
+ *     别的盘都正常）。只挡"整盘"这种一级路径；cwd 由调用方写进账（r459，issue #4）。
  *   - 没登记工作区的会话：放行（r261 那种"未分组"），否则第一段会话反而绑不上。
  */
 export function bindingProblem({ roster, memberKey, sessionId, pondRoot }) {
@@ -149,11 +149,19 @@ export function bindingProblem({ roster, memberKey, sessionId, pondRoot }) {
   const wsPath = workspacePathOf(home, id)
   if (wsPath) {
     if (member.role === 'watcher') {
-      // 巡守的会话常建在鱼塘根的父目录里（例：default-workspace\lil-whale 的会话建在 default-workspace）。
-      // 2026-11-23 r439：允许"鱼塘根的祖先"，但至少要有两级目录，免得把 C:\ 这种当成合法工作区。
-      const ancestorOk = underRoot(pondRoot, wsPath) && normalizePath(wsPath).split('\\').filter(Boolean).length >= 2
-      if (pondRoot && !underRoot(wsPath, pondRoot) && !ancestorOk) {
-        return { status: 409, error: 'session-workspace-outside-pond', message: `这段会话的工作区在鱼塘外面（${wsPath}），不绑给 ${name}` }
+      // 巡守没有"沙箱根"：他的家本来就在鱼塘外（doctor 那句"watcher 的家不在鱼塘里"），
+      // 会话也都建在他当天干活的地方——鱼塘内、鱼塘的父目录、兄弟目录、别的盘，都是正常的。
+      //
+      // 所以这一格对巡守只挡一件事：浅到只剩一级的路径（`C:\`、`G:\`）不是一个能落地的地方。
+      // 归属不靠这里守：`sessionExistsInHome()` 已经要求会话文件落在**他自己的** `dshHome\sessions\` 下，
+      // 别人的会话根本进不来。放行之后由调用方把 cwd 记进账（r459），让人知道他会醒在哪儿。
+      //
+      // 2026-11-24 r459：去掉了 r439 那条"鱼塘的祖先"代理规则——它在"鱼塘直接在盘根"和
+      // "巡守的日常目录是鱼塘的兄弟"两种布置下把巡守锁在门外（issue #4）。
+      const inside = underRoot(wsPath, pondRoot)
+      const depth = normalizePath(wsPath).split('\\').filter(Boolean).length
+      if (!inside && depth < 2) {
+        return { status: 409, error: 'session-workspace-too-broad', message: `这段会话的工作区是整盘（${wsPath}），不是能落地的地方，不绑给 ${name}` }
       }
     } else {
       const own = typeof member.home === 'string' && member.home.trim() ? member.home.trim() : home
@@ -287,7 +295,10 @@ export function sessionCandidatesOf({ roster, memberKey, pondRoot, pins = {}, li
 }
 
 /** 账单里的一行。和 scripts/bind-member.mjs 的 bind/unbind 行同形，`by=` 说清是谁干的。 */
-export function stateLogLine({ ts, action, memberKey, sessionId, by = 'panel' }) {
+export function stateLogLine({ ts, action, memberKey, sessionId, by = 'panel', cwd = null }) {
   const id = sessionIdOf(sessionId) ?? String(sessionId ?? '')
-  return `${ts} | ${action} | fmt=1 member=${memberKey} session=${id} by=${by}`
+  // cwd 只在 bind 时带（解绑时那段会话已经不算数了）。它是行尾字段、可能含空格，读的人按"最后一个 key=" 切。
+  // r459 起才有这一格：老行没有，空着不等于"未知"，等于"那时候还不记"。
+  const tail = cwd ? ` cwd=${cwd}` : ''
+  return `${ts} | ${action} | fmt=1 member=${memberKey} session=${id} by=${by}${tail}`
 }
