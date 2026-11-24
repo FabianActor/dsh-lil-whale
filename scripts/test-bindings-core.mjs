@@ -122,7 +122,7 @@ writeFileSync(join(homeA, 'storages', 'workspace.json'), JSON.stringify({
   tables: { workspaces: { w1: { path: tmp, sessionIds: [SID] } } },
 }))
 
-// 巡守：工作区在鱼塘里 → 放行；在鱼塘外 → 拒
+// 巡守：只有「整盘」才拒（r459，issue #4）——鱼塘里、父目录、兄弟目录、别的盘深处都放行
 writeFileSync(join(homeC, 'dsh-home', 'storages', 'workspace.json'), JSON.stringify({
   unit: { name: 'workspace', version: 2 },
   tables: { workspaces: { w1: { path: tmp, sessionIds: [SID2] } } },
@@ -131,9 +131,15 @@ check('巡守：工作区在鱼塘里：放行', bindingProblem({ roster, member
 check('巡守：工作区是鱼塘根的父目录：放行（r439）', bindingProblem({ roster, memberKey: 'lee', sessionId: SID, pondRoot: join(tmp, 'pond') }) === null)
 writeFileSync(join(homeA, 'storages', 'workspace.json'), JSON.stringify({
   unit: { name: 'workspace', version: 2 },
-  tables: { workspaces: { w1: { path: join(tmp, 'elsewhere'), sessionIds: [SID] } } },
+  tables: { workspaces: { w1: { path: join(tmp, 'elsewhere', 'deeper'), sessionIds: [SID] } } },
 }))
-check('巡守：工作区与鱼塘无关 → 拒', bindingProblem({ roster, memberKey: 'lee', sessionId: SID, pondRoot: join(tmp, 'pond') })?.error === 'session-workspace-outside-pond')
+check('巡守：工作区与鱼塘无关但落得下脚：放行（r459）', bindingProblem({ roster, memberKey: 'lee', sessionId: SID, pondRoot: join(tmp, 'pond') }) === null)
+const driveRoot = tmp.slice(0, 3)   // 例 "C:\\"
+writeFileSync(join(homeA, 'storages', 'workspace.json'), JSON.stringify({
+  unit: { name: 'workspace', version: 2 },
+  tables: { workspaces: { w1: { path: driveRoot, sessionIds: [SID] } } },
+}))
+check('巡守：整盘（一级路径）→ 拒，且换了个错误码', bindingProblem({ roster, memberKey: 'lee', sessionId: SID, pondRoot: join(tmp, 'pond') })?.error === 'session-workspace-too-broad')
 writeFileSync(join(homeA, 'storages', 'workspace.json'), JSON.stringify({
   unit: { name: 'workspace', version: 2 },
   tables: { workspaces: { w1: { path: tmp, sessionIds: [SID] } } },
