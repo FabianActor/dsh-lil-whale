@@ -22,6 +22,10 @@
 
 ## [未发布]
 
+### r453 文本指纹先归一化换行再 hash（内部）
+
+- 旧：`.gitattributes` 的 `* text=auto` 让同一份模板在 Windows 检出是 CRLF、在包里是 LF；raw sha256 从 `2b40a6da` 变成 `eeff217b`，doctor 把四条鱼刚生成好的 `环境.md` 全判成旧模板。
+- 新：`scripts\lib\text-hash.mjs`（`normalizeNewlines` / `sha256OfTextFile` / `sha8OfTextFile`）先归一化 CRLF→LF 再 hash；`render-env.mjs`、`doctor.ps1`、`fish.ps1`（升级证据）与 `code-fp.js` 全部改用它。指纹答"是不是同一份内容"，不答"是不是同一套换行"。
 ### r452 判据 §96 补第二格：上界要跟数写在同行（内部）
 
 - 旧：上界只在写端用来判荒谬，验的人还得去别处查分母。

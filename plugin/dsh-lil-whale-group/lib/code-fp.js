@@ -41,7 +41,16 @@ export function codeFingerprint(dir = DEFAULT_DIR) {
     for (const rel of files) {
       hash.update(rel)
       hash.update('\0')
-      hash.update(readFileSync(join(dir, rel)))
+      // r453：先归一化 CRLF→LF，指纹答「是不是同一份内容」，不答「是不是同一套换行」。
+      const buf = readFileSync(join(dir, rel))
+      const normalized = Buffer.allocUnsafe(buf.length)
+      let n = 0
+      for (let i = 0; i < buf.length; i += 1) {
+        if (buf[i] === 0x0d && i + 1 < buf.length && buf[i + 1] === 0x0a) continue
+        normalized[n] = buf[i]
+        n += 1
+      }
+      hash.update(normalized.subarray(0, n))
       hash.update('\0')
     }
     return { fp: hash.digest('hex').slice(0, 12), files: files.length }

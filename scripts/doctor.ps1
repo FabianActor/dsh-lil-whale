@@ -1,4 +1,4 @@
-﻿#requires -Version 7.0
+#requires -Version 7.0
 # doctor.ps1 -- 一条鱼还活着吗？
 #
 # 用法：
@@ -749,7 +749,7 @@ try {
 $envTemplate = Join-Path (Split-Path $PSScriptRoot -Parent) 'templates\环境.md.tpl'
 if (Test-Path -LiteralPath $envTemplate) {
   try {
-    $tplSha = (Get-FileHash -LiteralPath $envTemplate -Algorithm SHA256).Hash.Substring(0, 8).ToLowerInvariant()
+    $tplSha = (Get-NormalizedTextHash $envTemplate).Substring(0, 8)
     $mjEnv = if ($Cfg.MembersFile -and (Test-Path -LiteralPath $Cfg.MembersFile)) { Get-Content -LiteralPath $Cfg.MembersFile -Raw -Encoding utf8 | ConvertFrom-Json } else { $null }
     $stale = @(); $missingEnv = @(); $envOk = 0
     if ($mjEnv) {

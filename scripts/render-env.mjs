@@ -18,7 +18,7 @@
  *
  * 退出码：0 = 写了（或 dry-run 打印了）；1 = 失败（并给 NEXT: 一行）。
  */
-import { createHash } from 'node:crypto'
+import { sha8OfTextFile } from './lib/text-hash.mjs'
 import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -333,7 +333,7 @@ if (cfgChangedAfterLoad) {
 const templatePath = join(REPO_ROOT, 'templates', '环境.md.tpl')
 if (!existsSync(templatePath)) die(`找不到模板：${templatePath}`)
 const template = readFileSync(templatePath, 'utf8')
-const templateSha = createHash('sha256').update(template).digest('hex').slice(0, 8)
+const templateSha = sha8OfTextFile(templatePath)
 
 const now = new Date()
 const pad = (n) => String(n).padStart(2, '0')

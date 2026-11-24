@@ -1,4 +1,4 @@
-﻿#requires -Version 7.0
+#requires -Version 7.0
 # fish.ps1 -- 鱼群唯一的入口。ASCII 文件名 + UTF-8 BOM。
 #
 # 为什么要有它：鱼一多，"开/停/体检"三件事各有各的脚本，每加一条鱼就多一套参数。
@@ -1307,7 +1307,7 @@ function Get-PondEvidence([string]$id) {
     'env-template' {
       $tpl = Join-Path $appRoot 'templates\环境.md.tpl'
       if (-not (Test-Path -LiteralPath $tpl)) { return @{ id = $id; ok = $false; detail = '模板不在：templates\环境.md.tpl' } }
-      $tplFp = (Get-FileHash -LiteralPath $tpl -Algorithm SHA256).Hash.Substring(0, 8).ToLowerInvariant()
+      $tplFp = (Get-NormalizedTextHash $tpl).Substring(0, 8)
       $homes = Join-Path $pondRoot 'homes'
       if (-not (Test-Path -LiteralPath $homes)) { return @{ id = $id; ok = $true; detail = '这台上没有 homes\，跳过' } }
       $stale = @()

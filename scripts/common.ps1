@@ -1,4 +1,4 @@
-﻿# common.ps1 -- 这台机器的假设，脚本侧的统一入口。
+# common.ps1 -- 这台机器的假设，脚本侧的统一入口。
 #
 # 真源是仓库根目录的 `lil-whale.config.json`（`LIL_WHALE_CONFIG` 环境变量可以指到别处）。
 # 每个脚本开头 dot-source 一次：
@@ -299,4 +299,12 @@ function Repair-WorkspaceLabelGaps([object]$Member) {
     }
   }
   return $n
+}
+# 文本指纹：先归一化 CRLF→LF 再算 sha256（r453）。
+# 用途：模板指纹（`env: template=<sha8>`）与升级证据——同一份内容不该因为检出换行而变。
+function Get-NormalizedTextHash([string]$Path) {
+  $bytes = [IO.File]::ReadAllBytes($Path)
+  $text = [Text.Encoding]::UTF8.GetString($bytes).Replace("`r`n", "`n")
+  $hash = [Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($text))
+  return ([BitConverter]::ToString($hash)).Replace('-', '').ToLowerInvariant()
 }
