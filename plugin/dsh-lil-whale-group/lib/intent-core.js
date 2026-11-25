@@ -375,12 +375,15 @@ export function probeFileChanged({ current, baseline }) {
   // "我盯的是文件变，我关心的是集合变"）。
   if (String(current.kind || "raw") === "json") {
     if (!hashChanged) {
+      // 三个不同的原因，各给一个名字：只碰了时间 / 被重写但语义没变 / 换了尺子（上面那条）。
+      // 名字糊在一起时，读账的人分不出"没人动它"和"动了但内容一样"（r481：第一次打样就撞上了）。
+      const why = sizeChanged ? "rewrite" : "mtime"
       return {
         hit: false,
         touchOnly: true,
-        sig: sizeChanged ? "format+size" : "format",
+        sig: why,
         atMs: Number(current.mtimeMs),
-        evidence: `文件被重写了，语义没变（${Number(current.size)} B，json 指纹 ${String(current.hash).slice(0, 17)}）`,
+        evidence: sizeChanged ? `文件被重写了，语义没变（${Number(current.size)} B，json 指纹 ${String(current.hash).slice(0, 17)}）` : `只碰了 mtime，语义没变（${Number(current.size)} B，json 指纹 ${String(current.hash).slice(0, 17)}）`,
         baseline: current,
       }
     }

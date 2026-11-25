@@ -22,6 +22,11 @@
 
 ## [未发布]
 
+### r481 `touch-only` 的 `sig=` 分成三个名字（用户可见：看 intent.log 的人）
+
+- 第一次打样就撞上：只碰了 `members.json` 的 mtime，账上记的是 `sig=format`，和「被重写但内容一样」同一格。三个原因是三件事，现在各有名字：`mtime`（只碰了时间）、`rewrite`（被重写、语义没变）、`format`（指指纹算法换代，尺子换了）。
+- `scripts/test-intent.mjs` 加一格三名字对照，42 项全过。
+
 ### r480 能当 JSON 读的文件按语义比「变没变」（用户可见：写 `file-changed` 条件的人）
 
 - 以前只看原始字节：整个文件被重写一次（缩进变了、键序变了、`updatedAt` 走了一格）就报「内容变了」。现在 JSON 文件按键排序后的规范形式算指纹，重排/缩进/整体重写一律记 `note=intent-touch-only sig=format`，不投递。

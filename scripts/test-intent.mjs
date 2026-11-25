@@ -346,13 +346,13 @@ t('semanticHashOf：读不成 JSON 的走原始字节（kind=raw）', () => {
   assert.equal(r.hash.length, 12)
 })
 
-t('probeFileChanged：JSON 被重写但语义没变 ⇒ 不算命中（报 format）', () => {
+t('probeFileChanged：JSON 被重写但语义没变 ⇒ 不算命中（报 rewrite）', () => {
   const baseline = { size: 20, mtimeMs: 1, hash: 'json:abc', kind: 'json' }
   const current = { size: 34, mtimeMs: 2, hash: 'json:abc', kind: 'json' }
   const r = probeFileChanged({ current, baseline })
   assert.equal(r.hit, false)
   assert.equal(r.touchOnly, true)
-  assert.equal(r.sig, 'format+size')
+  assert.equal(r.sig, 'rewrite')
 })
 
 t('probeFileChanged：JSON 语义变了 ⇒ 命中，sig=json', () => {
@@ -374,6 +374,15 @@ t('probeFileChanged：指纹算法换了（raw→json）⇒ 只重取基线，�
 t('normalizeIntent：ignore 只收字符串、去空、最多 20 个', () => {
   const r = normalizeIntent({ id: 'x', why: 'w', kind: 'file-changed', path: 'pool/x.json', ignore: [' a ', '', 3, 'b'] })
   assert.deepEqual(r.ignore, ['a', 'b'])
+})
+t('probeFileChanged：JSON 只碰 mtime / 只改格式 / 语义变了，三个名字各不相同', () => {
+  const base = { size: 20, mtimeMs: 1, hash: 'json:abc', kind: 'json' }
+  const touched = probeFileChanged({ current: { ...base, mtimeMs: 2 }, baseline: base })
+  const rewritten = probeFileChanged({ current: { ...base, size: 40, mtimeMs: 2 }, baseline: base })
+  const changed = probeFileChanged({ current: { ...base, size: 20, mtimeMs: 2, hash: 'json:def' }, baseline: base })
+  assert.equal(touched.sig, 'mtime')
+  assert.equal(rewritten.sig, 'rewrite')
+  assert.equal(changed.sig, 'json')
 })
 console.log(`合计：${pass + fail} 项，PASS ${pass}，FAIL ${fail}`)
 if (fail > 0) {
