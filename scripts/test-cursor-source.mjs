@@ -221,7 +221,8 @@ function eq(name, got, want) {
   ok(idx3.includes('cursor-corrupt-pruned'), '副本超过上限要留一行账')
   ok(/try \{ writeCursors\(member, recovered\) \} catch/.test(idx3), '隔离后写回合法文件（下一次读走 src=file）')
   ok(idx3.includes('cursor-repair-failed'), '写回失败要留痕')
-  ok(idx3.includes('const quarantinedSigs = new Set()'), '同一份坏字节只隔离一次（member+sha 去重）')
+  ok(idx3.includes("backup: basename(dest), repeat: true"), '同一份坏字节第二次出现：不复制，但记一行 repeat=true')
+  ok(/note: 'cursor-repaired', member, from: 'cursor-meta', keys:/.test(idx3), '写回成功记 cursor-repaired（从哪儿补、补了几个键）')
 }
 
 // ---------- 结果 ----------

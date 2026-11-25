@@ -19,8 +19,6 @@ import { MENTION_ALL, normalizeMention, wantsWake, mentionTextOf, mentionDisplay
 import { codeFingerprint } from './code-fp.js'
 import { codeFpChangeOf, codeFpHistoryLine, codeFpLedgerOf, CODE_FP_LEDGER } from './code-fp-history-core.js'
 import { join, dirname, basename } from 'node:path'
-// fi-0023：同一份坏字节只隔离一次（按 member+sha 去重），副本按内容指纹命名。
-const quarantinedSigs = new Set()
 import { homedir } from 'node:os'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import { randomUUID, createHash } from 'node:crypto'
@@ -1536,6 +1534,10 @@ function readCursorState(member) {
     try { writeCursors(member, recovered) } catch (error) {
       logLine({ note: 'cursor-repair-failed', member, error: String(error?.message ?? error).slice(0, 80) })
     }
+
+    // 2026-11-25（LeeaCP 第 89 行）：`src=recovered` 只说"从别处补回来的"，没说从哪儿补的。
+    // 补一行账，把来源和键数写下来：写回成功本身也要留痕，否则"文件看着是好的"就说不出怎么好的。
+    logLine({ note: 'cursor-repaired', member, from: 'cursor-meta', keys: Object.keys(recovered[member] ?? {}).length })
     return { cursors: recovered, source: 'recovered' }
   }
   return { cursors: {}, source: 'unknown' }
@@ -1557,10 +1559,10 @@ function quarantineCursorFile(member) {
       copyFileSync(file, dest)
       pruneCorruptCopies(member)
       logLine({ note: 'cursor-corrupt', member, code, bytes: bytes.length, sha256: sha, backup: basename(dest) })
-    } else if (!quarantinedSigs.has(`${member}:${sha}`)) {
-      logLine({ note: 'cursor-corrupt', member, code, bytes: bytes.length, sha256: sha, backup: basename(dest), note2: 'already-saved' })
+    } else {
+      // 同一份坏字节第二次出现：不再复制，但要记一行——次数落在账上，别只落在文件名里。
+      logLine({ note: 'cursor-corrupt', member, code, bytes: bytes.length, sha256: sha, backup: basename(dest), repeat: true })
     }
-    quarantinedSigs.add(`${member}:${sha}`)
   } catch (error) {
     logLine({ note: 'cursor-corrupt', member, code: 'save-failed', error: String(error?.message ?? error).slice(0, 80) })
   }
