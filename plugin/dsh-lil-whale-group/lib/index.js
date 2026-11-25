@@ -4222,12 +4222,14 @@ function maybePruneMediaCache() {
   for (const item of result.failed) {
     watchmanLog('error', `note=media-prune-failed scope=${item.scope ?? 'file'} file=${item.name || '-'} reason=${item.code}`)
   }
-  if (result.removed > 0) {
-    watchmanLog(
-      'note',
-      `note=media-prune removed=${result.removed} bytes=${result.bytes} older-than-days=${MEDIA_CACHE_MAX_AGE_DAYS} failed=${result.failed.length}`,
-    )
-  }
+  // 每一轮都留一行（fi-0021）：以前只在删到东西时才写，于是"扫过、没东西删"和"根本没跑"
+  // 在账上长得一模一样——0 条既可以是"没有"，也可以是"哑了"。
+  const stats = mediaCacheStats({ dir: MEDIA_CACHE_DIR })
+  const oldestDays = stats.oldestMs === null ? '-' : Math.floor((now - stats.oldestMs) / 86400_000)
+  watchmanLog(
+    'note',
+    `note=media-prune existed=${result.existed ? 'yes' : 'no'} removed=${result.removed} bytes=${result.bytes} files=${stats.files} oldest-days=${oldestDays} older-than-days=${MEDIA_CACHE_MAX_AGE_DAYS} failed=${result.failed.length}`,
+  )
 }
 
 // 日志轮转：每小时最多一次，起一个独立进程去切（A.86）。

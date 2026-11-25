@@ -92,7 +92,7 @@ const indexText = readFileSync(new URL('../plugin/dsh-lil-whale-group/lib/index.
 ok(indexText.includes("from './media-cache-core.js'"), 'index.js 引入了 media-cache-core')
 ok(indexText.includes("'cache', 'bili-eyes', 'media'"), 'index.js 指向鱼塘共享的媒体缓存目录')
 ok(indexText.includes('maybePruneMediaCache()'), 'index.js 有 maybePruneMediaCache()')
-ok(indexText.includes('note=media-prune removed='), '成功也留一行账（note=media-prune）')
+ok(indexText.includes('note=media-prune existed='), '成功也留一行账（note=media-prune，字段从 existed= 起）')
 ok(indexText.includes('note=media-prune-failed'), '删不掉写 error 行（note=media-prune-failed）')
 ok(indexText.includes('scope=dir reason='), '目录层失败写 scope=dir（与文件层失败分开）')
 ok(indexText.includes('scope=${item.scope ?? \'file\'}'), '文件层失败写 scope=file 与文件名')
@@ -106,5 +106,11 @@ const coreText = readFileSync(new URL('../plugin/dsh-lil-whale-group/lib/media-c
 ok(coreText.includes("scope: 'file'"), '文件层失败带 scope=file（读者知道是哪一层）')
 ok(coreText.includes("error: 'NO-ARG'"), '没给 dir 时 error=NO-ARG')
 
+
+// fi-0021：每一轮都写一行——以前只在删到东西时写，于是「扫过没东西删」和「没跑」同形。
+ok(!indexText.includes('if (result.removed > 0)'), '清理账不再挂在「删到东西」这个条件下面')
+ok(/note=media-prune existed=/.test(indexText), 'media-prune 行带 existed=（目录在不在也是读数）')
+ok(/note=media-prune [^`]*files=\$\{stats\.files\}/.test(indexText), 'media-prune 行带 files=（这次扫到几个文件）')
+ok(/note=media-prune [^`]*oldest-days=/.test(indexText), 'media-prune 行带 oldest-days=（最老的还剩多久到期，0 删除时能解释为什么）')
 console.log(`test-media-prune：合计 ${total}，PASS ${pass}，FAIL ${total - pass}`)
 if (pass !== total) process.exit(1)

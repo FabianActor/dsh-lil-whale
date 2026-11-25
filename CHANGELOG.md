@@ -22,6 +22,11 @@
 
 ## [未发布]
 
+### r472 缓存清理每轮都留一行（fi-0021）
+
+- 旧：`note=media-prune` 只在删到东西时才写；缓存里没有过期文件的那些晚上，一小时跑一次、一次也不写，于是「扫过、没东西删」和「根本没跑」在账上都是 0 条。
+- 新：每一轮都写 `note=media-prune existed=… removed=… bytes=… files=… oldest-days=… older-than-days=… failed=…`——删 0 个时也能看出「扫过、最老的还差几天到期」。`scripts\test-media-prune.mjs` 加四格（不再挂在条件下面、带 existed/files/oldest-days）⇒ 37 格。
+
 ### r471 系统行带上它自己的时刻与失效方式（fi-0028）
 
 - 旧：那条「她可能在等审批或等回答」只写了「自几点起安静」，读的人过十几个小时才看到时，句子里没有任何东西说明它已经过期，只能自己翻 `ts` 去核。
