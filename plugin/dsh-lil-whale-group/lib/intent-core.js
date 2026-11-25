@@ -374,7 +374,20 @@ export function probeFileChanged({ current, baseline }) {
   // JSON 按语义指纹比：重排/缩进/被重写但内容一样，不算条件成立（小肥鱼 2026-11-25 群第 3464 行：
   // "我盯的是文件变，我关心的是集合变"）。
   if (String(current.kind || "raw") === "json") {
+    const allChanged = baseline.hashAll !== undefined && current.hashAll !== undefined
+      && String(current.hashAll) !== String(baseline.hashAll)
     if (!hashChanged) {
+      // r486：只有被 ignore 的字段变了，给一个自己的名字——它和"有人只碰了 mtime"在账上不该同形。
+      if (allChanged) {
+        return {
+          hit: false,
+          touchOnly: true,
+          sig: "ignored",
+          atMs: Number(current.mtimeMs),
+          evidence: `只有被 ignore 的字段变了（语义指纹没变：${String(current.hash)}）`,
+          baseline: current,
+        }
+      }
       // 三个不同的原因，各给一个名字：只碰了时间 / 被重写但语义没变 / 换了尺子（上面那条）。
       // 名字糊在一起时，读账的人分不出"没人动它"和"动了但内容一样"（r481：第一次打样就撞上了）。
       const why = sizeChanged ? "rewrite" : "mtime"

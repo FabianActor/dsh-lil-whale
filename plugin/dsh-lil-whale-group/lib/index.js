@@ -3643,7 +3643,12 @@ function sha256OfFile(file) {
 function baselineOfPath(target, opts = {}) {
   const st = statSync(target)
   if (!st.isDirectory()) {
-    const sem = semanticHashOf({ text: readFileSync(target, "utf8"), ignore: opts.ignore })    return { size: st.size, mtimeMs: st.mtimeMs, hash: sem.hash, kind: sem.kind }
+    const text = readFileSync(target, "utf8")
+    const sem = semanticHashOf({ text, ignore: opts.ignore })
+    // r486：再算一份"不摘任何字段"的指纹。两个都在时，才能分开
+    // "只有被 ignore 的字段变了"与"整份被重排了"——以前两者都落 touchOnly，账上分不出。
+    const all = semanticHashOf({ text, ignore: [] })
+    return { size: st.size, mtimeMs: st.mtimeMs, hash: sem.hash, kind: sem.kind, hashAll: all.hash }
   }
   const parts = []
   let size = 0

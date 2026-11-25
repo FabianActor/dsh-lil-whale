@@ -392,8 +392,21 @@ t('源码：每次触发带 seq=（同样的事件不会被去重窗折成一次
   assert.ok(/patch: \{ baseline: r\.baseline, seq \}/.test(src), 'seq 没写回状态（下次还是 1）')
   assert.ok(/const changed = r\.hit \|\| r\.touchOnly[\s\S]{0,160}?const seq = Number\(s\.seq/.test(src), '没变的那拍不该涨 seq（r485）')
 })
+t('probeFileChanged：只有被 ignore 的字段变了 ⇒ sig=ignored', () => {
+  const base = { size: 20, mtimeMs: 1, hash: 'json:abc', hashAll: 'json:raw1', kind: 'json' }
+  const cur = { size: 20, mtimeMs: 2, hash: 'json:abc', hashAll: 'json:raw2', kind: 'json' }
+  const r = probeFileChanged({ current: cur, baseline: base })
+  assert.equal(r.hit, false)
+  assert.equal(r.sig, 'ignored')
+})
+t('probeFileChanged：整份重排（全量指纹也没变，只大小和 mtime 变）仍是 rewrite', () => {
+  const base = { size: 20, mtimeMs: 1, hash: 'json:abc', hashAll: 'json:raw1', kind: 'json' }
+  const cur = { size: 40, mtimeMs: 2, hash: 'json:abc', hashAll: 'json:raw1', kind: 'json' }
+  const r = probeFileChanged({ current: cur, baseline: base })
+  assert.equal(r.sig, 'rewrite')
+})
 console.log(`合计：${pass + fail} 项，PASS ${pass}，FAIL ${fail}`)
 if (fail > 0) {
-console.log(`  ✗ ${f}`)
+  for (const f of failures) console.log(`  ✗ ${f}`)
   process.exit(1)
 }
