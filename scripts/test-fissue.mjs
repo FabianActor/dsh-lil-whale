@@ -92,6 +92,15 @@ ok('引用块里的标记也收', quoted.ok === true && quoted.title === '引用
 const boldLabels = parseFissueMessage('fissue｜标签整段加粗\n**现象**：a\n**证据**：b\n**期望**：c\n**验收**：v\n**前案**：d\n**不确定**：e');
 ok('小节标签加粗也收', boldLabels.ok === true && boldLabels.fields.现象 === 'a', JSON.stringify(boldLabels.missing));
 
+// fi-0025：标签独占一行、内容在下一行（2026-11-25 早上因此退回两条真报告）
+const bareLabels = parseFissueMessage('fissue｜标签独占一行\n**现象**\n第一行还在现象里\n第二行\n**证据**\n日志行\n期望：c\n验收：v\n前案：d\n不确定：e');
+ok('标签独占一行、内容在下一行也收', bareLabels.ok === true, JSON.stringify(bareLabels.missing));
+ok('独占一行的标签，续行归到它名下', bareLabels.fields.现象 === '第一行还在现象里\n第二行' && bareLabels.fields.证据 === '日志行', JSON.stringify(bareLabels.fields));
+const mixed = parseFissueMessage('fissue｜有的带冒号有的不带\n现象：a\n证据\nb\n期望：c\n验收：v\n前案：d\n不确定：e');
+ok('带冒号与不带冒号混着写也收', mixed.ok === true && mixed.fields.证据 === 'b', JSON.stringify(mixed.fields));
+const inlineMention = parseFissueMessage('fissue｜正文里提到证据不算标签\n现象：我看了证据\n证据：真的证据\n期望：c\n验收：v\n前案：d\n不确定：e');
+ok('正文里顺带提到「证据」不会被当标签', inlineMention.fields.现象 === '我看了证据' && inlineMention.fields.证据 === '真的证据', JSON.stringify(inlineMention.fields));
+
 section('事件折叠');
 const t0 = '2026-11-19T01:00:00.000Z';
 const events = [
