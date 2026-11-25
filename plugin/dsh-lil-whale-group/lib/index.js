@@ -64,6 +64,7 @@ import {
   looksLikeSchedule,
   pathAllowed,
   INTENT_GRACE_MIN,
+  semanticHashOf,
 } from './intent-core.js'
 
 // 这个包是用 link: 挂进 profile 的，它的真实路径在项目里，walk-up 找不到宿主的
@@ -3639,10 +3640,10 @@ function sha256OfFile(file) {
 }
 
 /** 文件/目录的基线（大小 + 最后写时间 + 指纹）。目录按"名字:大小:时间"拼起来再哈希。 */
-function baselineOfPath(target) {
+function baselineOfPath(target, opts = {}) {
   const st = statSync(target)
   if (!st.isDirectory()) {
-    return { size: st.size, mtimeMs: st.mtimeMs, hash: sha256OfFile(target) }
+    const sem = semanticHashOf({ text: readFileSync(target, "utf8"), ignore: opts.ignore })    return { size: st.size, mtimeMs: st.mtimeMs, hash: sem.hash, kind: sem.kind }
   }
   const parts = []
   let size = 0
@@ -3694,11 +3695,11 @@ function probeOneIntent(member, spec, s, now) {
       const r = probeTextAppears({ content, offset: s.offset ?? 0, spec, atMs: st.mtimeMs })
       return { hit: r.hit, evidence: r.evidence, atMs: r.atMs ?? null, patch: { offset: r.nextOffset ?? content.length } }
     }
-    const current = baselineOfPath(resolved.file)
+    const current = baselineOfPath(resolved.file, { ignore: spec.ignore })
     const r = probeFileChanged({ current, baseline: s.baseline ?? null })
     // fi-0020：只碰了 mtime 不叫「变了」——记一行，不投递；baseline 照旧更新，免得每拍都记。
     if (r.touchOnly) {
-      noteOnce(member, `note=intent-touch-only id=${spec.id} sig=mtime`)
+      noteOnce(member, `note=intent-touch-only id=${spec.id} sig=${r.sig ?? 'mtime'}`)
       return { hit: false, patch: { baseline: r.baseline } }
     }
     if (r.hit) noteOnce(member, `note=intent-hit id=${spec.id} sig=${r.sig}`)

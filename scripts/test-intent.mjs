@@ -21,6 +21,7 @@ import {
   probePending,
   probeTextAppears,
   probeFileChanged,
+  semanticHashOf,
   INTENT_MAX,
   INTENT_GLOBAL_PER_DAY,
 } from '../plugin/dsh-lil-whale-group/lib/intent-core.js'
@@ -323,6 +324,56 @@ t('intentTick：条件不再成立时清掉 firstTrueAt（不许旧时间戳活�
   assert.ok(setFirst > notHit, 'not-hit 分支必须在设 firstTrueAt 之前')
   const between = src.slice(notHit, setFirst)
   assert.ok(/delete s\.firstTrueAt/.test(between), 'not-hit 分支里没有清 firstTrueAt')
+})
+t('semanticHashOf：重排和缩进不算内容变了', () => {
+  const a = semanticHashOf({ text: '{"b":2,"a":1}' })
+  const b = semanticHashOf({ text: '{\n  "a": 1,\n  "b": 2\n}' })
+  assert.equal(a.hash, b.hash)
+  assert.equal(a.kind, 'json')
+})
+
+t('semanticHashOf：ignore 摘掉每次都会变的字段（名册的 updatedAt）', () => {
+  const a = semanticHashOf({ text: '{"updatedAt":"x","members":{"lee":1}}', ignore: ['updatedAt'] })
+  const b = semanticHashOf({ text: '{"updatedAt":"y","members":{"lee":1}}', ignore: ['updatedAt'] })
+  const c = semanticHashOf({ text: '{"updatedAt":"y","members":{"lee":2}}', ignore: ['updatedAt'] })
+  assert.equal(a.hash, b.hash)
+  assert.notEqual(a.hash, c.hash)
+})
+
+t('semanticHashOf：读不成 JSON 的走原始字节（kind=raw）', () => {
+  const r = semanticHashOf({ text: 'hello' })
+  assert.equal(r.kind, 'raw')
+  assert.equal(r.hash.length, 12)
+})
+
+t('probeFileChanged：JSON 被重写但语义没变 ⇒ 不算命中（报 format）', () => {
+  const baseline = { size: 20, mtimeMs: 1, hash: 'json:abc', kind: 'json' }
+  const current = { size: 34, mtimeMs: 2, hash: 'json:abc', kind: 'json' }
+  const r = probeFileChanged({ current, baseline })
+  assert.equal(r.hit, false)
+  assert.equal(r.touchOnly, true)
+  assert.equal(r.sig, 'format+size')
+})
+
+t('probeFileChanged：JSON 语义变了 ⇒ 命中，sig=json', () => {
+  const baseline = { size: 20, mtimeMs: 1, hash: 'json:abc', kind: 'json' }
+  const current = { size: 21, mtimeMs: 2, hash: 'json:def', kind: 'json' }
+  const r = probeFileChanged({ current, baseline })
+  assert.equal(r.hit, true)
+  assert.equal(r.sig, 'json')
+})
+
+t('probeFileChanged：指纹算法换了（raw→json）⇒ 只重取基线，不报内容变了', () => {
+  const baseline = { size: 20, mtimeMs: 1, hash: 'abcdefabcdef' }
+  const current = { size: 20, mtimeMs: 1, hash: 'json:abcdefabcdef', kind: 'json' }
+  const r = probeFileChanged({ current, baseline })
+  assert.equal(r.hit, false)
+  assert.equal(r.sig, 'format')
+})
+
+t('normalizeIntent：ignore 只收字符串、去空、最多 20 个', () => {
+  const r = normalizeIntent({ id: 'x', why: 'w', kind: 'file-changed', path: 'pool/x.json', ignore: [' a ', '', 3, 'b'] })
+  assert.deepEqual(r.ignore, ['a', 'b'])
 })
 console.log(`合计：${pass + fail} 项，PASS ${pass}，FAIL ${fail}`)
 if (fail > 0) {
