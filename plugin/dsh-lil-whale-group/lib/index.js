@@ -19,6 +19,8 @@ import { MENTION_ALL, normalizeMention, wantsWake, mentionTextOf, mentionDisplay
 import { codeFingerprint } from './code-fp.js'
 import { codeFpChangeOf, codeFpHistoryLine, codeFpLedgerOf, CODE_FP_LEDGER } from './code-fp-history-core.js'
 import { join, dirname, basename } from 'node:path'
+// fi-0023：同一份坏字节只隔离一次（按 member+sha 去重），副本按内容指纹命名。
+const quarantinedSigs = new Set()
 import { homedir } from 'node:os'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import { randomUUID, createHash } from 'node:crypto'
@@ -1528,21 +1530,52 @@ function readCursorState(member) {
   // 2026-11-23（LeeaCP 验收 C）：坏过一次要留下痕迹——自愈过的和从没坏过的不能同形。
   quarantineCursorFile(member)
   const recovered = recoveredCursorsOf(member)
-  if (recovered !== null) return { cursors: recovered, source: 'recovered' }
+  if (recovered !== null) {
+    // fi-0023 ②：隔离完立刻写回一份合法文件，别等下一个人来读才发现它还是坏的。
+    // 不写回的话，坏文件原地留着，每次读都重新隔离一遍（2026-11-25，一秒生一份副本）。
+    try { writeCursors(member, recovered) } catch (error) {
+      logLine({ note: 'cursor-repair-failed', member, error: String(error?.message ?? error).slice(0, 80) })
+    }
+    return { cursors: recovered, source: 'recovered' }
+  }
   return { cursors: {}, source: 'unknown' }
 }
 
-/** 坏文件先复制一份带时刻的副本，再记一行账。副本只留证，不参与读。 */
+/** 坏文件先存一份带内容指纹的副本（同一份只存一次），再记一行账。副本只留证，不参与读。 */
 function quarantineCursorFile(member) {
   const file = cursorFileOf(member)
   try {
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '-').replace('Z', '')
-    const dest = `${file}.corrupt-${stamp}`
-    copyFileSync(file, dest)
-    logLine({ note: 'cursor-corrupt', member, backup: basename(dest) })
+    const bytes = readFileSync(file)
+    // fi-0023：全 0 / 全空白单独一种原因——"半截 JSON"与"整份被零填充"修法不同，
+    // 混成一句 cursor-corrupt 之后，读的人只能猜。
+    const zeroFilled = bytes.length > 0 && bytes.every((b) => b === 0 || b === 0x20 || b === 0x09 || b === 0x0a || b === 0x0d)
+    const code = zeroFilled ? 'zero-filled' : 'cursor-corrupt'
+    const sha = createHash('sha256').update(bytes).digest('hex').slice(0, 16)
+    // 按内容指纹命名：同一份坏字节第二次不再复制（2026-11-25，fishball 一分钟里生出 74 份）。
+    const dest = `${file}.corrupt-${sha}`
+    if (!existsSync(dest)) {
+      copyFileSync(file, dest)
+      pruneCorruptCopies(member)
+      logLine({ note: 'cursor-corrupt', member, code, bytes: bytes.length, sha256: sha, backup: basename(dest) })
+    } else if (!quarantinedSigs.has(`${member}:${sha}`)) {
+      logLine({ note: 'cursor-corrupt', member, code, bytes: bytes.length, sha256: sha, backup: basename(dest), note2: 'already-saved' })
+    }
+    quarantinedSigs.add(`${member}:${sha}`)
   } catch (error) {
-    logLine({ note: 'cursor-corrupt', member, backup: 'save-failed', error: String(error?.message ?? error).slice(0, 80) })
+    logLine({ note: 'cursor-corrupt', member, code: 'save-failed', error: String(error?.message ?? error).slice(0, 80) })
   }
+}
+
+/** 副本只留最近 3 份（fi-0023 ④）；删掉的份数记一行账，别让它悄悄消失。 */
+function pruneCorruptCopies(member) {
+  try {
+    const dir = dirname(cursorFileOf(member))
+    const base = basename(cursorFileOf(member))
+    const names = readdirSync(dir).filter((n) => n.startsWith(`${base}.corrupt-`)).sort()
+    const extra = names.slice(0, Math.max(0, names.length - 3))
+    for (const name of extra) unlinkSync(join(dir, name))
+    if (extra.length > 0) logLine({ note: 'cursor-corrupt-pruned', member, removed: extra.length })
+  } catch {}
 }
 
 /** 从 meta（上一次真递到的行号）重建各通道的游标；没有 meta 就返回 null。 */

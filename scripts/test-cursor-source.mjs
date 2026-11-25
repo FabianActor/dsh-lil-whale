@@ -207,7 +207,25 @@ function eq(name, got, want) {
   const missing = classifyCursorRead({ source: 'missing', stored: 0, lastDelivered: null, lines: 89 })
   ok(missing.unknown === true, '文件读不到时 counts=unknown（不编条数）')
 }
+// ---------- fi-0023：坏游标隔离只做一次，且隔离完写回合法文件 ----------
+// 2026-11-25：fishball 的一份 206 B 全 0 游标在 73 秒里生出 74 份 .corrupt-* 副本。
+// 根因是 quarantineCursorFile() 只 copyFileSync：不按内容去重、不修不删，下一拍再复制一份。
+// 这里验四条：按内容指纹命名（同一份只存一次）/ 全 0 单独一种原因 / 副本各有上限 / 隔离后写回。
+{
+  const idx3 = readFileSync(new URL('../plugin/dsh-lil-whale-group/lib/index.js', import.meta.url), 'utf8')
+  ok(/dest = `\$\{file\}\.corrupt-\$\{sha\}`/.test(idx3), '副本按内容 sha256 命名（同一份字节只存一次）')
+  ok(/sha = createHash\('sha256'\)\.update\(bytes\)\.digest\('hex'\)\.slice\(0, 16\)/.test(idx3), 'sha256 取前 16 位')
+  ok(idx3.includes("code = zeroFilled ? 'zero-filled' : 'cursor-corrupt'"), '全 0 单独记 code=zero-filled')
+  ok(/note: 'cursor-corrupt', member, code, bytes: bytes\.length, sha256: sha/.test(idx3), 'cursor-corrupt 行带 bytes 与 sha256（副本删了还能验）')
+  ok(!/note: 'cursor-corrupt', member, backup: basename\(dest\) \}\)/.test(idx3), '旧形状（只有 backup）不许留')
+  ok(idx3.includes('cursor-corrupt-pruned'), '副本超过上限要留一行账')
+  ok(/try \{ writeCursors\(member, recovered\) \} catch/.test(idx3), '隔离后写回合法文件（下一次读走 src=file）')
+  ok(idx3.includes('cursor-repair-failed'), '写回失败要留痕')
+  ok(idx3.includes('const quarantinedSigs = new Set()'), '同一份坏字节只隔离一次（member+sha 去重）')
+}
+
 // ---------- 结果 ----------
 console.log(`合计 ${pass + fail}，PASS ${pass}，FAIL ${fail}`)
 for (const line of failures) console.log(line)
 process.exit(fail === 0 ? 0 : 1)
+
