@@ -191,6 +191,22 @@ function eq(name, got, want) {
   ok(!/watchmanLog\('skip', `(?!to=)/.test(idx), 'skip 行不许没有主语')
 }
 
+
+// ---------- fi-0027：prior-cursor=0 的三种来源 ----------
+// 0 可以来自：文件里真写着 0（read）、这一格不见了（missing）、文件本身读不到（unknown）。
+// 投递行紧跟一格 prior-src= 把这三种分开；不声称 first——「这条通道头一回读」不是读数能证明的事。
+{
+  const idx2 = readFileSync(new URL('../plugin/dsh-lil-whale-group/lib/index.js', import.meta.url), 'utf8')
+  ok(idx2.includes('prior-src='), '投递行带 prior-src=')
+  ok(/prior-src=\$\{read\.src === 'absent' \? 'missing'/.test(idx2), '键缺席 ⇒ prior-src=missing（不是 0）')
+  ok(/prior-src=[^}]*read\.unknown/.test(idx2), '读不到 ⇒ prior-src=unknown')
+  const absent = classifyCursorRead({ source: 'file', stored: 0, lastDelivered: null, lines: 89, present: false })
+  ok(absent.src === 'absent', 'present=false 的读取结果叫 absent（不是 file）')
+  const realZero = classifyCursorRead({ source: 'file', stored: 0, lastDelivered: null, lines: 89, present: true })
+  ok(realZero.src === 'file', '真写着 0 的读取结果叫 file')
+  const missing = classifyCursorRead({ source: 'missing', stored: 0, lastDelivered: null, lines: 89 })
+  ok(missing.unknown === true, '文件读不到时 counts=unknown（不编条数）')
+}
 // ---------- 结果 ----------
 console.log(`合计 ${pass + fail}，PASS ${pass}，FAIL ${fail}`)
 for (const line of failures) console.log(line)
