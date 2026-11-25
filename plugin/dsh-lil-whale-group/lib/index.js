@@ -13,7 +13,7 @@ import { printableText } from './text-clean.js'
 import { sayProblemOf, channelProblemOf } from './say-core.js'
 import { noteCodeOf, intentNoteTextOf, watchmanSkipLineOf } from './note-core.js'
 import { classifyStall, stallSentenceOf } from './stall-core.js'
-import { classifyCursorRead, countsKnownOf, heldTrustedOf, heldOverflows } from './cursor-core.js'
+import { classifyCursorRead, cursorWriteSourceOf, countsKnownOf, heldTrustedOf, heldOverflows } from './cursor-core.js'
 import { membersWithKeys } from './members-core.js'
 import { MENTION_ALL, normalizeMention, wantsWake, mentionTextOf, mentionDisplayOf, bumpHeld, heldOf, clearHeld, heldSentenceOf } from './mention-core.js'
 import { codeFingerprint } from './code-fp.js'
@@ -1532,7 +1532,7 @@ function readCursorState(member) {
   if (recovered !== null) {
     // fi-0023 ②：隔离完立刻写回一份合法文件，别等下一个人来读才发现它还是坏的。
     // 不写回的话，坏文件原地留着，每次读都重新隔离一遍（2026-11-25，一秒生一份副本）。
-    try { writeCursors(member, recovered) } catch (error) {
+    try { writeCursors(member, recovered, 'meta') } catch (error) {
       logLine({ note: 'cursor-repair-failed', member, error: String(error?.message ?? error).slice(0, 80) })
     }
 
@@ -1649,7 +1649,15 @@ function mergeCursorValue(a, b) {
   return a === undefined ? b : a
 }
 
-function writeCursors(member, cursors) {
+const CURSOR_WRITE_SOURCES = new Set(['file', 'meta', 'legacy', 'computed'])
+
+function writeCursors(member, cursors, from) {
+  // fi-0031：写回的每一笔都要能说出"值是从哪儿来的"。问不到就抛错——
+  // 不写没有来源的文件，也别用默认值把它补成 'file'。
+  const origin = String(from ?? '').trim()
+  if (!CURSOR_WRITE_SOURCES.has(origin)) {
+    throw new Error(`writeCursors 缺来源（from=file|meta|legacy|computed，实际拿到 ${JSON.stringify(from)}）`)
+  }
   const liveSeats = new Set(
     pinnedSessions(member).map((sid) => sid.replace(/^session-/, '').slice(0, 6)),
   )
@@ -1687,6 +1695,13 @@ function writeCursors(member, cursors) {
     }
   }
   writeJson(cursorFileOf(member), kept)
+  // fi-0031：写回也要能看出"值是从哪儿来的"。只在异常时记会被读成"从文件读的"，
+  // 所以每笔都记；来源由调用方给，缺了就抛错（不补默认值）。
+  logLine({
+    note: 'cursor-write', member, from: origin,
+    keys: Object.keys(kept[member] ?? {}).length,
+    seats: Math.max(0, Object.keys(kept).length - 1),
+  })
 }
 
 function readWakes(member) {
@@ -3148,7 +3163,7 @@ function handleChannel({ agent, member, seat, channel, cursorState, wakes }) {
   if (incoming.length === 0) {
     setCursor(cursors, member, channel.key, lines.length)
     setCursor(cursors, seatKey, channel.key, lines.length)
-    writeCursors(member, cursors)
+    writeCursors(member, cursors, cursorWriteSourceOf(read))
     noteDelivered(member, channel.key, lines.length)
     return false
   }
@@ -3304,7 +3319,7 @@ function handleChannel({ agent, member, seat, channel, cursorState, wakes }) {
 
   setCursor(cursors, member, channel.key, lines.length)
   setCursor(cursors, seatKey, channel.key, lines.length)
-  writeCursors(member, cursors)
+  writeCursors(member, cursors, cursorWriteSourceOf(read))
   noteDelivered(member, channel.key, lines.length)
   recordWake(wakes, member)
   pending.delete(pendingKey)

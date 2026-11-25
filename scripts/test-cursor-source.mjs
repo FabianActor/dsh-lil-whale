@@ -13,6 +13,7 @@ import {
   CURSOR_LOST_WINDOW,
   classifyCursorRead,
   cursorSourceLine,
+  cursorWriteSourceOf,
   countsKnownOf,
   heldTrustedOf,
   heldOverflows,
@@ -219,10 +220,35 @@ function eq(name, got, want) {
   ok(/note: 'cursor-corrupt', member, code, bytes: bytes\.length, sha256: sha/.test(idx3), 'cursor-corrupt 行带 bytes 与 sha256（副本删了还能验）')
   ok(!/note: 'cursor-corrupt', member, backup: basename\(dest\) \}\)/.test(idx3), '旧形状（只有 backup）不许留')
   ok(idx3.includes('cursor-corrupt-pruned'), '副本超过上限要留一行账')
-  ok(/try \{ writeCursors\(member, recovered\) \} catch/.test(idx3), '隔离后写回合法文件（下一次读走 src=file）')
+  ok(/try \{ writeCursors\(member, recovered, 'meta'\) \} catch/.test(idx3), '隔离后写回合法文件（来源记 meta）')
   ok(idx3.includes('cursor-repair-failed'), '写回失败要留痕')
   ok(idx3.includes("backup: basename(dest), repeat: true"), '同一份坏字节第二次出现：不复制，但记一行 repeat=true')
   ok(/note: 'cursor-repaired', member, from: 'cursor-meta', keys:/.test(idx3), '写回成功记 cursor-repaired（从哪儿补、补了几个键）')
+}
+
+// ---------- fi-0031：写回的每一笔都要说清"值是从哪儿来的" ----------
+// 2026-11-25（LeeaCP 第 92/94 行）：游标坏掉有两条恢复路——从 cursor-meta 重建会写 cursor-repaired，
+// 而"进程活着、拿手里那份整份写回"旧代码什么都不记。于是"文件现在是好的"说不出怎么好的。
+// 这一格只在异常时记就没有意义（缺行会被读成"从文件读的"），所以每笔都记，来源必填。
+{
+  const idx4 = readFileSync(new URL('../plugin/dsh-lil-whale-group/lib/index.js', import.meta.url), 'utf8')
+  ok(/function writeCursors\(member, cursors, from\) \{/.test(idx4), 'writeCursors 必须收到 from（没有默认值）')
+  ok(/if \(!CURSOR_WRITE_SOURCES\.has\(origin\)\) \{/.test(idx4), '来源不在白名单就抛错')
+  ok(/note: 'cursor-write', member, from: origin/.test(idx4), '写回记 cursor-write from=')
+  ok(/keys: Object\.keys\(kept\[member\] \?\? \{\}\)\.length/.test(idx4), 'cursor-write 带 keys=（写了几个通道）')
+  const calls = (idx4.match(/writeCursors\(member, [^)]*\)/g) || []).filter((c) => !c.startsWith('writeCursors(member, cursors, from'))
+  ok(calls.length >= 3, '调用点至少三处（补、递送两条）')
+  ok(calls.every((c) => c.split(',').length >= 3), '每个调用点都带了来源')
+}
+{
+  ok(cursorWriteSourceOf({ src: 'file' }) === 'file', 'file → file（正常路）')
+  ok(cursorWriteSourceOf({ src: 'legacy' }) === 'legacy', 'legacy → legacy（迁移来的真值）')
+  ok(cursorWriteSourceOf({ src: 'recovered' }) === 'meta', 'recovered → meta（从 cursor-meta 补回）')
+  ok(cursorWriteSourceOf({ src: 'regressed' }) === 'meta', 'regressed → meta（退步时从 meta 接着走）')
+  ok(cursorWriteSourceOf({ src: 'absent' }) === 'computed', 'absent → computed（这一格不见了）')
+  ok(cursorWriteSourceOf({ src: 'missing' }) === 'computed', 'missing → computed')
+  ok(cursorWriteSourceOf({ src: 'capped' }) === 'computed', 'capped → computed（夹到文件尾，值不是读来的）')
+  ok(cursorWriteSourceOf(undefined) === 'computed', '连 read 都没有 → computed（不冒充 file）')
 }
 
 // ---------- 结果 ----------

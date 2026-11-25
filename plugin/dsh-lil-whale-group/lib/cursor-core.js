@@ -96,3 +96,27 @@ export function heldOverflows(count, lines) {
   if (!Number.isFinite(c) || !Number.isFinite(n)) return false
   return c > n
 }
+
+/**
+ * 这一次写回的游标值，是从哪儿来的（fi-0031，2026-11-25）。
+ *
+ * 为什么要这一格：游标坏掉有两条恢复路——从 cursor-meta 重建（会写 cursor-repaired），
+ * 以及进程活着、拿手里那份整份写回（旧代码什么都不记）。后者更常见，于是一个好的游标文件
+ * 说不清"它怎么好的"。这里把来源定成四个字，写在每一条写回上：
+ *
+ *   file     从游标文件那一格读到（正常路）
+ *   meta     从 cursor-meta 补回来的（recovered / regressed）
+ *   legacy   迁移来的遗留值
+ *   computed 没读到，按文件尾现算（missing / absent / unknown / capped）
+ *
+ * 不给默认值：缺省值会被读成"从文件读的"，那就又回到"错的和对的长得一样"。
+ * @param {{src?: string}} read classifyCursorRead 的返回值
+ * @returns {'file'|'meta'|'legacy'|'computed'}
+ */
+export function cursorWriteSourceOf(read) {
+  const src = read?.src
+  if (src === 'file') return 'file'
+  if (src === 'legacy') return 'legacy'
+  if (src === 'recovered' || src === 'regressed') return 'meta'
+  return 'computed'
+}
