@@ -2047,7 +2047,7 @@ function checkOwnStall(ctx) {
   if (verdict.kind !== 'stalled') return
   if (stallNotified.get(me) === delivery.at) return
   stallNotified.set(me, delivery.at)
-  const text = stallSentenceOf({ label: labelOf(me), port: MEMBERS[me]?.port ?? '', since: verdict.lastAt ?? delivery.at })
+  const text = stallSentenceOf({ label: labelOf(me), port: MEMBERS[me]?.port ?? '', since: verdict.lastAt ?? delivery.at, at: Date.now() })
   try {
     saySystemToDm(me, text)
     mkdirSync(STALL_DIR, { recursive: true })

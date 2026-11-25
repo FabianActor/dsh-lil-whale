@@ -56,13 +56,19 @@ export function hhmmOf(ms) {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+/** 系统行自己带时刻与失效方式（fi-0028）：它说的是「当时」，不是「此刻」。 */
+export const STALL_NOTE_TTL_MIN = 10;
+
 /**
  * 给人看的系统行。它明确是「系统」，并且明确只是「可能」。
  * @param {{label:string, port:number|string, since:number}} input
  */
-export function stallSentenceOf({ label, port, since }) {
+export function stallSentenceOf({ label, port, since, at = Date.now(), ttlMin = STALL_NOTE_TTL_MIN }) {
   const who = typeof label === 'string' && label.trim() !== '' ? label.trim() : '她';
   const url = port === undefined || port === null || port === '' ? '' : `http://127.0.0.1:${port}/`;
   const tail = url === '' ? '去她自己的 WebUI 看一眼。' : `去 ${url} 看一眼，点一下就好。`;
-  return `【系统】${who} 可能在等审批或等回答（自 ${hhmmOf(since)} 起没有新动静）。${tail}`;
+  const ttl = Number.isFinite(ttlMin) && ttlMin > 0 ? Math.round(ttlMin) : STALL_NOTE_TTL_MIN;
+  return `【系统】${who} 可能在等审批或等回答（自 ${hhmmOf(since)} 起没有新动静；写于 ${hhmmOf(at)}）。${tail}`
+    + `这条只在写后 ${ttl} 分钟内有效——超过就别跑这一趟，翻她的账看后来有没有动作。`;
 }
+
