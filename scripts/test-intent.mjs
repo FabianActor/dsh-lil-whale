@@ -384,6 +384,13 @@ t('probeFileChanged：JSON 只碰 mtime / 只改格式 / 语义变了，三个�
   assert.equal(rewritten.sig, 'rewrite')
   assert.equal(changed.sig, 'json')
 })
+t('源码：每次触发带 seq=（同样的事件不会被去重窗折成一次）', () => {
+  const src = readFileSync(new URL('../plugin/dsh-lil-whale-group/lib/index.js', import.meta.url), 'utf8')
+  assert.ok(/const seq = Number\(s\.seq \|\| 0\) \+ 1/.test(src), '没有 seq 计数器')
+  assert.ok(/note=intent-touch-only id=\$\{spec\.id\} sig=\$\{r\.sig \?\? 'mtime'\} seq=\$\{seq\}/.test(src), 'touch-only 行没带 seq')
+  assert.ok(/note=intent-hit id=\$\{spec\.id\} sig=\$\{r\.sig\} seq=\$\{seq\}/.test(src), 'hit 行没带 seq')
+  assert.ok(/patch: \{ baseline: r\.baseline, seq \}/.test(src), 'seq 没写回状态（下次还是 1）')
+})
 console.log(`合计：${pass + fail} 项，PASS ${pass}，FAIL ${fail}`)
 if (fail > 0) {
   for (const f of failures) console.log(`  ✗ ${f}`)

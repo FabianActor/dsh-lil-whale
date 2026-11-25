@@ -22,6 +22,12 @@
 
 ## [未发布]
 
+### r483 自主触发的每次发生带一个号（用户可见：看她 intent.log 的人）
+
+- 以前两次同样的事件在账上长得一模一样（`id=` 只说哪条条件、不说第几次），去重窗把第二次压成 `note-suppressed count=1`：账能证明"这事发生过"，证明不了"发生过两次"。
+- 现在 `note=intent-hit`、`note=intent-touch-only` 都带 `seq=<n>`（每条条件各自递增、写进 `pool\state\wake-on\<键>.json`）；同样的两件事在账上不再长得一样。
+- 来源：小肥鱼 20:37 在群里指出"重复发生和永久发生长得一样"，这回长在我自己的验收上。`scripts/test-intent.mjs` 43 项。
+
 ### r482 升级不再动鱼在设置页里做的选择（用户可见：升级过鱼塘的人）
 
 - 以前 `install.ps1 -Upgrade` 里重挂 profile 那一步会让 `dsh plugin add` 按 bundle 清单重写 `cordis.patch.yml`：设置页写进去的 `ui-settings-general`、`agent-default-model`（含她选定的 provider / model / reasoningEffort）没有对应 bundle，就被静默丢掉，退出码还是 0。
