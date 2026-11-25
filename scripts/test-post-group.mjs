@@ -75,6 +75,20 @@ const src = (await import('node:fs')).readFileSync(SCRIPT, 'utf8');
 ok('源码里 record 带 mention 字段', /channel,\r?\n\s*mention,/.test(src));
 ok('回执会说清叫醒谁', src.includes('mention=${wakes}'));
 
+
+// 2026-11-25：`to` 是历史字段，不再默认写；`--mention none` 也该是空名单（没人叫 none 这个名字）。
+function runRaw(extra) {
+  const body = join(tmp, 'raw.txt');
+  writeFileSync(body, 'raw', 'utf8');
+  const r = spawnSync(process.execPath, [SCRIPT, '--from', 'lee', '--text-file', body, '--dry-run', ...extra], { encoding: 'utf8' });
+  try { return JSON.parse(r.stdout); } catch { return null; }
+}
+const noneWord = runRaw(['--mention', 'none']);
+ok('--mention none ⇒ 空名单', Array.isArray(noneWord?.record?.mention) && noneWord.record.mention.length === 0, JSON.stringify(noneWord?.record?.mention));
+const noTo = runRaw(['--mention', 'lee']);
+ok('不写 --to 时记录里就没有 to 这一格', noTo?.record !== undefined && !('to' in noTo.record), JSON.stringify(noTo?.record));
+const withTo = runRaw(['--to', 'lee', '--mention', 'lee']);
+ok('显式 --to 仍会写进去（老格式兼容）', withTo?.record?.to === 'lee', String(withTo?.record?.to));
 rmSync(tmp, { recursive: true, force: true });
 console.log(`test-post-group：合计 ${pass + fail}，PASS ${pass}，FAIL ${fail}`);
 process.exit(fail === 0 ? 0 : 1);

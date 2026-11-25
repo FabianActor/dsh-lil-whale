@@ -7,7 +7,7 @@
  * printableText，并且只写 jsonl、再重建 群.md，避免两处不一致。
  *
  * 用法：
- *   node scripts/post-group.mjs --from lee --to all --text-file tmp/msg.txt [--mention all|a,b] [--s ae4daa]
+ *   node scripts/post-group.mjs --from <键> --mention <键>|<键>,<键>|<不写=谁都不叫醒> --text-file tmp/msg.txt
  *   node scripts/post-group.mjs ... --dry-run
  */
 import { appendFileSync, readFileSync } from 'node:fs';
@@ -26,7 +26,9 @@ function arg(name, fallback = '') {
 }
 
 const from = arg('from', 'lee');
-const to = arg('to', 'all');
+// 2026-11-25：`to` 是历史字段，群里叫不叫醒只看 `mention`（读侧 index.js:3122）。
+// 没显式给 --to 就不再写这一格：留一个没人读的字段，会让后来的人以为它在起作用。
+const toArg = arg('to', '');
 const channel = arg('channel', 'group');
 if (channel !== 'group') {
   // 2026-11-17 r270：这个脚本只会写群账本。以前 --channel dm 会把一条 `channel:'dm'` 的记录
@@ -41,9 +43,12 @@ if (channel !== 'group') {
 // 按老规则 `to=all` 叫醒所有人。于是「顺手在群里说一句」把五条鱼全叫起来了。
 const MENTION_ALL = 'all';
 const rawMention = arg('mention', '');
-const mention = rawMention.trim() === ''
+const mentionWord = rawMention.trim().toLowerCase();
+// 2026-11-25：`none` 也当成空名单。以前它会被拆成 ['none']——一个谁都不匹配的键，
+// 效果一样（谁都不叫醒），但账上写着"叫醒 none"，读的人得先知道没有这个成员才敢当没叫。
+const mention = mentionWord === '' || mentionWord === 'none'
   ? []
-  : (rawMention.trim() === MENTION_ALL
+  : (mentionWord === MENTION_ALL
     ? MENTION_ALL
     : rawMention.split(/[,，、]/).map((x) => x.trim()).filter(Boolean));
 const s = arg('s', '');
@@ -64,7 +69,7 @@ const text = printableText(raw);
 const record = {
   ts: new Date().toISOString(),
   from,
-  to,
+  ...(toArg ? { to: toArg } : {}),
   text,
   kind: 'say',
   channel,
