@@ -316,15 +316,32 @@ export function probeFileChanged({ current, baseline }) {
   if (!baseline || !Number.isFinite(Number(baseline.size))) {
     return { hit: false, baseline: current }
   }
-  const changed =
-    Number(current.size) !== Number(baseline.size) ||
-    Number(current.mtimeMs) !== Number(baseline.mtimeMs) ||
-    String(current.hash) !== String(baseline.hash)
-  if (!changed) return { hit: false, baseline }
+  const sizeChanged = Number(current.size) !== Number(baseline.size)
+  const hashChanged = String(current.hash) !== String(baseline.hash)
+  const mtimeChanged = Number(current.mtimeMs) !== Number(baseline.mtimeMs)
+  if (!sizeChanged && !hashChanged && !mtimeChanged) return { hit: false, baseline }
+  // fi-0020（小肥鱼 2026-11-24 群第 3334 行）：以前三个分量 OR 在一起，报出来只有一句
+  // 「文件变了」——重写/触碰、内容变了、只刷 mtime，在纸上是同一个样子。
+  // 现在：hit 只认内容（size 或 hash）；只碰 mtime 另记 kind=touch-only，不算条件成立。
+  if (!sizeChanged && !hashChanged) {
+    return {
+      hit: false,
+      touchOnly: true,
+      sig: 'mtime',
+      atMs: Number(current.mtimeMs),
+      evidence: `只碰了 mtime，内容没变（${Number(current.size)} B，hash ${String(current.hash).slice(0, 8)}）`,
+      baseline: current,
+    }
+  }
+  const parts = []
+  if (sizeChanged) parts.push(`size ${Number(baseline.size)}→${Number(current.size)}`)
+  if (hashChanged) parts.push(`hash ${String(baseline.hash).slice(0, 8)}→${String(current.hash).slice(0, 8)}`)
+  const sig = [sizeChanged ? 'size' : '', hashChanged ? 'hash' : '', mtimeChanged ? 'mtime' : ''].filter(Boolean).join('+')
   return {
     hit: true,
+    sig,
     atMs: Number(current.mtimeMs),
-    evidence: `文件变了：${current.size} B，最后写于 ${new Date(current.mtimeMs).toISOString()}`,
+    evidence: `内容变了：${parts.join('，')}（${Number(current.size)} B，最后写于 ${new Date(Number(current.mtimeMs)).toISOString()}）`,
     baseline: current,
   }
 }

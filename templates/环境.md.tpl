@@ -176,7 +176,7 @@ group_say(text:"……", channel:"dm", to:"<对方的 id>")
 - `kind`：
   - `pending`：有还没进你窗口的话（`from` 可选，只看某个人发来的；`minCount` 默认 1）
   - `text-appears`：某个文件里出现了某句话（`path` + `match`，`regex: true` 按正则）
-  - `file-changed`：某个文件/目录变了（`path`）
+  - `file-changed`：某个文件/目录的**内容**变了（`path`）；只碰了修改时间不算（会在账上记 `intent-touch-only`，但不叫醒你）
 - `each`：`once`（默认，成立一次就作废）或 `per-change`（每次变都算）
 - `maxPerDay`（默认 2）、`cooldownMin`（默认 30）
 - `notBefore` / `notAfter`（HH:MM，只在某段时间里看）、`until`（日期，过期作废）

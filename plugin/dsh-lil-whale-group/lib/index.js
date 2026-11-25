@@ -3694,6 +3694,12 @@ function probeOneIntent(member, spec, s, now) {
     }
     const current = baselineOfPath(resolved.file)
     const r = probeFileChanged({ current, baseline: s.baseline ?? null })
+    // fi-0020：只碰了 mtime 不叫「变了」——记一行，不投递；baseline 照旧更新，免得每拍都记。
+    if (r.touchOnly) {
+      noteOnce(member, `note=intent-touch-only id=${spec.id} sig=mtime`)
+      return { hit: false, patch: { baseline: r.baseline } }
+    }
+    if (r.hit) noteOnce(member, `note=intent-hit id=${spec.id} sig=${r.sig}`)
     return { hit: r.hit, evidence: r.evidence, atMs: r.atMs ?? null, patch: { baseline: r.baseline } }
   } catch (error) {
     noteOnce(member, `note=intent-probe-failed id=${spec.id} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 100)}`)

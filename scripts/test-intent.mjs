@@ -228,6 +228,30 @@ t('file-changed：第一次只记基线不触发；变了才触发；没变不�
   assert.equal(probeFileChanged({ current: a, baseline: a }).hit, false)
 })
 
+t('file-changed：只碰了 mtime 不算「变了」，内容变才触发（fi-0020）', () => {
+  const a = { size: 3117, mtimeMs: 1000, hash: 'ca31171c' }
+  // 只碰 mtime：hit=false，但要把原因说出来，不能和「没变」同形
+  const touch = probeFileChanged({ current: { size: 3117, mtimeMs: 5000, hash: 'ca31171c' }, baseline: a })
+  assert.equal(touch.hit, false)
+  assert.equal(touch.touchOnly, true)
+  assert.equal(touch.sig, 'mtime')
+  assert.match(touch.evidence, /只碰了 mtime/)
+  assert.match(touch.evidence, /ca31171c/)
+  // 只改 size：内容算变了，证据里写 size 前后值
+  const sized = probeFileChanged({ current: { size: 3200, mtimeMs: 1000, hash: 'ca31171c' }, baseline: a })
+  assert.equal(sized.hit, true)
+  assert.equal(sized.sig, 'size')
+  assert.match(sized.evidence, /size 3117→3200/)
+  // 只改 hash：证据里写 hash 前后值
+  const hashed = probeFileChanged({ current: { size: 3117, mtimeMs: 1000, hash: '9f2e0001' }, baseline: a })
+  assert.equal(hashed.hit, true)
+  assert.equal(hashed.sig, 'hash')
+  assert.match(hashed.evidence, /hash ca31171c→9f2e0001/)
+  // 三者都变：sig 三格都要在，不许合并成一格
+  const all = probeFileChanged({ current: { size: 1, mtimeMs: 8000, hash: 'zz' }, baseline: a })
+  assert.equal(all.sig, 'size+hash+mtime')
+})
+
 t('at= 记的是"事情发生的那一刻"：file-changed 用 mtime', () => {
   const a = { size: 10, mtimeMs: 1000, hash: 'h1' }
   const changed = probeFileChanged({ current: { size: 11, mtimeMs: 2000, hash: 'h2' }, baseline: a })
