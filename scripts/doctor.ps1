@@ -1362,7 +1362,9 @@ try {
       $rotatedWithFmt9c = $false
       if ($late9c) {
         try {
-          $rot9c = @(Get-ChildItem -LiteralPath (Split-Path -Parent $wmPath9c) -Filter 'watchman.*.log' -File -ErrorAction SilentlyContinue |
+                    # r469（fi-0029）：切下来的份现在叫 watchman.log.<stamp>，旧的 watchman.<stamp>.log 也还在盘上——两种都收
+          $rot9c = @(Get-ChildItem -LiteralPath (Split-Path -Parent $wmPath9c) -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match '^watchman\.log\.\d{8}-\d{6}(-\d+)?$' -or $_.Name -match '^watchman\.\d{8}-\d{6}(-\d+)?\.log$' } |
             Sort-Object LastWriteTime -Descending | Select-Object -First 3)
           foreach ($r9c in $rot9c) {
             $rAll9c = @(Get-Content -LiteralPath $r9c.FullName -Encoding utf8)
