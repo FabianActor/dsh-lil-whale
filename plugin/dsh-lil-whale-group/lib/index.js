@@ -3760,7 +3760,16 @@ async function intentTick(member, st, now) {
       for (const [key, value] of Object.entries(probe.patch)) s[key] = value
       dirty = true
     }
-    if (!probe.hit) continue
+    if (!probe.hit) {
+      // 条件不成立了，就把"第一次成立"作废。否则同一格里留着上一轮的旧时刻，
+      // 下一次真的再成立时会被 ageMs 判成 intent-stale —— 报的原因像"你醒得太晚"，
+      // 实际是"这个时间戳从上一轮活到了这一轮"（fi-0020 验收时撞到）。
+      if (s.firstTrueAt) {
+        delete s.firstTrueAt
+        dirty = true
+      }
+      continue
+    }
     if (!s.firstTrueAt) {
       s.firstTrueAt = now.toISOString()
       dirty = true

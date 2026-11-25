@@ -7,6 +7,7 @@
 // 跑法：node scripts/test-intent.mjs
 
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import {
   parseIntents,
   pruneIntentState,
@@ -312,6 +313,17 @@ t('parseIntents：items: [] 是合法的空表，不是坏形状（她真的删�
   assert.equal(r.list.length, 0)
 })
 
+// 源码级：条件回落后必须把"第一次成立"清掉，否则它的时间戳会活到下一轮，
+// 下一次真的成立时被 ageMs 判成 intent-stale（fi-0020 验收时撞到的那一格）。
+t('intentTick：条件不再成立时清掉 firstTrueAt（不许旧时间戳活到下一轮）', () => {
+  const src = readFileSync(new URL('../plugin/dsh-lil-whale-group/lib/index.js', import.meta.url), 'utf8')
+  const notHit = src.indexOf('if (!probe.hit) {')
+  const setFirst = src.indexOf('if (!s.firstTrueAt) {')
+  assert.ok(notHit > 0, '找不到 not-hit 分支')
+  assert.ok(setFirst > notHit, 'not-hit 分支必须在设 firstTrueAt 之前')
+  const between = src.slice(notHit, setFirst)
+  assert.ok(/delete s\.firstTrueAt/.test(between), 'not-hit 分支里没有清 firstTrueAt')
+})
 console.log(`合计：${pass + fail} 项，PASS ${pass}，FAIL ${fail}`)
 if (fail > 0) {
   for (const f of failures) console.log(`  ✗ ${f}`)

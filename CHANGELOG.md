@@ -22,6 +22,12 @@
 
 ## [未发布]
 
+### r478 条件回落后清掉「第一次成立」的时间（用户可见：写 wake-on 的人）
+
+- 条件从成立变回不成立时，状态里那格 `firstTrueAt` 现在会被删掉。以前它一直留着，下次条件真的再成立，会被拿旧时刻算年龄、判成 `deny=intent-stale`——报的原因像「你醒得太晚」，实际是「时间戳从上一轮活到了这一轮」。
+- 验收时撞到：改 `members.json` 一个字段，`intent.log` 先记 `note=intent-hit sig=size+hash+mtime`，两毫秒后同一条被 `deny=intent-stale` 拒掉。
+- `scripts/test-intent.mjs` 加一条源码级断言（not-hit 分支里必须清 `firstTrueAt`），34 项全过。
+
 ### r477 修好的那一行要说清是从哪儿补的（LeeaCP 第 89 行）
 - 以前：游标坏了会写回一份合法文件，账上只有 `src=recovered`——"从别处补的"说了，"从哪儿补、补了几个键"没说。
 - 现在：写回成功后记 `cursor-repaired member=… from=cursor-meta keys=N`；补不回来的键（meta 里没有的那几格）这行看不出来，所以它只证明"补了几个"，不证明"一个没丢"。
