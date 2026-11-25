@@ -3700,6 +3700,9 @@ function probeOneIntent(member, spec, s, now) {
     // fi-0020：只碰了 mtime 不叫「变了」——记一行，不投递；baseline 照旧更新，免得每拍都记。
     // r483：每次触发带一个能唯一指认的号（seq=）。没有它，两次同样的事件在账上长得一样，
     // 去重窗会把第二次压成 note-suppressed——账只证明"这事发生过"，证明不了"发生了两次"。
+    // r485：没变的那拍不涨 seq——seq 数的是"记下来的第几次"，不是心跳。
+    const changed = r.hit || r.touchOnly
+    if (!changed) return { hit: false, patch: { baseline: r.baseline } }
     const seq = Number(s.seq || 0) + 1
     if (r.touchOnly) {
       noteOnce(member, `note=intent-touch-only id=${spec.id} sig=${r.sig ?? 'mtime'} seq=${seq}`)

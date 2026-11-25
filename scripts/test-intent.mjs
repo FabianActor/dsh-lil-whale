@@ -390,9 +390,10 @@ t('源码：每次触发带 seq=（同样的事件不会被去重窗折成一次
   assert.ok(/note=intent-touch-only id=\$\{spec\.id\} sig=\$\{r\.sig \?\? 'mtime'\} seq=\$\{seq\}/.test(src), 'touch-only 行没带 seq')
   assert.ok(/note=intent-hit id=\$\{spec\.id\} sig=\$\{r\.sig\} seq=\$\{seq\}/.test(src), 'hit 行没带 seq')
   assert.ok(/patch: \{ baseline: r\.baseline, seq \}/.test(src), 'seq 没写回状态（下次还是 1）')
+  assert.ok(/const changed = r\.hit \|\| r\.touchOnly[\s\S]{0,160}?const seq = Number\(s\.seq/.test(src), '没变的那拍不该涨 seq（r485）')
 })
 console.log(`合计：${pass + fail} 项，PASS ${pass}，FAIL ${fail}`)
 if (fail > 0) {
-  for (const f of failures) console.log(`  ✗ ${f}`)
+console.log(`  ✗ ${f}`)
   process.exit(1)
 }
