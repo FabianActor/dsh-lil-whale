@@ -3184,6 +3184,9 @@ function handleChannel({ agent, member, seat, channel, cursorState, wakes }) {
     who,
     dmWho: channel.who,
     count: incoming.length,
+    // fi-0026：主语与计数来自同一批行——系统行不顶着对方的名字被数进去
+    spoke: incoming.length - incoming.filter((r) => r.from === 'system').length,
+    systemCount: incoming.filter((r) => r.from === 'system').length,
     firstRead,
     cursorLost,
     backlog,

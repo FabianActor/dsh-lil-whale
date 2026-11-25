@@ -37,21 +37,21 @@ function eq(name, got, want) {
   const r = wakeWordingOf({ kind: 'group', who: '小满、小鱼丸', count: 76, firstRead: true, cursorLost: false, backlog: true })
   eq('first 的正文', r.where, '群里现在有 76 条点了你名字的（小满、小鱼丸）——你还没读过这个群（还没有游标）')
   eq('first 的尾巴', r.tailHint, '先看最后三条；前面的不用补，想看再翻。')
-  eq('first 的模板 id', r.tpl, 'group-first@2')
+  eq('first 的模板 id', r.tpl, 'group-first@3')
   eq('first 的尾巴 id', r.tailTpl, 'tail-no-backfill@1')
 }
 {
   const r = wakeWordingOf({ kind: 'group', who: '小满', count: 76, firstRead: true, cursorLost: true, backlog: true })
   eq('lost 的正文', r.where, '群里现在有 76 条点了你名字的（小满）——你的读进度不见了（游标这一格是空的），这次按从头算，已经记了一笔账')
   eq('lost 的尾巴', r.tailHint, '先看最后三条；前面的不用补，想看再翻。')
-  eq('lost 的模板 id', r.tpl, 'group-lost@2')
+  eq('lost 的模板 id', r.tpl, 'group-lost@3')
   eq('lost 的尾巴 id', r.tailTpl, 'tail-no-backfill@1')
 }
 {
   const r = wakeWordingOf({ kind: 'group', who: '小鱼丸', count: 12, firstRead: false, cursorLost: false, backlog: true })
   eq('resumed 的正文', r.where, '你不在的这段时间，群里积了 12 条点了你名字的（小鱼丸）')
   eq('resumed 的尾巴', r.tailHint, '先看最后三条，再看看有没有指名你的。')
-  eq('resumed 的模板 id', r.tpl, 'group-backlog@2')
+  eq('resumed 的模板 id', r.tpl, 'group-backlog@3')
   eq('resumed 的尾巴 id', r.tailTpl, 'tail-named@1')
 }
 
@@ -63,7 +63,7 @@ function eq(name, got, want) {
   const c = wakeWordingOf({ kind: 'group', who: '小满', count: 3, firstRead: false, cursorLost: false, backlog: false })
   eq('没过档 的正文', a.where, '群里有 3 条点了你名字的（小满）')
   eq('没过档 的尾巴', a.tailHint, '去看看。')
-  eq('没过档 的模板 id', a.tpl, 'group-plain@2')
+  eq('没过档 的模板 id', a.tpl, 'group-plain@3')
   eq('没过档 的尾巴 id', a.tailTpl, 'tail-go@1')
   eq('没过档 不区分 first/lost/resumed（正文）', a.where === b.where && b.where === c.where, true)
   eq('没过档 不区分 first/lost/resumed（尾巴）', a.tailHint === b.tailHint && b.tailHint === c.tailHint, true)
@@ -89,14 +89,14 @@ function eq(name, got, want) {
   const r = wakeWordingOf({ kind: 'dm', who: '小满、小鱼丸', dmWho: 'Fabian', count: 5, firstRead: true, cursorLost: false, backlog: true })
   eq('私聊积压的正文', r.where, 'Fabian 私下跟你说了 5 句')
   eq('私聊积压的尾巴（头回读）', r.tailHint, '先看最后三条；前面的不用补，想看再翻。')
-  eq('私聊积压的模板 id', r.tpl, 'dm@1')
+  eq('私聊积压的模板 id', r.tpl, 'dm@2')
   eq('私聊积压的尾巴 id', r.tailTpl, 'tail-no-backfill@1')
 }
 {
   const r = wakeWordingOf({ kind: 'dm', dmWho: 'Fabian', count: 2, firstRead: false, cursorLost: false, backlog: false })
   eq('私聊没积压的正文', r.where, 'Fabian 私下跟你说了 2 句')
   eq('私聊没积压的尾巴', r.tailHint, '去看看。')
-  eq('私聊没积压的模板 id', r.tpl, 'dm@1')
+  eq('私聊没积压的模板 id', r.tpl, 'dm@2')
   eq('私聊没积压的尾巴 id', r.tailTpl, 'tail-go@1')
 }
 
@@ -131,11 +131,24 @@ for (const src of ['missing', 'unknown']) {
 {
   const r = wakeWordingOf({ kind: 'group', who: '小满', count: 76, firstRead: false, cursorLost: false, backlog: true, src: 'file' })
   eq('file 源仍报条数', r.where.includes('76'), true)
-  eq('file 源模板不变', r.tpl, 'group-backlog@2')
+  eq('file 源模板不变', r.tpl, 'group-backlog@3')
 }
+
+// ---------- fi-0026：主语与计数来自同一批行 ----------
+// 3 条系统行 + 1 条对方的话 ⇒ 只数 1 句，另外 3 条要能被看出来不是他说的。
+const mixed = wakeWordingOf({ kind: 'dm', who: 'Fabian', dmWho: 'Fabian', count: 4, spoke: 1, systemCount: 3, firstRead: false, cursorLost: false, backlog: false })
+eq('4 行里 1 行是人说的 ⇒ 叫醒词说 1 句', mixed.where.includes('说了 1 句'), true)
+eq('同一句里说明另外 3 条是系统消息', mixed.where.includes('另有 3 条系统消息'), true)
+eq('不再把系统行数成对方说的话', mixed.where.includes('说了 4 句'), false)
+const sysOnly = wakeWordingOf({ kind: 'dm', who: 'Fabian', dmWho: 'Fabian', count: 3, spoke: 0, systemCount: 3, firstRead: false, cursorLost: false, backlog: false })
+eq('全是系统消息时不说「说了 N 句」', sysOnly.where.includes('说了 3 句'), false)
+eq('全是系统消息时说「没有新的话」', sysOnly.where.includes('没有新的话'), true)
+const groupMixed = wakeWordingOf({ kind: 'group', who: '小肥鱼', count: 5, spoke: 2, systemCount: 3, firstRead: false, cursorLost: false, backlog: false })
+eq('群也按人说的行数数（不带系统行）', groupMixed.where.includes('群里有 2 条'), true)
 
 console.log(`test-wake-preview：合计 ${pass + fail}，PASS ${pass}，FAIL ${fail}`)
 if (fail > 0) {
-  console.log(failures.join('\n'))
+  
+console.log(failures.join('\n'))
   process.exit(1)
 }
