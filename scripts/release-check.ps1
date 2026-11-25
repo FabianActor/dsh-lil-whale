@@ -429,6 +429,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '群消息叫醒' (($pgOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '群消息叫醒' '不写 --mention 就是 []（谁都不叫醒）、all 写字符串、名单写数组（test-post-group.mjs）' }
   } else { Fail '群消息叫醒' 'scripts\test-post-group.mjs 不在包里' }
+  # ── 4bk. 投递时间两种写法（2026-11-25 r470：fi-0030，同一时刻 jsonl 是 ISO Z、last-ts 是 epoch 毫秒）──
+  $dtsTest = Join-Path $pkg 'scripts\test-delivery-ts.mjs'
+  if (Test-Path $dtsTest) {
+    $dtsOut = & node $dtsTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '投递时间两写法' (($dtsOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '投递时间两写法' 'last-ts= 后面紧跟 last-ts-iso=；换算逐毫秒相等（test-delivery-ts.mjs）' }
+  } else { Fail '投递时间两写法' 'scripts\test-delivery-ts.mjs 不在包里' }
   # ── 4as. 名册值带 key（2026-11-22：to=undefined 900 行，fi-0010／r404）──
   $keyTest = Join-Path $pkg 'scripts\test-member-key.mjs'
   if (Test-Path $keyTest) {
