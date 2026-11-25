@@ -405,8 +405,22 @@ t('probeFileChanged：整份重排（全量指纹也没变，只大小和 mtime 
   const r = probeFileChanged({ current: cur, baseline: base })
   assert.equal(r.sig, 'rewrite')
 })
+// r488：失败打印层单独成函数，并给它灌一条假失败——
+// 只在真红时才跑的代码，平时不会被跑到（r485 就是这样把循环改断的）。
+function reportFailures(list) {
+  for (const f of list) console.log(`  ✗ ${f}`)
+}
+t('失败打印层：灌一条假失败，字要出得来', () => {
+  const out = []
+  const orig = console.log
+  console.log = (...a) => out.push(a.join(' '))
+  try { reportFailures(['假失败 1']) } finally { console.log = orig }
+  assert.ok(out.some((x) => x.includes('假失败 1')), '失败打印层没出字')
+  assert.ok(out[0].startsWith('  ✗ '), '失败行没有缩进记号')
+})
+
 console.log(`合计：${pass + fail} 项，PASS ${pass}，FAIL ${fail}`)
 if (fail > 0) {
-  for (const f of failures) console.log(`  ✗ ${f}`)
+  reportFailures(failures)
   process.exit(1)
 }
