@@ -436,6 +436,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '投递时间两写法' (($dtsOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '投递时间两写法' 'last-ts= 后面紧跟 last-ts-iso=；换算逐毫秒相等（test-delivery-ts.mjs）' }
   } else { Fail '投递时间两写法' 'scripts\test-delivery-ts.mjs 不在包里' }
+  # ── 4bl. 升级不动鱼的选择（2026-11-25 issue #5：dsh plugin add 重写 patch，静默丢掉设置页写的段）──
+  $ppTest = Join-Path $pkg 'scripts\test-patch-preserve.mjs'
+  if (Test-Path $ppTest) {
+    $ppOut = & node $ppTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '升级不动鱼的选择' (($ppOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '升级不动鱼的选择' 'plugin add 前后按顶层 id 比，丢了就原样接回去；空清单 [] 也处理（test-patch-preserve.mjs）' }
+  } else { Fail '升级不动鱼的选择' 'scripts\test-patch-preserve.mjs 不在包里' }
   # ── 4as. 名册值带 key（2026-11-22：to=undefined 900 行，fi-0010／r404）──
   $keyTest = Join-Path $pkg 'scripts\test-member-key.mjs'
   if (Test-Path $keyTest) {

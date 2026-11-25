@@ -22,6 +22,14 @@
 
 ## [未发布]
 
+### r482 升级不再动鱼在设置页里做的选择（用户可见：升级过鱼塘的人）
+
+- 以前 `install.ps1 -Upgrade` 里重挂 profile 那一步会让 `dsh plugin add` 按 bundle 清单重写 `cordis.patch.yml`：设置页写进去的 `ui-settings-general`、`agent-default-model`（含她选定的 provider / model / reasoningEffort）没有对应 bundle，就被静默丢掉，退出码还是 0。
+- 现在重挂前先留快照（`cordis.patch.yml.bak-before-plugin-add-<时间>`），重挂后按顶层 `- id:` 比对一次，把少掉的段原样接回尾部，并在输出里点名补了哪些；`scripts/lib/patch-preserve.mjs` + `scripts/preserve-patch-blocks.mjs` + `scripts/test-patch-preserve.mjs`（10 项）。
+- `scripts/seed-child-profile.mjs`：家长 patch 里缺某段时不再"warn 一句就当成功"，改为退出码 3，`install.ps1` 会 Warn 出来（"没补上"不再长得像"补好了"）。
+- `scripts/release-check.ps1` 加 4bl「升级不动鱼的选择」⇒ 72 项。
+- 来源：GitHub issue #5（外部用户，1.13.2 / r459，`G:\鱼塘`）。
+
 ### r481 `touch-only` 的 `sig=` 分成三个名字（用户可见：看 intent.log 的人）
 
 - 第一次打样就撞上：只碰了 `members.json` 的 mtime，账上记的是 `sig=format`，和「被重写但内容一样」同一格。三个原因是三件事，现在各有名字：`mtime`（只碰了时间）、`rewrite`（被重写、语义没变）、`format`（指指纹算法换代，尺子换了）。
