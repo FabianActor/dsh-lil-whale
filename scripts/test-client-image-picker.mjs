@@ -8,6 +8,7 @@
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { MIN_CLIENT_BUILD, clientBuildOf, describeClientBuildFailure } from './lib/client-build.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const FILE = join(HERE, '..', 'plugin', 'dsh-lil-whale-group-ui', 'lib', 'client.js')
@@ -43,7 +44,7 @@ ok('先复制 → 再清空 → 再交给 attachImages', ordered)
 ok('注释写明 FileList 是活的', src.includes('FileList 是活的'))
 
 // 5. 构建标记：人刷新后靠它确认拿到的是这一版
-ok('client build v68 · bind-cwd', src.includes('client build v68 · bind-cwd'))
+ok('build 标记够新', (clientBuildOf(src)?.version ?? 0) >= MIN_CLIENT_BUILD, describeClientBuildFailure(src))
 
 console.log(`test-client-image-picker：合计 ${total}，PASS ${pass}，FAIL ${total - pass}`)
 process.exit(pass === total ? 0 : 1)

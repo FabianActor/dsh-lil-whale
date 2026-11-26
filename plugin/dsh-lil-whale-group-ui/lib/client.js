@@ -3032,6 +3032,23 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
           .catch(() => {})
       }, [])
 
+      // 版本：进设置页先读当前版本；「检查更新」是显式动作（要联网，不自动跑）。
+      const [versions, setVersions] = useState(null)
+      const [updateState, setUpdateState] = useState(null)
+      const [updateBusy, setUpdateBusy] = useState(false)
+      useEffect(() => {
+        void loadVersions()
+          .then((data) => setVersions(data))
+          .catch(() => setVersions({ error: '连不上宿主，读不到版本' }))
+      }, [])
+      const runCheckUpdate = () => {
+        setUpdateBusy(true)
+        void checkUpdates()
+          .then((data) => setUpdateState(data))
+          .catch((error) => setUpdateState({ error: String(error?.message ?? error) }))
+          .finally(() => setUpdateBusy(false))
+      }
+
       // 一个设置分组用模块级的 SettingsSection 画（不能写在这里，见上面那段注释）。
       return h('div', { style: { ...baseStyle, padding: '22px 24px 24px' } },
         h('div', { style: { fontSize: 16, fontWeight: 500, lineHeight: '24px' } }, t.settingsTitle),
@@ -3098,10 +3115,9 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
             ? h('div', { style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)', marginTop: 6 } },
                 `检查时间：${String(updateState.checkedAt).replace('T', ' ').slice(0, 19)}`)
             : null,
-        ),
-
           h('div', { style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)', marginTop: 6 } },
             '查的是 GitHub Releases；npm 上只有两块 bundle，安装与更新请走仓库。'),
+        ),
         h('div', {
           style: { marginTop: 16, fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)' },
         }, status || '改动会自动保存。侧边栏名称要刷新页面才变。'),
@@ -3685,7 +3701,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
               item.role === 'watcher' ? POND.roleWatcher : POND.roleMember,
             ),
           ),
-          demo || self || avatarFor !== item.key
+          demo || avatarFor !== item.key
             ? null
             : h(
               'div',
@@ -4128,7 +4144,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v69 · pond-avatar-rotation:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v70 · pond-avatar-rotation:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')
