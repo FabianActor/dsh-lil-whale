@@ -13,6 +13,8 @@
 
 /** 默认值。写在这里而不是散在 index.js：面板、测试、文档都读这一份。 */
 export const ROTATION_DEFAULTS = {
+  // r496：默认关。没写 enabled 也没写 rounds 的机器，装上不换段。
+  enabled: false,
   /** 聊满多少轮换一段。0 = 永不自动换（靠 compaction 压，原话会一层层丢，但不会崩）。 */
   rounds: 80,
   /** 换段时带几轮原话进新段。0 = 不带。 */
@@ -52,6 +54,18 @@ export function resolveRotation(globalRotation, memberRotation) {
   const sources = []
   // 顺序是"单鱼 → 总控 → 默认"。写坏的那一层不是"用了"，是"没读到"：
   // 不许它把整条链掐断（一份 `rounds: "abc"` 不该让所有人的换段一起关掉）。
+  const pickBool = (key) => {
+    const from = (bag, prefix) => {
+      const v = bag[key]
+      if (v === undefined || v === null || v === '') return undefined
+      if (v === true || v === 1 || v === 'true' || v === 'yes' || v === 'on') { sources.push(prefix + key); return 1 }
+      if (v === false || v === 0 || v === 'false' || v === 'no' || v === 'off') { sources.push(prefix + key); return 0 }
+      return undefined
+    }
+    const m1 = from(m, 'member.')
+    if (m1 !== undefined) return m1
+    return from(g, 'global.')
+  }
   const pick = (key) => {
     if (m[key] !== undefined && m[key] !== null && m[key] !== '') {
       const value = intOr(m[key], undefined)
@@ -69,6 +83,11 @@ export function resolveRotation(globalRotation, memberRotation) {
     }
     return undefined
   }
+  // r496：开关与轮数分开收。三种情况按这个顺序判：
+  //   1) 写了 enabled（布尔/字符串都认）——它就是答案，写 rounds 也压不过它；
+  //   2) 没写 enabled 但写了 rounds——"我知道我在开"，0 就是关；
+  //   3) 两样都没写——默认关。
+  const enabledRaw = pickBool('enabled')
   const roundsRaw = pick('rounds')
   const carryRaw = pick('carryRounds')
   const pauseRaw = pick('pauseMin')
@@ -84,7 +103,7 @@ export function resolveRotation(globalRotation, memberRotation) {
     forceExtra,
     maxCarryRounds: ROTATION_DEFAULTS.maxCarryRounds,
     trimChars: ROTATION_DEFAULTS.trimChars,
-    enabled: rounds > 0,
+    enabled: enabledRaw === undefined ? (roundsRaw === undefined ? ROTATION_DEFAULTS.enabled : rounds > 0) : enabledRaw !== 0,
     sources,
   }
 }

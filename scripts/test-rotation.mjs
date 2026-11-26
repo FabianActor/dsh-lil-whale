@@ -3,6 +3,7 @@
 // 为什么先写测试再接线：换段这件事的坑全在边界上（0 轮、最后 1 轮不裁、预算裁到只剩一轮、
 // 停顿与强制换谁先谁后）。这些边界在真会话里一天只撞上一次，靠"上了再看"要等一周。
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import {
   ROTATION_DEFAULTS,
   resolveRotation,
@@ -29,6 +30,32 @@ function test(name, fn) {
   }
 }
 
+// ---------- 开关（r496） ----------
+test('开关：写了 enabled 就听 enabled', () => {
+  assert.equal(resolveRotation({ enabled: true }, undefined).enabled, true)
+  assert.equal(resolveRotation({ enabled: false, rounds: 40 }, undefined).enabled, false, '开关压过轮数')
+  assert.equal(resolveRotation(undefined, { enabled: 'off' }).enabled, false)
+  assert.equal(resolveRotation({ enabled: true }, { enabled: false }).enabled, false, '单鱼能关掉总控')
+})
+
+test('开关：没写 enabled 但写了 rounds，就按轮数算', () => {
+  assert.equal(resolveRotation({ rounds: 40 }, undefined).enabled, true)
+  assert.equal(resolveRotation({ rounds: 0 }, undefined).enabled, false)
+  assert.equal(resolveRotation(undefined, { rounds: 12 }).enabled, true)
+})
+
+test('开关：两样都没写就不换段', () => {
+  assert.equal(resolveRotation(undefined, undefined).enabled, false)
+  assert.equal(resolveRotation({}, {}).enabled, false)
+})
+
+test('源码：不再有 noteOnce(rotation-hold…) 那种传法，改成按 failedAt 记一次', () => {
+  const src = readFileSync(new URL('../plugin/dsh-lil-whale-group/lib/index.js', import.meta.url), 'utf8')
+  assert.equal(/noteOnce\(`rotation-hold/.test(src), false, 'noteOnce 的第一个参数必须是成员对象')
+  assert.ok(src.includes('rotationHoldNoted'))
+  assert.ok(/note: 'rotation-hold', member, channel: channel\.key/.test(src))
+})
+
 // ---------- 生效值 ----------
 test('默认值：80 轮 / 带 3 轮 / 停 20 分钟 / 再延 10 轮', () => {
   const r = resolveRotation(undefined, undefined)
@@ -36,7 +63,7 @@ test('默认值：80 轮 / 带 3 轮 / 停 20 分钟 / 再延 10 轮', () => {
   assert.equal(r.carryRounds, ROTATION_DEFAULTS.carryRounds)
   assert.equal(r.pauseMin, ROTATION_DEFAULTS.pauseMin)
   assert.equal(r.forceExtra, ROTATION_DEFAULTS.forceExtra)
-  assert.equal(r.enabled, true)
+  assert.equal(r.enabled, false, 'r496：默认关')
   assert.deepEqual(r.sources, [])
 })
 

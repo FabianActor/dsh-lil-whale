@@ -3184,6 +3184,8 @@ const cursorShapeLogged = new Set()
 const rotationBusy = new Set()
 const rotationPending = new Map()
 const rotationCooldown = new Map()
+/** r496：哪一次失败已经记过 rotation-hold（member → failedAt），免得每拍重写一行 */
+const rotationHoldNoted = new Map()
 /** 换完段、还没绑上的（等新会话目录落盘）：member → { sessionId, since } */
 const rotationBindQueue = new Map()
 const ROTATION_RETRY_MS = 10 * 60 * 1000
@@ -3360,6 +3362,7 @@ function tryBindRotated(member, sessionId) {
     logLine({ note: 'rotation-bound', member, session: sessionId })
     rotationBindQueue.delete(member)
     rotationCooldown.delete(member) // 绑上了，下一次轮换该照常发生
+    rotationHoldNoted.delete(member)
     markRotationBound(member, sessionId)
     return { ok: true }
   } catch (error) {
@@ -3652,10 +3655,16 @@ function handleChannel({ ctx, agent, member, seat, channel, cursorState, wakes, 
     // 每错一次多等 10 分钟，免得一秒一次地建会话——试的时候一次失败建了四段空会话，就是这么来的。
     const failedAt = rotationCooldown.get(member) ?? 0
     if (Date.now() - failedAt < ROTATION_RETRY_MS) {
-      noteOnce(`rotation-hold:${member}:${failedAt}`, () => logLine({
-        note: 'rotation-hold', member, channel: channel.key,
-        waitMin: Math.ceil((ROTATION_RETRY_MS - (Date.now() - failedAt)) / 60000),
-      }))
+      // r496：noteOnce 要的是成员对象（用 member.key）+ 字符串，这里原本传的是键名 + 函数
+      // ⇒ 去重键里是 undefined、账本正文写成函数源码、member 字段也丢了。
+      // 这一行本来就只该"每次失败记一次"，按 failedAt 记比按时间窗去重更贴原意。
+      if (rotationHoldNoted.get(member) !== failedAt) {
+        rotationHoldNoted.set(member, failedAt)
+        logLine({
+          note: 'rotation-hold', member, channel: channel.key,
+          waitMin: Math.ceil((ROTATION_RETRY_MS - (Date.now() - failedAt)) / 60000),
+        })
+      }
     } else {
       rotationPending.set(member, rotation)
       logLine({

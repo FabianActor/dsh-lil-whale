@@ -404,6 +404,7 @@ pwsh -File scripts\fish.ps1 upgrade-check -Mark 1.7.2   # 做完以后记账
 | 装一条新鱼时给她放什么种子文件             | [新鱼出生时给她什么](./docs/detail/新鱼出生时给她什么.md)                      |
 | 第三方插件的折腾心得（给小鱼装 billion-context、B站眼睛、fishtalk） | [advanced notes on third-party plugins](./advanced%20notes%20on%20third-party%20plugins/) |
 | 从零装到跑起来的每一步（变量、路径、时序） | [怎么装一套鱼塘](./docs/detail/怎么装一套鱼塘.md)                              |
+| 聊满多少轮自动换一段会话（默认关）        | [怎么自动换段](./docs/detail/自动换段.md)                                      |
 | 怎么「出生」一条新鱼、怎么换段搬家         | [怎么生一条新鱼](./docs/detail/怎么生一条新鱼.md)                              |
 | 发版前逐条检查                             | [发布前检查清单](./docs/detail/发布前检查清单.md)、`scripts\release-check.ps1` |
 | 升级到新版本后要做什么（给部署方的代理）   | [怎么升级](./docs/detail/怎么升级.md)                                          |
