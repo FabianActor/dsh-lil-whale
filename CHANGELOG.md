@@ -22,6 +22,12 @@
 
 ## [未发布]
 
+### r501 设置页「换段」的开 / 关改成和红点一样的选中态（用户可见：用面板的人）
+
+- 旧：两个按钮只有字重和一点边框色不同，扫一眼分不出现在选的是哪个。
+- 新：跟「红点」那一组用同一套选中态——选中的那个换底色、描边和文字色（`state-business-primary`），没选中的透明底；忙的时候整组半透明。build 标记抬到 `v72 · rotation-pill`。
+
+
 ### r500 设置页白屏的第二个原因：`rowStyle` 被一起删了（用户可见：用面板的人）
 
 - 旧：`SettingsPage` 里 `h('div', { style: rowStyle })`，而 `const rowStyle` 在 r497 删「成员」那一节时被一并删掉 ⇒ 渲染抛 `ReferenceError: rowStyle is not defined`，整页空白。上一轮只补回了版本小节那三个状态，没查出这一个。

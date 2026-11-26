@@ -3101,9 +3101,16 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
                 type: 'button',
                 onClick: () => setRotationDefaultValue(option.mode),
                 disabled: rotationBusy || !rotationDefault,
-                style: { ...pondButtonStyle(false), padding: '4px 12px', fontWeight: active ? 600 : 400,
-                  borderColor: active ? 'var(--dsw-alias-brand-primary)' : undefined,
-                  color: active ? 'var(--dsw-alias-brand-primary)' : undefined },
+                title: active ? '现在是这个' : '点这里改成这个',
+                style: {
+                  height: 32, padding: '0 12px', boxSizing: 'border-box', fontFamily: 'inherit', fontSize: 13,
+                  borderRadius: 'var(--dsw-radius-md, 8px)', cursor: 'pointer',
+                  border: '0.5px solid ' + (active ? 'var(--dsw-alias-state-business-primary)' : 'var(--dsw-alias-border-l2, rgba(0,0,0,0.12))'),
+                  background: active ? 'var(--dsw-alias-bg-layer-2, rgba(0,0,0,0.05))' : 'transparent',
+                  color: active ? 'var(--dsw-alias-state-business-primary)' : 'var(--dsw-alias-label-secondary)',
+                  fontWeight: active ? 600 : 400,
+                  opacity: rotationBusy ? 0.6 : 1,
+                },
               }, option.label)
             }),
             h('label', { style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginLeft: 8 } },
@@ -4205,7 +4212,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v71 · rotation-default:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v72 · rotation-pill:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')
