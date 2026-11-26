@@ -748,6 +748,54 @@ function readPondSettings() {
   }
 }
 
+// 换段（r497，2026-11-26 他定的分工）：总控在 lil-whale.config.json 的 `rotation` 段，
+// 单鱼覆盖写 pool\state\rotation\<键>.json；这里只管"那条鱼的三个状态"。
+const ROTATION_DIR = join(POOL_STATE, 'rotation')
+const ROTATION_MODES = ['follow', 'on', 'off']
+
+function rotationFileOf(key) {
+  return join(ROTATION_DIR, `${key}.json`)
+}
+
+/** 读一条鱼的覆盖：{ mode: follow|on|off|unknown, enabled, rounds } */
+function rotationOfMember(key) {
+  const file = rotationFileOf(key)
+  if (!existsSync(file)) return { mode: 'follow', enabled: null, rounds: null }
+  try {
+    const json = JSON.parse(readFileSync(file, 'utf8')) ?? {}
+    const rounds = Number.isFinite(Number(json.rounds)) ? Number(json.rounds) : null
+    if (json.enabled === false) return { mode: 'off', enabled: false, rounds }
+    return { mode: 'on', enabled: true, rounds }
+  } catch {
+    return { mode: 'unknown', enabled: null, rounds: null }
+  }
+}
+
+function setRotationOfMember(key, mode) {
+  if (!ROTATION_MODES.includes(mode)) throw new Error(`mode 只认 ${ROTATION_MODES.join('/')}`)
+  const file = rotationFileOf(key)
+  if (mode === 'follow') {
+    if (existsSync(file)) rmSync(file)
+    return rotationOfMember(key)
+  }
+  let prev = {}
+  try { prev = JSON.parse(readFileSync(file, 'utf8')) ?? {} } catch { prev = {} }
+  const next = { ...prev, version: 1, enabled: mode === 'on', updatedAt: new Date().toISOString() }
+  mkdirSync(ROTATION_DIR, { recursive: true })
+  const tmp = `${file}.tmp-${process.pid}`
+  writeFileSync(tmp, JSON.stringify(next, null, 2) + '\n', 'utf8')
+  renameSync(tmp, file)
+  return rotationOfMember(key)
+}
+
+function rotationGlobal() {
+  const raw = config()?.rotation
+  const bag = raw && typeof raw === 'object' ? raw : {}
+  const enabled = bag.enabled === true || bag.enabled === 'on' || bag.enabled === 'true'
+  const rounds = Number.isFinite(Number(bag.rounds)) && Number(bag.rounds) > 0 ? Number(bag.rounds) : 80
+  return { enabled, rounds, source: config()?._path ?? null }
+}
+
 function writePondSettings(payload) {
   // 读-改-写：这个文件不只存自启动开关（宿主读 crashNotify，见 PRD A.52）。
   // 2026-11-13 18:5x 修：以前整份重建 {version,autoStartFish,updatedAt}，
@@ -804,6 +852,7 @@ async function pondStatus() {
       sessionId: boundList[0] ?? null,
       sessionShort: boundList[0] ? shortSessionId(boundList[0]) : null,
       url: portOpen ? pondUrlOf(member) : null,
+      rotation: rotationOfMember(key),
     })
   }
   // 排序 = 家谱顺序（2026-11-12 他要的）：世代浅的在前；同代按出生日期，早的在前；
@@ -1643,7 +1692,7 @@ export function apply(ctx) {
     async handler(req, res) {
       if (!guardWrite(req, res, '/pond/api/settings')) return
       if (req.method === 'GET') {
-        sendJson(res, 200, { ok: true, settings: readPondSettings() })
+        sendJson(res, 200, { ok: true, settings: readPondSettings(), rotationDefault: rotationGlobal() })
         return
       }
       if (req.method !== 'POST') {
@@ -1661,6 +1710,47 @@ export function apply(ctx) {
         sendJson(res, 200, { ok: true, settings: writePondSettings(payload) })
       } catch (error) {
         sendJson(res, 500, { ok: false, error: 'settings-failed', detail: String(error?.message ?? error) })
+      }
+    },
+  }))
+
+  // 换段开关（r497）：一条鱼一个三态（跟随总控/开/关）。只写 pool\state\rotation\<键>.json。
+  disposers.push(ctx.webServer.register({
+    kind: 'exact',
+    path: '/pond/api/rotation',
+    async handler(req, res) {
+      if (!guardWrite(req, res, '/pond/api/rotation')) return
+      if (req.method === 'GET') {
+        const members = pondMembers()
+        const fish = {}
+        for (const [key, member] of Object.entries(members)) {
+          if (member?.kind === 'fish') fish[key] = rotationOfMember(key)
+        }
+        sendJson(res, 200, { ok: true, default: rotationGlobal(), fish })
+        return
+      }
+      if (req.method !== 'POST') {
+        sendJson(res, 405, { error: 'method-not-allowed' })
+        return
+      }
+      let payload
+      try {
+        payload = JSON.parse(await readBody(req))
+      } catch {
+        sendJson(res, 400, { error: 'bad-json' })
+        return
+      }
+      const key = String(payload?.member ?? '')
+      const member = pondMembers()[key]
+      if (!member || member?.kind !== 'fish') {
+        sendJson(res, 400, { error: 'unknown-member' })
+        return
+      }
+      try {
+        const rotation = setRotationOfMember(key, String(payload?.mode ?? ''))
+        sendJson(res, 200, { ok: true, member: key, rotation, default: rotationGlobal() })
+      } catch (error) {
+        sendJson(res, 400, { ok: false, error: 'rotation-failed', detail: String(error?.message ?? error) })
       }
     },
   }))
