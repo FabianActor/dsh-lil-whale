@@ -25,7 +25,7 @@
 // 判据（小满）：「声明描述它想管的 kind，检查器该报它不管的 kind 有几行」。
 // 2026-11-19 fi-0001 小满复验 #2269：`kinds=` 声明的是**正文事件**；`log-format` 是表头这一行自己的 kind，
 // 不属于正文清单（否则每本带新表头的账都会把自己报成未声明）。所以这里不收它，对账时也不数它。
-export const LOG_KINDS = ['deliver', 'error', 'note', 'resumed', 'skip', 'started', 'stopped', 'wake', 'wake-caps', 'wake-skip', 'wake-try', 'woke']
+export const LOG_KINDS = ['deliver', 'error', 'note', 'resumed', 'rotated', 'rotated-bind', 'skip', 'started', 'stopped', 'wake', 'wake-caps', 'wake-skip', 'wake-try', 'woke']
 
 export const LOG_FORMAT_SIG = `fmt=3 changed=skip,wake-skip,deliver fields=deny,note,reason field-since=codeFp:r255,member:r292,note:r293,cfgProvider:r491,cfgModel:r491 kinds=${LOG_KINDS.join(',')}`
 
