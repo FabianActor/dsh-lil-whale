@@ -22,6 +22,12 @@
 
 ## [未发布]
 
+### r500 设置页白屏的第二个原因：`rowStyle` 被一起删了（用户可见：用面板的人）
+
+- 旧：`SettingsPage` 里 `h('div', { style: rowStyle })`，而 `const rowStyle` 在 r497 删「成员」那一节时被一并删掉 ⇒ 渲染抛 `ReferenceError: rowStyle is not defined`，整页空白。上一轮只补回了版本小节那三个状态，没查出这一个。
+- 新：补回 `rowStyle`；`scripts/test-client-draft.mjs` 加一条静态守卫——扫全文 `style: <名字>` 的裸引用，名字若在文件里没有声明就红（拿掉 `rowStyle` 再跑确实会红，不是空转）。
+
+
 ### r499 换段的默认值有了面板入口：三层收干净（用户可见：用面板的人）
 
 - 旧：全机默认只能改 `lil-whale.config.json` 的 `rotation` 段，面板里那一行只读，想改默认只能编辑文件；优先级还分四层，读起来要绕。
