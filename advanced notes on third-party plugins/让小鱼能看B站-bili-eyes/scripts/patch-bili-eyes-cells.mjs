@@ -1,0 +1,111 @@
+#!/usr/bin/env node
+// 给 dsh-bili-eyes 的格子清单加上"落点"：格号带总数、每格带 BV 号。
+//
+// 起因（2026-11-26，群里小肥鱼与小满）：工具输出的「（这一格里拼了 9 张小图）」
+// 不带片名也不带这次采样的格数，转手到另一条视频上照样读得通 —— 句子离开了落点
+// 还能读，就会有人（包括我）把它搬到别处。做法是把坐标写进句子本身：
+//
+//   旧：格1 0:00–0:02（这一格里拼了 9 张小图）
+//   新：格1/6 0:00–0:02 · bc=BV1QoWb6FELj（这一格里拼了 9 张小图）
+//
+// 判据（小满给的）：写一条正则，能从任意转发文本里把落点捞回来。
+//   /bc=(BV[0-9A-Za-z]{10})/  与  /格(\d+)\/(\d+)/
+//
+// 用法：
+//   node scripts\patch-bili-eyes-cells.mjs --check      只读，看各安装打没打
+//   node scripts\patch-bili-eyes-cells.mjs --dry-run    打印将改什么，不写
+//   node scripts\patch-bili-eyes-cells.mjs              真打（写前备份 .orig-cells-<时间>）
+//
+// 第三方补丁不进 CHANGELOG（记法第 4 条），只进本目录的笔记。
+
+import { readFileSync, writeFileSync, copyFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { homedir } from 'node:os';
+
+const MARK = 'bc=' + '${bc}'; // 幂等标记：改动后在源码里出现这段
+const here = dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
+
+const args = new Set(process.argv.slice(2));
+const dry = args.has('--dry-run');
+const check = args.has('--check');
+
+function pondRoot() {
+  // <仓库根>\app\advanced notes ...\scripts\ → 上四级是鱼塘根
+  let p = here;
+  for (let i = 0; i < 4; i += 1) p = dirname(p);
+  return p;
+}
+
+function candidates() {
+  const out = [];
+  const push = (p) => { if (existsSync(p) && !out.includes(p)) out.push(p); };
+  push(join(homedir(), '.dsh', 'profiles', 'web', 'node_modules', 'dsh-bili-eyes', 'src', 'look.js'));
+  const homes = join(pondRoot(), 'homes');
+  if (existsSync(homes)) {
+    for (const key of readdirSync(homes)) {
+      push(join(homes, key, 'dsh-home', 'profiles', key, 'node_modules', 'dsh-bili-eyes', 'src', 'look.js'));
+    }
+  }
+  return out;
+}
+
+const OLD_CELL = /const tiles = c\.sub \? `（这一格里拼了 \$\{c\.sub \* c\.sub\} 张小图）` : '';\r?\n(\s*)lines\.push\(`格\$\{c\.i\} \$\{fmtDur\(c\.t_start\)\}–\$\{fmtDur\(c\.t_end\)\}\$\{tiles\}/;
+const NEW_CELL = [
+  "const tiles = c.sub ? `（这一格里拼了 ${c.sub * c.sub} 张小图）` : '';",
+  "$1const total = (result.sheets ?? []).reduce((n, s) => n + (s.cells?.length ?? 0), 0);",
+  "$1const bcTag = bc ? ` · bc=${bc}` : '';",
+  "$1lines.push(`格${c.i}${total > 0 ? `/${total}` : ''} ${fmtDur(c.t_start)}–${fmtDur(c.t_end)}${bcTag}${tiles}",
+].join('\n');
+
+function patchText(src) {
+  let t = src;
+  const steps = [];
+
+  if (!t.includes('const bc = String(opts.bc')) {
+    const anchor = 'export function compactCells(result, maxCellChars, opts = {}) {\n  const lines = [];';
+    if (!t.includes(anchor)) return { ok: false, why: '锚点不在：compactCells 开头' };
+    t = t.replace(anchor, `${anchor}\n  const bc = String(opts.bc ?? '').trim();`);
+    steps.push('compactCells 读 opts.bc');
+  }
+
+  if (!t.includes('bcTag')) {
+    if (!OLD_CELL.test(t)) return { ok: false, why: '锚点不在：格子那一行' };
+    t = t.replace(OLD_CELL, NEW_CELL);
+    steps.push('格子行带 格N/总数 与 bc=');
+  }
+
+  const callers = [
+    ['{ loginState: login.state, loginError: login.error })', '{ loginState: login.state, loginError: login.error, bc: meta.bvid })', 'look 的 fitCells 传 bc'],
+    ['compactCells(result, DETAIL_CHARS.med, { loginState: login.state, loginError: login.error })', 'compactCells(result, DETAIL_CHARS.med, { loginState: login.state, loginError: login.error, bc: meta.bvid })', 'zoom 的 compactCells 传 bc'],
+    ['fitCells(result, room, DETAIL_CHARS[detail])', 'fitCells(result, room, DETAIL_CHARS[detail], { bc: meta.bvid })', '本机视频的 fitCells 传 bc'],
+  ];
+  for (const [from, to, label] of callers) {
+    if (t.includes(to)) continue;
+    if (!t.includes(from)) return { ok: false, why: `锚点不在：${label}` };
+    t = t.replace(from, to);
+    steps.push(label);
+  }
+  return { ok: true, text: t, steps };
+}
+
+let bad = 0;
+const files = candidates();
+if (!files.length) { console.log('xx 没找到任何 dsh-bili-eyes 安装'); process.exit(1); }
+for (const f of files) {
+  const src = readFileSync(f, 'utf8');
+  const patched = src.includes('bcTag') && src.includes('bc: meta.bvid');
+  if (check) {
+    console.log(`${patched ? 'ok' : 'xx'} ${patched ? '已打' : '未打'} ${f}`);
+    if (!patched) bad += 1;
+    continue;
+  }
+  if (patched) { console.log(`ok 已打 ${f}`); continue; }
+  const r = patchText(src);
+  if (!r.ok) { console.log(`xx ${f}：${r.why}`); bad += 1; continue; }
+  if (dry) { console.log(`ok 将改 ${f}（${r.steps.join(' / ')}）`); continue; }
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..*$/, '');
+  copyFileSync(f, `${f}.orig-cells-${stamp}`);
+  writeFileSync(f, r.text, 'utf8');
+  console.log(`ok 已打 ${f}（${r.steps.join(' / ')}）`);
+}
+if (check && bad) process.exit(1);
