@@ -15,6 +15,32 @@
   },
   "entries": [
     {
+      "version": "1.13.4",
+      "at": "2026-11-26",
+      "summary": "日志不再被每秒一次的游标写回刷爆（r493），体检在日志被轮转之后不再误报\"没注册\"（r492）。",
+      "requires": [
+        "package",
+        "restart"
+      ],
+      "restart": [
+        "all"
+      ],
+      "commands": [
+        "git pull",
+        "pwsh -File app\\scripts\\fish.ps1 upgrade-check",
+        "pwsh -File app\\scripts\\doctor.ps1"
+      ],
+      "verify": [
+        "重启后 app\\logs\\plugin-boot.log 最后几条的 pkg 是 @fabianactor/dsh-lil-whale-group@1.13.4。",
+        "一小时之后看 pool\\group\\plugin.log 与 plugin.log.<时间>：note 是 cursor-write 的行应当只剩个位到十位（原来一分钟就有几百行）。",
+        "看 pool\\state\\cursor-meta\\<成员>.json 的修改时间：只在真投递时更新，不再每秒一跳。",
+        "doctor 的「工具注册」「睡眠工具」不再因为日志被轮转而报 FAIL。",
+        "doctor 全过（允许仍是原来那两条钥匙 WARN）。"
+      ],
+      "breaking": [],
+      "note": "两条都是内部修正，不改数据格式、不动名册与账本；只拉代码不重启不会生效（进程里跑的还是旧字节）。旧版本写出来的那几份大日志会按保留策略自己挤掉，不用手动删。"
+    },
+    {
       "version": "1.13.3",
       "at": "2026-11-26",
       "summary": "账本里几处「同一个名字底下压着两三种原因」的地方各自有了名字：投递时刻两种写法、叫醒词主语与计数、prior-cursor=0 的四种来源、被 ignore 摘掉的字段、游标写回的来源；升级不再清掉设置页写进 patch 的两段；轮转日志保留原前缀。",
