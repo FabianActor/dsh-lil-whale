@@ -125,30 +125,51 @@ if (Test-Path -LiteralPath $presenceFile) {
 # 3. 工具注册：哑 8 小时那次的判据（有 host-resolve 却没有 group_say-registered）
 $pluginLog = Join-Path $Cfg.GroupDir 'plugin.log'
 $lastBoot = Tail-Line (Join-Path $Cfg.Root 'logs\plugin-boot.log')
-if (Test-Path -LiteralPath $pluginLog) {
-  $hit = Select-String -LiteralPath $pluginLog -Pattern 'group_say-registered' -SimpleMatch | Select-Object -Last 1
-  if ($hit) {
-    Add-Row '工具注册' 'OK' ('plugin.log 里有：' + $hit.Line.Trim())
+# 2026-11-26 r492：日志会轮转（plugin.log.<时间>）。只看当前那份，"这次启动写过、后来被转会去了"
+# 会被读成"从来没写过"——本机实测就这样误报过一屏 FAIL。轮转档按名字倒序，先看新的。
+$pluginLogFamily = @()
+if (Test-Path -LiteralPath $pluginLog) { $pluginLogFamily += (Get-Item -LiteralPath $pluginLog) }
+$pluginLogFamily += @(Get-ChildItem -LiteralPath $Cfg.GroupDir -Filter 'plugin.log.*' -File -ErrorAction SilentlyContinue | Sort-Object Name -Descending)
+function Find-LogHit([string]$pattern) {
+  foreach ($f in $pluginLogFamily) {
+    $h = Select-String -LiteralPath $f.FullName -Pattern $pattern -SimpleMatch | Select-Object -Last 1
+    if ($h) {
+      $atObj = $null
+      try { $atObj = ($h.Line | ConvertFrom-Json).at } catch { $atObj = $null }
+      return [pscustomobject]@{ Hit = $h; FileName = $f.Name; At = $atObj }
+    }
+  }
+  return $null
+}
+$bootAt = $null
+if ($lastBoot) { try { $bootAt = ($lastBoot.Line | ConvertFrom-Json).at } catch { $bootAt = $null } }
+$reg = Find-LogHit 'group_say-registered'
+if ($reg) {
+  if ($bootAt -and $reg.At -and $reg.At -lt $bootAt) {
+    Add-Row '工具注册' 'WARN' (("最新的 group_say-registered 早于本次启动（{0} 里那行是 {1}，本次启动 {2}）——这次启动之后还没写过注册行") -f $reg.FileName, $reg.At.ToString('yyyy-MM-dd HH:mm:ss'), $bootAt.ToString('yyyy-MM-dd HH:mm:ss')) 'NEXT: 看这次启动后有没有新的注册行；若没有，再看 plugin.log* 里 boot 之后有没有 host-resolve（有 host-resolve 没注册 = 又回到异步注册那个坑）'
   } else {
-    Add-Row '工具注册' 'FAIL' 'plugin.log 里没有 group_say-registered' 'NEXT: 重启她的窗；若还不行，看 plugin.log 有没有 host-resolve（有 host-resolve 没注册 = 又回到异步注册那个坑）'
+    Add-Row '工具注册' 'OK' (("{0} 里有：{1}") -f $reg.FileName, $reg.Hit.Line.Trim())
   }
 } else {
-  Add-Row '工具注册' 'WARN' 'group\plugin.log 不存在（可能还没发过言）'
+  Add-Row '工具注册' 'FAIL' 'plugin.log 与轮转档里都没有 group_say-registered' 'NEXT: 重启她的窗；若还不行，看 plugin.log 有没有 host-resolve（有 host-resolve 没注册 = 又回到异步注册那个坑）'
 }
-
   # 3b. 睡眠工具：裸 spec 少了 output.render 时会整组注册失败（2026-11-14 10:59 踩过：
   #     "tool \"sleep\" must declare output { schema, render, presentationMeta? }"，
   #     结果她的 sleep/wake_up 两个工具静悄悄地没有，只有 group_say 活着）。
-  $sleepOk = Select-String -LiteralPath $pluginLog -Pattern 'sleep-tools-registered' -SimpleMatch | Select-Object -Last 1
-  $sleepBad = Select-String -LiteralPath $pluginLog -Pattern 'sleep-tools-register-failed' -SimpleMatch | Select-Object -Last 1
-  if ($sleepBad -and (-not $sleepOk -or $sleepBad.LineNumber -gt $sleepOk.LineNumber)) {
-    Add-Row '睡眠工具' 'FAIL' ('plugin.log 里最近一次是注册失败：' + $sleepBad.Line.Trim()) 'NEXT: 看 index.js 里 sleep/wake_up 的 output 有没有 render；改完重启'
-  } elseif ($sleepOk) {
-    Add-Row '睡眠工具' 'OK' ('plugin.log 里有：' + $sleepOk.Line.Trim())
-  } else {
-    Add-Row '睡眠工具' 'WARN' 'plugin.log 里还没有 sleep-tools-registered（旧代码或还没重启）'
+  #     r492：同样要跨轮转档看，否则"写过、被转走了"会被读成"旧代码或还没重启"。
+  $sleepOk = Find-LogHit 'sleep-tools-registered'
+  $sleepBad = Find-LogHit 'sleep-tools-register-failed'
+  $sleepOkNewer = $false
+  if ($sleepOk) {
+    $sleepOkNewer = (-not $sleepBad) -or (-not $sleepOk.At) -or (-not $sleepBad.At) -or ($sleepOk.At -ge $sleepBad.At)
   }
-
+  if ($sleepBad -and -not $sleepOkNewer) {
+    Add-Row '睡眠工具' 'FAIL' (("{0} 里最近一次是注册失败：{1}") -f $sleepBad.FileName, $sleepBad.Hit.Line.Trim()) 'NEXT: 看 index.js 里 sleep/wake_up 的 output 有没有 render；改完重启'
+  } elseif ($sleepOk) {
+    Add-Row '睡眠工具' 'OK' (("{0} 里有：{1}") -f $sleepOk.FileName, $sleepOk.Hit.Line.Trim())
+  } else {
+    Add-Row '睡眠工具' 'WARN' 'plugin.log 与轮转档里都没有 sleep-tools-registered（旧代码或还没重启）'
+  }
   # 3c. 她自己的条件（wake-on）：形状坏了就永远不会触发；"没触发"和"没写"在纸上一样。
   if ($Cfg.MembersFile -and (Test-Path -LiteralPath $Cfg.MembersFile)) {
     try {
