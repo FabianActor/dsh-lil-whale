@@ -3036,6 +3036,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
         background: 'var(--dsw-alias-bg-layer-1, #fff)',
         color: 'var(--dsw-alias-label-primary)', font: 'inherit', fontSize: 13,
       }
+      const rowStyle = { display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }
       const labelStyle = { width: 84, fontSize: 13, color: 'var(--dsw-alias-label-secondary)' }
       const smallBtnStyle = {
         height: 32, padding: '0 10px', boxSizing: 'border-box', fontFamily: 'inherit', fontSize: 12,
