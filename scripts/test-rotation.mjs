@@ -233,7 +233,17 @@ test('r499 三层：全机默认读 pool/state/rotation/_default.json，配置�
   assert.ok(ui.includes('ROTATION_ROUNDS_MIN') && ui.includes('ROTATION_ROUNDS_MAX'), '轮数要有上下界')
   const client = readFileSync('plugin/dsh-lil-whale-group-ui/lib/client.js', 'utf8')
   assert.ok(client.includes('scope: ') && client.includes('default'), '设置页提交带 scope=default')
-  assert.ok(!client.includes('跟随配置'), '设置页不提供「跟随」——它自己就是被跟随的那一层')
+  // r502：账上要能看出「被预算挤掉」和「窗口外」，否则 carried=1 与 carryRounds=3 并排时没人核得动。
+  assert.ok(group.includes('carryBudgetChars(settings.carryRounds)'), '预算要先算出来再传下去，账上写的才是真用的那个数')
+  assert.ok(group.includes('droppedBudget'), 'dropped 要拆成「窗口外」与「被预算挤掉」')
+  assert.ok(group.includes('why-dropped') || group.includes('whyDropped'), '要给一个 why-dropped')
+  assert.ok(/logLine\(\{ note: 'rotation'[^)]*budget/.test(group), 'rotation 那行要带 budget=')
+  // r502：换段后新会话要登记进她自己的「家」工作区，否则界面上落在「未分组」。
+  assert.ok(group.includes('function registerWorkspaceSession'), '要有登记工作区的函数')
+  assert.ok(group.includes('registerWorkspaceSession(member, newId)'), '建完新段就要登记')
+  assert.ok(group.includes("storages', 'workspace.json'"), '登记的是 <DSH_HOME>\\storages\\workspace.json')
+  assert.ok(group.includes('CFG.selfDshHome') && group.includes('CFG.selfCwd'), '按每条鱼自己的家取，不写死路径')
+  assert.ok(!/workspace\.json', 'w'/.test(group), '写要交回 writeJson（原子替换）')
 })
 
 console.log(failed === 0 ? '\n全部通过' : `\n${failed} 条没过`)

@@ -25,7 +25,7 @@ import { pathToFileURL, fileURLToPath } from 'node:url'
 import { randomUUID, createHash } from 'node:crypto'
 import { spawn, execFileSync } from 'node:child_process'
 import { connect } from 'node:net'
-import { resolveRotation, rotationDue, groupTurns, buildCarryText, buildOpeningText, handoverLine, rotationRecord } from './rotation-core.js'
+import { resolveRotation, rotationDue, groupTurns, buildCarryText, carryBudgetChars, buildOpeningText, handoverLine, rotationRecord } from './rotation-core.js'
 import { config } from './config.js'
 import { resolveWake, wakeCapsText } from './wake-config.js'
 import {
@@ -3326,6 +3326,56 @@ function writeHandoverLine(member, line) {
 }
 
 /**
+ * 把新段登记进她自己家的「家」工作区（`<DSH_HOME>\storages\workspace.json`）。
+ *
+ * 不登记的话，界面上这段会话落在「未分组」——换段之后的第一次看见，人看到的是「她丢了」。
+ * 认法是按 `path` 找她的家（每条鱼自家进程里 `CFG.selfCwd` 就是那个家），认不出来就不猜：
+ * 只有一个工作区才退用它；否则留一行账说没找到，别把人家的会话塞进别人的家。
+ */
+function registerWorkspaceSession(member, sessionId) {
+  const wsFile = join(CFG.selfDshHome, 'storages', 'workspace.json')
+  const norm = (v) => String(v ?? '').trim().replace(/[\\/]+$/, '').replace(/\//g, '\\').toLowerCase()
+  try {
+    if (!existsSync(wsFile)) {
+      logLine({ note: 'rotation-workspace', member, session: sessionId, state: 'no-file' })
+      return 'no-file'
+    }
+    const data = readJson(wsFile, null)
+    const table = data?.tables?.workspaces
+    if (!table || typeof table !== 'object') {
+      logLine({ note: 'rotation-workspace', member, session: sessionId, state: 'no-table' })
+      return 'no-table'
+    }
+    const ids = Object.keys(table)
+    const want = norm(CFG.selfCwd)
+    let wsId = ids.find((id) => norm(table[id]?.path) === want)
+    let how = 'path'
+    if (!wsId && ids.length === 1) { wsId = ids[0]; how = 'only-one' }
+    if (!wsId && data?.global?.defaultWorkspaceId && table[data.global.defaultWorkspaceId]) {
+      wsId = data.global.defaultWorkspaceId
+      how = 'default'
+    }
+    if (!wsId) {
+      logLine({ note: 'rotation-workspace', member, session: sessionId, state: 'no-match', cwd: CFG.selfCwd })
+      return 'no-match'
+    }
+    const ws = table[wsId]
+    ws.sessionIds = Array.isArray(ws.sessionIds) ? ws.sessionIds : []
+    if (ws.sessionIds.includes(sessionId)) {
+      logLine({ note: 'rotation-workspace', member, session: sessionId, workspace: wsId, how, state: 'already' })
+      return 'already'
+    }
+    ws.sessionIds.push(sessionId)
+    writeJson(wsFile, data)
+    logLine({ note: 'rotation-workspace', member, session: sessionId, workspace: wsId, how, state: 'added', sessions: ws.sessionIds.length })
+    return 'added'
+  } catch (error) {
+    logLine({ note: 'rotation-workspace', member, session: sessionId, state: 'failed', detail: String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120) })
+    return 'failed'
+  }
+}
+
+/**
  * 换段七步的落地：取原话 → 建新段 → 换绑 → 写交接一行 → 记账 → 备好递进去的第一句。
  * 任何一步失败都**不递**这批消息（游标不动，下个 tick 再试），并留一行说清是哪一步。
  * 成功返回 `{ agent, sessionId, prefix }`，调用方用 prefix 把"上一段最后这几轮"接在新消息前面。
@@ -3445,12 +3495,16 @@ async function rotateSegment({ ctx, agent, member }) {
 
     // 1) 原话：两条通道的对话，按时间排好，交给纯函数裁。
     const { turns, nonText } = groupTurns(rotationRecordsOf(member), { labelOf })
-    const carry = buildCarryText(turns, { carryRounds: settings.carryRounds, trimChars: settings.trimChars })
+    // 预算也进账：账上写 carried=1、参数里写 carryRounds=3 时，读者没法判断是算法错还是被预算挤掉。
+    const budget = carryBudgetChars(settings.carryRounds)
+    const carry = buildCarryText(turns, { carryRounds: settings.carryRounds, trimChars: settings.trimChars, budgetChars: budget })
     // 实际带进新段的轮数：选中 K 轮里没被预算丢掉的。
     // carry.dropped 含两种丢法（K 之外的老轮 + 超预算丢的轮），算"带了几个"时得把前一种剔掉。
     const picked = Math.min(settings.carryRounds, turns.length)
     const outOfWindow = Math.max(0, turns.length - picked)
-    const carried = carry.text === '' ? 0 : Math.max(0, picked - (carry.dropped - outOfWindow))
+    const droppedBudget = Math.max(0, carry.dropped - outOfWindow)
+    const carried = carry.text === '' ? 0 : Math.max(0, picked - droppedBudget)
+    const whyDropped = droppedBudget > 0 ? 'budget' : outOfWindow > 0 ? 'window' : 'none'
 
     // 2) 新段：cwd 是她的家（绑定那一刻工作区才对得上）。preset 解析不到就退回默认。
     let created = null
@@ -3463,6 +3517,8 @@ async function rotateSegment({ ctx, agent, member }) {
     const newAgent = created?.agent
     const newId = sessionIdOf(newAgent)
     if (!newId) throw new Error('createSession 没有给出会话 id')
+    // 3) 登记进她的工作区：DSH 建新会话时不会自己登记，不登记的话界面上这段落在「未分组」。
+    const workspaceOfNew = registerWorkspaceSession(member, newId)
 
     // 3) 交接一行（机器写的；四行是她的事，不替她写）。
     //    换绑不在这里做：新会话的目录是 DSH 懒建的，`createSession` 返回时磁盘上还没有它，
@@ -3483,13 +3539,17 @@ async function rotateSegment({ ctx, agent, member }) {
       pauseMin: settings.pauseMin,
       forceExtra: settings.forceExtra,
       sources: settings.sources,
+      budget,
+      droppedBudget,
+      whyDropped,
+      workspace: workspaceOfNew,
       handover: handoverWritten ? 'written' : 'failed',
       nonText,
       bind: 'pending',
     }
     mkdirSync(ROTATION_STATE_DIR, { recursive: true })
     writeJson(join(ROTATION_STATE_DIR, `${member}.json`), record)
-    logLine({ note: 'rotation', member, from: fromSession, to: newId, why: plan.why, lastTurn: plan.lastTurn, carried, dropped: carry.dropped, trimmed: carry.trimmed, idleMin: record.idleMin, handover: record.handover })
+    logLine({ note: 'rotation', member, from: fromSession, to: newId, why: plan.why, lastTurn: plan.lastTurn, carried, dropped: carry.dropped, droppedBudget, whyDropped, budget, trimmed: carry.trimmed, workspace: workspaceOfNew, idleMin: record.idleMin, handover: record.handover })
 
     // 6) 递进新段的第一句：带原话就说原话，不带就直说没带（不假装她记得）。
     const prefix = buildOpeningText({ carryText: carry.text, newText: '', prevSession: fromSession, why: plan.why })

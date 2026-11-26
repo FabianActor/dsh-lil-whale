@@ -22,6 +22,13 @@
 
 ## [未发布]
 
+### r502 换段：账上写清「被预算挤掉」，新段自动登记进她自己的家（用户可见：开了换段的人）
+
+- 旧：`rotation` 那行只写 `carried=1 dropped=3472`，参数里却是 `carryRounds=3`——读的人分不清是算法算错还是被字数预算挤的。
+- 新：账上加 `budget=<字数>`、`dropped-budget=<n>`、`why-dropped=budget|window|none`；预算先算出来再显式传下去，账上那个数就是真用的那个。
+- 旧：换段建出的新会话没有登记进工作区，界面上落在「未分组」。
+- 新：建完新段立刻登记进她自己的「家」工作区（`<DSH_HOME>\storages\workspace.json`），按 `path` 认家、认不出来不猜；留一行 `rotation-workspace` 说清 `added|already|no-match|no-file|no-table|failed`。
+
 ### r501 设置页「换段」的开 / 关改成和红点一样的选中态（用户可见：用面板的人）
 
 - 旧：两个按钮只有字重和一点边框色不同，扫一眼分不出现在选的是哪个。
