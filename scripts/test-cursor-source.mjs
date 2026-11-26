@@ -239,6 +239,12 @@ function eq(name, got, want) {
   const calls = (idx4.match(/writeCursors\(member, [^)]*\)/g) || []).filter((c) => !c.startsWith('writeCursors(member, cursors, from'))
   ok(calls.length >= 3, '调用点至少三处（补、递送两条）')
   ok(calls.every((c) => c.split(',').length >= 3), '每个调用点都带了来源')
+  // fi-0034（2026-11-26）：扫描每秒跑一遍，值没变就不该每秒写一份、记一行。
+  ok(/readFileSync\(cursorFileOf\(member\), 'utf8'\) === body/.test(idx4), '写回前先比磁盘字节')
+  ok(/=== body\) return false/.test(idx4), '内容相同就提前返回（不写、不记账）')
+  ok(idx4.indexOf('=== body) return false') < idx4.indexOf("note: 'cursor-write'"), '比字节在写回与记账之前')
+  ok(/return true\s*\r?\n\}/.test(idx4), '真的写了才 return true')
+  ok(/if \(prev && prev\.delivered === delivered\) return/.test(idx4), 'cursor-meta 同一位置不重写（fi-0034）')
 }
 {
   ok(cursorWriteSourceOf({ src: 'file' }) === 'file', 'file → file（正常路）')

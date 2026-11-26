@@ -1623,6 +1623,11 @@ function lastDeliveredOf(member, channelKey) {
 function noteDelivered(member, channelKey, delivered) {
   try {
     const meta = readCursorMeta(member)
+    // fi-0034：同一位置不要每秒重写一次。
+    // 扫描每秒跑一遍，`delivered` 没变就说明这一格没有新进展；
+    // 只改 `at` 的写入既不为读也不为验，只是让磁盘跟着心跳转。
+    const prev = meta.channels[channelKey]
+    if (prev && prev.delivered === delivered) return
     meta.channels[channelKey] = { delivered, at: new Date().toISOString() }
     mkdirSync(CURSOR_META_DIR, { recursive: true })
     writeJson(cursorMetaFileOf(member), meta)
@@ -1684,6 +1689,13 @@ function writeCursors(member, cursors, from) {
     }
   }
   ensureParent(cursorFileOf(member))
+  // fi-0034（2026-11-26）：值没变就不写、也不记账。
+  // 旧写法：扫描每秒跑一遍（WAKE.intervalMs=1000），每一遍都整份写回并记一行
+  // cursor-write —— 一天 14.8 万行、6.8 MB/小时，账的形状盖过了账的内容。
+  const body = `${JSON.stringify(kept, null, 2)}\n`
+  try {
+    if (readFileSync(cursorFileOf(member), 'utf8') === body) return false
+  } catch { /* 读不到就当变了，照写 */ }
   // 写前自检：座位影子的通道键集合应与主键一致（缺键 = 半份）。
   const mainKeys = Object.keys(kept[member] ?? {}).sort().join(',')
   for (const key of Object.keys(kept)) {
@@ -1703,6 +1715,7 @@ function writeCursors(member, cursors, from) {
     keys: Object.keys(kept[member] ?? {}).length,
     seats: Math.max(0, Object.keys(kept).length - 1),
   })
+  return true
 }
 
 function readWakes(member) {
