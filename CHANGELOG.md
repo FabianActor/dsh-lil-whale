@@ -22,6 +22,11 @@
 
 ## [未发布]
 
+### r504 换段会换掉你的工具：neutral preset 落后了（用户可见：用换段的鱼）
+
+- 旧：`preset-neutral` 是安装时生成的一份快照，standard 后来多出来的插件它不会有。换段把会话从 standard 换成 neutral 之后，那一段里少了几只手，而账上没有任何一行说"少了"（11-26 23:59 那条鱼 69 → 67，少了 office 三件，她当时什么错都没犯）。
+- 新：重新生成模板（补上 `tool-office`）并给四条鱼重装；新增 `scripts\check-neutral-preset.mjs`（按 `--dump-config` 比 standard 与 neutral 的插件清单，差集非空即落后），接进 `doctor` 的「中立 preset（全鱼）」一格与 `release-check` 4bo —— 以后快照落后会自己响，不用等换段时才发现。
+
 ### r503 换段写的两种账行补进 kind 声明（内部）
 
 - 旧：`watchman.log` 出现 `rotated` / `rotated-bind`，但 `LOG_KINDS` 里没有它们，体检报「账上有未声明的 kind」。

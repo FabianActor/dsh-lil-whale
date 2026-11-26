@@ -709,6 +709,31 @@ try {
   } else {
     Add-Row '谱系（全鱼）' 'INFO' '还没有名册或还没有 family.json（干净安装后两者都会在）'
   }
+# ── 中立 preset（全鱼）：neutral 是一份快照，落后于 standard 时，用 neutral 起的新会话会静默少手（r504）──
+try {
+  $npScript = Join-Path $Cfg.Root 'scripts\check-neutral-preset.mjs'
+  if (-not (Test-Path $npScript)) {
+    Add-Row '中立 preset（全鱼）' 'INFO' '这个包还没有检查器（老版本安装）' 'NEXT: 升级到含 scripts\check-neutral-preset.mjs 的版本'
+  } else {
+    $npOut = & node $npScript 2>&1
+    $npCode = $LASTEXITCODE
+    $npLines = @($npOut | ForEach-Object { "$_" })
+    $npBehind = @($npLines | Where-Object { $_ -match '^落后 ' })
+    $npOk = @($npLines | Where-Object { $_ -match '^ok ' })
+    if ($npCode -eq 0) {
+      Add-Row '中立 preset（全鱼）' 'OK' ('{0} 条鱼：neutral 与 standard 的插件清单一致' -f $npOk.Count)
+    } elseif ($npCode -eq 3) {
+      Add-Row '中立 preset（全鱼）' 'WARN' (($npBehind | Select-Object -First 3) -join '；') 'NEXT: node scripts\gen-neutral-preset.mjs --profile <键> 重新生成，再用 scripts\apply-neutral-preset.mjs --patch <她的 patch> --profile <键> --home <她的 DSH_HOME> 装进去；装完要重启一次'
+    } elseif ($npCode -eq 2) {
+      Add-Row '中立 preset（全鱼）' 'INFO' '名册里没有可查的鱼，或她的 patch 里没装 neutral（不换段就没事）'
+    } else {
+      $npFirst = ($npLines | Where-Object { $_.Trim() } | Select-Object -First 1)
+      Add-Row '中立 preset（全鱼）' 'WARN' ('这次没查成（exit=' + $npCode + '）：' + $npFirst) 'NEXT: 手动跑 node scripts\check-neutral-preset.mjs 看完整输出'
+    }
+  }
+} catch {
+  Add-Row '中立 preset（全鱼）' 'WARN' ("查不了：{0}" -f $_.Exception.Message) 'NEXT: 手动跑 node scripts\check-neutral-preset.mjs'
+}
 } catch {
   Add-Row '谱系（全鱼）' 'WARN' ("读不了名册或谱系：{0}" -f $_.Exception.Message) 'NEXT: 看 pool\members.json 与 pool\family.json 是不是合法 JSON'
 }

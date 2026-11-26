@@ -26,6 +26,7 @@ const FAMILIES = [
   { name: '谱系图', static: ['谱系图'], why: '生成的谱系图不比 family.json 旧（测试机 U5 的尾巴，r443）' },
   { name: '生命周期字段', static: ['生命周期字段'], why: '旧 status 字段是否还在' },
   { name: '归档完整性', static: ['归档完整性'], why: '归档目录的清单/事件流/磁盘是否对得上（r354）' },
+  { name: '中立 preset（全鱼）', static: ['中立 preset（全鱼）'], why: 'neutral 是快照，落后于 standard 时会静默少手（r504）' },
   { name: 'fissue 账', static: ['fissue 账'], why: '鱼群 issue 收件台的账是否自洽、正在做哪条（r372）' },
   { name: '日志 kind 声明', static: ['日志 kind 声明'], why: '账上出现未声明的 kind 时报行数（fi-0001，r374）' },
   { name: '启动账', static: ['启动账（runs）'], why: '每本 runs 账的每条 started 前面有 stopped/resumed 交代（fi-0007，r402）' },

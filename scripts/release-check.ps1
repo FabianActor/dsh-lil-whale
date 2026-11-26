@@ -450,6 +450,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '升级不动鱼的选择' (($ppOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '升级不动鱼的选择' 'plugin add 前后按顶层 id 比，丢了就原样接回去；空清单 [] 也处理（test-patch-preserve.mjs）' }
   } else { Fail '升级不动鱼的选择' 'scripts\test-patch-preserve.mjs 不在包里' }
+  # ── 4bo. 中立 preset 不落后（2026-11-27 r504：neutral 是快照，落后时换段静默少手）──
+  $npTest = Join-Path $pkg 'scripts\test-neutral-preset.mjs'
+  if (Test-Path $npTest) {
+    $npOut = & node $npTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '中立 preset' (($npOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '中立 preset' '切清单与比差集都对；落后时能点名少哪几件（test-neutral-preset.mjs）' }
+  } else { Fail '中立 preset' 'scripts\test-neutral-preset.mjs 不在包里' }
   # ── 4as. 名册值带 key（2026-11-22：to=undefined 900 行，fi-0010／r404）──
   $keyTest = Join-Path $pkg 'scripts\test-member-key.mjs'
   if (Test-Path $keyTest) {
