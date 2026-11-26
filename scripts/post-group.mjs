@@ -80,6 +80,25 @@ if (dry) {
   console.log(JSON.stringify({ ok: true, dryRun: true, replaced: bad, record }, null, 2));
   process.exit(0);
 }
+// SAME-TEXT-GUARD 2026-11-26（r495，v2）：同一个作者 180 秒内发过一模一样的正文就拒绝再写。
+// 起因：一次调用已经写进去了、但进程中途抛错，我当成"没写成功"又跑了一遍 —— 账上多了一条一样的话；
+// 第一版只看最后一行，结果别人刚好插一句就不拦了，同一条被我写成三份。所以改成扫最近 30 行。
+// 判据：能拦住的重复，别靠我记得。真要靠意发两遍，加 --allow-repeat。
+if (!process.argv.includes('--allow-repeat')) {
+  try {
+    const recentLines = readFileSync(MESSAGES, 'utf8').split('\n').filter(Boolean).slice(-30);
+    for (const line of recentLines) {
+      let prev;
+      try { prev = JSON.parse(line); } catch { continue; }
+      if (prev.from !== from || prev.text !== text) continue;
+      const ago = Date.now() - Date.parse(prev.ts || 0);
+      if (ago >= 0 && ago < 180000) {
+        console.error(`刚写过一模一样的一条（${Math.round(ago / 1000)} 秒前），拒绝重复写入；真要发请加 --allow-repeat`);
+        process.exit(3);
+      }
+    }
+  } catch { /* 账本读不出来时不拦，写入本身会报 */ }
+}
 appendFileSync(MESSAGES, JSON.stringify(record) + '\n', 'utf8');
 const lines = readFileSync(MESSAGES, 'utf8').split('\n').filter(Boolean).length;
 const r = spawnSync(process.execPath, [join(APP, 'scripts', 'rebuild-group-md.mjs'), '--write'], {
