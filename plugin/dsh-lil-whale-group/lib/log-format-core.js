@@ -27,7 +27,7 @@
 // 不属于正文清单（否则每本带新表头的账都会把自己报成未声明）。所以这里不收它，对账时也不数它。
 export const LOG_KINDS = ['deliver', 'error', 'note', 'resumed', 'skip', 'started', 'stopped', 'wake', 'wake-caps', 'wake-skip', 'wake-try', 'woke']
 
-export const LOG_FORMAT_SIG = `fmt=3 changed=skip,wake-skip,deliver fields=deny,note,reason field-since=codeFp:r255,member:r292,note:r293 kinds=${LOG_KINDS.join(',')}`
+export const LOG_FORMAT_SIG = `fmt=3 changed=skip,wake-skip,deliver fields=deny,note,reason field-since=codeFp:r255,member:r292,note:r293,cfgProvider:r491,cfgModel:r491 kinds=${LOG_KINDS.join(',')}`
 
 const MARK = ' | log-format | '
 // 参与指纹的 key（顺序固定输出，但比较时按 key 取值——顺序不进指纹）。

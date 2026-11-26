@@ -436,6 +436,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '投递时间两写法' (($dtsOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '投递时间两写法' 'last-ts= 后面紧跟 last-ts-iso=；换算逐毫秒相等（test-delivery-ts.mjs）' }
   } else { Fail '投递时间两写法' 'scripts\test-delivery-ts.mjs 不在包里' }
+  # ── 4bn. 路由配置两格（2026-11-26 r491：fi-0022；boot 行只记 cfg- 来源，切换行叫 route-cfg-changed）──
+  $rcTest = Join-Path $pkg 'scripts\test-route-cfg.mjs'
+  if (Test-Path $rcTest) {
+    $rcOut = & node $rcTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '路由配置两格' (($rcOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '路由配置两格' 'cfgProvider/cfgModel 只取 agent-default-model 那块；没变不写；不叫 route-switch' }
+  } else { Fail '路由配置两格' 'scripts\test-route-cfg.mjs 不在包里' }
   # ── 4bl. 升级不动鱼的选择（2026-11-25 issue #5：dsh plugin add 重写 patch，静默丢掉设置页写的段）──
   $ppTest = Join-Path $pkg 'scripts\test-patch-preserve.mjs'
   if (Test-Path $ppTest) {

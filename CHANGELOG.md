@@ -22,6 +22,11 @@
 
 ## [未发布]
 
+### r491 boot 行带上"文件里写的"路由两格（内部）
+
+- 旧：boot 行没有 provider/model；换过模型之后，账上没有任何一格能说"这一版进程启动时配置文件写的是哪个"。
+- 新：boot 行加 `cfgProvider` / `cfgModel`（读 profile 里 `agent-default-model` 那一段；读不到写 `unknown`）；同一进程再改 patch 会另写一行 `route-cfg-changed from-cfg=… to-cfg=…`，旧值取 `pool\state\route\<成员>.json`，没变不写。**不叫 `route-switch`**：它证明配置变了，不证明进程切了（fi-0022）。
+
 ### r490 `deliver` 行带 scope（内部）
 
 - 旧：`watchman.log` 的 `deliver` 与 `wake-deliver.log` 的 `delivered` 用同一个动词指两件事（自计划推给自己 / 宿主递进会话），拿两本账的"最后一条"比时间会比出假矛盾。

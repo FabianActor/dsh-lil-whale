@@ -17,6 +17,7 @@ import { classifyCursorRead, cursorWriteSourceOf, countsKnownOf, heldTrustedOf, 
 import { membersWithKeys } from './members-core.js'
 import { MENTION_ALL, normalizeMention, wantsWake, mentionTextOf, mentionDisplayOf, bumpHeld, heldOf, clearHeld, heldSentenceOf } from './mention-core.js'
 import { codeFingerprint } from './code-fp.js'
+import { parseDefaultModel, routeCfgDiff, routeCfgLine } from './route-cfg.js'
 import { codeFpChangeOf, codeFpHistoryLine, codeFpLedgerOf, CODE_FP_LEDGER } from './code-fp-history-core.js'
 import { join, dirname, basename } from 'node:path'
 import { homedir } from 'node:os'
@@ -2133,6 +2134,46 @@ function logLine(record) {
  * repoRoot 来自 `import.meta.url`（这一行代码自己站在哪），配置写错也改不动它。
  */
 const BOOT_LOG = join(CFG.repoRoot, 'logs', 'plugin-boot.log')
+// fi-0022（2026-11-26）：boot 行加"读文件读到的"路由两格。名字带 cfg，不带 switch——
+// 它证明配置文件写着什么，不证明进程真的跑在什么上（运行态暂时没有读数）。
+const ROUTE_STATE_DIR = join(POOL_STATE, 'route')
+
+function cfgRouteNow() {
+  const patch = join(CFG.selfDshHome, 'profiles', CFG.selfProfile, 'cordis.patch.yml')
+  let text = ''
+  try {
+    text = readFileSync(patch, 'utf8')
+  } catch {
+    return { provider: 'unknown', model: 'unknown', patch, error: 'unreadable' }
+  }
+  const parsed = parseDefaultModel(text)
+  return { provider: parsed.provider ?? 'unknown', model: parsed.model ?? 'unknown', patch, error: null }
+}
+
+/**
+ * 配置变了就留一行。变了才写；没变不写（"没有这行"= 没变，这条覆盖率天然 100%，
+ * 因为它比较的是每次 apply 都读的同一个文件）。
+ * 旧值从磁盘拿：改 patch 会让插件热重载，内存里那份活不过下一次 apply。
+ */
+function recordRouteCfg(member) {
+  const now = cfgRouteNow()
+  const file = join(ROUTE_STATE_DIR, `${member}.json`)
+  let prev = null
+  try {
+    prev = JSON.parse(readFileSync(file, 'utf8'))
+  } catch {
+    prev = null
+  }
+  const diff = prev ? routeCfgDiff(prev, now) : null
+  if (diff) {
+    logLine({ note: 'route-cfg-changed', member, line: routeCfgLine(prev, now, member), fields: `provider=${diff.provider ? 1 : 0} model=${diff.model ? 1 : 0}` })
+  }
+  try {
+    mkdirSync(dirname(file), { recursive: true })
+    writeFileSync(file, JSON.stringify({ fmt: 1, provider: now.provider, model: now.model, at: new Date().toISOString(), patch: now.patch, error: now.error }, null, 2) + '\n', 'utf8')
+  } catch {}
+  return now
+}
 function recordCodeFpHistory() {
   try {
     const prev = readJson(CODE_FP_LEDGER_FILE, null)
@@ -2249,6 +2290,8 @@ function apply(ctx) {
   // 只写能证明的那种（按 DSH_HOME 与名册 dshHome 对上）；认不出就写 (unresolved)——
   // 推断出来的身份不能写成事实（同 `own-member-guess` 那次的教训）。
   const bootMember = selfMemberKeyRaw()
+  // fi-0022：先读一次，boot 行带上"文件里写的"路由（读不到就是 unknown）。
+  const bootRoute = cfgRouteNow()
   const bootRecord = {
     pkg: `${name}@${PKG_VERSION}`,
     codeFp: CODE_FP.fp,
@@ -2264,6 +2307,8 @@ function apply(ctx) {
     // 加上 member=（名册键），一行就能认领；认不出来时为 '(unresolved)'，不写成某个默认成员。
     member: bootMember ?? '(unresolved)',
     suspect: homeLooksRight ? undefined : `selfHome 里既没有 START.md 也没有 dsh-home；配置可能指错了地方`,
+    cfgProvider: bootRoute.provider,
+    cfgModel: bootRoute.model,
   }
   // 小鱼丸/小满 #1670–#1672（2026-11-18）：镜像到 pool\group\plugin.log 的那一行原来 spread 的是
   // bootRecord，而 note 只临时贴在 bootLog 的参数里 ⇒ 同一批 boot 行在群里那本没有 note。
@@ -2274,6 +2319,8 @@ function apply(ctx) {
   // 小鱼丸私聊第 53 行（2026-11-19）：boot 行只留了一个时刻的指纹，
   // 回答不了“改过没有”；在值变化时补一行，账上有历史值才判得动。
   recordCodeFpHistory()
+  // fi-0022：每次 apply 都读一次；和磁盘上上次的值比，变了才写一行 route-cfg-changed。
+  try { recordRouteCfg(bootMember ?? CFG.selfProfile) } catch {}
   // P4（2026-11-16 第三份装机沉淀）：只把两个 bundle add 进 profile（最小安装）时，
   // 没有安装器来问"鱼塘放哪"，也没有配置文件 ⇒ 默认值会把 homes/pool 建在仓库旁边
   // （实测：<workspace>\whale-src\ 里同时出现仓库和 homes/pool）。用户以为数据在别处，
