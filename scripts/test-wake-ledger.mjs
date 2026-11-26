@@ -89,6 +89,26 @@ function wokeCallsWithoutTo(rawText) {
   return hits
 }
 
+
+// 同类第 4 条（LeeaCP 2026-11-26 第 100 行）：`deliver` 这一个动词在两个账本里指两件事
+// ——「宿主/巡守把别人的话递进某个会话」与「鱼自己的进程把自计划条目推给自己」。
+// 两本账的范围不同，所以它们的「最后一条」不是同一件事的两种说法。
+// 不在账外改名（动词不动），只给每一行补一格 `scope=`：self-plan / relay。
+function deliverCallsWithoutScope(rawText) {
+  const text = stripCommentsKeepingLayout(rawText)
+  const marker = 'watchmanLog('
+  const hits = []
+  let i = -1
+  while ((i = text.indexOf(marker, i + 1)) !== -1) {
+    const rest = text.slice(i)
+    const nextCall = rest.indexOf(marker, marker.length)
+    const call = nextCall === -1 ? rest : rest.slice(0, nextCall)
+    if (!call.includes("'deliver'")) continue
+    if (!/scope=(self-plan|relay)\b/.test(call)) hits.push(i)
+  }
+  return hits
+}
+
 const lineOf = (text, idx) => text.slice(0, idx).split('\n').length
 
 const must = [
@@ -137,7 +157,25 @@ for (const idx of wokeCallsWithoutTo(src)) {
   bad++
 }
 
+
+// deliver 的 scope= 也要有负样本（缺一格、写成别的值都算不合格）
+const scopeSamples = [
+  ['单行、有 scope=self-plan', "watchmanLog('deliver', `reason=x scope=self-plan to=w`)", 0],
+  ['单行、有 scope=relay', "watchmanLog('deliver', `reason=x scope=relay plan=y`)", 0],
+  ['单行、缺 scope=', "watchmanLog('deliver', `reason=x to=w`)", 1],
+  ['跨行、缺 scope=', "watchmanLog(\n  'deliver',\n  `reason=x to=w`,\n)", 1],
+  ['scope 写错值', "watchmanLog('deliver', `reason=x scope=plan to=w`)", 1],
+]
+for (const [name, sample, want] of scopeSamples) {
+  const got = deliverCallsWithoutScope(sample).length
+  if (got !== want) { console.log('FAIL 自检：' + name + ' 期望 ' + want + ' 处，得到 ' + got); bad++ }
+}
+for (const idx of deliverCallsWithoutScope(src)) {
+  console.log('FAIL 第 ' + lineOf(src, idx) + ' 行的 deliver 调用缺 scope=self-plan|relay')
+  bad++
+}
+
 for (const [name, re] of must) if (!re.test(src)) { console.log('FAIL 缺少：' + name); bad++ }
 for (const [name, re] of forbidden) if (re.test(src)) { console.log('FAIL 仍存在：' + name); bad++ }
 if (bad > 0) { console.log('FAIL×' + bad + ' —— 账本形状检查没过'); process.exit(1) }
-console.log('OK —— 所有 woke 写点都带 to=（单行与跨行都扫）；过期的尝试不再冒充 woke；断言自检通过（含跨行负样本）')
+console.log('OK —— 所有 woke 写点都带 to=、所有 deliver 写点都带 scope=（单行与跨行都扫）；过期的尝试不再冒充 woke；断言自检通过（含跨行负样本）')

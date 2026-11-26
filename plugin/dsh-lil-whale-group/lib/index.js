@@ -3566,10 +3566,10 @@ function selfPlanTick(ctx) {
     try {
       const privateResult = deliverToSelf(ctx, self, planDeliveryText(job))
       if (privateResult) {
-        watchmanLog('deliver', `reason=self-plan-private to=${self} plan=${item.id}${privateResult === 'queued' ? ' queued=1' : ''}`)
+        watchmanLog('deliver', `reason=self-plan-private scope=self-plan to=${self} plan=${item.id}${privateResult === 'queued' ? ' queued=1' : ''}`)
       } else {
         say(watcherKey(), self, planDeliveryPublicText(job), 'group', '', '', null, null, [self])
-        watchmanLog('deliver', `reason=self-plan-public-fallback to=${self} plan=${item.id}`)
+        watchmanLog('deliver', `reason=self-plan-public-fallback scope=self-plan to=${self} plan=${item.id}`)
       }
       // 与巡守触发的账同形状（wid / lag / inserted 都要有）：
       // 2026-11-17 第一条鱼：`trigger=self` 第一次出现时缺这三个字段 = 同一个词、两种账。
@@ -4023,7 +4023,7 @@ async function watchOne(member, st) {
         markWake(member.key, 'plan')
         try {
           say(watcherKey(), member.key, planDeliveryPublicText(job), 'group', '', '', null, null, [member.key])
-          watchmanLog('deliver', `reason=plan-after-wake ${job.tag}（窗是推开的，话已递进去）`)
+          watchmanLog('deliver', `reason=plan-after-wake scope=relay ${job.tag}（窗是推开的，话已递进去）`)
         } catch (error) {
           watchmanLog(
             'error',
@@ -4070,7 +4070,7 @@ async function watchOne(member, st) {
         if (claimPlanDelivery(member, job.key)) {
           try {
             say(watcherKey(), member.key, planDeliveryPublicText(job), 'group', '', '', null, null, [member.key])
-            watchmanLog('deliver', `reason=plan-after-wake ${job.tag}（窗是推开的，话已递进去）`)
+            watchmanLog('deliver', `reason=plan-after-wake scope=relay ${job.tag}（窗是推开的，话已递进去）`)
           } catch (error) {
             watchmanLog('error', `note=plan-deliver-failed detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)} ${job.tag}`)
           }

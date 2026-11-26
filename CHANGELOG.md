@@ -22,6 +22,11 @@
 
 ## [未发布]
 
+### r490 `deliver` 行带 scope（内部）
+
+- 旧：`watchman.log` 的 `deliver` 与 `wake-deliver.log` 的 `delivered` 用同一个动词指两件事（自计划推给自己 / 宿主递进会话），拿两本账的"最后一条"比时间会比出假矛盾。
+- 新：`deliver` 行加 `scope=self-plan|relay`（动词不改名）；`scripts/test-wake-ledger.mjs` 扫每个 `deliver` 写点必须带 `scope=`，含跨行负样本。
+
 ### r489 游标写回记一行"从哪儿来的"（内部）
 
 - 旧：游标坏掉有两条恢复路——从 `cursor-meta` 补回来会记 `cursor-repaired`；而"进程还活着、把手里那份整份写回"什么都不记。于是"文件现在是好的"说不出怎么好的，"自愈过"与"从没坏过"在账上同形。
