@@ -239,11 +239,23 @@ test('r499 三层：全机默认读 pool/state/rotation/_default.json，配置�
   assert.ok(group.includes('why-dropped') || group.includes('whyDropped'), '要给一个 why-dropped')
   assert.ok(/logLine\(\{ note: 'rotation'[^)]*budget/.test(group), 'rotation 那行要带 budget=')
   // r502：换段后新会话要登记进她自己的「家」工作区，否则界面上落在「未分组」。
-  assert.ok(group.includes('function registerWorkspaceSession'), '要有登记工作区的函数')
-  assert.ok(group.includes('registerWorkspaceSession(member, newId)'), '建完新段就要登记')
-  assert.ok(group.includes("storages', 'workspace.json'"), '登记的是 <DSH_HOME>\\storages\\workspace.json')
-  assert.ok(group.includes('CFG.selfDshHome') && group.includes('CFG.selfCwd'), '按每条鱼自己的家取，不写死路径')
-  assert.ok(!/workspace\.json', 'w'/.test(group), '写要交回 writeJson（原子替换）')
+  // fi-0037（2026-11-27）：登记必须走 workspaceRegistry 的服务，不能直写 storages\workspace.json——
+  // 直写只改文件，DSH 的内存态不认，界面上照样显示「未分组」，而且它下次回写会把我们加的抹掉。
+  assert.ok(group.includes('async function registerWorkspaceSession'), '要有登记工作区的函数（异步：服务接口是 Promise）')
+  assert.ok(group.includes("ctx?.get?.('workspaceRegistry')"), '走 workspaceRegistry 服务')
+  assert.ok(group.includes('attachSession(sessionId)'), '用 WorkspaceEntity.attachSession，内存+持久化一起改')
+  assert.ok(!group.includes("storages', 'workspace.json'"), '不许再直写 workspace.json（fi-0037 的根因）')
+  assert.ok(group.includes('await registerWorkspaceSession(ctx, member, newId)'), '建完新段就要登记')
+  assert.ok(group.includes('rotationWorkspaceQueue'), '登记失败（新会话还没落盘）要排队，由 tick 补')
+  assert.ok(group.includes('serviceRotationWorkspaces(ctx)'), 'tick 里要补登记')
+  // fi-0035：waiting 是唯一不落账的判定结果——补一行，一批一次、状态不变不重复。
+  assert.ok(group.includes("note: 'rotation-waiting'"), '不换段也要留一行 rotation-waiting')
+  assert.ok(group.includes('noteRotationWaiting(member, channel.key, rotation)'), '在换段闸的 else 分支里写')
+  assert.ok(group.includes('rotationWaitNoted'), '同一状态不能每拍重写（member → 状态串）')
+  // fi-0036：换段搬走的旧段按 cwd 兜底会被认回同一个人，要排除。
+  assert.ok(group.includes('retiredSessionIds()'), '换段账里的 from 会话不认人')
+  assert.ok(group.includes("note: 'member-retired-session'"), '排除了要留痕，不能静默')
+  assert.ok(group.includes('retiredSessionIds().has(id)') || group.includes('retiredSessionIds().has('), '判定按会话 id')
 })
 
 console.log(failed === 0 ? '\n全部通过' : `\n${failed} 条没过`)

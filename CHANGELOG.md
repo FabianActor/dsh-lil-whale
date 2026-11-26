@@ -22,6 +22,26 @@
 
 ## [未发布]
 
+### r508 换段后的新会话不再落在「未分组」（用户可见：用换段的人）
+
+- 旧：换段建完新会话，插件把会话 id 直接写进 `<DSH_HOME>\storages\workspace.json`。文件确实变了，但 DSH 自己的内存里没有它，界面照样显示「未分组」；DSH 下一次回写还会把这一行抹掉。
+- 新：改走 DSH 的工作区服务（`workspaceRegistry.resolveByPath(cwd)` 取实体 + `WorkspaceEntity.attachSession(sessionId)`，内存与持久化一起改）。新会话的 header 还没落盘时这一步会失败，那就排进队列由下一拍补（10 次 / 10 分钟后放弃并记 `rotation-workspace-giveup`）；`rotation-workspace` 行的 `how=` 记 `registry`。
+
+### r507 换段搬走的旧段不再被认回同一个人（内部）
+
+- 旧：`memberOf()` 认不出 pins 里的会话就按 cwd 兜底；旧段的 cwd 是同一个家 ⇒ 换段之后旧段仍被当成这条鱼（11-27 换段测试里 `member-by-cwd-fallback` 指向的正是旧段）。
+- 新：换段账里记过的 `from` 会话一律不认（`retiredSessionIds()`，60 秒缓存）；第一次遇到留一行 `member-retired-session`。把已挂载的旧 agent 从进程里摘下来没有公开接口，这一半不做，写进 fissue 关单说明。
+
+### r506 换段判据「再等等」也要落一行（内部）
+
+- 旧：`waiting`（轮数到了、但静默窗还没到）是唯一不落账的判定结果——判据跑了、结论是"再等等"，账上一个字都没有，于是「判据没跑」与「判据说再等等」长得一样（11-27 测试第二次触发就因此白等了一轮）。
+- 新：不换段时写一行 `rotation-waiting`，带 `why/lastTurn/rounds/pauseMin/idleMin/remaining`；一批一次，同一状态不重复写。
+
+### r505 boot 行与路由变化行加上运行态读数（内部）
+
+- 旧：boot 行只有 `cfgProvider/cfgModel`（文件里写着什么），「进程真的用哪个」没有读数。
+- 新：读 `agentDefaultModel.currentSelection()`（读 config refs；`dsh-api-session-controller` 的 `agentOptions()` 每次请求现取），boot 行读到就带 `liveProvider/liveModel`，另写一行 `route-live`（`live= cfg= diff= why=`）；配置变化时与 `route-cfg-changed` 相邻再写一次。读不到写 `(unavailable)` 而不是 `unknown`；`diff=yes` 只说明两个来源不一样，不说明谁对。
+
 ### r504 换段会换掉你的工具：neutral preset 落后了（用户可见：用换段的鱼）
 
 - 旧：`preset-neutral` 是安装时生成的一份快照，standard 后来多出来的插件它不会有。换段把会话从 standard 换成 neutral 之后，那一段里少了几只手，而账上没有任何一行说"少了"（11-26 23:59 那条鱼 69 → 67，少了 office 三件，她当时什么错都没犯）。

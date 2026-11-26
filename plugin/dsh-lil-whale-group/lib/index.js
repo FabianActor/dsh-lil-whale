@@ -17,7 +17,7 @@ import { classifyCursorRead, cursorWriteSourceOf, countsKnownOf, heldTrustedOf, 
 import { membersWithKeys } from './members-core.js'
 import { MENTION_ALL, normalizeMention, wantsWake, mentionTextOf, mentionDisplayOf, bumpHeld, heldOf, clearHeld, heldSentenceOf } from './mention-core.js'
 import { codeFingerprint } from './code-fp.js'
-import { parseDefaultModel, routeCfgDiff, routeCfgLine } from './route-cfg.js'
+import { parseDefaultModel, routeCfgDiff, routeCfgLine, liveRouteOf, routeLiveLine } from './route-cfg.js'
 import { codeFpChangeOf, codeFpHistoryLine, codeFpLedgerOf, CODE_FP_LEDGER } from './code-fp-history-core.js'
 import { join, dirname, basename } from 'node:path'
 import { homedir } from 'node:os'
@@ -1358,6 +1358,31 @@ const pending = new Map()
 
 // 退回 cwd 认人的痕迹只记一次，否则每秒一行会把 plugin.log 刷满
 const fallbackLogged = new Set()
+const retiredLogged = new Set()
+/**
+ * fi-0036（2026-11-27）：换段之后旧段还挂载着。`memberOf()` 认出会话不在 pins 里，
+ * 就退回按 cwd 认人 —— 旧段的 cwd 是同一个家，于是它又被认成"这个人"。
+ *
+ * 这里不取消 cwd 兜底（新会话在被钉住之前还得靠它），只加一条窄条件：
+ * **换段账里记过的 `from` 会话，一律不认人。** 它们是"这个人搬走之前的房子"，
+ * 不是"还没登记的新房子"。
+ */
+function retiredSessionIds() {
+  const now = Date.now()
+  if (now - RETIRED_CACHE.at < 60_000) return RETIRED_CACHE.ids
+  const ids = new Set()
+  try {
+    for (const name of readdirSync(ROTATION_STATE_DIR)) {
+      if (!name.endsWith('.json')) continue
+      const rec = readJson(join(ROTATION_STATE_DIR, name), null)
+      if (rec && typeof rec.from === 'string' && rec.from !== '') ids.add(rec.from)
+    }
+  } catch { /* 还没换过段：空集 */ }
+  RETIRED_CACHE.at = now
+  RETIRED_CACHE.ids = ids
+  return ids
+}
+const RETIRED_CACHE = { at: 0, ids: new Set() }
 
 // ---------- 小工具 ----------
 
@@ -2196,7 +2221,7 @@ function cfgRouteNow() {
  * 因为它比较的是每次 apply 都读的同一个文件）。
  * 旧值从磁盘拿：改 patch 会让插件热重载，内存里那份活不过下一次 apply。
  */
-function recordRouteCfg(member) {
+function recordRouteCfg(member, readLive) {
   const now = cfgRouteNow()
   const file = join(ROUTE_STATE_DIR, `${member}.json`)
   let prev = null
@@ -2208,6 +2233,10 @@ function recordRouteCfg(member) {
   const diff = prev ? routeCfgDiff(prev, now) : null
   if (diff) {
     logLine({ note: 'route-cfg-changed', member, line: routeCfgLine(prev, now, member), fields: `provider=${diff.provider ? 1 : 0} model=${diff.model ? 1 : 0}` })
+    // fi-0033：配置变了，运行态这一刻读一次——两份放在相邻两行，读者不用自己 join。
+    if (typeof readLive === 'function') {
+      try { recordRouteLive(member, 'cfg-changed', readLive) } catch {}
+    }
   }
   try {
     mkdirSync(dirname(file), { recursive: true })
@@ -2215,6 +2244,28 @@ function recordRouteCfg(member) {
   } catch {}
   return now
 }
+/**
+ * fi-0033（2026-11-27）：把"运行态这一刻用哪个"也记一行。
+ *
+ * 只在两种情况写：①这次读到的 (live, cfg) 与上次写下的不同；②调用方要求强制写（换了配置）。
+ * 不每拍写——路由不会自己动，"每分钟一行 live=…"只会把账本变厚，不会让它变准。
+ *
+ * @param {string} member 名册键（认不出时传 profile）
+ * @param {string} where boot | cfg-changed | first-read
+ * @param {() => unknown} read 调 currentSelection 的薄壳；服务还没注册就传 null
+ */
+let lastRouteLiveState = null
+function recordRouteLive(member, where, read) {
+  const live = liveRouteOf(read)
+  const cfg = cfgRouteNow()
+  const state = `${live.provider ?? '-'}/${live.model ?? '-'}|${cfg.provider}/${cfg.model}|${live.reason ?? '-'}`
+  if (state === lastRouteLiveState && where !== 'cfg-changed') return
+  lastRouteLiveState = state
+  const { line } = routeLiveLine(live, cfg)
+  logLine({ note: 'route-live', member, where, line })
+  return { live, cfg }
+}
+
 function recordCodeFpHistory() {
   try {
     const prev = readJson(CODE_FP_LEDGER_FILE, null)
@@ -2333,6 +2384,17 @@ function apply(ctx) {
   const bootMember = selfMemberKeyRaw()
   // fi-0022：先读一次，boot 行带上"文件里写的"路由（读不到就是 unknown）。
   const bootRoute = cfgRouteNow()
+  // fi-0033：运行态那一刻用哪个。apply 时服务可能还没注册——读不到就不写这两格
+  // （写 (unavailable) 会被人当成"读到了但不知道"），交给后面的 route-live 行补。
+  const liveRouteNow = () => {
+    try {
+      const svc = ctx.get('agentDefaultModel')
+      return typeof svc?.currentSelection === 'function' ? svc.currentSelection() : null
+    } catch {
+      return null
+    }
+  }
+  const bootLive = liveRouteOf(liveRouteNow)
   const bootRecord = {
     pkg: `${name}@${PKG_VERSION}`,
     codeFp: CODE_FP.fp,
@@ -2350,6 +2412,8 @@ function apply(ctx) {
     suspect: homeLooksRight ? undefined : `selfHome 里既没有 START.md 也没有 dsh-home；配置可能指错了地方`,
     cfgProvider: bootRoute.provider,
     cfgModel: bootRoute.model,
+    // 只在真读到的时候带这两格；读不到就不假装有两个值。
+    ...(bootLive.reason === null ? { liveProvider: bootLive.provider, liveModel: bootLive.model } : {}),
   }
   // 小鱼丸/小满 #1670–#1672（2026-11-18）：镜像到 pool\group\plugin.log 的那一行原来 spread 的是
   // bootRecord，而 note 只临时贴在 bootLog 的参数里 ⇒ 同一批 boot 行在群里那本没有 note。
@@ -2361,7 +2425,22 @@ function apply(ctx) {
   // 回答不了“改过没有”；在值变化时补一行，账上有历史值才判得动。
   recordCodeFpHistory()
   // fi-0022：每次 apply 都读一次；和磁盘上上次的值比，变了才写一行 route-cfg-changed。
-  try { recordRouteCfg(bootMember ?? CFG.selfProfile) } catch {}
+  try { recordRouteCfg(bootMember ?? CFG.selfProfile, liveRouteNow) } catch {}
+  // fi-0033：运行态读数一样要落账。服务可能比 apply 晚一拍，所以补两次（2s / 15s）；
+  // 真读到了就不再写（de-dupe 在 recordRouteLive 里），免得每拍一行。
+  const liveMember = bootMember ?? CFG.selfProfile
+  if (bootLive.reason === null) {
+    try { recordRouteLive(liveMember, 'boot', liveRouteNow) } catch {}
+  } else {
+    for (const delayMs of [2000, 15000]) {
+      const t = setTimeout(() => {
+        if (!stillPrimary()) return
+        try { recordRouteLive(liveMember, 'first-read', liveRouteNow) } catch {}
+      }, delayMs)
+      t.unref?.()
+      instanceGuard.addTimer(t)
+    }
+  }
   // P4（2026-11-16 第三份装机沉淀）：只把两个 bundle add 进 profile（最小安装）时，
   // 没有安装器来问"鱼塘放哪"，也没有配置文件 ⇒ 默认值会把 homes/pool 建在仓库旁边
   // （实测：<workspace>\whale-src\ 里同时出现仓库和 homes/pool）。用户以为数据在别处，
@@ -2989,6 +3068,14 @@ function memberOf(agent) {
   }
 
   const cwd = agent?.session?.header?.cwd
+  // fi-0036：先排除"换段搬走的旧段"——它有同一个 cwd，按 cwd 兜底会把它认回这个人。
+  if (id !== null && retiredSessionIds().has(id)) {
+    if (!retiredLogged.has(id)) {
+      retiredLogged.add(id)
+      logLine({ note: 'member-retired-session', member: '(none)', sessionId: id })
+    }
+    return null
+  }
   if (typeof cwd !== 'string') return null
   const normalized = cwd.replace(/[\\/]+$/, '').toLowerCase()
   for (const [key, member] of Object.entries(MEMBERS)) {
@@ -3066,6 +3153,7 @@ async function tick(ctx) {
   settleMarks() // 到期的"叫醒之后他有没有开口"先结算，再决定这一轮做什么
   rearmRotationBinds() // 上次进程里换完段却没来得及绑的，起来先补上
   serviceRotationBinds() // 新会话目录落盘了就把名册改到新段上（换段那一步只排队，不阻塞叫醒）
+  await serviceRotationWorkspaces(ctx) // fi-0037：工作区登记没成功的，同一拍补一次
   if (!hostReady) void resolveHost()
 
   if (!hasOwnAgent(ctx)) {
@@ -3190,6 +3278,26 @@ const rotationPending = new Map()
 const rotationCooldown = new Map()
 /** r496：哪一次失败已经记过 rotation-hold（member → failedAt），免得每拍重写一行 */
 const rotationHoldNoted = new Map()
+/**
+ * fi-0035（2026-11-27）：`waiting` 是唯一不落账的判定结果——判据跑了、结论是"再等等"，
+ * 账上一个字都没有，于是"判据没跑"与"判据说再等等"长得一样。
+ * 这里一批一次、状态不变不重复（member → 状态串）。
+ */
+const rotationWaitNoted = new Map()
+function noteRotationWaiting(member, channelKey, rotation) {
+  if (!rotation) return
+  const why = typeof rotation.why === 'string' ? rotation.why : 'unknown'
+  const lastTurn = rotation.lastTurn ?? null
+  const state = `${why}|${lastTurn ?? '-'}|${rotation.remaining ?? '-'}|${rotation.settings?.rounds ?? '-'}`
+  if (rotationWaitNoted.get(member) === state) return
+  rotationWaitNoted.set(member, state)
+  const idleMin = rotation.idleMin === null || rotation.idleMin === undefined ? null : Math.round(rotation.idleMin)
+  logLine({
+    note: 'rotation-waiting', member, channel: channelKey, why,
+    lastTurn, rounds: rotation.settings?.rounds ?? null, pauseMin: rotation.settings?.pauseMin ?? null,
+    idleMin, remaining: rotation.remaining ?? null,
+  })
+}
 /** 换完段、还没绑上的（等新会话目录落盘）：member → { sessionId, since } */
 const rotationBindQueue = new Map()
 const ROTATION_RETRY_MS = 10 * 60 * 1000
@@ -3326,52 +3434,65 @@ function writeHandoverLine(member, line) {
 }
 
 /**
- * 把新段登记进她自己家的「家」工作区（`<DSH_HOME>\storages\workspace.json`）。
+ * 把新段登记进她自己家的「家」工作区。
  *
- * 不登记的话，界面上这段会话落在「未分组」——换段之后的第一次看见，人看到的是「她丢了」。
- * 认法是按 `path` 找她的家（每条鱼自家进程里 `CFG.selfCwd` 就是那个家），认不出来就不猜：
- * 只有一个工作区才退用它；否则留一行账说没找到，别把人家的会话塞进别人的家。
+ * fi-0037（2026-11-27）：上一版是**直写** `<DSH_HOME>\storages\workspace.json` ——
+ * 文件确实变了，但 DSH 的内存态不认，界面上这段仍旧落在「未分组」；而且下一次 DSH
+ * 自己回写时会把我们加的抹掉。
+ *
+ * 现在走它的服务：`workspaceRegistry.resolveByPath(cwd)` 拿实体，
+ * `WorkspaceEntity.attachSession(sessionId)` 走 `mutate`（内存 + 持久化一起改）。
+ * 新会话的 header 要等它落盘才有，attachSession 会去读、读不到就抛 ——
+ * 所以这一步失败**不阻塞换段**，排进 `rotationWorkspaceQueue`，由 tick 补。
  */
-function registerWorkspaceSession(member, sessionId) {
-  const wsFile = join(CFG.selfDshHome, 'storages', 'workspace.json')
-  const norm = (v) => String(v ?? '').trim().replace(/[\\/]+$/, '').replace(/\//g, '\\').toLowerCase()
+async function registerWorkspaceSession(ctx, member, sessionId) {
+  const registry = ctx?.get?.('workspaceRegistry')
+  if (!registry || typeof registry.resolveByPath !== 'function') {
+    logLine({ note: 'rotation-workspace', member, session: sessionId, state: 'no-service' })
+    return 'no-service'
+  }
   try {
-    if (!existsSync(wsFile)) {
-      logLine({ note: 'rotation-workspace', member, session: sessionId, state: 'no-file' })
-      return 'no-file'
-    }
-    const data = readJson(wsFile, null)
-    const table = data?.tables?.workspaces
-    if (!table || typeof table !== 'object') {
-      logLine({ note: 'rotation-workspace', member, session: sessionId, state: 'no-table' })
-      return 'no-table'
-    }
-    const ids = Object.keys(table)
-    const want = norm(CFG.selfCwd)
-    let wsId = ids.find((id) => norm(table[id]?.path) === want)
+    let entity = null
     let how = 'path'
-    if (!wsId && ids.length === 1) { wsId = ids[0]; how = 'only-one' }
-    if (!wsId && data?.global?.defaultWorkspaceId && table[data.global.defaultWorkspaceId]) {
-      wsId = data.global.defaultWorkspaceId
-      how = 'default'
+    try {
+      entity = await registry.resolveByPath(CFG.selfCwd)
+    } catch (error) {
+      logLine({ note: 'rotation-workspace', member, session: sessionId, state: 'resolve-failed', detail: String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120) })
     }
-    if (!wsId) {
+    if (!entity) {
+      const all = typeof registry.list === 'function' ? registry.list() : []
+      if (all.length === 1) { entity = all[0]; how = 'only-one' }
+    }
+    if (!entity) {
       logLine({ note: 'rotation-workspace', member, session: sessionId, state: 'no-match', cwd: CFG.selfCwd })
       return 'no-match'
     }
-    const ws = table[wsId]
-    ws.sessionIds = Array.isArray(ws.sessionIds) ? ws.sessionIds : []
-    if (ws.sessionIds.includes(sessionId)) {
-      logLine({ note: 'rotation-workspace', member, session: sessionId, workspace: wsId, how, state: 'already' })
+    const had = Array.isArray(entity.sessionIds) && entity.sessionIds.includes(sessionId)
+    if (had) {
+      logLine({ note: 'rotation-workspace', member, session: sessionId, workspace: entity.id, how: 'registry', state: 'already' })
       return 'already'
     }
-    ws.sessionIds.push(sessionId)
-    writeJson(wsFile, data)
-    logLine({ note: 'rotation-workspace', member, session: sessionId, workspace: wsId, how, state: 'added', sessions: ws.sessionIds.length })
+    await entity.attachSession(sessionId)
+    logLine({ note: 'rotation-workspace', member, session: sessionId, workspace: entity.id, how: 'registry', state: 'added', sessions: entity.sessionIds.length, pickedBy: how })
     return 'added'
   } catch (error) {
-    logLine({ note: 'rotation-workspace', member, session: sessionId, state: 'failed', detail: String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120) })
+    logLine({ note: 'rotation-workspace', member, session: sessionId, state: 'failed', detail: String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 160) })
     return 'failed'
+  }
+}
+
+/** 登记没成功的（多半是新会话还没落盘），下一拍再试；试到 10 次或 10 分钟就放弃并记账。 */
+const rotationWorkspaceQueue = new Map()
+async function serviceRotationWorkspaces(ctx) {
+  for (const [member, pending] of rotationWorkspaceQueue) {
+    if (Date.now() - pending.since > 10 * 60 * 1000 || pending.tries >= 10) {
+      logLine({ note: 'rotation-workspace-giveup', member, session: pending.sessionId, tries: pending.tries })
+      rotationWorkspaceQueue.delete(member)
+      continue
+    }
+    pending.tries += 1
+    const state = await registerWorkspaceSession(ctx, member, pending.sessionId)
+    if (state === 'added' || state === 'already' || state === 'no-match') rotationWorkspaceQueue.delete(member)
   }
 }
 
@@ -3518,7 +3639,9 @@ async function rotateSegment({ ctx, agent, member }) {
     const newId = sessionIdOf(newAgent)
     if (!newId) throw new Error('createSession 没有给出会话 id')
     // 3) 登记进她的工作区：DSH 建新会话时不会自己登记，不登记的话界面上这段落在「未分组」。
-    const workspaceOfNew = registerWorkspaceSession(member, newId)
+    // fi-0037：走 DSH 的工作区服务（内存+持久化一起改）；失败排进队列，由 tick 补。
+    const workspaceOfNew = await registerWorkspaceSession(ctx, member, newId)
+    if (workspaceOfNew !== 'added' && workspaceOfNew !== 'already') rotationWorkspaceQueue.set(member, { sessionId: newId, since: Date.now(), tries: 0 })
 
     // 3) 交接一行（机器写的；四行是她的事，不替她写）。
     //    换绑不在这里做：新会话的目录是 DSH 懒建的，`createSession` 返回时磁盘上还没有它，
@@ -3742,6 +3865,9 @@ function handleChannel({ ctx, agent, member, seat, channel, cursorState, wakes, 
       })
       return 'rotate' // 游标不动：这批消息留给新段去递
     }
+  } else {
+    // fi-0035：不换也要留一行——"判据没跑"和"判据说再等等"不能长得一样。
+    noteRotationWaiting(member, channel.key, rotation)
   }
 
   const who = incoming.map((record) => labelOf(record.from)).join('、')
