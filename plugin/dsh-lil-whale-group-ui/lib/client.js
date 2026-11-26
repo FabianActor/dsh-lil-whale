@@ -2971,6 +2971,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
     function SettingsPage() {
       const [config, setConfig] = useState(DEFAULT_CONFIG)
       const [rotationDefault, setRotationDefault] = useState(null)
+      const [rotationBusy, setRotationBusy] = useState(false)
       const [status, setStatus] = useState('')
       const [dirty, setDirty] = useState(false)
       const timerRef = useRef(null)
@@ -3008,7 +3009,26 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
         return () => { if (timerRef.current) clearTimeout(timerRef.current) }
       }, [config, dirty])
 
-      const rowStyle = { display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }
+      // 改全机默认：写 pool\state\rotation\_default.json（scope=default），不碰配置文件。
+      const setRotationDefaultValue = async (mode, rounds) => {
+        setRotationBusy(true)
+        try {
+          const response = await fetch('/pond/api/rotation', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'x-llw-panel': '1' },
+            body: JSON.stringify({ scope: 'default', mode, rounds }),
+          })
+          const data = await response.json().catch(() => ({}))
+          if (!response.ok) throw new Error(data?.detail ?? data?.error ?? `HTTP ${response.status}`)
+          if (data?.default) setRotationDefault(data.default)
+          setStatus('已保存')
+        } catch (error) {
+          setStatus('换段默认值没改成：' + String(error?.message ?? error))
+        } finally {
+          setRotationBusy(false)
+        }
+      }
+
       const inputStyle = {
         flex: 1, minWidth: 0, height: 32, padding: '0 10px', boxSizing: 'border-box',
         borderRadius: 'var(--dsw-radius-md, 8px)',
@@ -3066,14 +3086,54 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
         ),
 
 
-        // 换段是「每条鱼可能不一样」的事 ⇒ 开关在鱼塘卡片；这里只说默认值、指个路。
-        h(SettingsSection, { title: '换段', hint: '聊满 N 轮换一段新会话。默认关；每条鱼各开各关在「鱼塘」卡片里。' },
-          h('div', { style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-secondary)', display: 'flex', gap: 6, flexWrap: 'wrap' } },
-            h('span', { title: rotationDefault?.source ?? '' }, rotationDefault ? (rotationDefault.enabled ? '当前：开' : '当前：关') + '（配置默认' + (rotationDefault.rounds ? ' ' + rotationDefault.rounds + ' 轮' : '') + '）' : '当前：读不到配置默认值'),
-            h('span', { style: { color: 'var(--dsw-alias-label-tertiary)' } }, '单条鱼在「鱼塘」卡片里改。'),
+        // 换段全机默认（r499）：三层的最上面一层是单鱼覆盖，这里是它下面那层。
+        // 设置页不再提供「跟随」——它自己就是被跟随的那一层，再跟一层就没处改了。
+        h(SettingsSection, { title: '换段', hint: '聊满 N 轮换一段新会话。这里是全机默认；某条鱼想不一样，去「鱼塘」卡片单独设。' },
+          h('div', { style: { display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' } },
+            [
+              { mode: 'on', label: '开' },
+              { mode: 'off', label: '关' },
+            ].map((option) => {
+              const active = rotationDefault?.enabled === (option.mode === 'on')
+              return h('button', {
+                key: option.mode,
+                type: 'button',
+                onClick: () => setRotationDefaultValue(option.mode),
+                disabled: rotationBusy || !rotationDefault,
+                style: { ...pondButtonStyle(false), padding: '4px 12px', fontWeight: active ? 600 : 400,
+                  borderColor: active ? 'var(--dsw-alias-brand-primary)' : undefined,
+                  color: active ? 'var(--dsw-alias-brand-primary)' : undefined },
+              }, option.label)
+            }),
+            h('label', { style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginLeft: 8 } },
+              '每 ', 
+              h('input', {
+                type: 'number',
+                min: 1,
+                max: 1000,
+                defaultValue: String(rotationDefault?.rounds ?? 80),
+                onBlur: (event) => {
+                  const next = Number(event.target.value)
+                  if (!Number.isInteger(next) || next < 1 || next > 1000) {
+                    event.target.value = String(rotationDefault?.rounds ?? 80)
+                    setStatus('轮数要 1–1000 的整数。')
+                    return
+                  }
+                  if (next !== rotationDefault?.rounds) setRotationDefaultValue(rotationDefault?.enabled === true ? 'on' : 'off', next)
+                },
+                style: { ...inputStyle, width: 72 },
+              }),
+              ' 轮换一段',
+            ),
+          ),
+          h('div', { style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)', marginTop: 8 } },
+            rotationDefault
+              ? (rotationDefault.enabled === null
+                  ? '现在：关（还没设过，代码默认 ' + rotationDefault.rounds + ' 轮）'
+                  : '现在：' + (rotationDefault.enabled ? '开' : '关') + ' · 全机默认（' + rotationDefault.rounds + ' 轮）')
+              : '现在：读不到（宿主没回话）',
           ),
         ),
-
         h(SettingsSection, { title: '红点', hint: '侧边栏和标签上的未读数算哪些话。私聊永远算（那里的话本来就是给你的）。' },
           h('div', { style: { display: 'flex', gap: 8, marginTop: 8 } },
             [
@@ -4144,7 +4204,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v70 · pond-avatar-rotation:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v71 · rotation-default:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')

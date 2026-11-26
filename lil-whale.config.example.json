@@ -25,7 +25,5 @@
   "_唤醒闸": "防跑飞，不防聊天：一条鱼一小时内被唤醒次数 / 一天 / 全池合计 / 两次唤醒最小间隔（秒）。正常聊天撞不到，见 PRD 附录 A.94。",
   "wake": {},
   "watch": {},
-  "_叫醒闸": "wake/watch 只在想偏离默认值时才写；默认值在 plugin/dsh-lil-whale-group/lib/wake-config.js 的 WAKE_DEFAULTS。照抄默认值 = 把默认钉死（2026-11-15 鱼丸）。",
-  "_换段说明": "默认不换段（r496）：想开就写 \"enabled\": true，或者写一个 rounds（写了 rounds 就当你知道自己在开，0 等于不改）。聊满 rounds 轮就换一段新会话并自动换绑（默认 80，0=不换）。换段只落在对话缝隙里：最后一句话安静满 pauseMin 分钟，或一直连着聊最多再延 forceExtra 轮。carryRounds = 换段后带几轮原话进新段（默认 3，0=不带，上限 10）。单鱼覆盖写 pool\\state\\rotation\\<键>.json，写法同 wake/watch。",
-  "rotation": {}
+  "_叫醒闸": "wake/watch 只在想偏离默认值时才写；默认值在 plugin/dsh-lil-whale-group/lib/wake-config.js 的 WAKE_DEFAULTS。照抄默认值 = 把默认钉死（2026-11-15 鱼丸）。"
 }

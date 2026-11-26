@@ -223,5 +223,18 @@ test('换段账：形状固定，by=auto', () => {
   assert.equal(r.idleMin, 3)
 })
 
+test('r499 三层：全机默认读 pool/state/rotation/_default.json，配置文件不再参与', () => {
+  const group = readFileSync('plugin/dsh-lil-whale-group/lib/index.js', 'utf8')
+  assert.ok(group.includes('_default.json'), '群插件要从 _default.json 取全局层')
+  assert.ok(!group.includes('resolveRotation(CFG.rotation'), '不许再读配置文件里的 rotation')
+  const ui = readFileSync('plugin/dsh-lil-whale-group-ui/lib/index.js', 'utf8')
+  assert.ok(ui.includes('ROTATION_DEFAULT_FILE'), '面板写的是同一个文件')
+  assert.ok(ui.includes('scope') && ui.includes('default'), 'POST 要能区分全机默认与单鱼')
+  assert.ok(ui.includes('ROTATION_ROUNDS_MIN') && ui.includes('ROTATION_ROUNDS_MAX'), '轮数要有上下界')
+  const client = readFileSync('plugin/dsh-lil-whale-group-ui/lib/client.js', 'utf8')
+  assert.ok(client.includes('scope: ') && client.includes('default'), '设置页提交带 scope=default')
+  assert.ok(!client.includes('跟随配置'), '设置页不提供「跟随」——它自己就是被跟随的那一层')
+})
+
 console.log(failed === 0 ? '\n全部通过' : `\n${failed} 条没过`)
 process.exit(failed === 0 ? 0 : 1)

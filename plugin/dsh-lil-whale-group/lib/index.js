@@ -954,7 +954,11 @@ let errorStreak = 0
 // 2026-11-14 小肥鱼："同一台机器上不该有两种钟"——她先是在 roster-audit 上抓到的，
 // 同一条账里的 wake-try 也犯着同样的错：行首本地，at= 却是 UTC。
 function localStampOf(value) {
-  // 两种写法都要认：epoch 毫秒（数字）和 ISO 字符串（state 里存的是后者）。  // 以前只认数字，ISO 进来一律变 "?"，而同一行的 lag= 是用 Date.parse 算的、认字符串 ——  // 同一个值时两处读者给出不同答案（投递现场：at=? 与 lag=44s 并排出现）。  const n = Number(value)  const d = value instanceof Date ? value : (Number.isFinite(n) ? new Date(n) : new Date(String(value)))
+  // 两种写法都要认：epoch 毫秒（数字）和 ISO 字符串（state 里存的是后者）。
+  // 以前只认数字，ISO 进来一律变 "?"，而同一行的 lag= 是用 Date.parse 算的、认字符串 ——
+  // 同一个值时两处读者给出不同答案（投递现场：at=? 与 lag=44s 并排出现）。
+  const n = Number(value)
+  const d = value instanceof Date ? value : (Number.isFinite(n) ? new Date(n) : new Date(String(value)))
   if (Number.isNaN(d.getTime())) return '?'
   const pad = (n) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
@@ -3192,9 +3196,13 @@ const ROTATION_RETRY_MS = 10 * 60 * 1000
 let rotationProbed = false
 
 function rotationSettingsOf(member) {
+  // r499 三层：单鱼覆盖 > 全机默认（pool\state\rotation\_default.json）> 代码默认。
+  // 不再读 CFG.rotation——面板改不了配置文件，两处真源会漂。
+  let global = {}
+  try { global = readJson(join(ROTATION_SETTING_DIR, '_default.json'), {}) ?? {} } catch { global = {} }
   let over = {}
   try { over = readJson(join(ROTATION_SETTING_DIR, `${member}.json`), {}) ?? {} } catch { over = {} }
-  return resolveRotation(CFG.rotation, over)
+  return resolveRotation(global, over)
 }
 
 /** 这条鱼参与的所有通道文件：群一条 + 每个私聊一段。 */
