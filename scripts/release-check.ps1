@@ -415,6 +415,41 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '启动账' (($runsOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '启动账' '每条 started 前应有 stopped/resumed 交代；空目录不算成立（test-run-ledger.mjs）' }
   } else { Fail '启动账' 'scripts\test-run-ledger.mjs 不在包里' }
+  # ── 4bf. 私聊投影标题顺序（2026-11-24：两处写标题顺序不一致 ⇒ 投影永远差一行／r460）──
+  $dmProjTest = Join-Path $pkg 'scripts\test-dm-projection.mjs'
+  if (Test-Path $dmProjTest) {
+    $dmProjOut = & node $dmProjTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '私聊投影' (($dmProjOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '私聊投影' '写标题的两处都按键排序；重建脚本认得「只是换了顺序」（test-dm-projection.mjs）' }
+  } else { Fail '私聊投影' 'scripts\test-dm-projection.mjs 不在包里' }
+  # ── 4bg. 群消息叫醒口径（2026-11-24 r462：post-group 只写 to、不写 mention ⇒ 读侧当老记录叫醒所有人）──
+  $pgTest = Join-Path $pkg 'scripts\test-post-group.mjs'
+  if (Test-Path $pgTest) {
+    $pgOut = & node $pgTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '群消息叫醒' (($pgOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '群消息叫醒' '不写 --mention 就是 []（谁都不叫醒）、all 写字符串、名单写数组（test-post-group.mjs）' }
+  } else { Fail '群消息叫醒' 'scripts\test-post-group.mjs 不在包里' }
+  # ── 4bk. 投递时间两种写法（2026-11-25 r470：fi-0030，同一时刻 jsonl 是 ISO Z、last-ts 是 epoch 毫秒）──
+  $dtsTest = Join-Path $pkg 'scripts\test-delivery-ts.mjs'
+  if (Test-Path $dtsTest) {
+    $dtsOut = & node $dtsTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '投递时间两写法' (($dtsOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '投递时间两写法' 'last-ts= 后面紧跟 last-ts-iso=；换算逐毫秒相等（test-delivery-ts.mjs）' }
+  } else { Fail '投递时间两写法' 'scripts\test-delivery-ts.mjs 不在包里' }
+  # ── 4bn. 路由配置两格（2026-11-26 r491：fi-0022；boot 行只记 cfg- 来源，切换行叫 route-cfg-changed）──
+  $rcTest = Join-Path $pkg 'scripts\test-route-cfg.mjs'
+  if (Test-Path $rcTest) {
+    $rcOut = & node $rcTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '路由配置两格' (($rcOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '路由配置两格' 'cfgProvider/cfgModel 只取 agent-default-model 那块；没变不写；不叫 route-switch' }
+  } else { Fail '路由配置两格' 'scripts\test-route-cfg.mjs 不在包里' }
+  # ── 4bl. 升级不动鱼的选择（2026-11-25 issue #5：dsh plugin add 重写 patch，静默丢掉设置页写的段）──
+  $ppTest = Join-Path $pkg 'scripts\test-patch-preserve.mjs'
+  if (Test-Path $ppTest) {
+    $ppOut = & node $ppTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '升级不动鱼的选择' (($ppOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '升级不动鱼的选择' 'plugin add 前后按顶层 id 比，丢了就原样接回去；空清单 [] 也处理（test-patch-preserve.mjs）' }
+  } else { Fail '升级不动鱼的选择' 'scripts\test-patch-preserve.mjs 不在包里' }
   # ── 4as. 名册值带 key（2026-11-22：to=undefined 900 行，fi-0010／r404）──
   $keyTest = Join-Path $pkg 'scripts\test-member-key.mjs'
   if (Test-Path $keyTest) {

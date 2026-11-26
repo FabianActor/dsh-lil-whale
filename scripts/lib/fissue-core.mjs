@@ -94,12 +94,24 @@ export function parseFissueMessage(text) {
     `^[ \\t]*(?:\\*\\*|__)?[ \\t]*(${FIELD_LABELS.join('|')})[ \\t]*(?:\\*\\*|__)?[ \\t]*[：:][ \\t]*(?:\\*\\*|__)?[ \\t]*(.*)$`,
     'u',
   );
+  // fi-0025（2026-11-25）：标签独占一行、内容在下一行也认（`**证据**` 后面没冒号）。
+  // 只认"整行就是那个标签"，正文里顺带提到"证据"的句子不受影响。
+  const bareRe = new RegExp(
+    `^[ \\t]*(?:\\*\\*|__)?[ \\t]*(${FIELD_LABELS.join('|')})[ \\t]*(?:\\*\\*|__)?[ \\t]*$`,
+    'u',
+  );
   for (const raw of lines.slice(1)) {
     const line = raw.replace(/\r$/u, '');
     const m = labelRe.exec(line);
     if (m) {
       current = m[1];
       fields[current] = m[2].trim().replace(/\\s*(?:\\*\\*|__)\\s*$/u, '').trim();
+      continue;
+    }
+    const bare = bareRe.exec(line);
+    if (bare) {
+      current = bare[1];
+      if (!Object.prototype.hasOwnProperty.call(fields, current)) fields[current] = '';
       continue;
     }
     if (current && line.trim()) {

@@ -18,24 +18,34 @@ import { createHash } from 'node:crypto'
 // 2026-11-22 r413：群消息不再写 to，叫醒只看 mention。预览措辞也跟着改——
 // 旧话"群里有 N 条新的"在新机制下是对的，但不够；点了名才叫醒的，要说"点了你名字的"。
 // 老记录（没有 mention 字段）仍按老话说"新的"，因为它确实可能是 to=all 广播。
-export function wakeWordingOf({ kind, who, dmWho = '', count, firstRead, cursorLost, backlog, woken = 'mention', src = 'file' }) {
+export function wakeWordingOf({ kind, who, dmWho = '', count, firstRead, cursorLost, backlog, woken = 'mention', src = 'file', systemCount = 0, spoke = null }) {
   const pointed = woken === 'mention' ? '点了你名字的' : '新的'
   // 2026-11-23（fi-0015）：读进度读不到时，不许把"文件有多少行"当成"积了多少条"。
   // 这条分支里一个数字都不出现——"最近几条"是摆出来的事实，"1107 条"才是编的。
   const unknown = src === 'missing' || src === 'unknown'
+  // 2026-11-25（fi-0026）：主语和计数必须来自同一批行。以前 count 数的是"所有行"，
+  // 于是系统行顶着对方的名字被数成"他跟你说了 3 句"；全系统消息时也不该说"说了 N 句"。
+  const human = Number.isFinite(spoke) ? spoke : Math.max(0, count - systemCount)
+  const sys = Math.max(0, Number.isFinite(systemCount) ? systemCount : 0)
+  const sysSuffix = sys > 0 ? `（另有 ${sys} 条系统消息，不是${dmWho || who || '对方'}说的）` : ''
+  const sysOnly = sys > 0 && human === 0
+    ? `；里面有 ${sys} 条系统消息，不是${dmWho || who || '对方'}说的`
+    : ''
   const where = unknown
     ? kind === 'dm'
       ? `${dmWho} 私下说了几句话；你在这条私聊里的读进度找不到了，只把最近几条摆给你看`
       : `群里有些话；你在这个群的读进度找不到了（游标这一格读不出来），只把最近几条摆给你看`
     : kind === 'dm'
-    ? `${dmWho} 私下跟你说了 ${count} 句`
+    ? (sysOnly !== ''
+        ? `${dmWho} 那边没有新的话${sysOnly}`
+        : `${dmWho} 私下跟你说了 ${human} 句${sysSuffix}`)
     : backlog
       ? firstRead
         ? cursorLost
-          ? `群里现在有 ${count} 条${pointed}（${who}）——你的读进度不见了（游标这一格是空的），这次按从头算，已经记了一笔账`
-          : `群里现在有 ${count} 条${pointed}（${who}）——你还没读过这个群（还没有游标）`
-        : `你不在的这段时间，群里积了 ${count} 条${pointed}（${who}）`
-      : `群里有 ${count} 条${pointed}（${who}）`
+          ? `群里现在有 ${human} 条${pointed}（${who}）——你的读进度不见了（游标这一格是空的），这次按从头算，已经记了一笔账${sysSuffix}`
+          : `群里现在有 ${human} 条${pointed}（${who}）——你还没读过这个群（还没有游标）${sysSuffix}`
+        : `你不在的这段时间，群里积了 ${human} 条${pointed}（${who}）${sysSuffix}`
+      : `群里有 ${human} 条${pointed}（${who}）${sysSuffix}`
   const tailHint = unknown
     ? '更早的这次不重放；想看就去翻文件。'
     : backlog
@@ -53,12 +63,12 @@ export function wakeWordingOf({ kind, who, dmWho = '', count, firstRead, cursorL
   const tpl = unknown
     ? kind === 'dm' ? 'dm-unknown@1' : 'group-unknown@1'
     : kind === 'dm'
-    ? 'dm@1'
+    ? 'dm@2'
     : backlog
       ? firstRead
-        ? cursorLost ? 'group-lost@2' : 'group-first@2'
-        : 'group-backlog@2'
-      : 'group-plain@2'
+        ? cursorLost ? 'group-lost@3' : 'group-first@3'
+        : 'group-backlog@3'
+      : 'group-plain@3'
   const tailTpl = unknown ? 'tail-unknown@1' : backlog ? (firstRead ? 'tail-no-backfill@1' : 'tail-named@1') : 'tail-go@1'
   // 2026-11-15 21:3x，第二条鱼：tpl 锁的是"选了哪一句"，锁不住"句子里那个数对不对"。
   // 渲染后整句的短指纹跟 tpl 一起记，才能事后重算出同一句话；

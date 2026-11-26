@@ -69,11 +69,14 @@ const eol = childText.includes('\r\n') ? '\r\n' : '\n'
 
 const blocks = []
 const added = []
+const missing = []
 for (const id of WANT) {
   if (new RegExp(`^- id: ${id}$`, 'm').test(childText)) continue
   const block = extractBlock(parentText, id)
   if (!block) {
-    console.error(`warn: 家长 patch 里没有 ${id}，跳过这一段`)
+    // 2026-11-25 issue #5：以前这里只 warn 一句就继续、退出码仍是 0，install.ps1 按成功处理。
+    // "没补"和"补好了"在屏幕上长得一样，正是这一格让人以为升级没事。
+    missing.push(id)
     continue
   }
   blocks.push(block)
@@ -104,4 +107,9 @@ const r = spawnSync(
   { stdio: 'inherit' },
 )
 if (r.status !== 0) die('apply-neutral-preset.mjs 失败（exit ' + r.status + '）')
+if (missing.length > 0) {
+  console.error('warn: 家长 patch 里没有 ' + missing.join(', ') + '——这几段没补上（不是装好了）')
+  console.error('NEXT: 在家长那一侧补上这些段，或手动写进 ' + childPath)
+  process.exitCode = 3
+}
 console.log('ok: ' + profile + ' 的模型与中立预设都装好了')

@@ -26,8 +26,12 @@ const MAX_BYTES = 1024 * 1024
 const KEEP = 3
 const DRY = process.argv.includes('--dry-run')
 
-// 已经切下来的份：<base>.<YYYYMMDD-HHMMSS>[-n].log
-const ROTATED_RE = /\.\d{8}-\d{6}(?:-\d+)?\.log$/
+// 已经切下来的份：<base>.log.<YYYYMMDD-HHMMSS>[-n]
+// 2026-11-25 r469（fi-0029）：旧形状把 `log` 挪到末位（`plugin.20261125-092735.log`），
+// 于是最自然的前缀筛法 `plugin.log*` 一条也匹配不上；新形状保留原前缀，旧的仍然认（不破坏已有文件）。
+const ROTATED_NEW_RE = /\.log\.\d{8}-\d{6}(?:-\d+)?$/
+const ROTATED_OLD_RE = /\.\d{8}-\d{6}(?:-\d+)?\.log$/
+const ROTATED_RE = new RegExp(`${ROTATED_NEW_RE.source}|${ROTATED_OLD_RE.source}`)
 
 function argValue(name) {
   const i = process.argv.indexOf(name)
@@ -195,14 +199,14 @@ for (const file of targets) {
   }
   if (!st.isFile() || st.size < MAX_BYTES) continue
   const dir = dirname(file)
-  const base = basename(file, '.log')
+  const base = basename(file)   // plugin.log：切下来的份保留这个前缀（fi-0029）
   const ts = stamp(new Date())
-  let dest = join(dir, `${base}.${ts}.log`)
+  let dest = join(dir, `${base}.${ts}`)
   let n = 1
   while (true) {
     try {
       statSync(dest)
-      dest = join(dir, `${base}.${ts}-${n++}.log`)
+      dest = join(dir, `${base}.${ts}-${n++}`)
     } catch {
       break
     }
@@ -234,13 +238,26 @@ for (const file of targets) {
 // 切下来的份名字里带着切下来的时刻 `<base>.<YYYYMMDD-HHMMSS>[-n].log`。
 // r392（fi-0005 收尾，小鱼丸发现）：排序看名字里的时间戳，不看 mtime——mtime 会被 checkout / 复制 / 还原改写
 // （她今天实测 lib\ 下三个文件 mtime 比最后一次提交晚 22 分钟），拿它判“谁更老”会把刚切下来的那份当成旧的删掉。
-function nameStampOf(file) {
-  const m = /\.(\d{8}-\d{6})(?:-(\d+))?\.log$/.exec(basename(file))
-  return { stamp: m ? m[1] : '', seq: m && m[2] ? Number(m[2]) : 0 }
+// 切下来的份名字里带着切下来的时刻：新形状 `<base>.log.<YYYYMMDD-HHMMSS>[-n]`、
+// 旧形状 `<base>.<YYYYMMDD-HHMMSS>[-n].log`（r469 之前的都长这样，仍然认）。
+// r392（fi-0005 收尾，小鱼丸发现）：排序看名字里的时间戳，不看 mtime——mtime 会被 checkout / 复制 / 还原改写
+// （她实测 lib\ 下三个文件 mtime 比最后一次提交晚 22 分钟），拿它判"谁更老"会把刚切下来的那份当成旧的删掉。
+function parsedRotated(name) {
+  const n = ROTATED_NEW_RE.exec(name)
+  if (n) {
+    const m = /\.log\.(\d{8}-\d{6})(?:-(\d+))?$/.exec(name)
+    return { family: name.slice(0, n.index + 4), stamp: m[1], seq: m[2] ? Number(m[2]) : 0 }
+  }
+  const o = ROTATED_OLD_RE.exec(name)
+  if (o) {
+    const m = /^(.*)\.(\d{8}-\d{6})(?:-(\d+))?\.log$/.exec(name)
+    return { family: m[1] + '.log', stamp: m[2], seq: m[3] ? Number(m[3]) : 0 }
+  }
+  return null
 }
 
-// 同类只留最近 KEEP 份：按目录把"切下来的份"按 base 分组，每组的第 KEEP+1 份起删掉。
-// r390 起每次都会扫一遍（不只在新切了一份之后），这样历史上堆下来的也能落回 3 份。
+// 同类只留最近 KEEP 份：按目录把"切下来的份"按 family（`plugin.log`）分组，每组的第 KEEP+1 份起删掉。
+// 新旧两种形状落进同一组——不然一次改名会把历史分成两堆，各自都还能留 3 份。
 for (const dir of scannedDirs) {
   let names
   try {
@@ -250,17 +267,17 @@ for (const dir of scannedDirs) {
   }
   const groups = new Map()
   for (const name of names) {
-    const m = /^(.+)\.\d{8}-\d{6}(?:-\d+)?\.log$/.exec(name)
-    if (!m) continue
-    const group = groups.get(m[1]) ?? []
-    group.push(join(dir, name))
-    groups.set(m[1], group)
+    const info = parsedRotated(name)
+    if (!info) continue
+    const group = groups.get(info.family) ?? []
+    group.push({ f: join(dir, name), ...info })
+    groups.set(info.family, group)
   }
-  for (const [base, files] of groups) {
+  for (const [family, files] of groups) {
     let sorted
     try {
       sorted = files
-        .map((f) => ({ f, ...nameStampOf(f), bytes: statSync(f).size, hash: hash12(f) }))
+        .map((x) => ({ ...x, bytes: statSync(x.f).size, hash: hash12(x.f) }))
         .sort((a, b) => (b.stamp === a.stamp ? b.seq - a.seq : b.stamp.localeCompare(a.stamp)))
     } catch {
       continue
@@ -274,7 +291,7 @@ for (const dir of scannedDirs) {
       try {
         unlinkSync(old.f)
         dropped++
-        account('note', `note=log-rotate-dropped file=${rel(old.f)} bytes=${old.bytes} hash=${old.hash} base=${base}`)
+        account('note', `note=log-rotate-dropped file=${rel(old.f)} bytes=${old.bytes} hash=${old.hash} base=${family}`)
         console.log(`dropped ${rel(old.f)}`)
       } catch (error) {
         failed++
@@ -284,7 +301,6 @@ for (const dir of scannedDirs) {
     }
   }
 }
-
 // 一行汇总：让"这一小时干了什么"不用逐行拼。
 account('note', `note=log-rotate rotated=${rotated} dropped=${dropped} failed=${failed} scanned=${targets.length} roots=${explicitDirs.length ? 'args' : cfgRoots ? 'config' : 'code'} pid=${process.pid}`)
 const ledgerOk = flushLedger()

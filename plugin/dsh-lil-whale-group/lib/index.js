@@ -13,10 +13,11 @@ import { printableText } from './text-clean.js'
 import { sayProblemOf, channelProblemOf } from './say-core.js'
 import { noteCodeOf, intentNoteTextOf, watchmanSkipLineOf } from './note-core.js'
 import { classifyStall, stallSentenceOf } from './stall-core.js'
-import { classifyCursorRead, countsKnownOf, heldTrustedOf, heldOverflows } from './cursor-core.js'
+import { classifyCursorRead, cursorWriteSourceOf, countsKnownOf, heldTrustedOf, heldOverflows } from './cursor-core.js'
 import { membersWithKeys } from './members-core.js'
 import { MENTION_ALL, normalizeMention, wantsWake, mentionTextOf, mentionDisplayOf, bumpHeld, heldOf, clearHeld, heldSentenceOf } from './mention-core.js'
 import { codeFingerprint } from './code-fp.js'
+import { parseDefaultModel, routeCfgDiff, routeCfgLine } from './route-cfg.js'
 import { codeFpChangeOf, codeFpHistoryLine, codeFpLedgerOf, CODE_FP_LEDGER } from './code-fp-history-core.js'
 import { join, dirname, basename } from 'node:path'
 import { homedir } from 'node:os'
@@ -64,6 +65,7 @@ import {
   looksLikeSchedule,
   pathAllowed,
   INTENT_GRACE_MIN,
+  semanticHashOf,
 } from './intent-core.js'
 
 // 这个包是用 link: 挂进 profile 的，它的真实路径在项目里，walk-up 找不到宿主的
@@ -930,7 +932,7 @@ let errorStreak = 0
 // 2026-11-14 小肥鱼："同一台机器上不该有两种钟"——她先是在 roster-audit 上抓到的，
 // 同一条账里的 wake-try 也犯着同样的错：行首本地，at= 却是 UTC。
 function localStampOf(value) {
-  const d = value instanceof Date ? value : new Date(Number(value))
+  // 两种写法都要认：epoch 毫秒（数字）和 ISO 字符串（state 里存的是后者）。  // 以前只认数字，ISO 进来一律变 "?"，而同一行的 lag= 是用 Date.parse 算的、认字符串 ——  // 同一个值时两处读者给出不同答案（投递现场：at=? 与 lag=44s 并排出现）。  const n = Number(value)  const d = value instanceof Date ? value : (Number.isFinite(n) ? new Date(n) : new Date(String(value)))
   if (Number.isNaN(d.getTime())) return '?'
   const pad = (n) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
@@ -1528,21 +1530,56 @@ function readCursorState(member) {
   // 2026-11-23（LeeaCP 验收 C）：坏过一次要留下痕迹——自愈过的和从没坏过的不能同形。
   quarantineCursorFile(member)
   const recovered = recoveredCursorsOf(member)
-  if (recovered !== null) return { cursors: recovered, source: 'recovered' }
+  if (recovered !== null) {
+    // fi-0023 ②：隔离完立刻写回一份合法文件，别等下一个人来读才发现它还是坏的。
+    // 不写回的话，坏文件原地留着，每次读都重新隔离一遍（2026-11-25，一秒生一份副本）。
+    try { writeCursors(member, recovered, 'meta') } catch (error) {
+      logLine({ note: 'cursor-repair-failed', member, error: String(error?.message ?? error).slice(0, 80) })
+    }
+
+    // 2026-11-25（LeeaCP 第 89 行）：`src=recovered` 只说"从别处补回来的"，没说从哪儿补的。
+    // 补一行账，把来源和键数写下来：写回成功本身也要留痕，否则"文件看着是好的"就说不出怎么好的。
+    logLine({ note: 'cursor-repaired', member, from: 'cursor-meta', keys: Object.keys(recovered[member] ?? {}).length })
+    return { cursors: recovered, source: 'recovered' }
+  }
   return { cursors: {}, source: 'unknown' }
 }
 
-/** 坏文件先复制一份带时刻的副本，再记一行账。副本只留证，不参与读。 */
+/** 坏文件先存一份带内容指纹的副本（同一份只存一次），再记一行账。副本只留证，不参与读。 */
 function quarantineCursorFile(member) {
   const file = cursorFileOf(member)
   try {
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '-').replace('Z', '')
-    const dest = `${file}.corrupt-${stamp}`
-    copyFileSync(file, dest)
-    logLine({ note: 'cursor-corrupt', member, backup: basename(dest) })
+    const bytes = readFileSync(file)
+    // fi-0023：全 0 / 全空白单独一种原因——"半截 JSON"与"整份被零填充"修法不同，
+    // 混成一句 cursor-corrupt 之后，读的人只能猜。
+    const zeroFilled = bytes.length > 0 && bytes.every((b) => b === 0 || b === 0x20 || b === 0x09 || b === 0x0a || b === 0x0d)
+    const code = zeroFilled ? 'zero-filled' : 'cursor-corrupt'
+    const sha = createHash('sha256').update(bytes).digest('hex').slice(0, 16)
+    // 按内容指纹命名：同一份坏字节第二次不再复制（2026-11-25，fishball 一分钟里生出 74 份）。
+    const dest = `${file}.corrupt-${sha}`
+    if (!existsSync(dest)) {
+      copyFileSync(file, dest)
+      pruneCorruptCopies(member)
+      logLine({ note: 'cursor-corrupt', member, code, bytes: bytes.length, sha256: sha, backup: basename(dest) })
+    } else {
+      // 同一份坏字节第二次出现：不再复制，但要记一行——次数落在账上，别只落在文件名里。
+      logLine({ note: 'cursor-corrupt', member, code, bytes: bytes.length, sha256: sha, backup: basename(dest), repeat: true })
+    }
   } catch (error) {
-    logLine({ note: 'cursor-corrupt', member, backup: 'save-failed', error: String(error?.message ?? error).slice(0, 80) })
+    logLine({ note: 'cursor-corrupt', member, code: 'save-failed', error: String(error?.message ?? error).slice(0, 80) })
   }
+}
+
+/** 副本只留最近 3 份（fi-0023 ④）；删掉的份数记一行账，别让它悄悄消失。 */
+function pruneCorruptCopies(member) {
+  try {
+    const dir = dirname(cursorFileOf(member))
+    const base = basename(cursorFileOf(member))
+    const names = readdirSync(dir).filter((n) => n.startsWith(`${base}.corrupt-`)).sort()
+    const extra = names.slice(0, Math.max(0, names.length - 3))
+    for (const name of extra) unlinkSync(join(dir, name))
+    if (extra.length > 0) logLine({ note: 'cursor-corrupt-pruned', member, removed: extra.length })
+  } catch {}
 }
 
 /** 从 meta（上一次真递到的行号）重建各通道的游标；没有 meta 就返回 null。 */
@@ -1613,7 +1650,15 @@ function mergeCursorValue(a, b) {
   return a === undefined ? b : a
 }
 
-function writeCursors(member, cursors) {
+const CURSOR_WRITE_SOURCES = new Set(['file', 'meta', 'legacy', 'computed'])
+
+function writeCursors(member, cursors, from) {
+  // fi-0031：写回的每一笔都要能说出"值是从哪儿来的"。问不到就抛错——
+  // 不写没有来源的文件，也别用默认值把它补成 'file'。
+  const origin = String(from ?? '').trim()
+  if (!CURSOR_WRITE_SOURCES.has(origin)) {
+    throw new Error(`writeCursors 缺来源（from=file|meta|legacy|computed，实际拿到 ${JSON.stringify(from)}）`)
+  }
   const liveSeats = new Set(
     pinnedSessions(member).map((sid) => sid.replace(/^session-/, '').slice(0, 6)),
   )
@@ -1651,6 +1696,13 @@ function writeCursors(member, cursors) {
     }
   }
   writeJson(cursorFileOf(member), kept)
+  // fi-0031：写回也要能看出"值是从哪儿来的"。只在异常时记会被读成"从文件读的"，
+  // 所以每笔都记；来源由调用方给，缺了就抛错（不补默认值）。
+  logLine({
+    note: 'cursor-write', member, from: origin,
+    keys: Object.keys(kept[member] ?? {}).length,
+    seats: Math.max(0, Object.keys(kept).length - 1),
+  })
 }
 
 function readWakes(member) {
@@ -2025,7 +2077,9 @@ function saySystemToDm(member, text) {
   appendFileSync(dmFileOf(member, human), JSON.stringify(record) + '\n', 'utf8')
   const readable = dmReadableOf(member, human)
   if (!existsSync(readable)) {
-    writeFileSync(readable, `# 私聊 · ${labelOf(member)} / ${labelOf(human)}\n\n`, 'utf8')
+    // 标题顺序和 sayPrivate 一样按键排序：两处写不同顺序，投影会来回翻（2026-11-24）
+    const [hx, hy] = [member, human].sort()
+    writeFileSync(readable, `# 私聊 · ${labelOf(hx)} / ${labelOf(hy)}\n\n`, 'utf8')
   }
   appendFileSync(readable, `**${stamp()} · ${labelOf('system')}**\n\n${text}\n\n`, 'utf8')
   return record
@@ -2045,7 +2099,7 @@ function checkOwnStall(ctx) {
   if (verdict.kind !== 'stalled') return
   if (stallNotified.get(me) === delivery.at) return
   stallNotified.set(me, delivery.at)
-  const text = stallSentenceOf({ label: labelOf(me), port: MEMBERS[me]?.port ?? '', since: verdict.lastAt ?? delivery.at })
+  const text = stallSentenceOf({ label: labelOf(me), port: MEMBERS[me]?.port ?? '', since: verdict.lastAt ?? delivery.at, at: Date.now() })
   try {
     saySystemToDm(me, text)
     mkdirSync(STALL_DIR, { recursive: true })
@@ -2080,6 +2134,46 @@ function logLine(record) {
  * repoRoot 来自 `import.meta.url`（这一行代码自己站在哪），配置写错也改不动它。
  */
 const BOOT_LOG = join(CFG.repoRoot, 'logs', 'plugin-boot.log')
+// fi-0022（2026-11-26）：boot 行加"读文件读到的"路由两格。名字带 cfg，不带 switch——
+// 它证明配置文件写着什么，不证明进程真的跑在什么上（运行态暂时没有读数）。
+const ROUTE_STATE_DIR = join(POOL_STATE, 'route')
+
+function cfgRouteNow() {
+  const patch = join(CFG.selfDshHome, 'profiles', CFG.selfProfile, 'cordis.patch.yml')
+  let text = ''
+  try {
+    text = readFileSync(patch, 'utf8')
+  } catch {
+    return { provider: 'unknown', model: 'unknown', patch, error: 'unreadable' }
+  }
+  const parsed = parseDefaultModel(text)
+  return { provider: parsed.provider ?? 'unknown', model: parsed.model ?? 'unknown', patch, error: null }
+}
+
+/**
+ * 配置变了就留一行。变了才写；没变不写（"没有这行"= 没变，这条覆盖率天然 100%，
+ * 因为它比较的是每次 apply 都读的同一个文件）。
+ * 旧值从磁盘拿：改 patch 会让插件热重载，内存里那份活不过下一次 apply。
+ */
+function recordRouteCfg(member) {
+  const now = cfgRouteNow()
+  const file = join(ROUTE_STATE_DIR, `${member}.json`)
+  let prev = null
+  try {
+    prev = JSON.parse(readFileSync(file, 'utf8'))
+  } catch {
+    prev = null
+  }
+  const diff = prev ? routeCfgDiff(prev, now) : null
+  if (diff) {
+    logLine({ note: 'route-cfg-changed', member, line: routeCfgLine(prev, now, member), fields: `provider=${diff.provider ? 1 : 0} model=${diff.model ? 1 : 0}` })
+  }
+  try {
+    mkdirSync(dirname(file), { recursive: true })
+    writeFileSync(file, JSON.stringify({ fmt: 1, provider: now.provider, model: now.model, at: new Date().toISOString(), patch: now.patch, error: now.error }, null, 2) + '\n', 'utf8')
+  } catch {}
+  return now
+}
 function recordCodeFpHistory() {
   try {
     const prev = readJson(CODE_FP_LEDGER_FILE, null)
@@ -2196,6 +2290,8 @@ function apply(ctx) {
   // 只写能证明的那种（按 DSH_HOME 与名册 dshHome 对上）；认不出就写 (unresolved)——
   // 推断出来的身份不能写成事实（同 `own-member-guess` 那次的教训）。
   const bootMember = selfMemberKeyRaw()
+  // fi-0022：先读一次，boot 行带上"文件里写的"路由（读不到就是 unknown）。
+  const bootRoute = cfgRouteNow()
   const bootRecord = {
     pkg: `${name}@${PKG_VERSION}`,
     codeFp: CODE_FP.fp,
@@ -2211,6 +2307,8 @@ function apply(ctx) {
     // 加上 member=（名册键），一行就能认领；认不出来时为 '(unresolved)'，不写成某个默认成员。
     member: bootMember ?? '(unresolved)',
     suspect: homeLooksRight ? undefined : `selfHome 里既没有 START.md 也没有 dsh-home；配置可能指错了地方`,
+    cfgProvider: bootRoute.provider,
+    cfgModel: bootRoute.model,
   }
   // 小鱼丸/小满 #1670–#1672（2026-11-18）：镜像到 pool\group\plugin.log 的那一行原来 spread 的是
   // bootRecord，而 note 只临时贴在 bootLog 的参数里 ⇒ 同一批 boot 行在群里那本没有 note。
@@ -2221,6 +2319,8 @@ function apply(ctx) {
   // 小鱼丸私聊第 53 行（2026-11-19）：boot 行只留了一个时刻的指纹，
   // 回答不了“改过没有”；在值变化时补一行，账上有历史值才判得动。
   recordCodeFpHistory()
+  // fi-0022：每次 apply 都读一次；和磁盘上上次的值比，变了才写一行 route-cfg-changed。
+  try { recordRouteCfg(bootMember ?? CFG.selfProfile) } catch {}
   // P4（2026-11-16 第三份装机沉淀）：只把两个 bundle add 进 profile（最小安装）时，
   // 没有安装器来问"鱼塘放哪"，也没有配置文件 ⇒ 默认值会把 homes/pool 建在仓库旁边
   // （实测：<workspace>\whale-src\ 里同时出现仓库和 homes/pool）。用户以为数据在别处，
@@ -3110,7 +3210,7 @@ function handleChannel({ agent, member, seat, channel, cursorState, wakes }) {
   if (incoming.length === 0) {
     setCursor(cursors, member, channel.key, lines.length)
     setCursor(cursors, seatKey, channel.key, lines.length)
-    writeCursors(member, cursors)
+    writeCursors(member, cursors, cursorWriteSourceOf(read))
     noteDelivered(member, channel.key, lines.length)
     return false
   }
@@ -3182,6 +3282,9 @@ function handleChannel({ agent, member, seat, channel, cursorState, wakes }) {
     who,
     dmWho: channel.who,
     count: incoming.length,
+    // fi-0026：主语与计数来自同一批行——系统行不顶着对方的名字被数进去
+    spoke: incoming.length - incoming.filter((r) => r.from === 'system').length,
+    systemCount: incoming.filter((r) => r.from === 'system').length,
     firstRead,
     cursorLost,
     backlog,
@@ -3240,7 +3343,7 @@ function handleChannel({ agent, member, seat, channel, cursorState, wakes }) {
     : Array.isArray(lastRecord?.mention)
       ? (lastRecord.mention.length === 0 ? 'none' : lastRecord.mention.join('+'))
       : 'legacy'
-  const deliveryNote = `id=${built.id} member=${member} mention=${mentionTag} held-since-wake=${heldTrusted ? heldCount : "unknown"} of=${lines.length} channel=${channel.key} seat=${seat === '' ? '-' : seat} pending=${incoming.length} last-line=${lastIncomingIndex + 1} last-from=${incoming[incoming.length - 1]?.from ?? '-'} last-ts=${lastTs || 0} cursor=${lines.length} prior-cursor=${sharedSeenStored} cursor-state=${read.unknown ? "unknown" : cursorLost ? "lost" : firstRead ? "first" : "resumed"} src=${read.src} start=${cursorLost || read.unknown ? "unknown" : read.start} counts=${cursorLost || read.unknown ? "unknown" : "known"} tpl=${tpl} n=${incoming.length} tail=${tailTpl} wtext8=${wtext8} human=${humanIncoming ? 'yes' : 'no'} pkg=${PKG_VERSION}`
+  const deliveryNote = `id=${built.id} member=${member} mention=${mentionTag} held-since-wake=${heldTrusted ? heldCount : "unknown"} of=${lines.length} channel=${channel.key} seat=${seat === '' ? '-' : seat} pending=${incoming.length} last-line=${lastIncomingIndex + 1} last-from=${incoming[incoming.length - 1]?.from ?? '-'} last-ts=${lastTs || 0} last-ts-iso=${lastTs ? new Date(lastTs).toISOString() : '-'} cursor=${lines.length} prior-cursor=${sharedSeenStored} prior-src=${read.src === 'absent' ? 'missing' : (read.unknown || read.src === 'missing' || read.src === 'unknown') ? 'unknown' : 'read'} cursor-state=${read.unknown ? "unknown" : cursorLost ? "lost" : firstRead ? "first" : "resumed"} src=${read.src} start=${cursorLost || read.unknown ? "unknown" : read.start} counts=${cursorLost || read.unknown ? "unknown" : "known"} tpl=${tpl} n=${incoming.length} tail=${tailTpl} wtext8=${wtext8} human=${humanIncoming ? 'yes' : 'no'} pkg=${PKG_VERSION}`
   try {
     agent.followup(built)
   } catch (error) {
@@ -3263,7 +3366,7 @@ function handleChannel({ agent, member, seat, channel, cursorState, wakes }) {
 
   setCursor(cursors, member, channel.key, lines.length)
   setCursor(cursors, seatKey, channel.key, lines.length)
-  writeCursors(member, cursors)
+  writeCursors(member, cursors, cursorWriteSourceOf(read))
   noteDelivered(member, channel.key, lines.length)
   recordWake(wakes, member)
   pending.delete(pendingKey)
@@ -3510,10 +3613,10 @@ function selfPlanTick(ctx) {
     try {
       const privateResult = deliverToSelf(ctx, self, planDeliveryText(job))
       if (privateResult) {
-        watchmanLog('deliver', `reason=self-plan-private to=${self} plan=${item.id}${privateResult === 'queued' ? ' queued=1' : ''}`)
+        watchmanLog('deliver', `reason=self-plan-private scope=self-plan to=${self} plan=${item.id}${privateResult === 'queued' ? ' queued=1' : ''}`)
       } else {
         say(watcherKey(), self, planDeliveryPublicText(job), 'group', '', '', null, null, [self])
-        watchmanLog('deliver', `reason=self-plan-public-fallback to=${self} plan=${item.id}`)
+        watchmanLog('deliver', `reason=self-plan-public-fallback scope=self-plan to=${self} plan=${item.id}`)
       }
       // 与巡守触发的账同形状（wid / lag / inserted 都要有）：
       // 2026-11-17 第一条鱼：`trigger=self` 第一次出现时缺这三个字段 = 同一个词、两种账。
@@ -3599,10 +3702,15 @@ function sha256OfFile(file) {
 }
 
 /** 文件/目录的基线（大小 + 最后写时间 + 指纹）。目录按"名字:大小:时间"拼起来再哈希。 */
-function baselineOfPath(target) {
+function baselineOfPath(target, opts = {}) {
   const st = statSync(target)
   if (!st.isDirectory()) {
-    return { size: st.size, mtimeMs: st.mtimeMs, hash: sha256OfFile(target) }
+    const text = readFileSync(target, "utf8")
+    const sem = semanticHashOf({ text, ignore: opts.ignore })
+    // r486：再算一份"不摘任何字段"的指纹。两个都在时，才能分开
+    // "只有被 ignore 的字段变了"与"整份被重排了"——以前两者都落 touchOnly，账上分不出。
+    const all = semanticHashOf({ text, ignore: [] })
+    return { size: st.size, mtimeMs: st.mtimeMs, hash: sem.hash, kind: sem.kind, hashAll: all.hash }
   }
   const parts = []
   let size = 0
@@ -3654,9 +3762,21 @@ function probeOneIntent(member, spec, s, now) {
       const r = probeTextAppears({ content, offset: s.offset ?? 0, spec, atMs: st.mtimeMs })
       return { hit: r.hit, evidence: r.evidence, atMs: r.atMs ?? null, patch: { offset: r.nextOffset ?? content.length } }
     }
-    const current = baselineOfPath(resolved.file)
+    const current = baselineOfPath(resolved.file, { ignore: spec.ignore })
     const r = probeFileChanged({ current, baseline: s.baseline ?? null })
-    return { hit: r.hit, evidence: r.evidence, atMs: r.atMs ?? null, patch: { baseline: r.baseline } }
+    // fi-0020：只碰了 mtime 不叫「变了」——记一行，不投递；baseline 照旧更新，免得每拍都记。
+    // r483：每次触发带一个能唯一指认的号（seq=）。没有它，两次同样的事件在账上长得一样，
+    // 去重窗会把第二次压成 note-suppressed——账只证明"这事发生过"，证明不了"发生了两次"。
+    // r485：没变的那拍不涨 seq——seq 数的是"记下来的第几次"，不是心跳。
+    const changed = r.hit || r.touchOnly
+    if (!changed) return { hit: false, patch: { baseline: r.baseline } }
+    const seq = Number(s.seq || 0) + 1
+    if (r.touchOnly) {
+      noteOnce(member, `note=intent-touch-only id=${spec.id} sig=${r.sig ?? 'mtime'} seq=${seq}`)
+      return { hit: false, patch: { baseline: r.baseline, seq } }
+    }
+    if (r.hit) noteOnce(member, `note=intent-hit id=${spec.id} sig=${r.sig} seq=${seq}`)
+    return { hit: r.hit, evidence: r.evidence, atMs: r.atMs ?? null, patch: { baseline: r.baseline, seq } }
   } catch (error) {
     noteOnce(member, `note=intent-probe-failed id=${spec.id} detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 100)}`)
     return { hit: false }
@@ -3714,7 +3834,16 @@ async function intentTick(member, st, now) {
       for (const [key, value] of Object.entries(probe.patch)) s[key] = value
       dirty = true
     }
-    if (!probe.hit) continue
+    if (!probe.hit) {
+      // 条件不成立了，就把"第一次成立"作废。否则同一格里留着上一轮的旧时刻，
+      // 下一次真的再成立时会被 ageMs 判成 intent-stale —— 报的原因像"你醒得太晚"，
+      // 实际是"这个时间戳从上一轮活到了这一轮"（fi-0020 验收时撞到）。
+      if (s.firstTrueAt) {
+        delete s.firstTrueAt
+        dirty = true
+      }
+      continue
+    }
     if (!s.firstTrueAt) {
       s.firstTrueAt = now.toISOString()
       dirty = true
@@ -3941,7 +4070,7 @@ async function watchOne(member, st) {
         markWake(member.key, 'plan')
         try {
           say(watcherKey(), member.key, planDeliveryPublicText(job), 'group', '', '', null, null, [member.key])
-          watchmanLog('deliver', `reason=plan-after-wake ${job.tag}（窗是推开的，话已递进去）`)
+          watchmanLog('deliver', `reason=plan-after-wake scope=relay ${job.tag}（窗是推开的，话已递进去）`)
         } catch (error) {
           watchmanLog(
             'error',
@@ -3988,7 +4117,7 @@ async function watchOne(member, st) {
         if (claimPlanDelivery(member, job.key)) {
           try {
             say(watcherKey(), member.key, planDeliveryPublicText(job), 'group', '', '', null, null, [member.key])
-            watchmanLog('deliver', `reason=plan-after-wake ${job.tag}（窗是推开的，话已递进去）`)
+            watchmanLog('deliver', `reason=plan-after-wake scope=relay ${job.tag}（窗是推开的，话已递进去）`)
           } catch (error) {
             watchmanLog('error', `note=plan-deliver-failed detail=${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 120)} ${job.tag}`)
           }
@@ -4220,12 +4349,14 @@ function maybePruneMediaCache() {
   for (const item of result.failed) {
     watchmanLog('error', `note=media-prune-failed scope=${item.scope ?? 'file'} file=${item.name || '-'} reason=${item.code}`)
   }
-  if (result.removed > 0) {
-    watchmanLog(
-      'note',
-      `note=media-prune removed=${result.removed} bytes=${result.bytes} older-than-days=${MEDIA_CACHE_MAX_AGE_DAYS} failed=${result.failed.length}`,
-    )
-  }
+  // 每一轮都留一行（fi-0021）：以前只在删到东西时才写，于是"扫过、没东西删"和"根本没跑"
+  // 在账上长得一模一样——0 条既可以是"没有"，也可以是"哑了"。
+  const stats = mediaCacheStats({ dir: MEDIA_CACHE_DIR })
+  const oldestDays = stats.oldestMs === null ? '-' : Math.floor((now - stats.oldestMs) / 86400_000)
+  watchmanLog(
+    'note',
+    `note=media-prune existed=${result.existed ? 'yes' : 'no'} removed=${result.removed} bytes=${result.bytes} files=${stats.files} oldest-days=${oldestDays} older-than-days=${MEDIA_CACHE_MAX_AGE_DAYS} failed=${result.failed.length}`,
+  )
 }
 
 // 日志轮转：每小时最多一次，起一个独立进程去切（A.86）。

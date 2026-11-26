@@ -15,6 +15,31 @@
   },
   "entries": [
     {
+      "version": "1.13.3",
+      "at": "2026-11-26",
+      "summary": "账本里几处「同一个名字底下压着两三种原因」的地方各自有了名字：投递时刻两种写法、叫醒词主语与计数、prior-cursor=0 的四种来源、被 ignore 摘掉的字段、游标写回的来源；升级不再清掉设置页写进 patch 的两段；轮转日志保留原前缀。",
+      "requires": [
+        "package",
+        "restart"
+      ],
+      "restart": [
+        "all"
+      ],
+      "commands": [
+        "pwsh -File app\\scripts\\fish.ps1 upgrade-check",
+        "pwsh -File app\\scripts\\doctor.ps1"
+      ],
+      "verify": [
+        "重启后 `logs/plugin-boot.log` 最近五条 `pkg=@fabianactor/dsh-lil-whale-group@1.13.3`，且每条带 `cfgProvider=`/`cfgModel=`",
+        "`pool\\state\\route\\<成员>.json` 出现（fmt=1、provider、model、patch 路径）",
+        "`pool\\group\\plugin.log` 出现 `\"note\":\"cursor-write\"` 行（带 `from=` 与 `keys=`/`seats=`）",
+        "`pool\\state\\watchman.log` 的 `log-format` 行里 `field-since=` 带 `cfgProvider:r491,cfgModel:r491`",
+        "`pwsh -File app\\scripts\\doctor.ps1` 全过（版本一致那一格会对上 1.13.3）"
+      ],
+      "breaking": [],
+      "note": "只换代码；`pool\\` 与 `homes\\` 的数据不动。前端改动（系统行文案、群投影署名）刷新即生效；`cursor-write`、`deliver scope=`、`cfgProvider` 这些在宿主进程里，要重启才会写出来。"
+    },
+    {
       "version": "1.13.2",
       "at": "2026-11-24",
       "summary": "巡守的会话换绑不再要求工作区在鱼塘里（只挡整盘），绑的时候把 cwd 记进账并显示在对话框；doctor 新增「名册（巡守）」。",

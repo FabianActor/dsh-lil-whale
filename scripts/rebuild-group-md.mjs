@@ -65,6 +65,8 @@ const HISTORY = (() => {
 
 /** 这条记录发生的时候，这个人叫什么。 */
 function labelAt(key, iso) {
+  // 系统行不是人也不是鱼，它自己署名（同 plugin/dsh-lil-whale-group/lib/index.js:1768）。
+  if (key === 'system') return '系统'
   const history = HISTORY[key]
   if (!Array.isArray(history) || history.length === 0) return LABEL[key] ?? key
   const t = Date.parse(String(iso ?? ''))
@@ -406,6 +408,27 @@ if (existsSync(DM_DIR)) {
       if (hunk.del.length === 0 && hunk.ins.length > 0) {
         console.log('  归类: 已知 —— 新增记录还没投影（纯插入）')
         continue
+      }
+      // 2026-11-24：两处写标题的顺序不一致时，投影只差一行；同一对人换个顺序不是"说不清"。
+      if (hunk.del.length === 1 && hunk.ins.length === 1) {
+        const dmHeader = (line) => /^# 私聊 · (.+?) \/ (.+)$/.exec(String(line ?? ''))
+        const m = dmHeader(a[hunk.del[0]])
+        const n = dmHeader(b[hunk.ins[0]])
+        if (m && n && m[1] === n[2] && m[2] === n[1]) {
+          console.log('  归类: 已知 —— 只是标题里两个人的顺序不同（同一对人，--write 统一成按名字排序）')
+          continue
+        }
+      }
+      // 2026-11-25：系统行的署名换过一次（旧投影写 system，插件现在写「系统」）。
+      // 只差这一格算已解释——否则一份旧投影会让整本私聊永远写不下去。
+      {
+        const bareText = (rows) => rows.map((x) => String(x ?? '').replace(/ · (system|系统)\*\*$/, ' · §**')).join('\n')
+        const delText = bareText(hunk.del.map((i) => a[i]))
+        const insText = bareText(hunk.ins.map((j) => b[j]))
+        if (delText === insText) {
+          console.log('  归类: 已知 —— 系统行的署名换代（system → 系统）')
+          continue
+        }
       }
       dmUnexplained += 1
     }

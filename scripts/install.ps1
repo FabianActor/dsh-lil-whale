@@ -376,11 +376,36 @@ try {
   if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
     Die "找不到 pnpm：dsh 装插件时固定调用 pnpm add（DSH 不自带它）。" "先运行 npm install --global pnpm@10，再重跑 install.ps1"
   }
+  # 2026-11-25 issue #5：`dsh plugin add` 会按 bundle 清单重写 cordis.patch.yml，只留它认识的段——
+  # 设置页写进去的 ui-settings-general / agent-default-model 没有对应 bundle，就被静默丢掉。
+  # 于是"升级代码"顺手改掉了鱼在设置页里做的选择（模型、reasoningEffort），而且整个过程没有一条警告。
+  # 做法：动手前留快照，动手后把少掉的顶层段原样接回去，补了哪些要说出来。
+  $patchPath = Join-Path $profileDir 'cordis.patch.yml'
+  $patchSnapshot = ''
+  if (Test-Path -LiteralPath $patchPath) {
+    $patchSnapshot = "$patchPath.bak-before-plugin-add-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+    Copy-Item -LiteralPath $patchPath -Destination $patchSnapshot -Force
+  }
   $add = & dsh plugin --profile $ChildProfile add "link:$RepoRoot\plugin\dsh-lil-whale-group" 2>&1
   if ($LASTEXITCODE -ne 0) {
     Die "装插件失败：$($add | Select-Object -Last 5)" "进 $DshHome\profiles\$ChildProfile 手动跑 dsh plugin add 看完整报错（若提示找不到 pnpm，先 npm install --global pnpm@10）"
   }
   Ok '@fabianactor/dsh-lil-whale-group'
+  if ($patchSnapshot -ne '' -and (Test-Path -LiteralPath $patchSnapshot) -and (Test-Path -LiteralPath $patchPath)) {
+    $preserveScript = Join-Path $RepoRoot 'scripts\preserve-patch-blocks.mjs'
+    if (Test-Path -LiteralPath $preserveScript) {
+      $preserveOut = & node $preserveScript --before $patchSnapshot --patch $patchPath --json 2>&1
+      $preserveJson = $null
+      try { $preserveJson = ($preserveOut | Select-Object -Last 1) | ConvertFrom-Json } catch { }
+      if ($preserveJson -and $preserveJson.restored -and @($preserveJson.restored).Count -gt 0) {
+        Note "plugin add 丢掉的 profile 段已补回：$(@($preserveJson.restored) -join ', ')（快照：$patchSnapshot）"
+      } elseif ($preserveJson) {
+        Note 'plugin add 没有丢段（快照留着：' + (Split-Path -Leaf $patchSnapshot) + '）'
+      } else {
+        Warn "plugin add 之后没能核对 profile 段有没有丢：$($preserveOut | Select-Object -Last 2) —— 快照在 $patchSnapshot"
+      }
+    }
+  }
 } finally {
   $env:DSH_HOME = $savedHome
 }
@@ -413,6 +438,7 @@ if ((Test-Path -LiteralPath $childPatch) -and (Test-Path -LiteralPath $seedScrip
   if ($parentPatch -ne '') {
     $seedOut = & node $seedScript --parent-patch $parentPatch --child-patch $childPatch --profile $ChildProfile --home $DshHome 2>&1
     if ($LASTEXITCODE -eq 0) { Ok '模型配置 + 中立预设（从家长的 profile 抄来，模型和钥匙跟家长一致）' }
+    elseif ($LASTEXITCODE -eq 3) { Warn "有 profile 段没补上（家长 patch 里没有）：$($seedOut | Select-Object -First 1) —— 她那边这两段原来是空的，不是被丢了；要补就改家长 patch 再跑 3b" }
     else { Warn "模型/预设没装上：$($seedOut | Select-Object -Last 3) —— 她可能醒得来但没模型可调" }
   } else {
     Warn "找不到家长的 profile patch（$ParentMemberId / $ParentProfile），模型与中立预设没装 —— 装完手动跑 node scripts\seed-child-profile.mjs ..."

@@ -48,6 +48,12 @@ check('带她的称呼', sentence.includes('小肥鱼'), sentence)
 check('带 WebUI 地址', sentence.includes('http://127.0.0.1:3082/'), sentence)
 check('没有自称「她卡住了」这种断言', !sentence.includes('卡住'), sentence)
 check('没有端口就不给空 URL', !stallSentenceOf({ label: 'x', port: '', since: T0 }).includes('http'), sentence)
+// fi-0028：句子自己带「写于几点」与「多久后失效」，读的人不必先去核 ts
+const s2 = stallSentenceOf({ label: '小肥鱼', port: 3082, since: T0, at: T0 + 13 * 3600 * 1000 })
+check('带写于时刻', /写于 \d{2}:\d{2}/.test(s2), s2)
+check('带失效方式', /只在写后 10 分钟内有效/.test(s2), s2)
+check('since 与 at 各是各的', !s2.includes('自 ' + hhmmOf(T0 + 13 * 3600 * 1000) + ' 起'), s2)
+check('可以指定有效期', /写后 3 分钟/.test(stallSentenceOf({ label: 'x', port: '', since: T0, at: T0, ttlMin: 3 })), 'ttlMin')
 
 // 3) 源码接线
 const here = dirname(fileURLToPath(import.meta.url))

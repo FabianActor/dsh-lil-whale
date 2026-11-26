@@ -11,6 +11,7 @@
 // 这个文件只做判断：读文件、发消息、写日志都在 index.js。
 
 import { parseHm } from './sleep-core.js'
+import { createHash } from "node:crypto"
 
 /** 一次最多认几条条件（和 plan 的 3 条一样，多了一屏看不完）。 */
 export const INTENT_MAX = 5
@@ -101,6 +102,11 @@ export function normalizeIntent(it, notes = [], opts = {}) {
     path: it?.path ? String(it.path) : null,
     match: it?.match ? String(it.match) : null,
     regex: it?.regex === true,
+    // 只想被"语义变了"叫醒时，把每写一次都变的字段列进来（如名册的 updatedAt）。
+    ignore: (Array.isArray(it?.ignore) ? it.ignore : [])
+      .filter((k) => typeof k === "string" && k.trim())
+      .map((k) => k.trim())
+      .slice(0, 20),
   }
   if (kind === 'pending') {
     if (!spec.from && !it?.anyFrom) {
@@ -312,19 +318,115 @@ export function probeTextAppears({ content, offset = 0, spec, atMs = null }) {
  * @param {{size:number, mtimeMs:number, hash:string}} current
  * @param {{size:number, mtimeMs:number, hash:string}|null} baseline
  */
+/**
+ * 语义指纹：能当 JSON 读的文件，按"键排序后的规范形式"算指纹，顺序/缩进/空格的差别不算内容变了。
+ * `ignore` 里的顶层键先摘掉再算 —— 像名册的 `updatedAt` 这种每写一次都变的字段，
+ * 盯着"集合有没有变"的人不该被它叫醒（小肥鱼 2026-11-25 群第 3464 行）。
+ * 读不成 JSON 的仍按原始字节算（kind:"raw"）。
+ */
+export function semanticHashOf({ text, ignore = [] } = {}) {
+  const src = String(text ?? "")
+  let parsed
+  try {
+    parsed = JSON.parse(src)
+  } catch {
+    return { hash: sha12(src), kind: "raw" }
+  }
+  const drop = new Set((Array.isArray(ignore) ? ignore : []).filter((k) => typeof k === "string" && k))
+  const canon = (v) => {
+    if (Array.isArray(v)) return v.map(canon)
+    if (v && typeof v === "object") {
+      const out = {}
+      for (const k of Object.keys(v).sort()) {
+        if (drop.has(k)) continue
+        out[k] = canon(v[k])
+      }
+      return out
+    }
+    return v
+  }
+  return { hash: "json:" + sha12(JSON.stringify(canon(parsed))), kind: "json" }
+}
+
+function sha12(text) {
+  return createHash("sha256").update(text, "utf8").digest("hex").slice(0, 12)
+}
+
 export function probeFileChanged({ current, baseline }) {
   if (!baseline || !Number.isFinite(Number(baseline.size))) {
     return { hit: false, baseline: current }
   }
-  const changed =
-    Number(current.size) !== Number(baseline.size) ||
-    Number(current.mtimeMs) !== Number(baseline.mtimeMs) ||
-    String(current.hash) !== String(baseline.hash)
-  if (!changed) return { hit: false, baseline }
+  const sizeChanged = Number(current.size) !== Number(baseline.size)
+  const hashChanged = String(current.hash) !== String(baseline.hash)
+  const mtimeChanged = Number(current.mtimeMs) !== Number(baseline.mtimeMs)
+  // 指纹换了算法（旧基线是原始字节，新的是规范 JSON）：这是"尺子换了"，不是"内容变了"。
+  if (String(baseline.kind || "raw") !== String(current.kind || "raw")) {
+    return {
+      hit: false,
+      touchOnly: true,
+      sig: "format",
+      atMs: Number(current.mtimeMs),
+      evidence: `换了指纹算法（${String(baseline.kind || "raw")}→${String(current.kind || "raw")}），这次只重取基线`,
+      baseline: current,
+    }
+  }
+  if (!sizeChanged && !hashChanged && !mtimeChanged) return { hit: false, baseline }
+  // JSON 按语义指纹比：重排/缩进/被重写但内容一样，不算条件成立（小肥鱼 2026-11-25 群第 3464 行：
+  // "我盯的是文件变，我关心的是集合变"）。
+  if (String(current.kind || "raw") === "json") {
+    const allChanged = baseline.hashAll !== undefined && current.hashAll !== undefined
+      && String(current.hashAll) !== String(baseline.hashAll)
+    if (!hashChanged) {
+      // r486：只有被 ignore 的字段变了，给一个自己的名字——它和"有人只碰了 mtime"在账上不该同形。
+      if (allChanged) {
+        return {
+          hit: false,
+          touchOnly: true,
+          sig: "ignored",
+          atMs: Number(current.mtimeMs),
+          evidence: `只有被 ignore 的字段变了（语义指纹没变：${String(current.hash)}）`,
+          baseline: current,
+        }
+      }
+      // 三个不同的原因，各给一个名字：只碰了时间 / 被重写但语义没变 / 换了尺子（上面那条）。
+      // 名字糊在一起时，读账的人分不出"没人动它"和"动了但内容一样"（r481：第一次打样就撞上了）。
+      const why = sizeChanged ? "rewrite" : "mtime"
+      return {
+        hit: false,
+        touchOnly: true,
+        sig: why,
+        atMs: Number(current.mtimeMs),
+        evidence: sizeChanged ? `文件被重写了，语义没变（${Number(current.size)} B，json 指纹 ${String(current.hash).slice(0, 17)}）` : `只碰了 mtime，语义没变（${Number(current.size)} B，json 指纹 ${String(current.hash).slice(0, 17)}）`,
+        baseline: current,
+      }
+    }
+    return {
+      hit: true,
+      sig: "json",
+      atMs: Number(current.mtimeMs),
+      evidence: `语义变了：json 指纹 ${String(baseline.hash).slice(0, 17)}→${String(current.hash).slice(0, 17)}（${Number(current.size)} B，最后写于 ${new Date(Number(current.mtimeMs)).toISOString()}）`,
+      baseline: current,
+    }
+  }
+  if (!sizeChanged && !hashChanged) {
+    return {
+      hit: false,
+      touchOnly: true,
+      sig: "mtime",
+      atMs: Number(current.mtimeMs),
+      evidence: `只碰了 mtime，内容没变（${Number(current.size)} B，hash ${String(current.hash).slice(0, 8)}）`,
+      baseline: current,
+    }
+  }
+  const parts = []
+  if (sizeChanged) parts.push(`size ${Number(baseline.size)}→${Number(current.size)}`)
+  if (hashChanged) parts.push(`hash ${String(baseline.hash).slice(0, 8)}→${String(current.hash).slice(0, 8)}`)
+  const sig = [sizeChanged ? "size" : "", hashChanged ? "hash" : "", mtimeChanged ? "mtime" : ""].filter(Boolean).join("+")
   return {
     hit: true,
+    sig,
     atMs: Number(current.mtimeMs),
-    evidence: `文件变了：${current.size} B，最后写于 ${new Date(current.mtimeMs).toISOString()}`,
+    evidence: `内容变了：${parts.join("，")}（${Number(current.size)} B，最后写于 ${new Date(Number(current.mtimeMs)).toISOString()}）`,
     baseline: current,
   }
 }

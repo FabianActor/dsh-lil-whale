@@ -33,7 +33,8 @@ function run(dir, extra = [], env = {}) {
   })
 }
 function rotatedNames(dir) {
-  return readdirSync(dir).filter((n) => /\.\d{8}-\d{6}(?:-\d+)?\.log$/.test(n))
+  // 新旧两种形状都算（r469 之后以 `<base>.log.<stamp>` 为准，旧文件仍留在盘上）
+  return readdirSync(dir).filter((n) => /\.log\.\d{8}-\d{6}(?:-\d+)?$/.test(n) || /\.\d{8}-\d{6}(?:-\d+)?\.log$/.test(n))
 }
 function bigFile(dir, name, bytes = 1100 * 1024) {
   writeFileSync(join(dir, name), 'x'.repeat(bytes), 'utf8')
@@ -95,7 +96,7 @@ try {
   const ledger = readLedger(dir)
   ok('写了 rotate.log', ledger.length > 0)
   ok('有汇总行 note=log-rotate rotated=', /note=log-rotate rotated=\d+ dropped=\d+/.test(ledger))
-  ok('有轮转行 from/to/bytes/hash', /note=log-rotate-rotated from=.*bytes=\d+ to=.*\.log hash=[0-9a-f]{12}$/m.test(ledger))
+  ok('有轮转行 from/to/bytes/hash', /note=log-rotate-rotated from=.*bytes=\d+ to=\S+\.log\.\d{8}-\d{6}(-\d+)? hash=[0-9a-f]{12}$/m.test(ledger))
   ok('有丢弃行 file/bytes/hash', /note=log-rotate-dropped file=.*bytes=\d+ hash=([0-9a-f]{12}|unknown)/.test(ledger))
 
   ok('轮转行带 12 位内容指纹', /note=log-rotate-rotated .* hash=[0-9a-f]{12}/.test(ledger))

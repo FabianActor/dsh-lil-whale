@@ -54,7 +54,7 @@ ok('老行缺 field-since，指纹不等于当前签名', signatureOfLine(line(o
 ok('非 log-format 行指纹为空', signatureOfLine('2026-11-18 08:18:00 | woke | trigger=channel to=fish') === '')
 ok('字段顺序无关（fields 在前也能认）', signatureOfLine(line(`fields=deny,note,reason ${LOG_FORMAT_SIG.replace(' fields=deny,note,reason', '')} since=x pid=1`)) === SIG)
 ok('常量重排后仍算同一签名（顺序不进指纹）', (() => {
-  const reordered = `field-since=codeFp:r255,member:r292,note:r293 changed=skip,wake-skip,deliver fmt=3 kinds=${LOG_KINDS.join(',')} fields=deny,note,reason`
+  const reordered = `field-since=codeFp:r255,member:r292,note:r293,cfgProvider:r491,cfgModel:r491 changed=skip,wake-skip,deliver fmt=3 kinds=${LOG_KINDS.join(',')} fields=deny,note,reason`
   return signatureOfConstant(reordered) === SIG
 })())
 ok('值里出现字面量 fields= 不会把指纹切错', signatureOfLine(line(`${OLD_SIG} since=x pid=1 to=note=fmt=3,fields=evil`)) === signatureOfConstant(OLD_SIG))
@@ -91,7 +91,7 @@ const changedSince = [...mixed, line(LOG_FORMAT_SIG.replace('field-since=codeFp:
 ok('field-since 变了要写', shouldWriteLogFormat({ lines: changedSince }).write === true)
 const changedFmt = [...mixed, line(LOG_FORMAT_SIG.replace('fmt=3', 'fmt=4') + ' since=x pid=3')]
 ok('fmt 变了要写', shouldWriteLogFormat({ lines: changedFmt }).write === true)
-const reorderedTail = [...mixed, line(`fields=deny,note,reason fmt=3 changed=skip,wake-skip,deliver field-since=codeFp:r255,member:r292,note:r293 kinds=${LOG_KINDS.join(',')} since=x pid=3`)]
+const reorderedTail = [...mixed, line(`fields=deny,note,reason fmt=3 changed=skip,wake-skip,deliver field-since=codeFp:r255,member:r292,note:r293,cfgProvider:r491,cfgModel:r491 kinds=${LOG_KINDS.join(',')} since=x pid=3`)]
 ok('只是 key 顺序不同，不写（r296）', shouldWriteLogFormat({ lines: reorderedTail }).write === false)
 
 // ── 4. 拼出来的行 ────────────────────────────────────────

@@ -7,6 +7,7 @@
 // 跑法：node scripts/test-intent.mjs
 
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import {
   parseIntents,
   pruneIntentState,
@@ -20,6 +21,7 @@ import {
   probePending,
   probeTextAppears,
   probeFileChanged,
+  semanticHashOf,
   INTENT_MAX,
   INTENT_GLOBAL_PER_DAY,
 } from '../plugin/dsh-lil-whale-group/lib/intent-core.js'
@@ -228,6 +230,30 @@ t('file-changed：第一次只记基线不触发；变了才触发；没变不�
   assert.equal(probeFileChanged({ current: a, baseline: a }).hit, false)
 })
 
+t('file-changed：只碰了 mtime 不算「变了」，内容变才触发（fi-0020）', () => {
+  const a = { size: 3117, mtimeMs: 1000, hash: 'ca31171c' }
+  // 只碰 mtime：hit=false，但要把原因说出来，不能和「没变」同形
+  const touch = probeFileChanged({ current: { size: 3117, mtimeMs: 5000, hash: 'ca31171c' }, baseline: a })
+  assert.equal(touch.hit, false)
+  assert.equal(touch.touchOnly, true)
+  assert.equal(touch.sig, 'mtime')
+  assert.match(touch.evidence, /只碰了 mtime/)
+  assert.match(touch.evidence, /ca31171c/)
+  // 只改 size：内容算变了，证据里写 size 前后值
+  const sized = probeFileChanged({ current: { size: 3200, mtimeMs: 1000, hash: 'ca31171c' }, baseline: a })
+  assert.equal(sized.hit, true)
+  assert.equal(sized.sig, 'size')
+  assert.match(sized.evidence, /size 3117→3200/)
+  // 只改 hash：证据里写 hash 前后值
+  const hashed = probeFileChanged({ current: { size: 3117, mtimeMs: 1000, hash: '9f2e0001' }, baseline: a })
+  assert.equal(hashed.hit, true)
+  assert.equal(hashed.sig, 'hash')
+  assert.match(hashed.evidence, /hash ca31171c→9f2e0001/)
+  // 三者都变：sig 三格都要在，不许合并成一格
+  const all = probeFileChanged({ current: { size: 1, mtimeMs: 8000, hash: 'zz' }, baseline: a })
+  assert.equal(all.sig, 'size+hash+mtime')
+})
+
 t('at= 记的是"事情发生的那一刻"：file-changed 用 mtime', () => {
   const a = { size: 10, mtimeMs: 1000, hash: 'h1' }
   const changed = probeFileChanged({ current: { size: 11, mtimeMs: 2000, hash: 'h2' }, baseline: a })
@@ -288,8 +314,113 @@ t('parseIntents：items: [] 是合法的空表，不是坏形状（她真的删�
   assert.equal(r.list.length, 0)
 })
 
+// 源码级：条件回落后必须把"第一次成立"清掉，否则它的时间戳会活到下一轮，
+// 下一次真的成立时被 ageMs 判成 intent-stale（fi-0020 验收时撞到的那一格）。
+t('intentTick：条件不再成立时清掉 firstTrueAt（不许旧时间戳活到下一轮）', () => {
+  const src = readFileSync(new URL('../plugin/dsh-lil-whale-group/lib/index.js', import.meta.url), 'utf8')
+  const notHit = src.indexOf('if (!probe.hit) {')
+  const setFirst = src.indexOf('if (!s.firstTrueAt) {')
+  assert.ok(notHit > 0, '找不到 not-hit 分支')
+  assert.ok(setFirst > notHit, 'not-hit 分支必须在设 firstTrueAt 之前')
+  const between = src.slice(notHit, setFirst)
+  assert.ok(/delete s\.firstTrueAt/.test(between), 'not-hit 分支里没有清 firstTrueAt')
+})
+t('semanticHashOf：重排和缩进不算内容变了', () => {
+  const a = semanticHashOf({ text: '{"b":2,"a":1}' })
+  const b = semanticHashOf({ text: '{\n  "a": 1,\n  "b": 2\n}' })
+  assert.equal(a.hash, b.hash)
+  assert.equal(a.kind, 'json')
+})
+
+t('semanticHashOf：ignore 摘掉每次都会变的字段（名册的 updatedAt）', () => {
+  const a = semanticHashOf({ text: '{"updatedAt":"x","members":{"lee":1}}', ignore: ['updatedAt'] })
+  const b = semanticHashOf({ text: '{"updatedAt":"y","members":{"lee":1}}', ignore: ['updatedAt'] })
+  const c = semanticHashOf({ text: '{"updatedAt":"y","members":{"lee":2}}', ignore: ['updatedAt'] })
+  assert.equal(a.hash, b.hash)
+  assert.notEqual(a.hash, c.hash)
+})
+
+t('semanticHashOf：读不成 JSON 的走原始字节（kind=raw）', () => {
+  const r = semanticHashOf({ text: 'hello' })
+  assert.equal(r.kind, 'raw')
+  assert.equal(r.hash.length, 12)
+})
+
+t('probeFileChanged：JSON 被重写但语义没变 ⇒ 不算命中（报 rewrite）', () => {
+  const baseline = { size: 20, mtimeMs: 1, hash: 'json:abc', kind: 'json' }
+  const current = { size: 34, mtimeMs: 2, hash: 'json:abc', kind: 'json' }
+  const r = probeFileChanged({ current, baseline })
+  assert.equal(r.hit, false)
+  assert.equal(r.touchOnly, true)
+  assert.equal(r.sig, 'rewrite')
+})
+
+t('probeFileChanged：JSON 语义变了 ⇒ 命中，sig=json', () => {
+  const baseline = { size: 20, mtimeMs: 1, hash: 'json:abc', kind: 'json' }
+  const current = { size: 21, mtimeMs: 2, hash: 'json:def', kind: 'json' }
+  const r = probeFileChanged({ current, baseline })
+  assert.equal(r.hit, true)
+  assert.equal(r.sig, 'json')
+})
+
+t('probeFileChanged：指纹算法换了（raw→json）⇒ 只重取基线，不报内容变了', () => {
+  const baseline = { size: 20, mtimeMs: 1, hash: 'abcdefabcdef' }
+  const current = { size: 20, mtimeMs: 1, hash: 'json:abcdefabcdef', kind: 'json' }
+  const r = probeFileChanged({ current, baseline })
+  assert.equal(r.hit, false)
+  assert.equal(r.sig, 'format')
+})
+
+t('normalizeIntent：ignore 只收字符串、去空、最多 20 个', () => {
+  const r = normalizeIntent({ id: 'x', why: 'w', kind: 'file-changed', path: 'pool/x.json', ignore: [' a ', '', 3, 'b'] })
+  assert.deepEqual(r.ignore, ['a', 'b'])
+})
+t('probeFileChanged：JSON 只碰 mtime / 只改格式 / 语义变了，三个名字各不相同', () => {
+  const base = { size: 20, mtimeMs: 1, hash: 'json:abc', kind: 'json' }
+  const touched = probeFileChanged({ current: { ...base, mtimeMs: 2 }, baseline: base })
+  const rewritten = probeFileChanged({ current: { ...base, size: 40, mtimeMs: 2 }, baseline: base })
+  const changed = probeFileChanged({ current: { ...base, size: 20, mtimeMs: 2, hash: 'json:def' }, baseline: base })
+  assert.equal(touched.sig, 'mtime')
+  assert.equal(rewritten.sig, 'rewrite')
+  assert.equal(changed.sig, 'json')
+})
+t('源码：每次触发带 seq=（同样的事件不会被去重窗折成一次）', () => {
+  const src = readFileSync(new URL('../plugin/dsh-lil-whale-group/lib/index.js', import.meta.url), 'utf8')
+  assert.ok(/const seq = Number\(s\.seq \|\| 0\) \+ 1/.test(src), '没有 seq 计数器')
+  assert.ok(/note=intent-touch-only id=\$\{spec\.id\} sig=\$\{r\.sig \?\? 'mtime'\} seq=\$\{seq\}/.test(src), 'touch-only 行没带 seq')
+  assert.ok(/note=intent-hit id=\$\{spec\.id\} sig=\$\{r\.sig\} seq=\$\{seq\}/.test(src), 'hit 行没带 seq')
+  assert.ok(/patch: \{ baseline: r\.baseline, seq \}/.test(src), 'seq 没写回状态（下次还是 1）')
+  assert.ok(/const changed = r\.hit \|\| r\.touchOnly[\s\S]{0,160}?const seq = Number\(s\.seq/.test(src), '没变的那拍不该涨 seq（r485）')
+})
+t('probeFileChanged：只有被 ignore 的字段变了 ⇒ sig=ignored', () => {
+  const base = { size: 20, mtimeMs: 1, hash: 'json:abc', hashAll: 'json:raw1', kind: 'json' }
+  const cur = { size: 20, mtimeMs: 2, hash: 'json:abc', hashAll: 'json:raw2', kind: 'json' }
+  const r = probeFileChanged({ current: cur, baseline: base })
+  assert.equal(r.hit, false)
+  assert.equal(r.sig, 'ignored')
+})
+t('probeFileChanged：整份重排（全量指纹也没变，只大小和 mtime 变）仍是 rewrite', () => {
+  const base = { size: 20, mtimeMs: 1, hash: 'json:abc', hashAll: 'json:raw1', kind: 'json' }
+  const cur = { size: 40, mtimeMs: 2, hash: 'json:abc', hashAll: 'json:raw1', kind: 'json' }
+  const r = probeFileChanged({ current: cur, baseline: base })
+  assert.equal(r.sig, 'rewrite')
+})
+// r488：失败打印层单独成函数，并给它灌一条假失败——
+// 只在真红时才跑的代码，平时不会被跑到（r485 就是这样把循环改断的）。
+function reportFailures(list) {
+  for (const f of list) console.log(`  ✗ ${f}`)
+}
+t('失败打印层：灌一条假失败，字要出得来', () => {
+  const out = []
+  const orig = console.log
+  console.log = (...a) => out.push(a.join(' '))
+  try { reportFailures(['假失败 1']) } finally { console.log = orig }
+  assert.ok(out.some((x) => x.includes('假失败 1')), '失败打印层没出字')
+  assert.ok(out[0].startsWith('  ✗ '), '失败行没有缩进记号')
+})
+
 console.log(`合计：${pass + fail} 项，PASS ${pass}，FAIL ${fail}`)
 if (fail > 0) {
-  for (const f of failures) console.log(`  ✗ ${f}`)
+  reportFailures(failures)
   process.exit(1)
 }
