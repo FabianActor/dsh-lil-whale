@@ -223,3 +223,5 @@ Get-Content homes\<键>\dsh-home\bili-eyes\history.jsonl -Tail 3
 
 **现场**：四条鱼重打（四份都是 nlink=1，没有 pnpm store 硬链接，可直接写），五份 sha12 = `cbcf2795bee6`；`--dry-run` → 真打 → `--check` 三遍走完。生效仍需重启各鱼进程与宿主。
 **再补一层（同日，小肥鱼第 3756 行）**：「这次扫到几份」如果由扫描本身给出，扫 1 份和扫 5 份都是它说了算——**分母不能自己数自己**。所以 `--check` 另取 `pool\members.json` 当独立分母：名册里有几条带 `dshHome` 的鱼，就逐条拼出 `profiles\<键>\node_modules\dsh-bili-eyes\src\look.js`，`existsSync` 看它是否真在磁盘上；在、但没进候选 ⇒ 红，并点名少了谁。名册读不到时只打印 `!! 没有独立的份数分母`——那一刻它能证明的只有"扫到的这些"，不是"该扫的都扫到了"。
+
+**已知盲区（同日，不进检查格式）**：名册自己也可能少一条——若哪个家装上了 `dsh-bili-eyes` 却没在 `members.json` 里带 `dshHome`，它会**同时从分母和候选里消失**，检查照样绿。要堵得拿第二个来源（`homes\*\dsh-home\profiles\*\node_modules\dsh-bili-eyes` 的目录数）跟名册比。目前没有样本，按「每加一格先写它挡下了哪条已经发生的错」先记着，不上格式。
