@@ -15,6 +15,26 @@
   },
   "entries": [
     {
+      "version": "1.14.1",
+      "at": "2026-11-27",
+      "summary": "修 issue #10：按升级单跑 `apply-neutral-preset.mjs` 时不再删掉设置页写进 patch 的模型与界面设置；开着换段的鱼会自动补 `--default`。脚本类修复，不重启也能生效。",
+      "requires": [
+        "package"
+      ],
+      "commands": [
+        "git pull",
+        "pwsh -File app\\scripts\\fish.ps1 upgrade-check",
+        "pwsh -File app\\scripts\\doctor.ps1"
+      ],
+      "verify": [
+        "对任意一条鱼跑 `node scripts\\apply-neutral-preset.mjs --patch \"<她的 DSH_HOME>\\profiles\\<鱼键>\\cordis.patch.yml\" --profile <鱼键> --home \"<她的 DSH_HOME>\" --dry-run`：输出里有「保留（不是脚本写的）：…」，设置页写进去的那几段仍在大括号里。",
+        "跑 `node scripts\\check-neutral-preset.mjs`：四条鱼是 ok；开着换段的鱼若默认 preset 不是 neutral，会被点名 `default-not-neutral`。",
+        "doctor 全过（允许原来那两条钥匙 WARN）。"
+      ],
+      "breaking": [],
+      "note": "脚本类修复，不动插件运行态，也不动数据：不用重启进程，下次跑升级单里的 seed-profile 命令时就是新行为。已经因为 issue #10 丢掉设置段的人，从脚本自己留的备份（`cordis.patch.yml.bak-<时间>`）把段补回标记行之前即可；新版脚本再跑不会动它们。"
+    },
+    {
       "version": "1.14.0",
       "at": "2026-11-27",
       "summary": "面板：换段能关、也能在设置页改默认；每条鱼的头像与三态开关搬到鱼塘卡片；设置页空白、巡守头像点不开已修。换段：新会话落回「家」，账上写清「再等等」与被预算挤掉的轮数，搬走的旧段不再被认回同一个人，neutral preset 更新（换段不再少工具）。闹钟递话带滞后读数，boot 行有运行态路由读数。",
