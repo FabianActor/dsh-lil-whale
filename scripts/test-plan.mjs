@@ -18,6 +18,7 @@ import {
   planFileOf,
   planDue,
   planDeliveryText,
+  planDeliveryPublicText,
   parseWakeCounts,
   sumWakesToday,
 } from '../plugin/dsh-lil-whale-group/lib/plan-core.js'
@@ -110,6 +111,16 @@ try {
   const text = planDeliveryText({ key: 'morning', tag: 'plan=morning', itemWhy: '读账', by: 'self' })
   check('自执行的闹钟写"自己的闹钟"', text.startsWith('自己的闹钟'), true)
   check('巡守递话写"巡守递话"', planDeliveryText({ key: 'm', tag: 't', itemWhy: '', by: 'watch' }).startsWith('巡守递话'), true)
+
+  // ---- 滞后要念进句子（2026-11-27 LeeaCP：账上 lag=332s，递到面前只写"到点了"）----
+  const late = planDeliveryText({ key: 'morning', tag: 'plan=morning at=08:00', itemWhy: '', by: 'self', lagSec: 332 })
+  check('晚 5 分 32 秒写进句子', late.includes('晚了 5 分 32 秒'), true)
+  check('机器字段 lag=Ns 也在同一句', late.includes('lag=332s'), true)
+  check('一分钟以内不念', planDeliveryText({ key: 'm', tag: 't', itemWhy: '', by: 'self', lagSec: 45 }).includes('晚了'), false)
+  check('刚好一分钟开始念', planDeliveryText({ key: 'm', tag: 't', itemWhy: '', by: 'self', lagSec: 60 }).includes('晚了 1 分（lag=60s）'), true)
+  check('半小时写成 30 分', planDeliveryText({ key: 'm', tag: 't', itemWhy: '', by: 'self', lagSec: 1800 }).includes('晚了 30 分（lag=1800s）'), true)
+  check('lag 读不到就不念', planDeliveryText({ key: 'm', tag: 't', itemWhy: '', by: 'self', lagSec: null }).includes('晚了'), false)
+  check('公共记录那版也念', planDeliveryPublicText({ key: 'm', tag: 't', by: 'self', lagSec: 90 }).includes('晚了 1 分 30 秒（lag=90s）'), true)
 } finally {
   rmSync(root, { recursive: true, force: true })
 }

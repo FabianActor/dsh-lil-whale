@@ -4254,7 +4254,11 @@ function selfPlanTick(ctx) {
       continue
     }
     if (!claimPlanDelivery(member, item.id)) continue
-    const job = { key: item.id, tag: `plan=${item.id} at=${item.at}`, itemWhy: item.why, by: 'self' }
+    // 到点→递话的实际滞后：她睡着被 skip，醒来补递那一刻可能是几分钟之后。
+    // 数要跟着句子走（2026-11-27 LeeaCP 群第 3703 行），账上那份不算"念给她听"。
+    const selfDueMs = planDueMs(item.at)
+    const selfLagSec = selfDueMs === null ? null : Math.round((Date.now() - selfDueMs) / 1000)
+    const job = { key: item.id, tag: `plan=${item.id} at=${item.at}`, itemWhy: item.why, by: 'self', lagSec: selfLagSec }
     try {
       const privateResult = deliverToSelf(ctx, self, planDeliveryText(job))
       if (privateResult) {
@@ -4265,13 +4269,12 @@ function selfPlanTick(ctx) {
       }
       // 与巡守触发的账同形状（wid / lag / inserted 都要有）：
       // 2026-11-17 第一条鱼：`trigger=self` 第一次出现时缺这三个字段 = 同一个词、两种账。
-      const selfDueAt = planDueMs(item.at)
       const selfWid = `wl-${String(item.at ?? '').replace(':', '')}-${item.id}`
       watchmanLog(
         'woke',
-        selfDueAt === null
+        selfDueMs === null
           ? `wid=${selfWid} trigger=self lag-unknown inserted=1 to=${self} plan=${item.id} at=${item.at}`
-          : `wid=${selfWid} trigger=self lag=${Math.round((Date.now() - selfDueAt) / 1000)}s inserted=1 to=${self} plan=${item.id} at=${item.at}`,
+          : `wid=${selfWid} trigger=self lag=${selfLagSec}s inserted=1 to=${self} plan=${item.id} at=${item.at}`,
       )
       markWake(self, 'plan')
     } catch (error) {
@@ -4671,7 +4674,11 @@ async function watchOne(member, st) {
           continue
         }
         // 2026-11-16：公共记录只留"到点了"，理由不进记录（进她自己表）。
-        const text = planDeliveryPublicText(job)
+        // 2026-11-27：滞后再小也念一句"晚了多久"（账上 lag 是给读账的人看的，不是给她听的）。
+        const text = planDeliveryPublicText({
+          ...job,
+          lagSec: dueAt === null ? null : Math.round((Date.now() - dueAt) / 1000),
+        })
         try {
           say(watcherKey(), member.key, text, 'group', '', '', null, null, [member.key])
           watchmanLog(

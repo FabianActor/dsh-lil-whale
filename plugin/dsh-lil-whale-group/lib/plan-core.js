@@ -73,10 +73,30 @@ export function planDue({ member, st, now, graceMin = 1, homeRoot, maxItems = 3,
   return out
 }
 
-/** 闹钟递的那句话。开着的窗直接用；刚被推开的窗也递进去，等她起来自己读到。 */
+/**
+ * 闹钟递的那句话。开着的窗直接用；刚被推开的窗也递进去，等她起来自己读到。
+ *
+ * 2026-11-27 LeeaCP（群第 3703 行）：计划 08:00 到点撞上睡着、被 skip；她 08:05:32 醒来
+ * 才补递，账上 lag=332s，可递到她面前那句只写"到点了"——晚 5 分 32 秒这个数没跟着句子走。
+ * 如果计划内容跟时间有关（"早上先逛再决定写什么"），晚 5 分钟和晚半小时该不该照做，是她的判断；
+ * 数不在句子里，她就没有可判断的东西。所以这里把滞后念进句子，只念"晚了一分钟以上"的：
+ * 一分钟以内是 tick 的抖动，不是"晚"。
+ */
+const LAG_NOTE_MIN_SEC = 60
+
+export function lagNoteOf(job) {
+  const sec = Number(job?.lagSec)
+  if (!Number.isFinite(sec) || sec < LAG_NOTE_MIN_SEC) return ''
+  const whole = Math.round(sec)
+  const min = Math.floor(whole / 60)
+  const rest = whole % 60
+  const human = min > 0 ? `${min} 分${rest > 0 ? ` ${rest} 秒` : ''}` : `${whole} 秒`
+  return `，晚了 ${human}（lag=${whole}s）`
+}
+
 export function planDeliveryText(job) {
   const who = job.by === 'self' ? '自己的闹钟' : '巡守递话'
-  return `${who}：\`${job.key}\` 到点了（${job.tag}）。\n\n表上写的理由：${job.itemWhy || '（没写）'}\n\n做着看不做也行，你定。这条只递一次。`
+  return `${who}：\`${job.key}\` 到点了（${job.tag}${lagNoteOf(job)}）。\n\n表上写的理由：${job.itemWhy || '（没写）'}\n\n做着看不做也行，你定。这条只递一次。`
 }
 
 /**
@@ -87,7 +107,7 @@ export function planDeliveryText(job) {
  */
 export function planDeliveryPublicText(job) {
   const who = job.by === 'self' ? '自己的闹钟' : '巡守递话'
-  return `${who}：\`${job.key}\` 到点了（${job.tag}）。理由只写在你自己的表里，没有放进记录。做着不做也行，你定。这条只递一次。`
+  return `${who}：\`${job.key}\` 到点了（${job.tag}${lagNoteOf(job)}）。理由只写在你自己的表里，没有放进记录。做着不做也行，你定。这条只递一次。`
 }
 
 /**
