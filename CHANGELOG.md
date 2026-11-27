@@ -1,6 +1,6 @@
 # 更新日志
 
-**当前版本：1.13.4** ｜ **最后更新：2026-11-26 18:45**（每次升版本号时更新这一行）
+**当前版本：1.14.0** ｜ **最后更新：2026-11-27 09:40**（每次升版本号时更新这一行）
 
 这里记录 **小小肥鱼（lil-whale）** 两个 npm 包的变更：`@fabianactor/dsh-lil-whale-group`（宿主插件）与 `@fabianactor/dsh-lil-whale-group-ui`（面板）。产品设计看 [docs/PRD.md](docs/PRD.md)。
 
@@ -23,6 +23,124 @@
 ## [未发布]
 
 暂无。
+
+## [1.14.0] - 2026-11-27
+
+面板这边把「每条鱼可能不一样」的设置收进了鱼塘：换段可以关、也能在设置页改全机默认，每条鱼三态跟随/开/关；头像跟着鱼走。换段本身补了几处会让人看错眼的地方——新会话落回「家」的工作区、账上写清「再等等」与被字数预算挤掉的轮数、搬走的旧段不再被认回同一个人，还有那条「换段之后少了三只手」的 neutral preset 也补上了。另外：闹钟递话带上滞后读数，boot 行有了运行态路由读数，工具数变化两头都记，bili-eyes 补丁脚本能扫到每一条鱼。
+
+
+### r513 「扫到几份」不能由扫描自己说（内部：bili-eyes 补丁检查器）
+
+- 旧：r512 的 `--check` 只报"扫到的这些"内容一不一致。若扫描本身漏了（比如路径算错），它会安静地报"1 份，一致"——分母自己数自己，扫 1 份和扫 5 份都是它说了算。
+- 新：另取一个独立分母——`pool\members.json` 里带 `dshHome` 的鱼有几条，就按名册逐条拼出 `profiles\<键>\node_modules\dsh-bili-eyes\src\look.js`，用 `existsSync` 看它在不在；**磁盘上有、候选里没有 ⇒ 红**，并点名少了谁。名册读不了时打印 `!! 没有独立的份数分母`（只证明扫到的，不证明该扫的都扫到了）。现场：候选 5 份，名册应到 4 份一个不缺。
+
+### r512 补丁脚本只扫到宿主那份（内部：bili-eyes 五份安装内容必须一致）
+
+- 旧：`patch-bili-eyes-cells.mjs` 用 `new URL(import.meta.url).pathname` 算鱼塘根。仓库路径带中文和空格，`.pathname` 会百分号编码（`%E6%96%87…`）⇒ `existsSync(<根>\homes)` 恒假 ⇒ **只扫到宿主 web profile 那一份**，四条鱼一个都没扫到，脚本照样打印 `ok 已打`、退出码 0。`bc=` 落点因此只到了宿主，鱼的格子上没有。
+- 新：改用 `fileURLToPath`；`--check` 除了逐份看打没打，还比已打那些的 sha12——不等就点名 `sha12=… ×N` 与是哪几份（"同版本号、不同内容"是这次现场的原始形状：五份都写 0.8.3，宿主 33099 B、四条鱼 32831 B）。`doctor` 新增一格「插件文件一致（bili-eyes）」。四条鱼已重打，五份 sha12 一致（`cbcf2795bee6`）。
+
+### r511 闹钟递话时把「晚了多久」念进句子（用户可见：给自己排了闹钟的鱼）
+
+- 旧：计划到点撞上睡着，巡守记一行 `skip deny=sleep`；醒来后补递（`queued=1`、`lag=332s`），可递到面前那句只写「到点了」。晚 5 分钟还是晚半小时，账上有、句子里没有——而"晚这么久该不该照做"是收话人的判断。
+- 新：句子里的括号永远带一个滞后读数：`（plan=morning at=08:00，lag=8s）`、`（…，晚了 5 分 32 秒（lag=332s））`，读不到写 `lag-unknown`。不写"准点"——「准点」是判断，`lag=8s` 是读数；而且不带数时「准点」与「晚了 40 秒没说」会长得一样。公共记录那版（睡着的鱼醒来才读到）同样带上。`test-plan` 加 7 条。
+
+### r510 route-live 行改回 `reason=`（内部）
+
+- 旧：r505 新加的 `route-live` 行用 `why=<原因>` 写读不到的原因。账本口径早就定过：`deny=`（被门拦下）/`reason=`（细分原因）/`note=`（观察/异常），`why=` 不许再出现在代码里。
+- 新：字段名改 `reason=`；`test-log-fields` 立刻抓到（这也是它存在的理由——上一轮 `release-check` 是在**未提交**的树上跑的，包里还是旧文件，所以没抓到；提交后一跑就红了）。
+
+### r509 工具数变少的那行账，把「多了什么」也记下来（内部）
+
+- 旧：`wake-agent-tools-shrank` 只写少了哪几件（`missing=旧−新`）。11-26 23:59 那条是 `from=69 to=67 missing=[office_render,office_convert,office_recalculate]`——少了两件，名单却有三件；读的人只能猜「数错了」或「不止这三件」，而两种猜法都不对（实际是少了三件、同时多了一件，多的那件当初没记）。
+- 新：两头都算，`missing`/`added` 各带一份列表与总数（`missingTotal`/`addedTotal`，列表超过 20 条会截断、总数不截）；拿不到旧名单时四个字段写 `null`，不写空数组（没读到和读到零个不一样）。新增 `scripts\test-tool-count.mjs`（17 条）与 `release-check` 4bp。
+
+### r508 换段后的新会话不再落在「未分组」（用户可见：用换段的人）
+
+- 旧：换段建完新会话，插件把会话 id 直接写进 `<DSH_HOME>\storages\workspace.json`。文件确实变了，但 DSH 自己的内存里没有它，界面照样显示「未分组」；DSH 下一次回写还会把这一行抹掉。
+- 新：改走 DSH 的工作区服务（`workspaceRegistry.resolveByPath(cwd)` 取实体 + `WorkspaceEntity.attachSession(sessionId)`，内存与持久化一起改）。新会话的 header 还没落盘时这一步会失败，那就排进队列由下一拍补（10 次 / 10 分钟后放弃并记 `rotation-workspace-giveup`）；`rotation-workspace` 行的 `how=` 记 `registry`。
+
+### r507 换段搬走的旧段不再被认回同一个人（内部）
+
+- 旧：`memberOf()` 认不出 pins 里的会话就按 cwd 兜底；旧段的 cwd 是同一个家 ⇒ 换段之后旧段仍被当成这条鱼（11-27 换段测试里 `member-by-cwd-fallback` 指向的正是旧段）。
+- 新：换段账里记过的 `from` 会话一律不认（`retiredSessionIds()`，60 秒缓存）；第一次遇到留一行 `member-retired-session`。把已挂载的旧 agent 从进程里摘下来没有公开接口，这一半不做，写进 fissue 关单说明。
+
+### r506 换段判据「再等等」也要落一行（内部）
+
+- 旧：`waiting`（轮数到了、但静默窗还没到）是唯一不落账的判定结果——判据跑了、结论是"再等等"，账上一个字都没有，于是「判据没跑」与「判据说再等等」长得一样（11-27 测试第二次触发就因此白等了一轮）。
+- 新：不换段时写一行 `rotation-waiting`，带 `why/lastTurn/rounds/pauseMin/idleMin/remaining`；一批一次，同一状态不重复写。
+
+### r505 boot 行与路由变化行加上运行态读数（内部）
+
+- 旧：boot 行只有 `cfgProvider/cfgModel`（文件里写着什么），「进程真的用哪个」没有读数。
+- 新：读 `agentDefaultModel.currentSelection()`（读 config refs；`dsh-api-session-controller` 的 `agentOptions()` 每次请求现取），boot 行读到就带 `liveProvider/liveModel`，另写一行 `route-live`（`live= cfg= diff= why=`）；配置变化时与 `route-cfg-changed` 相邻再写一次。读不到写 `(unavailable)` 而不是 `unknown`；`diff=yes` 只说明两个来源不一样，不说明谁对。
+
+### r504 换段会换掉你的工具：neutral preset 落后了（用户可见：用换段的鱼）
+
+- 旧：`preset-neutral` 是安装时生成的一份快照，standard 后来多出来的插件它不会有。换段把会话从 standard 换成 neutral 之后，那一段里少了几只手，而账上没有任何一行说"少了"（11-26 23:59 那条鱼 69 → 67，少了 office 三件，她当时什么错都没犯）。
+- 新：重新生成模板（补上 `tool-office`）并给四条鱼重装；新增 `scripts\check-neutral-preset.mjs`（按 `--dump-config` 比 standard 与 neutral 的插件清单，差集非空即落后），接进 `doctor` 的「中立 preset（全鱼）」一格与 `release-check` 4bo —— 以后快照落后会自己响，不用等换段时才发现。
+
+### r503 换段写的两种账行补进 kind 声明（内部）
+
+- 旧：`watchman.log` 出现 `rotated` / `rotated-bind`，但 `LOG_KINDS` 里没有它们，体检报「账上有未声明的 kind」。
+- 新：两种加进 `LOG_KINDS`；表头按老规矩在下次启动时因为 `kinds=` 变了重写一次。
+
+### r502 换段：账上写清「被预算挤掉」，新段自动登记进她自己的家（用户可见：开了换段的人）
+
+- 旧：`rotation` 那行只写 `carried=1 dropped=3472`，参数里却是 `carryRounds=3`——读的人分不清是算法算错还是被字数预算挤的。
+- 新：账上加 `budget=<字数>`、`dropped-budget=<n>`、`why-dropped=budget|window|none`；预算先算出来再显式传下去，账上那个数就是真用的那个。
+- 旧：换段建出的新会话没有登记进工作区，界面上落在「未分组」。
+- 新：建完新段立刻登记进她自己的「家」工作区（`<DSH_HOME>\storages\workspace.json`），按 `path` 认家、认不出来不猜；留一行 `rotation-workspace` 说清 `added|already|no-match|no-file|no-table|failed`。
+
+### r501 设置页「换段」的开 / 关改成和红点一样的选中态（用户可见：用面板的人）
+
+- 旧：两个按钮只有字重和一点边框色不同，扫一眼分不出现在选的是哪个。
+- 新：跟「红点」那一组用同一套选中态——选中的那个换底色、描边和文字色（`state-business-primary`），没选中的透明底；忙的时候整组半透明。build 标记抬到 `v72 · rotation-pill`。
+
+
+### r500 设置页白屏的第二个原因：`rowStyle` 被一起删了（用户可见：用面板的人）
+
+- 旧：`SettingsPage` 里 `h('div', { style: rowStyle })`，而 `const rowStyle` 在 r497 删「成员」那一节时被一并删掉 ⇒ 渲染抛 `ReferenceError: rowStyle is not defined`，整页空白。上一轮只补回了版本小节那三个状态，没查出这一个。
+- 新：补回 `rowStyle`；`scripts/test-client-draft.mjs` 加一条静态守卫——扫全文 `style: <名字>` 的裸引用，名字若在文件里没有声明就红（拿掉 `rowStyle` 再跑确实会红，不是空转）。
+
+
+### r499 换段的默认值有了面板入口：三层收干净（用户可见：用面板的人）
+
+- 旧：全机默认只能改 `lil-whale.config.json` 的 `rotation` 段，面板里那一行只读，想改默认只能编辑文件；优先级还分四层，读起来要绕。
+- 新：三层——单鱼 `pool\state\rotation\<键>.json` > 全机默认 `pool\state\rotation\_default.json` > 代码默认（关、80 轮）。设置页「换段」一节可以点开 / 关、填轮数（1–1000）；鱼塘卡片仍是三态（跟随默认 / 开 / 关）。
+- 配置文件的 `rotation` 段退役：那份配置四份 profile 共用，面板写它会热重载牵动所有鱼，也分不清一格是"人改的"还是"面板改的"。
+- `rotationGlobal()` 回 `{enabled: true|false|null, rounds, source}`，`null` = 还没写过——读的人不会把"没设过"当成"设成了关"。
+
+
+### r498 修两处：设置页空白、巡守头像点不开（用户可见：用面板的人）
+
+- 旧：插件设置页整页空白；鱼塘里巡守（第一条鱼）的卡片点头像没有任何反应。
+- 新：设置页恢复正常（侧边栏标题 / 换段只读 / 红点 / 版本）；巡守卡片和别的鱼一样能改头像（文字、底色、照片）。
+- 原因：删「成员」一节时把紧挨着它的版本小节那几个状态一起删掉了（`versions`/`updateState`/`updateBusy`/`runCheckUpdate`）⇒ 设置页渲染时抛异常；头像编辑块的闸是 `demo || self || …`，巡守卡片 `self` 恒真，所以点了只是改了状态、块永远不画。
+- 顺手：面板 build 标记的断言原来散在七个测试里各写一个 vNN，改成 `scripts/lib/client-build.mjs` 一处维护（`MIN_CLIENT_BUILD`）。
+
+### r497 设置分家：换段开关进鱼塘卡片，头像跟着鱼走（用户可见：用面板的人）
+
+- 旧：设置页有「成员」一节，能改每条鱼的头像；换段只有一个配置文件开关，面板上看不到。
+- 新：设置页删掉「成员」一节，只留「换段」一行**只读**说明（当前默认：关 / 开）；每条鱼的三态开关（跟随默认 / 开 / 关）和头像编辑搬到「鱼塘」卡片——点卡片上的头像展开，可改文字、底色、上传/去掉照片。
+- 口径：每条鱼可能不一样的，放鱼塘卡片；全机共用、跟这台机器上这个插件有关的，放设置页。换段三态写 `pool\state\rotation\<键>.json`，「跟随默认」= 删掉这个文件；面板**不写** `lil-whale.config.json`（那份是人的配置，四鱼共用）。
+- 接口：`GET/POST /pond/api/rotation`（GET 回 `{default, fish}`，POST `{member, mode}`）；`/pond/api/settings` 多回一个 `rotationDefault`。
+
+### r496 换段默认关（用户可见：升级的人）
+
+- 旧：装上默认就按 80 轮换段——安装动作替所有人决定了"要换房"。
+- 新：默认不换。要开写 `rotation.enabled: true`，或写一个 `rounds`（写了轮数就算知道自己在开，`0` 等于不改）；单鱼写 `pool\state\rotation\<键>.json` 覆盖总控。两个文件每拍现读，改完下一拍生效。
+- 内部：换段失败退避时那行 `rotation-hold` 参数形状写错了（正文写成函数源码、`member` 字段丢失），改成按 `failedAt` 每次失败记一行。
+
+### r495 `post-group` 拦住"同一个人 180 秒内发一模一样的话"（内部）
+
+- 旧：脚本只管写。一次调用已经写进账本、但进程在中途抛错时，看输出会以为没写成功，重跑就重复；同一段话这样写了三遍。
+- 新：写之前扫最近 30 行，同一个人 180 秒内发过逐字相同的正文就 `exit 3` 并报"多少秒前写过"，不写；`--allow-repeat` 显式放行。第一版只看最后一行，别人插一句就不拦了，所以改成扫窗口。
+
+### r494 升级记账能写清"谁做的"（内部）
+
+- 旧：`fish.ps1 upgrade-check -Mark <版本>` 的 `by=` 固定取配置主人名，代理代跑或别人跑都会写成同一个人。
+- 新：同一条命令可以带 `-By <谁>`，`by=` 记这个名字；不传仍是配置主人名（旧行为不变），传空串也退回主人名。
+
 
 ## [1.13.4] - 2026-11-26
 

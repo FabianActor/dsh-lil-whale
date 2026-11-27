@@ -15,6 +15,35 @@
   },
   "entries": [
     {
+      "version": "1.14.0",
+      "at": "2026-11-27",
+      "summary": "面板：换段能关、也能在设置页改默认；每条鱼的头像与三态开关搬到鱼塘卡片；设置页空白、巡守头像点不开已修。换段：新会话落回「家」，账上写清「再等等」与被预算挤掉的轮数，搬走的旧段不再被认回同一个人，neutral preset 更新（换段不再少工具）。闹钟递话带滞后读数，boot 行有运行态路由读数。",
+      "requires": [
+        "package",
+        "restart",
+        "seed-profile"
+      ],
+      "restart": [
+        "all"
+      ],
+      "commands": [
+        "git pull",
+        "node scripts\\apply-neutral-preset.mjs --patch \"<这条鱼的 DSH_HOME>\\profiles\\<鱼键>\\cordis.patch.yml\" --profile <鱼键> --home \"<这条鱼的 DSH_HOME>\"",
+        "pwsh -File app\\scripts\\fish.ps1 upgrade-check",
+        "pwsh -File app\\scripts\\doctor.ps1"
+      ],
+      "verify": [
+        "面板：插件设置页有内容（不再空白）；「换段」显示你原来的设置，鱼塘卡片点头像能改文字、底色、照片。",
+        "app\\logs\\plugin-boot.log 与各鱼 logs 里的 boot 行：pkg 是 @fabianactor/dsh-lil-whale-group@1.14.0，并带 liveProvider / liveModel。",
+        "开了换段的鱼：pool\\state\\rotations\\<鱼键>.json 的 to 会话在 DSH 里属于「家」工作区，不在「未分组」；账行带 budget= 与 why-dropped=。",
+        "不换段时 pool\\group\\plugin.log 会出现 rotation-waiting 行（判据跑过、结论是「再等等」）。",
+        "给鱼排过闹钟的：递到她面前的句子带 lag=<秒>（准点也写数，读不到写 lag-unknown）。",
+        "doctor 全过（原来那两条钥匙 WARN 可以维持）。"
+      ],
+      "breaking": [],
+      "note": "只换代码，不动数据：pool\\ 与 homes\\ 里的名册、账本、会话都不随版本变。seed-profile 那一步是重装 neutral preset，逐鱼一次；不重装的话，开了换段的鱼换段后会少 office 三件（工具数 69→67，账上会有 wake-agent-tools-shrank）。没开换段的鱼可以跳过，但以后开之前记得补这一步。"
+    },
+    {
       "version": "1.13.4",
       "at": "2026-11-26",
       "summary": "日志不再被每秒一次的游标写回刷爆（r493），体检在日志被轮转之后不再误报\"没注册\"（r492）。",

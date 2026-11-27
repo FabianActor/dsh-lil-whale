@@ -709,6 +709,31 @@ try {
   } else {
     Add-Row '谱系（全鱼）' 'INFO' '还没有名册或还没有 family.json（干净安装后两者都会在）'
   }
+# ── 中立 preset（全鱼）：neutral 是一份快照，落后于 standard 时，用 neutral 起的新会话会静默少手（r504）──
+try {
+  $npScript = Join-Path $Cfg.Root 'scripts\check-neutral-preset.mjs'
+  if (-not (Test-Path $npScript)) {
+    Add-Row '中立 preset（全鱼）' 'INFO' '这个包还没有检查器（老版本安装）' 'NEXT: 升级到含 scripts\check-neutral-preset.mjs 的版本'
+  } else {
+    $npOut = & node $npScript 2>&1
+    $npCode = $LASTEXITCODE
+    $npLines = @($npOut | ForEach-Object { "$_" })
+    $npBehind = @($npLines | Where-Object { $_ -match '^落后 ' })
+    $npOk = @($npLines | Where-Object { $_ -match '^ok ' })
+    if ($npCode -eq 0) {
+      Add-Row '中立 preset（全鱼）' 'OK' ('{0} 条鱼：neutral 与 standard 的插件清单一致' -f $npOk.Count)
+    } elseif ($npCode -eq 3) {
+      Add-Row '中立 preset（全鱼）' 'WARN' (($npBehind | Select-Object -First 3) -join '；') 'NEXT: node scripts\gen-neutral-preset.mjs --profile <键> 重新生成，再用 scripts\apply-neutral-preset.mjs --patch <她的 patch> --profile <键> --home <她的 DSH_HOME> 装进去；装完要重启一次'
+    } elseif ($npCode -eq 2) {
+      Add-Row '中立 preset（全鱼）' 'INFO' '名册里没有可查的鱼，或她的 patch 里没装 neutral（不换段就没事）'
+    } else {
+      $npFirst = ($npLines | Where-Object { $_.Trim() } | Select-Object -First 1)
+      Add-Row '中立 preset（全鱼）' 'WARN' ('这次没查成（exit=' + $npCode + '）：' + $npFirst) 'NEXT: 手动跑 node scripts\check-neutral-preset.mjs 看完整输出'
+    }
+  }
+} catch {
+  Add-Row '中立 preset（全鱼）' 'WARN' ("查不了：{0}" -f $_.Exception.Message) 'NEXT: 手动跑 node scripts\check-neutral-preset.mjs'
+}
 } catch {
   Add-Row '谱系（全鱼）' 'WARN' ("读不了名册或谱系：{0}" -f $_.Exception.Message) 'NEXT: 看 pool\members.json 与 pool\family.json 是不是合法 JSON'
 }
@@ -1554,6 +1579,26 @@ try {
     }
   }
 } catch { Add-Row '第三方补丁' 'WARN' ('核不了：{0}' -f $_.Exception.Message) }
+
+# 9c2. 插件文件一致（bili-eyes，2026-11-27）：note 补丁的 --check 只比"这一代补丁打没打打齐没打齐"，
+#      它看不见**另一支补丁**（格子的 bc= 落点）只打到了一份的情况。小肥鱼报的现场：
+#      五份 install 同版本号 0.8.3，宿主 33099 B、四条鱼 32831 B——版本号一样，内容两种。
+#      判据两条：①每份都打 ②已打的那些 sha12 彼此相等（不同就点名 sha12 与份数）。
+try {
+  $cellsScript = Join-Path $Cfg.Root 'advanced notes on third-party plugins\让小鱼能看B站-bili-eyes\scripts\patch-bili-eyes-cells.mjs'
+  if (-not (Test-Path -LiteralPath $cellsScript)) {
+    Add-Row '插件文件一致（bili-eyes）' 'INFO' '补丁脚本不在这一版仓库里——跳过'
+  } else {
+    $cellsOut = @(& node $cellsScript --check 2>&1)
+    $cellsCode = $LASTEXITCODE
+    $cellsTail = (@($cellsOut) | Where-Object { $_ -match '内容一致|内容不齐|没找到任何' } | Select-Object -Last 1)
+    if ($cellsCode -eq 0) {
+      Add-Row '插件文件一致（bili-eyes）' 'OK' ('五份/多份安装同内容' + $(if ($cellsTail) { '｜' + $cellsTail } else { '' }))
+    } else {
+      Add-Row '插件文件一致（bili-eyes）' 'WARN' ('有安装文件不同或未打（版本号相同不代表内容相同）｜' + $cellsTail) 'NEXT: node "advanced notes on third-party plugins\让小鱼能看B站-bili-eyes\scripts\patch-bili-eyes-cells.mjs"（先 --dry-run；重装/升级插件后要重打，打完 --check 应 5 份同 sha12）'
+    }
+  }
+} catch { Add-Row '插件文件一致（bili-eyes）' 'WARN' ('核不了：{0}' -f $_.Exception.Message) }
 
 # 9e. fissue 账（2026-11-19 r372）：鱼在群里提的 issue 收在哪、有没有卡住。
 #     收件人是我，最容易出的错不是丢，是**收了忘了做**——所以除了自洽检查，还报"正在做哪条"。

@@ -16,6 +16,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
+import { MIN_CLIENT_BUILD, clientBuildOf, describeClientBuildFailure } from './lib/client-build.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(HERE, '..')
@@ -39,7 +40,18 @@ ok('定时器到点后归零', /draftTimerRef\.current = setTimeout\(\(\) => \{\
 ok('切回群聊时重放草稿', /if \(tab !== 'group'\) return\s[\s\S]{0,200}readDraft\(GROUP_DRAFT_KEY\)/.test(SRC), '没找到重放逻辑')
 ok('重放写进输入框', /const stored = readDraft\(GROUP_DRAFT_KEY\)\s[\s\S]{0,120}el\.value = stored\s/.test(SRC), '没写 el.value')
 ok('重放后同步 hasText', /el\.value = stored\s[\s\S]{0,120}setHasText\(stored\.trim\(\) !== ''\)/.test(SRC), '没同步 hasText')
-ok('build 标记 v55 read-truth', SRC.includes('client build v68 · bind-cwd'), 'build 标记没更新')
+ok('build 标记够新', (clientBuildOf(SRC)?.version ?? 0) >= MIN_CLIENT_BUILD, describeClientBuildFailure(SRC))
+ok('style: 后面那些名字都声明过（r500：删一节时删掉过 rowStyle）', (() => {
+  const declared = new Set()
+  for (const m of SRC.matchAll(/\b(?:const|let|var|function)\s+([A-Za-z_$][\w$]*)/g)) declared.add(m[1])
+  for (const m of SRC.matchAll(/\b(?:const|let)\s*\[([^\]]*)\]\s*=/g)) for (const n of m[1].split(',')) declared.add(n.trim())
+  for (const m of SRC.matchAll(/\b(?:const|let)\s*\{([^}]*)\}\s*=/g)) for (const n of m[1].split(',')) declared.add(n.trim().split(':').pop().trim())
+  for (const m of SRC.matchAll(/\bimport\s*\{([^}]*)\}/g)) for (const n of m[1].split(',')) declared.add(n.trim().split(/\s+as\s+/).pop())
+  const missing = []
+  for (const m of SRC.matchAll(/style:\s*([A-Za-z_$][\w$]*)\s*[,}]/g)) if (!declared.has(m[1])) missing.push(m[1])
+  if (missing.length > 0) console.error('  没有声明的 style 名字：' + [...new Set(missing)].join(','))
+  return missing.length === 0
+})(), '有 style: 引用了没声明的名字')
 
 console.log(`test-client-draft：合计 ${total}，PASS ${total - failed}，FAIL ${failed}`)
 process.exit(failed === 0 ? 0 : 1)

@@ -24,7 +24,7 @@
 #   pwsh -File fish.ps1 bind <键> -Session <会话id>   把这段会话钉到那条鱼名下（新鱼第一次开口后由宿主跑）
 #   pwsh -File fish.ps1 promote <键> [-Why 为什么]     转正：只记一笔账（pool\state\lifecycle.log）；身份不是字段，别靠改字段
 #   pwsh -File fish.ps1 upgrade-check                 读包里的升级单：这个版本要用户做哪几步、做完看什么
-#   pwsh -File fish.ps1 upgrade-check -Mark <版本>     动作做完并验收后记一笔（pool\state\upgrade-applied.json）
+#   pwsh -File fish.ps1 upgrade-check -Mark <版本> [-By 谁]   动作做完并验收后记一笔（pool\state\upgrade-applied.json）；-By 记是谁做的，不传=配置主人名
 #   pwsh -File fish.ps1 help
 #
 # 选项：-Window（开窗起；默认无人值守） -NoBrowser（强制不开） -BrowserMainOnly（只给主 dsh 开窗） -Yes（不停下来问）
@@ -1421,10 +1421,11 @@ function Invoke-UpgradeCheck([string]$MarkVersion) {
       return $false
     }
     $at = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    $by = if ([string]::IsNullOrWhiteSpace($By)) { 'fabian' } else { $By.Trim() }
     $obj = [ordered]@{
       lastApplied = $v
       at          = $at
-      by          = $By
+      by          = $by
       note        = '按升级单执行并验收后记录（fish.ps1 upgrade-check -Mark）'
     }
     $dir = Split-Path -Parent $stateFile

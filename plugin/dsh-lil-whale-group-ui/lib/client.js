@@ -166,6 +166,22 @@ window.__ModuleLoader__.load({
       return cachedConfig
     }
 
+    /** 头像的最后一步：把 dataUrl 交给宿主。两页共用（2026-11-26 定：鱼的事在鱼塘卡片改）。 */
+    async function postAvatar(member, body) {
+      const response = await fetch(`/group/api/avatar?member=${encodeURIComponent(member)}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-llw-panel': '1' },
+        body: JSON.stringify({ member, ...body }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        const reason = data?.error ?? `HTTP ${response.status}`
+        const hint = data?.hint ? `（${data.hint}）` : ''
+        throw new Error(`${reason}${hint}`)
+      }
+      return data
+    }
+
     /**
      * 版本：读两个包当前版本；「检查更新」才去问 GitHub Releases。
      * 两个包必须一起用，所以两条一起显示、一起说"有没有新的"。
@@ -2954,6 +2970,8 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
 
     function SettingsPage() {
       const [config, setConfig] = useState(DEFAULT_CONFIG)
+      const [rotationDefault, setRotationDefault] = useState(null)
+      const [rotationBusy, setRotationBusy] = useState(false)
       const [status, setStatus] = useState('')
       const [dirty, setDirty] = useState(false)
       const timerRef = useRef(null)
@@ -2991,7 +3009,26 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
         return () => { if (timerRef.current) clearTimeout(timerRef.current) }
       }, [config, dirty])
 
-      const rowStyle = { display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }
+      // 改全机默认：写 pool\state\rotation\_default.json（scope=default），不碰配置文件。
+      const setRotationDefaultValue = async (mode, rounds) => {
+        setRotationBusy(true)
+        try {
+          const response = await fetch('/pond/api/rotation', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'x-llw-panel': '1' },
+            body: JSON.stringify({ scope: 'default', mode, rounds }),
+          })
+          const data = await response.json().catch(() => ({}))
+          if (!response.ok) throw new Error(data?.detail ?? data?.error ?? `HTTP ${response.status}`)
+          if (data?.default) setRotationDefault(data.default)
+          setStatus('已保存')
+        } catch (error) {
+          setStatus('换段默认值没改成：' + String(error?.message ?? error))
+        } finally {
+          setRotationBusy(false)
+        }
+      }
+
       const inputStyle = {
         flex: 1, minWidth: 0, height: 32, padding: '0 10px', boxSizing: 'border-box',
         borderRadius: 'var(--dsw-radius-md, 8px)',
@@ -2999,6 +3036,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
         background: 'var(--dsw-alias-bg-layer-1, #fff)',
         color: 'var(--dsw-alias-label-primary)', font: 'inherit', fontSize: 13,
       }
+      const rowStyle = { display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }
       const labelStyle = { width: 84, fontSize: 13, color: 'var(--dsw-alias-label-secondary)' }
       const smallBtnStyle = {
         height: 32, padding: '0 10px', boxSizing: 'border-box', fontFamily: 'inherit', fontSize: 12,
@@ -3007,10 +3045,13 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
         background: 'transparent', color: 'var(--dsw-alias-label-secondary)',
       }
 
-      // 头像照片：选一张 → 读成 data URL → 交给宿主写进 group\avatars\。
-      // 大小和格式在这里先挡一道，用户就不用等到"上传失败"才知道图太大。
-      const fileInputs = useRef({})
-      const [avatarBusy, setAvatarBusy] = useState('')
+      // 换段默认值只读：真正的开关在鱼塘卡片（写 pool\state\rotation\<键>.json）。
+      useEffect(() => {
+        fetch('/pond/api/settings', { headers: { accept: 'application/json' } })
+          .then((response) => response.json())
+          .then((data) => { if (data?.rotationDefault) setRotationDefault(data.rotationDefault) })
+          .catch(() => {})
+      }, [])
 
       // 版本：进设置页先读当前版本；「检查更新」是显式动作（要联网，不自动跑）。
       const [versions, setVersions] = useState(null)
@@ -3029,65 +3070,6 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
           .finally(() => setUpdateBusy(false))
       }
 
-      const uploadAvatar = (member, file) => {
-        if (!file) return
-        if (!/^image\/(png|jpeg|webp)$/.test(file.type)) {
-          setStatus('只收 png / jpg / webp。')
-          return
-        }
-        if (file.size > 1.5 * 1024 * 1024) {
-          setStatus('这张图太大（超过 1.5 MB），换一张小点的。')
-          return
-        }
-        const reader = new FileReader()
-        setAvatarBusy(member)
-        reader.onload = () => {
-          fetch(`/group/api/avatar?member=${encodeURIComponent(member)}`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json', 'x-llw-panel': '1' },
-            body: JSON.stringify({ member, dataUrl: reader.result }),
-          })
-            .then((response) => response.json().catch(() => ({})).then((data) => ({ ok: response.ok, status: response.status, data })))
-            .then(({ ok, status, data }) => {
-              if (ok) {
-                setConfig(data)
-                setStatus('头像已保存')
-                return
-              }
-              // 把宿主给的原因原样说出来。只说"失败了"等于没说 —— 现场为这句话多查了一轮。
-              const reason = data?.error ?? `HTTP ${status}`
-              const hint = data?.hint ? `（${data.hint}）` : ''
-              setStatus(`头像没存上：${reason}${hint}`)
-            })
-            .catch(() => setStatus('头像没存上（连不上宿主）'))
-            .finally(() => setAvatarBusy(''))
-        }
-        reader.onerror = () => {
-          setAvatarBusy('')
-          setStatus('这个文件读不出来。')
-        }
-        reader.readAsDataURL(file)
-      }
-
-      const clearAvatar = (member) => {
-        fetch(`/group/api/avatar?member=${encodeURIComponent(member)}`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', 'x-llw-panel': '1' },
-          body: JSON.stringify({ member, clear: true }),
-        })
-          .then((response) => response.json().catch(() => ({})).then((data) => ({ ok: response.ok, status: response.status, data })))
-          .then(({ ok, status, data }) => {
-            if (ok) {
-              setConfig(data)
-              setStatus('照片已去掉')
-              return
-            }
-            setStatus(`去不掉：${data?.error ?? `HTTP ${status}`}`)
-          })
-          .catch(() => setStatus('去不掉（连不上宿主）'))
-      }
-
-
       // 一个设置分组用模块级的 SettingsSection 画（不能写在这里，见上面那段注释）。
       return h('div', { style: { ...baseStyle, padding: '22px 24px 24px' } },
         h('div', { style: { fontSize: 16, fontWeight: 500, lineHeight: '24px' } }, t.settingsTitle),
@@ -3104,73 +3086,62 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
           ),
         ),
 
-        // 名字 / 头像讲的是同一件事：这一位在群里长什么样。
-        // （座位名那一组 2026-11-12 拿掉了：椅子已撤，界面不该再留一个空的入口。）
-        h(SettingsSection, { title: '成员', hint: '名字是她的称呼，只能由她自己改——让她在会话里调 rename。这里只改头像。' },
-          Object.keys(config?.names ?? NAMES).map((member, index) => {
-            const avatar = avatarOf(config, member)
-            return h('div', {
-              key: `member-${member}`,
-              style: {
-                padding: index === 0 ? '6px 0 12px' : '12px 0',
-                borderTop: index === 0 ? 'none' : '0.5px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12))',
-              },
-            },
-              h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
-                h(Avatar, { config, member, size: 32 }),
-                h('span', { style: { fontSize: 14, color: 'var(--dsw-alias-label-primary)' } },
-                  config.names?.[member] ?? NAMES[member] ?? member),
-              ),
 
-              h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, paddingLeft: 42, flexWrap: 'wrap' } },
-                h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', width: 48, flex: '0 0 auto' } }, '头像'),
-                h(ComposingTextInput, {
-                  value: avatar.text,
-                  limit: 2,
-                  title: '文字 1–2 个（也可以是 emoji）',
-                  onCommit: (text) => patch((next) => {
-                    next.avatars = { ...(next.avatars ?? {}) }
-                    next.avatars[member] = { ...(next.avatars?.[member] ?? {}), text }
-                  }),
-                  style: { ...inputStyle, flex: '0 0 52px', minWidth: 52, textAlign: 'center' },
-                }),
-                h('input', {
-                  type: 'color',
-                  value: avatar.tint,
-                  title: '底色',
-                  onChange: (event) => patch((next) => {
-                    next.avatars = { ...(next.avatars ?? {}) }
-                    next.avatars[member] = { ...(next.avatars?.[member] ?? {}), tint: event.target.value }
-                  }),
-                  style: { width: 32, height: 32, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', flex: '0 0 auto' },
-                }),
-                h('button', {
-                  onClick: () => fileInputs.current[member]?.click(),
-                  disabled: avatarBusy === member,
-                  style: { ...smallBtnStyle, opacity: avatarBusy === member ? 0.6 : 1 },
-                }, avatarBusy === member ? '上传中…' : (avatar.image ? '换一张照片' : '上传照片')),
-                avatar.image
-                  ? h('button', { onClick: () => clearAvatar(member), style: smallBtnStyle }, '去掉照片')
-                  : null,
-                // 选文件用真的 input[type=file]，只是藏起来 —— 点按钮等于点它
-                h('input', {
-                  type: 'file',
-                  accept: 'image/png,image/jpeg,image/webp',
-                  ref: (node) => { fileInputs.current[member] = node },
-                  onChange: (event) => {
-                    uploadAvatar(member, event.target.files?.[0])
-                    event.target.value = ''
-                  },
-                  style: { display: 'none' },
-                }),
-                avatar.image
-                  ? h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } }, '照片优先于文字')
-                  : null,
-              ),
-            )
-          }),
+        // 换段全机默认（r499）：三层的最上面一层是单鱼覆盖，这里是它下面那层。
+        // 设置页不再提供「跟随」——它自己就是被跟随的那一层，再跟一层就没处改了。
+        h(SettingsSection, { title: '换段', hint: '聊满 N 轮换一段新会话。这里是全机默认；某条鱼想不一样，去「鱼塘」卡片单独设。' },
+          h('div', { style: { display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' } },
+            [
+              { mode: 'on', label: '开' },
+              { mode: 'off', label: '关' },
+            ].map((option) => {
+              const active = rotationDefault?.enabled === (option.mode === 'on')
+              return h('button', {
+                key: option.mode,
+                type: 'button',
+                onClick: () => setRotationDefaultValue(option.mode),
+                disabled: rotationBusy || !rotationDefault,
+                title: active ? '现在是这个' : '点这里改成这个',
+                style: {
+                  height: 32, padding: '0 12px', boxSizing: 'border-box', fontFamily: 'inherit', fontSize: 13,
+                  borderRadius: 'var(--dsw-radius-md, 8px)', cursor: 'pointer',
+                  border: '0.5px solid ' + (active ? 'var(--dsw-alias-state-business-primary)' : 'var(--dsw-alias-border-l2, rgba(0,0,0,0.12))'),
+                  background: active ? 'var(--dsw-alias-bg-layer-2, rgba(0,0,0,0.05))' : 'transparent',
+                  color: active ? 'var(--dsw-alias-state-business-primary)' : 'var(--dsw-alias-label-secondary)',
+                  fontWeight: active ? 600 : 400,
+                  opacity: rotationBusy ? 0.6 : 1,
+                },
+              }, option.label)
+            }),
+            h('label', { style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginLeft: 8 } },
+              '每 ', 
+              h('input', {
+                type: 'number',
+                min: 1,
+                max: 1000,
+                defaultValue: String(rotationDefault?.rounds ?? 80),
+                onBlur: (event) => {
+                  const next = Number(event.target.value)
+                  if (!Number.isInteger(next) || next < 1 || next > 1000) {
+                    event.target.value = String(rotationDefault?.rounds ?? 80)
+                    setStatus('轮数要 1–1000 的整数。')
+                    return
+                  }
+                  if (next !== rotationDefault?.rounds) setRotationDefaultValue(rotationDefault?.enabled === true ? 'on' : 'off', next)
+                },
+                style: { ...inputStyle, width: 72 },
+              }),
+              ' 轮换一段',
+            ),
+          ),
+          h('div', { style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)', marginTop: 8 } },
+            rotationDefault
+              ? (rotationDefault.enabled === null
+                  ? '现在：关（还没设过，代码默认 ' + rotationDefault.rounds + ' 轮）'
+                  : '现在：' + (rotationDefault.enabled ? '开' : '关') + ' · 全机默认（' + rotationDefault.rounds + ' 轮）')
+              : '现在：读不到（宿主没回话）',
+          ),
         ),
-
         h(SettingsSection, { title: '红点', hint: '侧边栏和标签上的未读数算哪些话。私聊永远算（那里的话本来就是给你的）。' },
           h('div', { style: { display: 'flex', gap: 8, marginTop: 8 } },
             [
@@ -3212,10 +3183,9 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
             ? h('div', { style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)', marginTop: 6 } },
                 `检查时间：${String(updateState.checkedAt).replace('T', ' ').slice(0, 19)}`)
             : null,
-        ),
-
           h('div', { style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)', marginTop: 6 } },
             '查的是 GitHub Releases；npm 上只有两块 bundle，安装与更新请走仓库。'),
+        ),
         h('div', {
           style: { marginTop: 16, fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)' },
         }, status || '改动会自动保存。侧边栏名称要刷新页面才变。'),
@@ -3299,6 +3269,13 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       modeWindow: '开着窗',
       modeUnknown: '模式未知',
       maintainHint: '先休眠，再开一扇窗让你看；看完关窗，再点「回无人值守」',
+      rotationLabel: '换段',
+      rotationModes: { follow: '跟随默认', on: '开', off: '关' },
+      rotationHint: '聊满 N 轮换一段新会话（默认关）。跟随默认 = 看配置文件里的 rotation 段。',
+      rotationUnknown: '（这格读不出来）',
+      rotationFailed: '换段开关没改成：',
+      avatarHint: '点这里改这条鱼的头像（文字、底色或照片）',
+      avatarFailed: '头像没改成功：',
       restoreHint: '关掉那个控制台窗，然后无窗起（会话由 host 挂上）',
       windowHint: '检修中：日志在刚开的控制台窗里；看完关窗，再点「回无人值守」。',
       upRunning: '已经在跑。要换模式先「休眠」，再「唤醒」或「检修」。',
@@ -3478,6 +3455,11 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       const [demo, setDemo] = useState(false)
       const [autoStart, setAutoStart] = useState(false)
       const [bindFor, setBindFor] = useState(null)
+      const [rotBusy, setRotBusy] = useState(null)
+      const [config, setConfig] = useState(null)
+      const [avatarFor, setAvatarFor] = useState(null)
+      const [avatarBusy, setAvatarBusy] = useState('')
+      const avatarFile = useRef({})
 
       const load = useCallback(async () => {
         try {
@@ -3498,6 +3480,65 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
         }, POND_POLL_MS)
         return () => clearInterval(timer)
       }, [load])
+
+      const setRotation = useCallback(async (member, mode) => {
+        setRotBusy(member)
+        try {
+          const response = await fetch('/pond/api/rotation', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'x-llw-panel': '1' },
+            body: JSON.stringify({ member, mode }),
+          })
+          const data = await response.json().catch(() => ({}))
+          if (!response.ok) throw new Error(data?.error ?? `HTTP ${response.status}`)
+          await load()
+          setError(null)
+        } catch (e) {
+          setError(POND.rotationFailed + String(e?.message ?? e))
+        } finally {
+          setRotBusy(null)
+        }
+      }, [load])
+
+      // 鱼塘卡片管"这条鱼长什么样"：配置读一次，改完就地更新。
+      useEffect(() => {
+        void loadConfig(true).then((value) => setConfig(value)).catch(() => {})
+      }, [])
+
+      const patchAvatar = useCallback((member, mut) => {
+        setConfig((prev) => {
+          const next = { ...(prev ?? DEFAULT_CONFIG) }
+          next.avatars = { ...(next.avatars ?? {}) }
+          next.avatars[member] = { ...(next.avatars[member] ?? {}) }
+          mut(next.avatars[member])
+          void saveConfig(next)
+            .then((saved) => { if (saved) setConfig(saved) })
+            .catch((e) => setError(POND.avatarFailed + String(e?.message ?? e)))
+          return next
+        })
+      }, [])
+
+      const uploadAvatar = useCallback((member, file) => {
+        if (!file) return
+        if (!/^image\/(png|jpeg|webp)$/.test(file.type)) { setError('只收 png / jpg / webp。'); return }
+        if (file.size > 1.5 * 1024 * 1024) { setError('这张图太大（超过 1.5 MB），换一张小点的。'); return }
+        setAvatarBusy(member)
+        const reader = new FileReader()
+        reader.onload = () => {
+          void postAvatar(member, { dataUrl: reader.result })
+            .then((data) => { setConfig(data); setError(null) })
+            .catch((e) => setError(POND.avatarFailed + String(e?.message ?? e)))
+            .finally(() => setAvatarBusy(''))
+        }
+        reader.onerror = () => { setAvatarBusy(''); setError('这个文件读不出来。') }
+        reader.readAsDataURL(file)
+      }, [])
+
+      const clearAvatar = useCallback((member) => {
+        void postAvatar(member, { clear: true })
+          .then((data) => { setConfig(data); setError(null) })
+          .catch((e) => setError(POND.avatarFailed + String(e?.message ?? e)))
+      }, [])
 
       // 自启动开关：读一次、改一次。改完下次启动主 dsh 生效。
       useEffect(() => {
@@ -3688,6 +3729,15 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
             'div',
             { style: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 } },
             h(PondDot, { on: item.portOpen }),
+            h(
+              'span',
+              {
+                onClick: () => setAvatarFor(avatarFor === item.key ? null : item.key),
+                title: POND.avatarHint,
+                style: { cursor: 'pointer', display: 'flex', alignItems: 'center' },
+              },
+              h(Avatar, { config: config ?? DEFAULT_CONFIG, member: item.key, size: 24 }),
+            ),
             h('span', {
               style: {
                 fontSize: 14, fontWeight: 600, lineHeight: '20px',
@@ -3719,6 +3769,55 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
               item.role === 'watcher' ? POND.roleWatcher : POND.roleMember,
             ),
           ),
+          demo || avatarFor !== item.key
+            ? null
+            : h(
+              'div',
+              { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 11, color: 'var(--dsw-alias-label-tertiary, #8a8f98)' } },
+              h(ComposingTextInput, {
+                value: avatarOf(config, item.key).text,
+                limit: 2,
+                title: '文字 1–2 个（也可以是 emoji）',
+                onCommit: (text) => patchAvatar(item.key, (a) => { a.text = text }),
+                style: { width: 60, height: 28, padding: '0 6px', boxSizing: 'border-box', textAlign: 'center', font: 'inherit', fontSize: 13, borderRadius: 6, border: '0.5px solid var(--dsw-alias-border-l2, rgba(0,0,0,0.12))', background: 'var(--dsw-alias-bg-layer-1, #fff)', color: 'var(--dsw-alias-label-primary)' },
+              }),
+              h(
+                'input',
+                {
+                  type: 'color',
+                  value: avatarOf(config, item.key).tint,
+                  title: '底色',
+                  onChange: (event) => patchAvatar(item.key, (a) => { a.tint = event.target.value }),
+                  style: { width: 28, height: 28, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' },
+                },
+              ),
+              h(
+                'button',
+                {
+                  onClick: () => avatarFile.current?.[item.key]?.click(),
+                  disabled: avatarBusy === item.key,
+                  style: pondButtonStyle(false),
+                },
+                avatarBusy === item.key ? '上传中…' : (avatarOf(config, item.key).image ? '换一张照片' : '上传照片'),
+              ),
+              avatarOf(config, item.key).image
+                ? h('button', { key: 'rm', onClick: () => clearAvatar(item.key), style: pondButtonStyle(false) }, '去掉照片')
+                : null,
+              h(
+                'input',
+                {
+                  type: 'file',
+                  accept: 'image/png,image/jpeg,image/webp',
+                  ref: (node) => { avatarFile.current[item.key] = node },
+                  onChange: (event) => {
+                    uploadAvatar(item.key, event.target.files?.[0])
+                    event.target.value = ''
+                  },
+                  style: { display: 'none' },
+                },
+              ),
+              h('button', { key: 'done', onClick: () => setAvatarFor(null), style: pondButtonStyle(false) }, '收起'),
+            ),
           h(
             'div',
             {
@@ -3753,6 +3852,25 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
               : null,
             parentItem ? h('span', null, `家长 ${parentItem.name}`) : null,
           ),
+          demo || self
+            ? null
+            : h(
+              'div',
+              { style: { fontSize: 11, lineHeight: '16px', display: 'flex', alignItems: 'center', gap: 6, color: 'var(--dsw-alias-label-tertiary, #8a8f98)', flexWrap: 'wrap' } },
+              h('span', { title: POND.rotationHint }, POND.rotationLabel),
+              ['follow', 'on', 'off'].map((mode) => h(
+                'button',
+                {
+                  key: `rot-${mode}`,
+                  onClick: () => setRotation(item.key, mode),
+                  disabled: rotBusy === item.key,
+                  title: POND.rotationHint,
+                  style: pondButtonStyle((item.rotation?.mode ?? 'follow') === mode),
+                },
+                POND.rotationModes[mode],
+              )),
+              item.rotation?.mode === 'unknown' ? h('span', null, POND.rotationUnknown) : null,
+            ),
           item.lastRun
             ? h(
               'div',
@@ -4094,7 +4212,7 @@ const Bubble = React.memo(function Bubble({ config, message, onMention, animate 
       inject: ['slots'],
       apply(ctx) {
         // 一行"我跑的是哪一版"的自报，方便判断浏览器是不是还在用旧 bundle
-        console.info('[dsh-lil-whale-group-ui] client build v68 · bind-cwd:', Object.keys(MARKDOWN_LABELS).join(','))
+        console.info('[dsh-lil-whale-group-ui] client build v72 · rotation-pill:', Object.keys(MARKDOWN_LABELS).join(','))
         // 「正在回复…」那三个点的呼吸动画 + 过场转圈。只在浏览器里注入一次。
         if (typeof document !== 'undefined' && !document.getElementById('dsh-lil-whale-group-keyframes')) {
           const style = document.createElement('style')

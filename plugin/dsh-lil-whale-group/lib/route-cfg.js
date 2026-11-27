@@ -76,3 +76,53 @@ export function routeCfgLine(prev, next, member) {
   const n = next ?? {}
   return `to=${member} from-cfg=${p.provider ?? 'unknown'}/${p.model ?? 'unknown'} to-cfg=${n.provider ?? 'unknown'}/${n.model ?? 'unknown'}`
 }
+
+// ---------------------------------------------------------------------------
+// fi-0033（2026-11-27）：运行态那一半的读数。
+//
+// 上一版只记了"文件里写着什么"（cfg*），把"进程真的用哪个"留给以后。翻案时查到两个接口：
+//   - `dsh-agent-default-model/lib/index.js:38` 的 `currentSelection()` 读的是 config refs；
+//   - `dsh-api-session-controller/lib/index.js:433-445` 的 `agentOptions()` 用 getter 每次现取。
+// 所以"请求那一刻用哪个"是读得到的，只是要在拿到服务之后读。
+//
+// 名字继续分开：live= 是进程内这一刻的选择，cfg= 是磁盘上那一份。
+// **两者不一致本身就是一条读数**——但只说明"内存与文件不同"，不说明"谁对"。
+// ---------------------------------------------------------------------------
+
+/**
+ * 把"读一眼运行态"变成一个纯函数：reader 返回 `{ provider, model }` 或 null。
+ * 读不到不是"没有路由"，而是"这一刻读不到"——两种状态分开写（fi-0031 的教训）。
+ *
+ * @param {() => unknown} read 调 `agentDefaultModel.currentSelection()` 的薄壳。
+ * @returns {{ provider: string|null, model: string|null, reason: string|null }}
+ */
+export function liveRouteOf(read) {
+  if (typeof read !== 'function') return { provider: null, model: null, reason: 'no-reader' }
+  let selection
+  try {
+    selection = read()
+  } catch (error) {
+    return { provider: null, model: null, reason: `read-failed:${String(error?.message ?? error).replace(/\s+/g, ' ').slice(0, 60)}` }
+  }
+  if (selection === null || selection === undefined) return { provider: null, model: null, reason: 'service-absent' }
+  const provider = typeof selection.provider === 'string' && selection.provider !== '' ? selection.provider : null
+  const model = typeof selection.model === 'string' && selection.model !== '' ? selection.model : null
+  if (provider === null || model === null) return { provider, model, reason: 'incomplete' }
+  return { provider, model, reason: null }
+}
+
+/**
+ * route-live 一行的正文。`diff=yes` 只表示两个来源写得不一样，不表示谁对。
+ * 读不到时 live 写 `(unavailable)` 而不是 `unknown`——unknown 会被读成"读到了但不知名"。
+ */
+export function routeLiveLine(live, cfg) {
+  const L = live ?? {}
+  const C = cfg ?? {}
+  const liveTxt = `${L.provider ?? '(unavailable)'}/${L.model ?? '(unavailable)'}`
+  const cfgTxt = `${C.provider ?? 'unknown'}/${C.model ?? 'unknown'}`
+  // 按"写出来的两个串"比：读不到写成 (unavailable)、文件里读不到写成 unknown，
+  // 它们不是同一个值，所以 diff 要亮。用 null 比较会把这一格吞掉。
+  const diff = liveTxt !== cfgTxt
+  const whyTxt = typeof L.reason === 'string' && L.reason !== '' ? ` reason=${L.reason}` : ''
+  return { line: `live=${liveTxt} cfg=${cfgTxt} diff=${diff ? 'yes' : 'no'}${whyTxt}`, diff }
+}

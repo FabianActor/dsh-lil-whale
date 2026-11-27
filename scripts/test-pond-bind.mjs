@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { bindingProblem, shortSessionId, sessionCandidatesOf, stateLogLine } from '../plugin/dsh-lil-whale-group-ui/lib/bindings-core.js'
+import { MIN_CLIENT_BUILD, clientBuildOf, describeClientBuildFailure } from './lib/client-build.mjs'
 
 let pass = 0
 let fail = 0
@@ -127,7 +128,7 @@ const clientSrc = readSrc('plugin/dsh-lil-whale-group-ui/lib/client.js')
   ok('客户端的候选来自新路由', clientSrc.includes('/group/api/bind-candidates?member='))
   ok('客户端只留一个「换绑」按钮', clientSrc.includes("bind: '换绑'") && !clientSrc.includes('解绑该会话'))
   ok('会话行菜单已撤掉', !clientSrc.includes('lil-whale.binding') && !clientSrc.includes("inject: ['slots', 'contextMenus']"))
-  ok('build 标记 v68', clientSrc.includes('client build v68 · bind-cwd'))
+  ok('build 标记够新', (clientBuildOf(clientSrc)?.version ?? 0) >= MIN_CLIENT_BUILD, describeClientBuildFailure(clientSrc))
   ok('服务端有候选路由', uiSrc.includes("path: '/group/api/bind-candidates'"))
   ok('服务端用同一个判定层', uiSrc.includes('sessionCandidatesOf({ roster'))
   ok('卡片状态里带会话', uiSrc.includes('sessionShort: boundList[0]'))

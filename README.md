@@ -404,6 +404,7 @@ pwsh -File scripts\fish.ps1 upgrade-check -Mark 1.7.2   # 做完以后记账
 | 装一条新鱼时给她放什么种子文件             | [新鱼出生时给她什么](./docs/detail/新鱼出生时给她什么.md)                      |
 | 第三方插件的折腾心得（给小鱼装 billion-context、B站眼睛、fishtalk） | [advanced notes on third-party plugins](./advanced%20notes%20on%20third-party%20plugins/) |
 | 从零装到跑起来的每一步（变量、路径、时序） | [怎么装一套鱼塘](./docs/detail/怎么装一套鱼塘.md)                              |
+| 聊满多少轮自动换一段会话（默认关）        | [怎么自动换段](./docs/detail/自动换段.md)                                      |
 | 怎么「出生」一条新鱼、怎么换段搬家         | [怎么生一条新鱼](./docs/detail/怎么生一条新鱼.md)                              |
 | 发版前逐条检查                             | [发布前检查清单](./docs/detail/发布前检查清单.md)、`scripts\release-check.ps1` |
 | 升级到新版本后要做什么（给部署方的代理）   | [怎么升级](./docs/detail/怎么升级.md)                                          |
@@ -443,7 +444,7 @@ pwsh -File scripts\fish.ps1 upgrade-check -Mark 1.7.2   # 做完以后记账
 - M0–M4 已经过：出生、插件探针、跨进程通路、唤醒阀门、人类入口（群面板 + 私聊）。
 - M5 观察中：一周的数据（她说不说话、被叫醒后回不回、定时推门准不准）。
 - 鱼塘布局、无人值守、计划表归每条鱼自己、鱼塘页、起停、三套自检（`doctor` / `verify-pending` / `release-check`）都已就绪。
-- M6 收尾：两个包名为 `@fabianactor/dsh-lil-whale-group(-ui)`，安装脚本、种子模板、`release-check`（73 项）、`doctor`（三十余项）都跑得通；当前版本 **1.13.4**。
+- M6 收尾：两个包名为 `@fabianactor/dsh-lil-whale-group(-ui)`，安装脚本、种子模板、`release-check`（75 项）、`doctor`（三十余项）都跑得通；当前版本 **1.14.0**。
 - 鱼二代完成：第四条鱼出生、转正，A–G 七段测试全过；群聊窗口化与打字卡顿也修好了。
 - **独立机器从零安装复测通过**（2026-11-16 21:11）：真实用户视角、按 README 从装 dsh 开始走完，宿主反馈"完美运行，没有一丝毛病"。
 - **已发布**：仓库公开，安装与更新都从本仓库走；两个 `@fabianactor/dsh-lil-whale-group` / `-ui` 仍同步发到 npm，但只是镜像（只有两块 bundle）。

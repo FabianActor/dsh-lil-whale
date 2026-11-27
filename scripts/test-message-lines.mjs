@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseMessageLines, projectMessage } from '../plugin/dsh-lil-whale-group-ui/lib/messages-core.js'
+import { MIN_CLIENT_BUILD, clientBuildOf, describeClientBuildFailure } from './lib/client-build.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const UI = join(ROOT, 'plugin', 'dsh-lil-whale-group-ui', 'lib')
@@ -81,7 +82,7 @@ const rec = (over) => JSON.stringify({ ts: over.ts ?? '2026-11-18 10:00', from: 
   check('可点击复制', client.includes('点击复制引用'), true)
   check('有复制函数', client.includes('async function copyToClipboard'), true)
   check('有复制回执', client.includes('已复制'), true)
-  check('build 标记 v55', client.includes('client build v68 · bind-cwd'), true)
+  check('build 标记够新', (clientBuildOf(client)?.version ?? 0) >= MIN_CLIENT_BUILD, true)
 }
 
 if (fail === 0) {

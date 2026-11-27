@@ -1,7 +1,7 @@
 # 中立 persona 的 preset（生成物，别手改）
 #
-# 来源：dsh 0.2.2-rc.1 的 preset-standard（--dump-config 现读）
-# 生成：2026-11-12T08:23:31.347Z  脚本：scripts/gen-neutral-preset.mjs
+# 来源：dsh 0.2.2-rc.5 的 preset-standard（--dump-config 现读）
+# 生成：2026-11-26T16:29:09.607Z  脚本：scripts/gen-neutral-preset.mjs
 # 用法：把下面这一段插进她的 profile patch（cordis.patch.yml）的 - insert: 列表里，
 #       然后在她那段新会话上选 preset=neutral；不要改默认 preset，除非确实要所有新会话都中立。
 #
@@ -46,6 +46,11 @@
             name: '@deepseek-ai/dsh-tool-schedule'
           - id: skill-filesystem
             name: '@deepseek-ai/dsh-skill-filesystem'
+            config:
+              customSkillDirs:
+                - !!js >-
+                  process.getBuiltinModule('node:path').join(process.getBuiltinModule('node:path').dirname(process.getBuiltinModule('node:module').createRequire(baseUrl).resolve('@deepseek-ai/dsh-agent-preset/package.json')),
+                  'skills')
           - id: tool-skill
             name: '@deepseek-ai/dsh-tool-skill'
           - id: command-goal
@@ -138,6 +143,8 @@
             config:
               - id: tool-subagent-control
                 name: '@deepseek-ai/dsh-tool-subagent-control'
+                config:
+                  interrupt: false
               - id: tool-subagent
                 name: '@deepseek-ai/dsh-tool-subagent'
                 config:
@@ -169,9 +176,13 @@
               searchTimeoutMs: 60000
           - id: present
             name: '@deepseek-ai/dsh-tool-present'
+          - id: tool-office
+            name: '@deepseek-ai/dsh-tool-office'
           - id: tool-plugin-manager
             name: '@deepseek-ai/dsh-plugin-manager/tools'
             disabled: !!js '!ctx.get(''profileContext'')'
           - id: tool-plugin-market
             name: '@deepseek-ai/dsh-plugin-market/tools'
             disabled: true
+      inject:
+        - biliBasicCompactionPolicy
