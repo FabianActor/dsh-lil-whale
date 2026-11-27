@@ -90,7 +90,7 @@ ok(l1.diff === true && l1.line.includes('live=opencode-go/x') && l1.line.include
 const l2 = routeLiveLine({ provider: 'qwen-platform', model: 'x', reason: null }, { provider: 'qwen-platform', model: 'x' })
 ok(l2.diff === false && l2.line.includes('diff=no'), '一致 ⇒ diff=no')
 const l3 = routeLiveLine({ provider: null, model: null, reason: 'service-absent' }, { provider: 'qwen-platform', model: 'x' })
-ok(l3.line.includes('live=(unavailable)/(unavailable)') && l3.line.includes('why=service-absent'), '读不到写 (unavailable) + why，不写 unknown')
+ok(l3.line.includes('live=(unavailable)/(unavailable)') && l3.line.includes('reason=service-absent'), '读不到写 (unavailable) + reason，不写 unknown')
 ok(routeLiveLine({}, {}).diff === true, '两边都空时 diff=yes（null 与 unknown 不是同一个值）')
 
 // ---------- ④ 代码里没有 route-switch ----------

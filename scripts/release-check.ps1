@@ -1,4 +1,4 @@
-﻿#requires -Version 7.0
+#requires -Version 7.0
 # scripts\release-check.ps1 —— 拟发版检查
 #
 # 为什么要有它：平时所有验证都在**工作目录**里做，而工作目录里混着本机配置、临时脚本、
@@ -457,6 +457,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '中立 preset' (($npOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '中立 preset' '切清单与比差集都对；落后时能点名少哪几件（test-neutral-preset.mjs）' }
   } else { Fail '中立 preset' 'scripts\test-neutral-preset.mjs 不在包里' }
+  # ── 4bp. 工具数两头（2026-11-27 r509：shrank 行只记少了什么，from=69 to=67 差点名单三件）──
+  $tcTest = Join-Path $pkg 'scripts\test-tool-count.mjs'
+  if (Test-Path $tcTest) {
+    $tcOut = & node $tcTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '工具数两头' (($tcOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '工具数两头' 'shrank 行同时写 missing 与 added，列表截断但总数保留（test-tool-count.mjs）' }
+  } else { Fail '工具数两头' 'scripts\test-tool-count.mjs 不在包里' }
   # ── 4as. 名册值带 key（2026-11-22：to=undefined 900 行，fi-0010／r404）──
   $keyTest = Join-Path $pkg 'scripts\test-member-key.mjs'
   if (Test-Path $keyTest) {

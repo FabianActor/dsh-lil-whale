@@ -19,6 +19,7 @@ import { MENTION_ALL, normalizeMention, wantsWake, mentionTextOf, mentionDisplay
 import { codeFingerprint } from './code-fp.js'
 import { parseDefaultModel, routeCfgDiff, routeCfgLine, liveRouteOf, routeLiveLine } from './route-cfg.js'
 import { codeFpChangeOf, codeFpHistoryLine, codeFpLedgerOf, CODE_FP_LEDGER } from './code-fp-history-core.js'
+import { toolCountDiff } from './tool-count-core.js'
 import { join, dirname, basename } from 'node:path'
 import { homedir } from 'node:os'
 import { pathToFileURL, fileURLToPath } from 'node:url'
@@ -3118,9 +3119,18 @@ function recordToolCount(member, view) {
     let prev = null
     try { prev = JSON.parse(readFileSync(file, 'utf8')) } catch { prev = null }
     if (prev && typeof prev.count === 'number' && typeof count === 'number' && count < prev.count) {
-      const prevTools = Array.isArray(prev.tools) ? prev.tools : null
-      const missing = prevTools && names ? prevTools.filter((x) => !names.includes(x)).slice(0, 20) : null
-      logLine({ note: 'wake-agent-tools-shrank', member, from: prev.count, to: count, missing })
+      // 两头都记：只写 missing 时，「差 2 却少了 3 件」这种账只能靠猜（2026-11-27 小肥鱼）。
+      const diff = toolCountDiff(Array.isArray(prev.tools) ? prev.tools : null, names)
+      logLine({
+        note: 'wake-agent-tools-shrank',
+        member,
+        from: prev.count,
+        to: count,
+        missing: diff.missing,
+        added: diff.added,
+        missingTotal: diff.missingTotal,
+        addedTotal: diff.addedTotal,
+      })
     } else {
       logLine({ note: 'wake-agent-tools', member, toolCount: count })
     }

@@ -22,6 +22,16 @@
 
 ## [未发布]
 
+### r510 route-live 行改回 `reason=`（内部）
+
+- 旧：r505 新加的 `route-live` 行用 `why=<原因>` 写读不到的原因。账本口径早就定过：`deny=`（被门拦下）/`reason=`（细分原因）/`note=`（观察/异常），`why=` 不许再出现在代码里。
+- 新：字段名改 `reason=`；`test-log-fields` 立刻抓到（这也是它存在的理由——上一轮 `release-check` 是在**未提交**的树上跑的，包里还是旧文件，所以没抓到；提交后一跑就红了）。
+
+### r509 工具数变少的那行账，把「多了什么」也记下来（内部）
+
+- 旧：`wake-agent-tools-shrank` 只写少了哪几件（`missing=旧−新`）。11-26 23:59 那条是 `from=69 to=67 missing=[office_render,office_convert,office_recalculate]`——少了两件，名单却有三件；读的人只能猜「数错了」或「不止这三件」，而两种猜法都不对（实际是少了三件、同时多了一件，多的那件当初没记）。
+- 新：两头都算，`missing`/`added` 各带一份列表与总数（`missingTotal`/`addedTotal`，列表超过 20 条会截断、总数不截）；拿不到旧名单时四个字段写 `null`，不写空数组（没读到和读到零个不一样）。新增 `scripts\test-tool-count.mjs`（17 条）与 `release-check` 4bp。
+
 ### r508 换段后的新会话不再落在「未分组」（用户可见：用换段的人）
 
 - 旧：换段建完新会话，插件把会话 id 直接写进 `<DSH_HOME>\storages\workspace.json`。文件确实变了，但 DSH 自己的内存里没有它，界面照样显示「未分组」；DSH 下一次回写还会把这一行抹掉。

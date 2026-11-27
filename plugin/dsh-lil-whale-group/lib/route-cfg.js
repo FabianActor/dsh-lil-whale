@@ -123,6 +123,6 @@ export function routeLiveLine(live, cfg) {
   // 按"写出来的两个串"比：读不到写成 (unavailable)、文件里读不到写成 unknown，
   // 它们不是同一个值，所以 diff 要亮。用 null 比较会把这一格吞掉。
   const diff = liveTxt !== cfgTxt
-  const why = typeof L.reason === 'string' && L.reason !== '' ? ` why=${L.reason}` : ''
-  return { line: `live=${liveTxt} cfg=${cfgTxt} diff=${diff ? 'yes' : 'no'}${why}`, diff }
+  const whyTxt = typeof L.reason === 'string' && L.reason !== '' ? ` reason=${L.reason}` : ''
+  return { line: `live=${liveTxt} cfg=${cfgTxt} diff=${diff ? 'yes' : 'no'}${whyTxt}`, diff }
 }
