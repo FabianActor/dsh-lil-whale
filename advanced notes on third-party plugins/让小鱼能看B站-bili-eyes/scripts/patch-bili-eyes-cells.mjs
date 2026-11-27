@@ -60,6 +60,29 @@ function sha12(file) {
   return createHash('sha256').update(readFileSync(file)).digest('hex').slice(0, 12);
 }
 
+// 2026-11-27 小肥鱼："分母不能自己数自己"——"这次扫到几份"如果由扫描本身给出，
+// 扫 1 份和扫 5 份都是它说了算。所以另取一个数当分母：名册里有几条带 dshHome 的鱼，
+// 就按名册逐条拼出"应该在哪"的路径，用 existsSync 直接看它在不在；在、但没进候选 ⇒ 扫描漏了。
+// 候选份数 ≠ 这个应到的份数就红，并点名少了谁。
+function expectedInstalls() {
+  const rosterFile = join(pondRoot(), 'pool', 'members.json')
+  const out = []
+  if (!existsSync(rosterFile)) return { paths: out, why: `名册不在：${rosterFile}` }
+  let members = {}
+  try {
+    const doc = JSON.parse(readFileSync(rosterFile, 'utf8'))
+    members = doc.members ?? doc
+  } catch (error) {
+    return { paths: out, why: `名册读不了：${error.message}` }
+  }
+  for (const [key, m] of Object.entries(members)) {
+    if (!m || typeof m !== 'object' || !m.dshHome) continue
+    if (m.lifecycle === 'archived') continue
+    out.push({ key, path: join(m.dshHome, 'profiles', key, 'node_modules', 'dsh-bili-eyes', 'src', 'look.js') })
+  }
+  return { paths: out, why: null }
+}
+
 const OLD_CELL = /const tiles = c\.sub \? `（这一格里拼了 \$\{c\.sub \* c\.sub\} 张小图）` : '';\r?\n(\s*)lines\.push\(`格\$\{c\.i\} \$\{fmtDur\(c\.t_start\)\}–\$\{fmtDur\(c\.t_end\)\}\$\{tiles\}/;
 const NEW_CELL = [
   "const tiles = c.sub ? `（这一格里拼了 ${c.sub * c.sub} 张小图）` : '';",
@@ -130,5 +153,21 @@ if (check) {
   } else if (patchedHashes.size === 1) {
     console.log(`ok 已打的 ${[...patchedHashes.values()][0].length} 份内容一致（sha12=${[...patchedHashes.keys()][0]}）`);
   }
+
+  // 分母不能自己数自己：候选份数要跟"名册说应该有几份"对上。
+  const expect = expectedInstalls();
+  const seen = new Set(files.map((f) => f.toLowerCase()));
+  const missing = expect.paths.filter((e) => existsSync(e.path) && !seen.has(e.path.toLowerCase()));
+  const installed = expect.paths.filter((e) => existsSync(e.path));
+  if (expect.why) {
+    console.log(`!! 没有独立的份数分母（${expect.why}）——这次只证明"扫到的这些"，不证明"该扫的都扫到了"`);
+  } else if (missing.length > 0) {
+    console.log(`xx 扫描漏了 ${missing.length} 份：磁盘上有、候选里没有 ⇒ 候选份数(${files.length}) < 应到份数(${installed.length})`);
+    for (const m of missing) console.log(`   ${m.key}: ${m.path}`);
+    bad += 1;
+  } else {
+    console.log(`ok 候选 ${files.length} 份，名册应到的 ${installed.length} 份一个不缺（独立分母：pool\\members.json）`);
+  }
+
   if (bad) process.exit(1);
 }

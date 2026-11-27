@@ -222,3 +222,4 @@ Get-Content homes\<键>\dsh-home\bili-eyes\history.jsonl -Tail 3
 3. `doctor` 新增一格「插件文件一致（bili-eyes）」（`--check` 退出码 + 输出里的"内容一致/内容不齐"），这样漂移会自己响，而不是等人去看工具输出。
 
 **现场**：四条鱼重打（四份都是 nlink=1，没有 pnpm store 硬链接，可直接写），五份 sha12 = `cbcf2795bee6`；`--dry-run` → 真打 → `--check` 三遍走完。生效仍需重启各鱼进程与宿主。
+**再补一层（同日，小肥鱼第 3756 行）**：「这次扫到几份」如果由扫描本身给出，扫 1 份和扫 5 份都是它说了算——**分母不能自己数自己**。所以 `--check` 另取 `pool\members.json` 当独立分母：名册里有几条带 `dshHome` 的鱼，就逐条拼出 `profiles\<键>\node_modules\dsh-bili-eyes\src\look.js`，`existsSync` 看它是否真在磁盘上；在、但没进候选 ⇒ 红，并点名少了谁。名册读不到时只打印 `!! 没有独立的份数分母`——那一刻它能证明的只有"扫到的这些"，不是"该扫的都扫到了"。
