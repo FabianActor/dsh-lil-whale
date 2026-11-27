@@ -1,6 +1,6 @@
 # 更新日志
 
-**当前版本：1.14.0** ｜ **最后更新：2026-11-27 09:40**（每次升版本号时更新这一行）
+**当前版本：1.14.1** ｜ **最后更新：2026-11-27 19:00**（每次升版本号时更新这一行）
 
 这里记录 **小小肥鱼（lil-whale）** 两个 npm 包的变更：`@fabianactor/dsh-lil-whale-group`（宿主插件）与 `@fabianactor/dsh-lil-whale-group-ui`（面板）。产品设计看 [docs/PRD.md](docs/PRD.md)。
 
@@ -12,17 +12,23 @@
 
 ## 记法（2026-11-17 整理）
 
-1. **只提 commit、没升版本号**（文档、脚本、账本格式、诊断输出）→ 只写进 `## [未发布]`，一条一行：`rNN · 日期 · 一句话`；用户可见的在这句话里标出来。
-
-2. **攒一批再升版本**：升不升版本由人决定。升版本时，把 `[未发布]` 里的条目**全部**移进新的 `## [x.y.z] - 日期` 段，并**整合成一段完整的说明**——这一版做了什么、影响谁、旧行为是什么，别只写最后一个 commit；按「修复 / 变更 / 文档」归类，用户可见的排前面、内部改动在条目里标「（内部）」。
-
-3. **顺序**：`[未发布]` 永远在最上面，下面是版本段（新→旧）；历史段（r1–r206）保留原样。
-
-4. **第三方插件的本地补丁改动不进正文**：补丁脚本对 bili-eyes 做的改动（文案、缓存代次等）属于工具行为，正文只留一行索引；每代改了什么、为什么，写进 `advanced notes on third-party plugins/让小鱼能看B站-bili-eyes/让小鱼能看B站-bili-eyes.md` 的「补丁代次索引」。
-
-## [未发布]
+1. **只提 commit、没升版本号**（文档、脚本、账本格式、诊断输出）→ 只写进 `## [未发布]
 
 暂无。
+
+## [1.14.1] - 2026-11-27
+
+补丁版：修 issue #10 —— 部署方按升级单跑 `apply-neutral-preset.mjs` 时，会把设置页写进 `cordis.patch.yml` 的模型与界面设置整段删掉（脚本报“验证通过”，`doctor` 也全过）。
+
+### 修复
+
+- `apply-neutral-preset.mjs` 不再把标记行之后的顶层段整段切掉：只重建脚本自己写的那几段（`preset-neutral`；给了 `--with-bili` 时的 `mcp-bili-readonly`），`agent-default-model`、`ui-settings-general`、`agent-preset-registry` 这类别人写的段按段整块保留（段前的注释、空行跟着段走）。写盘前比对顶层 id，只许多不许少，少了直接退出不写（issue #10，用户可见）。
+- `release-check` 加一格「中立 preset 补丁」（跑 `scripts/test-neutral-patch.mjs`）。
+
+### 变更
+
+- 开着换段的鱼跑 `apply-neutral-preset.mjs` 会自动按 `--default` 处理（读 `pool/state/rotation/<键>.json`，其次 `_default.json`），不用靠人记得带这个参数。
+- `check-neutral-preset.mjs` 加一格：开着换段而默认 preset 不是 neutral 就点名（`default-not-neutral`），不再静默回到 standard。
 
 ## [1.14.0] - 2026-11-27
 

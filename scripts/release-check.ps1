@@ -464,6 +464,13 @@ if ($root) {
     if ($LASTEXITCODE -ne 0) { Fail '工具数两头' (($tcOut | Select-Object -Last 3) -join ' / ') }
     else { Ok '工具数两头' 'shrank 行同时写 missing 与 added，列表截断但总数保留（test-tool-count.mjs）' }
   } else { Fail '工具数两头' 'scripts\test-tool-count.mjs 不在包里' }
+  # ── 4bq. 中立 preset 补丁不吞别人的段（2026-11-27 issue #10：设置页写进 patch 的 model / ui-settings 被静默删掉）──
+  $npcTest = Join-Path $pkg 'scripts\test-neutral-patch.mjs'
+  if (Test-Path $npcTest) {
+    $npcOut = & node $npcTest 2>&1
+    if ($LASTEXITCODE -ne 0) { Fail '中立 preset 补丁' (($npcOut | Select-Object -Last 3) -join ' / ') }
+    else { Ok '中立 preset 补丁' '生成段重建、别人的顶层段原样保留、幂等（test-neutral-patch.mjs）' }
+  } else { Fail '中立 preset 补丁' 'scripts\test-neutral-patch.mjs 不在包里' }
   # ── 4as. 名册值带 key（2026-11-22：to=undefined 900 行，fi-0010／r404）──
   $keyTest = Join-Path $pkg 'scripts\test-member-key.mjs'
   if (Test-Path $keyTest) {
