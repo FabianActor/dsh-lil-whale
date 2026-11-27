@@ -1580,6 +1580,26 @@ try {
   }
 } catch { Add-Row '第三方补丁' 'WARN' ('核不了：{0}' -f $_.Exception.Message) }
 
+# 9c2. 插件文件一致（bili-eyes，2026-11-27）：note 补丁的 --check 只比"这一代补丁打没打打齐没打齐"，
+#      它看不见**另一支补丁**（格子的 bc= 落点）只打到了一份的情况。小肥鱼报的现场：
+#      五份 install 同版本号 0.8.3，宿主 33099 B、四条鱼 32831 B——版本号一样，内容两种。
+#      判据两条：①每份都打 ②已打的那些 sha12 彼此相等（不同就点名 sha12 与份数）。
+try {
+  $cellsScript = Join-Path $Cfg.Root 'advanced notes on third-party plugins\让小鱼能看B站-bili-eyes\scripts\patch-bili-eyes-cells.mjs'
+  if (-not (Test-Path -LiteralPath $cellsScript)) {
+    Add-Row '插件文件一致（bili-eyes）' 'INFO' '补丁脚本不在这一版仓库里——跳过'
+  } else {
+    $cellsOut = @(& node $cellsScript --check 2>&1)
+    $cellsCode = $LASTEXITCODE
+    $cellsTail = (@($cellsOut) | Where-Object { $_ -match '内容一致|内容不齐|没找到任何' } | Select-Object -Last 1)
+    if ($cellsCode -eq 0) {
+      Add-Row '插件文件一致（bili-eyes）' 'OK' ('五份/多份安装同内容' + $(if ($cellsTail) { '｜' + $cellsTail } else { '' }))
+    } else {
+      Add-Row '插件文件一致（bili-eyes）' 'WARN' ('有安装文件不同或未打（版本号相同不代表内容相同）｜' + $cellsTail) 'NEXT: node "advanced notes on third-party plugins\让小鱼能看B站-bili-eyes\scripts\patch-bili-eyes-cells.mjs"（先 --dry-run；重装/升级插件后要重打，打完 --check 应 5 份同 sha12）'
+    }
+  }
+} catch { Add-Row '插件文件一致（bili-eyes）' 'WARN' ('核不了：{0}' -f $_.Exception.Message) }
+
 # 9e. fissue 账（2026-11-19 r372）：鱼在群里提的 issue 收在哪、有没有卡住。
 #     收件人是我，最容易出的错不是丢，是**收了忘了做**——所以除了自洽检查，还报"正在做哪条"。
 try {

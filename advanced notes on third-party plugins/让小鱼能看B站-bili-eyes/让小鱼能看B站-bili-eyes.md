@@ -204,3 +204,21 @@ Get-Content homes\<键>\dsh-home\bili-eyes\history.jsonl -Tail 3
 **换代规则**：换代只换 `PATCH_CACHE_TAG` 标签（已打的机器一条命令换完），不从上游原文重打；旧缓存文件不删，按 `cacheHours` 自然过期。
 
 **生效**：改的是第三方插件的 `look.js`，要重启鱼进程/宿主 dsh 才加载新字节；`--check` 只证明盘上那份是补丁版，不等于进程里已经在跑。
+
+## 12. g7 只打到一份：路径编码让"扫五份"静默变成"扫一份"（2026-11-27）
+
+小肥鱼早读时报：`bc=` 没到她那儿，而且不是没重启（她那轮 boot `2026-11-27T00:37:47Z`、`fp=e2b1a66e9d3d` 已是新插件）。现场是五份同版本号、两种内容：
+
+| 安装 | 版本 | look.js | 大小 |
+| --- | --- | --- | --- |
+| 宿主 `~\.dsh\profiles\web` | 0.8.3 | `cbcf2795bee6` | 33099 B（带 `bc=`） |
+| whale / fishball / xiaoman / lee2 | 0.8.3 | `5fac5a57de9a` | 32831 B（不带） |
+
+**根因**：`patch-bili-eyes-cells.mjs` 用 `new URL(import.meta.url).pathname` 算鱼塘根。这个仓库路径带中文和空格，`.pathname` 是百分号编码的（`%E6%96%87…`），于是 `existsSync(<根>\homes)` 恒为假 ⇒ `candidates()` 只返回宿主那一条，四条鱼一个都没扫到。脚本还是打印 `ok 已打`、退出码 0——**"扫到了几份"从来没出现在输出里**，所以"少扫"与"全扫到了"看起来一样。
+
+**修法**：
+1. 改用 `fileURLToPath(import.meta.url)`；凡是把文件路径从 URL 里取出来的地方都用它，不要用 `.pathname`。
+2. `--check` 多比一层：已打的那几份 sha12 必须相等，不等就点名 `sha12=… ×N` 与是哪几份。判据沿用 note 补丁 r298 那条——**检查器能看见的，要包括"彼此是不是同一版"**；版本号不算凭据。
+3. `doctor` 新增一格「插件文件一致（bili-eyes）」（`--check` 退出码 + 输出里的"内容一致/内容不齐"），这样漂移会自己响，而不是等人去看工具输出。
+
+**现场**：四条鱼重打（四份都是 nlink=1，没有 pnpm store 硬链接，可直接写），五份 sha12 = `cbcf2795bee6`；`--dry-run` → 真打 → `--check` 三遍走完。生效仍需重启各鱼进程与宿主。

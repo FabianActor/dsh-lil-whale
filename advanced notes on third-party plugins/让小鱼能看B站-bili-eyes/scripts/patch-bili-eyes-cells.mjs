@@ -19,11 +19,16 @@
 // 第三方补丁不进 CHANGELOG（记法第 4 条），只进本目录的笔记。
 
 import { readFileSync, writeFileSync, copyFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 
 const MARK = 'bc=' + '${bc}'; // 幂等标记：改动后在源码里出现这段
-const here = dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
+// 2026-11-27：这里原来用 `new URL(import.meta.url).pathname`，中文与空格会被百分号编码
+// （`%E6%96%87...`），`existsSync(<鱼塘根>\homes)` 恒为假 ⇒ 只扫到宿主那份，
+// 四条鱼一个都没扫到，而脚本照样打印 ok、退出码 0。别用 pathname，用 fileURLToPath。
+const here = dirname(fileURLToPath(import.meta.url));
 
 const args = new Set(process.argv.slice(2));
 const dry = args.has('--dry-run');
@@ -47,6 +52,12 @@ function candidates() {
     }
   }
   return out;
+}
+
+// 2026-11-27 小肥鱼：五份安装同版本号、两种内容 ⇒ 版本号不是"大家跑的是同一份"的凭据。
+// `--check` 除了看每份打没打，还要比"已打的那些彼此是不是同一份"（sha12），不等就点名。
+function sha12(file) {
+  return createHash('sha256').update(readFileSync(file)).digest('hex').slice(0, 12);
 }
 
 const OLD_CELL = /const tiles = c\.sub \? `（这一格里拼了 \$\{c\.sub \* c\.sub\} 张小图）` : '';\r?\n(\s*)lines\.push\(`格\$\{c\.i\} \$\{fmtDur\(c\.t_start\)\}–\$\{fmtDur\(c\.t_end\)\}\$\{tiles\}/;
@@ -91,12 +102,15 @@ function patchText(src) {
 let bad = 0;
 const files = candidates();
 if (!files.length) { console.log('xx 没找到任何 dsh-bili-eyes 安装'); process.exit(1); }
+const patchedHashes = new Map();
 for (const f of files) {
   const src = readFileSync(f, 'utf8');
   const patched = src.includes('bcTag') && src.includes('bc: meta.bvid');
   if (check) {
-    console.log(`${patched ? 'ok' : 'xx'} ${patched ? '已打' : '未打'} ${f}`);
+    const h = sha12(f);
+    console.log(`${patched ? 'ok' : 'xx'} ${patched ? '已打' : '未打'} sha12=${h} ${f}`);
     if (!patched) bad += 1;
+    else patchedHashes.set(h, [...(patchedHashes.get(h) ?? []), f]);
     continue;
   }
   if (patched) { console.log(`ok 已打 ${f}`); continue; }
@@ -108,4 +122,13 @@ for (const f of files) {
   writeFileSync(f, r.text, 'utf8');
   console.log(`ok 已打 ${f}（${r.steps.join(' / ')}）`);
 }
-if (check && bad) process.exit(1);
+if (check) {
+  if (patchedHashes.size > 1) {
+    console.log('xx 补丁内容不齐（同版本号、不同内容 ⇒ 版本号不能当"同一份"的凭据）');
+    for (const [h, list] of patchedHashes) console.log(`   sha12=${h} ×${list.length}: ${list.map((f) => f.split('dsh-home')[0] || f).join(' | ')}`);
+    bad += 1;
+  } else if (patchedHashes.size === 1) {
+    console.log(`ok 已打的 ${[...patchedHashes.values()][0].length} 份内容一致（sha12=${[...patchedHashes.keys()][0]}）`);
+  }
+  if (bad) process.exit(1);
+}
