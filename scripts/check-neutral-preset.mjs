@@ -48,6 +48,16 @@ export function missingPluginsOf(standardIds, neutralIds) {
   return standardIds.filter((id) => !have.has(id))
 }
 
+/** 这条鱼是不是开着换段（单鱼文件优先，其次全机默认）。 */
+export function rotationEnabledOf(pondRoot, key) {
+  const dir = path.join(pondRoot, 'pool', 'state', 'rotation')
+  const read = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')) } catch { return null } }
+  const on = (o) => Boolean(o) && (o.enabled === true || (o.enabled !== false && typeof o.rounds === 'number' && o.rounds > 0))
+  const mine = read(path.join(dir, key + '.json'))
+  if (mine) return on(mine)
+  return on(read(path.join(dir, '_default.json')))
+}
+
 function main() {
   const argv = process.argv.slice(2)
   const flag = (n) => argv.includes(`--${n}`)
@@ -111,7 +121,11 @@ function main() {
     if (neutral === null) { rows.push({ member: f.key, state: 'no-neutral' }); continue }
     const missing = missingPluginsOf(standard, neutral)
     if (missing.length > 0) drift = true
-    rows.push({ member: f.key, state: missing.length ? 'behind' : 'ok', missing })
+    // 开着换段却把默认 preset 留在 standard：新起的会话不经过换段，会回到 standard（issue #10 后半）
+    const needsNeutralDefault = rotationEnabledOf(pondRoot, f.key) && !/^\s*default:\s*neutral\s*$/m.test(r.stdout)
+    if (needsNeutralDefault) drift = true
+    const state = missing.length ? 'behind' : needsNeutralDefault ? 'default-not-neutral' : 'ok'
+    rows.push({ member: f.key, state, missing })
   }
 
   if (json) {
@@ -120,10 +134,11 @@ function main() {
     for (const r of rows) {
       if (r.state === 'ok') console.log(`ok   ${r.member}：neutral 与 standard 的插件清单一致`)
       else if (r.state === 'behind') console.log(`落后 ${r.member}：neutral 少 ${r.missing.length} 件 —— ${r.missing.join(', ')}`)
+      else if (r.state === 'default-not-neutral') console.log(`默认 ${r.member}：开着换段，但默认 preset 不是 neutral —— 新起的会话会回到 standard`)
       else if (r.state === 'no-neutral') console.log(`没有 ${r.member}：她的 patch 里没装 preset-neutral（不换段就没事）`)
       else console.log(`查不了 ${r.member}：${r.state}${r.detail ? ' —— ' + r.detail : ''}`)
     }
-    if (drift) console.log('NEXT: node scripts\\gen-neutral-preset.mjs --profile <键> 重新生成，再用 scripts\\apply-neutral-preset.mjs --home <她的 DSH_HOME> 装进去；装完要重启一次')
+    if (drift) console.log('NEXT: node scripts\\gen-neutral-preset.mjs --profile <键> 重新生成，再用 scripts\\apply-neutral-preset.mjs --home <她的 DSH_HOME> 装进去（开着换段的加 --default）；装完要重启一次')
   }
 
   process.exit(failed ? 1 : drift ? 3 : 0)

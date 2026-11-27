@@ -1,6 +1,6 @@
 # 更新日志
 
-**当前版本：1.14.0** ｜ **最后更新：2026-11-27 09:40**（每次升版本号时更新这一行）
+**当前版本：1.14.0** ｜ **最后更新：2026-11-27 18:30**（每次升版本号时更新这一行）
 
 这里记录 **小小肥鱼（lil-whale）** 两个 npm 包的变更：`@fabianactor/dsh-lil-whale-group`（宿主插件）与 `@fabianactor/dsh-lil-whale-group-ui`（面板）。产品设计看 [docs/PRD.md](docs/PRD.md)。
 
@@ -22,7 +22,8 @@
 
 ## [未发布]
 
-暂无。
+- r514 · 2026-11-27 · `apply-neutral-preset.mjs` 不再把标记行之后的顶层段整段切掉：只重建脚本自己写的那几段（`preset-neutral`；给了 `--with-bili` 时的 `mcp-bili-readonly`），设置页/`dsh plugin add` 写进去的 `agent-default-model`、`ui-settings-general`、`agent-preset-registry` 原样保留；写盘前先比顶层 id，只许多不许少，少了就退出不写（issue #10，用户可见：重跑升级单里的 seed-profile 命令不再删掉设置页的模型配置）
+- r514 · 2026-11-27 · `apply-neutral-preset.mjs` 在开着换段时自动补 `--default`（`pool/state/rotation/<键>.json` 或 `_default.json` 说开着，就把默认 preset 设成 neutral）；`check-neutral-preset.mjs` 同步加一格：开着换段而默认不是 neutral 就点名（内部 + 部署方的代理可见）
 
 ## [1.14.0] - 2026-11-27
 

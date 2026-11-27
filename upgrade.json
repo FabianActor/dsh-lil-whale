@@ -41,7 +41,7 @@
         "doctor 全过（原来那两条钥匙 WARN 可以维持）。"
       ],
       "breaking": [],
-      "note": "只换代码，不动数据：pool\\ 与 homes\\ 里的名册、账本、会话都不随版本变。seed-profile 那一步是重装 neutral preset，逐鱼一次；不重装的话，开了换段的鱼换段后会少 office 三件（工具数 69→67，账上会有 wake-agent-tools-shrank）。没开换段的鱼可以跳过，但以后开之前记得补这一步。"
+      "note": "只换代码，不动数据：pool\\ 与 homes\\ 里的名册、账本、会话都不随版本变。seed-profile 那一步是重装 neutral preset，逐鱼一次；不重装的话，开了换段的鱼换段后会少 office 三件（工具数 69→67，账上会有 wake-agent-tools-shrank）。没开换段的鱼可以跳过，但以后开之前记得补这一步。\n\n开着换段的鱼跑 `apply-neutral-preset.mjs` 时带 `--default`（脚本现在也会自己判断，但写在命令里更清楚）；这条命令不再删掉设置页写进 patch 的模型与 ui-settings 配置（issue #10）。"
     },
     {
       "version": "1.13.4",
